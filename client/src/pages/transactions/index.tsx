@@ -48,10 +48,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useTheme } from "next-themes";
+import { useTranslation } from "@/contexts/LocalizationContext";
 import { motion, AnimatePresence } from "framer-motion";
 
 // Custom dropdown components with proper positioning - copied from working modal
-function TypeFilterDropdown({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+function TypeFilterDropdown({ value, onChange, t }: { value: string; onChange: (value: string) => void; t: (key: string, fallback: string) => string }) {
   const [isOpen, setIsOpen] = useState(false);
   const selectRef = useRef<HTMLDivElement>(null);
 
@@ -75,17 +76,17 @@ function TypeFilterDropdown({ value, onChange }: { value: string; onChange: (val
   const getDisplayText = () => {
     switch (value) {
       case TransactionType.INCOME:
-        return "Receitas";
+        return t('transactions.filters.income', 'Receitas');
       case TransactionType.EXPENSE:
-        return "Despesas";
+        return t('transactions.filters.expense', 'Despesas');
       default:
-        return "Todos os tipos";
+        return t('transactions.filters.all_types', 'Todos os tipos');
     }
   };
 
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-sm font-medium text-muted-foreground">Tipo</label>
+      <label className="text-sm font-medium text-muted-foreground">{t('transactions.filters.type', 'Tipo')}</label>
       <div ref={selectRef} className="relative">
         <button
           type="button"
@@ -112,7 +113,7 @@ function TypeFilterDropdown({ value, onChange }: { value: string; onChange: (val
                     <Check className="h-4 w-4" />
                   </span>
                 )}
-                Todos os tipos
+                {t('transactions.filters.all_types', 'Todos os tipos')}
               </button>
               <button
                 type="button"
@@ -127,7 +128,7 @@ function TypeFilterDropdown({ value, onChange }: { value: string; onChange: (val
                     <Check className="h-4 w-4" />
                   </span>
                 )}
-                Receitas
+                {t('transactions.filters.income', 'Receitas')}
               </button>
               <button
                 type="button"
@@ -142,7 +143,7 @@ function TypeFilterDropdown({ value, onChange }: { value: string; onChange: (val
                     <Check className="h-4 w-4" />
                   </span>
                 )}
-                Despesas
+                {t('transactions.filters.expense', 'Despesas')}
               </button>
             </div>
           </div>
@@ -153,7 +154,7 @@ function TypeFilterDropdown({ value, onChange }: { value: string; onChange: (val
 }
 
 // Status filter dropdown with proper positioning
-function StatusFilterDropdown({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+function StatusFilterDropdown({ value, onChange, t }: { value: string; onChange: (value: string) => void; t: (key: string, fallback: string) => string }) {
   const [isOpen, setIsOpen] = useState(false);
   const selectRef = useRef<HTMLDivElement>(null);
 
@@ -176,21 +177,21 @@ function StatusFilterDropdown({ value, onChange }: { value: string; onChange: (v
   const getDisplayText = () => {
     switch (value) {
       case TransactionStatus.COMPLETED:
-        return "Efetivadas";
+        return t('transactions.filters.completed', 'Efetivadas');
       case TransactionStatus.PENDING:
-        return "Pendentes";
+        return t('transactions.filters.pending', 'Pendentes');
       case TransactionStatus.SCHEDULED:
-        return "Agendadas";
+        return t('transactions.filters.scheduled', 'Agendadas');
       case TransactionStatus.CANCELED:
-        return "Canceladas";
+        return t('transactions.filters.cancelled', 'Canceladas');
       default:
-        return "Todos os status";
+        return t('transactions.filters.all_status', 'Todos os status');
     }
   };
 
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-sm font-medium text-muted-foreground">Status</label>
+      <label className="text-sm font-medium text-muted-foreground">{t('transactions.filters.status', 'Status')}</label>
       <div ref={selectRef} className="relative">
         <button
           type="button"
@@ -217,7 +218,7 @@ function StatusFilterDropdown({ value, onChange }: { value: string; onChange: (v
                     <Check className="h-4 w-4" />
                   </span>
                 )}
-                Todos os status
+                {t('transactions.filters.all_status', 'Todos os status')}
               </button>
               <button
                 type="button"
@@ -232,7 +233,7 @@ function StatusFilterDropdown({ value, onChange }: { value: string; onChange: (v
                     <Check className="h-4 w-4" />
                   </span>
                 )}
-                Efetivadas
+                {t('transactions.filters.completed', 'Efetivadas')}
               </button>
               <button
                 type="button"
@@ -247,7 +248,7 @@ function StatusFilterDropdown({ value, onChange }: { value: string; onChange: (v
                     <Check className="h-4 w-4" />
                   </span>
                 )}
-                Pendentes
+                {t('transactions.filters.pending', 'Pendentes')}
               </button>
               <button
                 type="button"
@@ -262,7 +263,7 @@ function StatusFilterDropdown({ value, onChange }: { value: string; onChange: (v
                     <Check className="h-4 w-4" />
                   </span>
                 )}
-                Agendadas
+                {t('transactions.filters.scheduled', 'Agendadas')}
               </button>
               <button
                 type="button"
@@ -277,7 +278,7 @@ function StatusFilterDropdown({ value, onChange }: { value: string; onChange: (v
                     <Check className="h-4 w-4" />
                   </span>
                 )}
-                Canceladas
+                {t('transactions.filters.cancelled', 'Canceladas')}
               </button>
             </div>
           </div>
@@ -291,11 +292,13 @@ function StatusFilterDropdown({ value, onChange }: { value: string; onChange: (v
 function CategoryFilterDropdown({ 
   value, 
   onChange, 
-  categories 
+  categories,
+  t
 }: { 
   value: string; 
   onChange: (value: string) => void;
   categories: Category[];
+  t: (key: string, fallback: string) => string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const selectRef = useRef<HTMLDivElement>(null);
@@ -317,14 +320,14 @@ function CategoryFilterDropdown({
   }, [isOpen]);
 
   const getDisplayText = () => {
-    if (value === "all") return "Todas as categorias";
+    if (value === "all") return t('transactions.filters.all_categories', 'Todas as categorias');
     const category = categories.find(cat => cat.id.toString() === value);
-    return category ? category.nome : "Todas as categorias";
+    return category ? category.nome : t('transactions.filters.all_categories', 'Todas as categorias');
   };
 
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-sm font-medium text-muted-foreground">Categoria</label>
+      <label className="text-sm font-medium text-muted-foreground">{t('transactions.filters.category', 'Categoria')}</label>
       <div ref={selectRef} className="relative">
         <button
           type="button"
@@ -351,7 +354,7 @@ function CategoryFilterDropdown({
                     <Check className="h-4 w-4" />
                   </span>
                 )}
-                Todas as categorias
+                {t('transactions.filters.all_categories', 'Todas as categorias')}
               </button>
               {categories.map((category) => (
                 <button
@@ -389,11 +392,13 @@ function CategoryFilterDropdown({
 function PaymentMethodFilterDropdown({ 
   value, 
   onChange, 
-  paymentMethods 
+  paymentMethods,
+  t
 }: { 
   value: string; 
   onChange: (value: string) => void;
   paymentMethods: PaymentMethod[];
+  t: (key: string, fallback: string) => string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const selectRef = useRef<HTMLDivElement>(null);
@@ -415,14 +420,14 @@ function PaymentMethodFilterDropdown({
   }, [isOpen]);
 
   const getDisplayText = () => {
-    if (value === "all") return "Todas as formas";
+    if (value === "all") return t('transactions.filters.all_payment_methods', 'Todas as formas');
     const method = paymentMethods.find(pm => pm.id.toString() === value);
-    return method ? method.nome : "Todas as formas";
+    return method ? method.nome : t('transactions.filters.all_payment_methods', 'Todas as formas');
   };
 
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-sm font-medium text-muted-foreground">Forma de Pagamento</label>
+      <label className="text-sm font-medium text-muted-foreground">{t('transactions.filters.payment_method', 'Forma de Pagamento')}</label>
       <div ref={selectRef} className="relative">
         <button
           type="button"
@@ -449,7 +454,7 @@ function PaymentMethodFilterDropdown({
                     <Check className="h-4 w-4" />
                   </span>
                 )}
-                Todas as formas
+                {t('transactions.filters.all_payment_methods', 'Todas as formas')}
               </button>
               {paymentMethods.map((method) => (
                 <button
@@ -477,7 +482,7 @@ function PaymentMethodFilterDropdown({
   );
 }
 
-const ActionsDropdown = ({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) => {
+const ActionsDropdown = ({ onEdit, onDelete, t }: { onEdit: () => void; onDelete: () => void; t: (key: string, fallback: string) => string }) => {
   const [isOpen, setIsOpen] = useState(false);
   const selectRef = useRef<HTMLDivElement>(null);
 
@@ -519,7 +524,7 @@ const ActionsDropdown = ({ onEdit, onDelete }: { onEdit: () => void; onDelete: (
               }}
             >
               <PencilIcon className="absolute left-2 h-4 w-4" />
-              Editar
+              {t('common.edit', 'Editar')}
             </button>
             <button
               type="button"
@@ -530,7 +535,7 @@ const ActionsDropdown = ({ onEdit, onDelete }: { onEdit: () => void; onDelete: (
               }}
             >
               <Trash2Icon className="absolute left-2 h-4 w-4" />
-              Excluir
+              {t('common.delete', 'Excluir')}
             </button>
           </div>
         </div>
@@ -541,6 +546,7 @@ const ActionsDropdown = ({ onEdit, onDelete }: { onEdit: () => void; onDelete: (
 
 export default function Transactions() {
   const { theme } = useTheme();
+  const { t } = useTranslation();
   const [isTransactionFormOpen, setIsTransactionFormOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [deletingTransaction, setDeletingTransaction] = useState<Transaction | null>(null);
@@ -610,14 +616,14 @@ export default function Transactions() {
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/summary"] });
       queryClient.invalidateQueries({ queryKey: ["/api/payment-methods/totals"] });
       toast({
-        title: "Transação excluída",
-        description: "A transação foi excluída com sucesso.",
+        title: t('transactions.transaction_deleted', 'Transação excluída'),
+        description: t('transactions.delete_success', 'A transação foi excluída com sucesso.'),
       });
       setDeletingTransaction(null);
     } catch (error) {
       toast({
-        title: "Erro",
-        description: "Não foi possível excluir a transação.",
+        title: t('transactions.error', 'Erro'),
+        description: t('transactions.delete_error', 'Não foi possível excluir a transação.'),
         variant: "destructive",
       });
     }
@@ -629,15 +635,15 @@ export default function Transactions() {
   };
 
   const getCategoryName = (categoryId: number | null) => {
-    if (!categoryId) return "Sem categoria";
+    if (!categoryId) return t('transactions.table.uncategorized', 'Sem categoria');
     const category = categories?.find(c => c.id === categoryId);
-    return category?.nome || "Categoria não encontrada";
+    return category?.nome || t('transactions.table.category_not_found', 'Categoria não encontrada');
   };
 
   const getPaymentMethodName = (paymentMethodId: number | null) => {
-    if (!paymentMethodId) return "Não informado";
+    if (!paymentMethodId) return t('transactions.table.not_specified', 'Não informado');
     const method = paymentMethods?.find(m => m.id === paymentMethodId);
-    return method?.nome || "Método não encontrado";
+    return method?.nome || t('transactions.table.method_not_found', 'Método não encontrado');
   };
 
   // Limpar badges quando transações são carregadas (usuário visualizou a lista)
@@ -653,12 +659,12 @@ export default function Transactions() {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between">
           <div className="mb-4 md:mb-0">
             <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-2xl md:text-3xl font-bold mb-1">Transações</h1>
+              <h1 className="text-2xl md:text-3xl font-bold mb-1">{t('transactions.title', 'Transações')}</h1>
               {/* Indicador de conexão WebSocket */}
               <div className="flex items-center gap-2">
                 <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'} animate-pulse`}></div>
                 <span className="text-xs text-gray-400">
-                  {isConnected ? 'Tempo real ativo' : 'Desconectado'}
+                  {isConnected ? t('transactions.realtime_active', 'Tempo real ativo') : t('transactions.disconnected', 'Desconectado')}
                 </span>
               </div>
             </div>
@@ -671,12 +677,12 @@ export default function Transactions() {
                     onClick={clearAllBadges}
                     className="text-xs text-gray-400 hover:text-gray-300 underline transition-colors"
                   >
-                    Limpar todas ({totalCount})
+                    {t('transactions.clear_all', 'Limpar todas')} ({totalCount})
                   </button>
                 )}
               </div>
             )}
-            <p className="text-gray-400">Gerencie suas receitas e despesas</p>
+            <p className="text-gray-400">{t('transactions.subtitle', 'Gerencie suas transações financeiras')}</p>
           </div>
           <div className="flex gap-2">
             <Button onClick={() => {
@@ -684,7 +690,7 @@ export default function Transactions() {
               setIsTransactionFormOpen(true);
             }} className="neon-border">
               <PlusIcon className="mr-2 h-4 w-4" />
-              Nova Transação
+              {t('transactions.new_transaction', 'Nova Transação')}
             </Button>
             
             {false && (
@@ -717,9 +723,9 @@ export default function Transactions() {
         <div className={`p-5 ${theme === 'light' ? 'text-gray-900' : ''}`}>
           <div className="flex flex-col md:flex-row gap-4 mb-6 md:items-end">
             <div className="flex-1">
-              <label className="text-sm font-medium text-muted-foreground block mb-1">Busca</label>
+              <label className="text-sm font-medium text-muted-foreground block mb-1">{t('transactions.filters.search', 'Busca')}</label>
               <Input
-                placeholder="Buscar transações..."
+                placeholder={t('transactions.filters.search', 'Buscar transações...')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="bg-dark-purple/10 h-10"
@@ -729,24 +735,31 @@ export default function Transactions() {
               <TypeFilterDropdown
                 value={typeFilter}
                 onChange={setTypeFilter}
+                t={t}
               />
 
-
+              <StatusFilterDropdown
+                value={statusFilter}
+                onChange={setStatusFilter}
+                t={t}
+              />
 
               <CategoryFilterDropdown
                 value={categoryFilter}
                 onChange={setCategoryFilter}
                 categories={categories || []}
+                t={t}
               />
 
               <PaymentMethodFilterDropdown
                 value={paymentMethodFilter}
                 onChange={setPaymentMethodFilter}
                 paymentMethods={paymentMethods || []}
+                t={t}
               />
 
               <div className="flex flex-col gap-1">
-                <label className="text-sm font-medium text-muted-foreground">Ações</label>
+                <label className="text-sm font-medium text-muted-foreground">{t('transactions.table.actions', 'Ações')}</label>
                 <div className="h-10 flex items-center justify-end">
                   <Button 
                     variant="outline" 
@@ -759,7 +772,7 @@ export default function Transactions() {
                     }}
                     className="bg-dark-purple/10"
                   >
-                    Limpar Filtros
+                    {t('transactions.filters.clear_filters', 'Limpar Filtros')}
                   </Button>
                 </div>
               </div>
@@ -772,22 +785,22 @@ export default function Transactions() {
               <table className="w-full min-w-[640px]">
                 <thead>
                   <tr>
-                    <th className="text-left pb-4 text-xs font-orbitron text-gray-400 tracking-wider">DESCRIÇÃO</th>
-                    <th className="text-left pb-4 text-xs font-orbitron text-gray-400 tracking-wider">CATEGORIA</th>
-                    <th className="text-left pb-4 text-xs font-orbitron text-gray-400 tracking-wider">DATA</th>
-                    <th className="text-left pb-4 text-xs font-orbitron text-gray-400 tracking-wider">VALOR</th>
-                    <th className="text-left pb-4 text-xs font-orbitron text-gray-400 tracking-wider">STATUS</th>
-                    <th className="text-right pb-4 text-xs font-orbitron text-gray-400 tracking-wider">AÇÕES</th>
+                    <th className="text-left pb-4 text-xs font-orbitron text-gray-400 tracking-wider">{t('transactions.table.description', 'DESCRIÇÃO')}</th>
+                    <th className="text-left pb-4 text-xs font-orbitron text-gray-400 tracking-wider">{t('transactions.table.category', 'CATEGORIA')}</th>
+                    <th className="text-left pb-4 text-xs font-orbitron text-gray-400 tracking-wider">{t('transactions.table.date', 'DATA')}</th>
+                    <th className="text-left pb-4 text-xs font-orbitron text-gray-400 tracking-wider">{t('transactions.table.value', 'VALOR')}</th>
+                    <th className="text-left pb-4 text-xs font-orbitron text-gray-400 tracking-wider">{t('transactions.table.status', 'STATUS')}</th>
+                    <th className="text-right pb-4 text-xs font-orbitron text-gray-400 tracking-wider">{t('transactions.table.actions', 'AÇÕES')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {isLoading ? (
                     <tr>
-                      <td colSpan={6} className="py-4 text-center">Carregando...</td>
+                      <td colSpan={6} className="py-4 text-center">{t('common.loading', 'Carregando...')}</td>
                     </tr>
                   ) : filteredTransactions?.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-4 text-center">Nenhuma transação encontrada</td>
+                      <td colSpan={6} className="py-4 text-center">{t('transactions.table.no_transactions', 'Nenhuma transação encontrada')}</td>
                     </tr>
                   ) : (
                     filteredTransactions?.map((transaction) => (
@@ -843,6 +856,7 @@ export default function Transactions() {
                           <ActionsDropdown
                             onEdit={() => editTransaction(transaction)}
                             onDelete={() => setDeletingTransaction(transaction)}
+                            t={t}
                           />
                         </td>
                       </TransactionRow>
@@ -884,13 +898,14 @@ export default function Transactions() {
                       <ActionsDropdown
                         onEdit={() => editTransaction(transaction)}
                         onDelete={() => setDeletingTransaction(transaction)}
+                        t={t}
                       />
                     </div>
                   </div>
                   
                   <div className="space-y-2">
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-400">Valor:</span>
+                      <span className="text-sm text-gray-400">{t('transactions.table.value', 'Valor')}:</span>
                       <span className={`${transaction.tipo === TransactionType.INCOME ? 'text-green-400' : 'text-red-400'} font-orbitron font-medium`}>
                         {transaction.tipo === TransactionType.INCOME ? '+ ' : '- '}
                         {formatCurrency(Number(transaction.valor))}
@@ -898,19 +913,19 @@ export default function Transactions() {
                     </div>
                     
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-400">Categoria:</span>
+                      <span className="text-sm text-gray-400">{t('transactions.table.category', 'Categoria')}:</span>
                       <span className="px-2 py-1 rounded-lg bg-primary/10 text-primary text-xs">
-                        {categories?.find(cat => cat.id === transaction.categoria_id)?.nome || 'Não identificada'}
+                        {categories?.find(cat => cat.id === transaction.categoria_id)?.nome || t('transactions.table.uncategorized', 'Não identificada')}
                       </span>
                     </div>
                     
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-400">Data:</span>
+                      <span className="text-sm text-gray-400">{t('transactions.table.date', 'Data')}:</span>
                       <span className="text-sm text-gray-300">{formatDate(transaction.data_transacao)}</span>
                     </div>
                     
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-400">Status:</span>
+                      <span className="text-sm text-gray-400">{t('transactions.table.status', 'Status')}:</span>
                       <span className={`px-2 py-1 rounded-lg text-xs
                         ${theme === 'light' && transaction.status === TransactionStatus.COMPLETED ? 'bg-emerald-400 text-white' : ''}
                         ${theme === 'light' && transaction.status === TransactionStatus.PENDING ? 'bg-yellow-400 text-gray-900' : ''}
@@ -977,7 +992,7 @@ export default function Transactions() {
                   className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 z-10"
                 >
                   <X className="h-5 w-5" />
-                  <span className="sr-only">Fechar</span>
+                  <span className="sr-only">{t('common.close', 'Fechar')}</span>
                 </button>
                 <TransactionForm 
                   transaction={editingTransaction}
@@ -988,10 +1003,10 @@ export default function Transactions() {
                     queryClient.invalidateQueries({ queryKey: ["/api/dashboard/summary"] });
                     queryClient.invalidateQueries({ queryKey: ["/api/payment-methods/totals"] });
                     toast({
-                      title: editingTransaction ? "Transação atualizada" : "Transação criada",
+                      title: editingTransaction ? t('transactions.transaction_updated', 'Transação atualizada') : t('transactions.transaction_created', 'Transação criada'),
                       description: editingTransaction 
-                        ? "A transação foi atualizada com sucesso." 
-                        : "A transação foi criada com sucesso.",
+                        ? t('transactions.update_success', 'A transação foi atualizada com sucesso.') 
+                        : t('transactions.create_success', 'A transação foi criada com sucesso.'),
                     });
                   }}
                 />
@@ -1004,18 +1019,18 @@ export default function Transactions() {
       <AlertDialog open={!!deletingTransaction} onOpenChange={(open) => !open && setDeletingTransaction(null)}>
         <AlertDialogContent className="glass-card">
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir transação</AlertDialogTitle>
+            <AlertDialogTitle>{t('transactions.delete_transaction', 'Excluir transação')}</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja excluir esta transação? Esta ação não pode ser desfeita.
+              {t('transactions.confirm_delete', 'Tem certeza que deseja excluir esta transação? Esta ação não pode ser desfeita.')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel>{t('common.cancel', 'Cancelar')}</AlertDialogCancel>
             <AlertDialogAction 
               onClick={() => deletingTransaction && handleDeleteTransaction(deletingTransaction.id)}
               className="bg-destructive"
             >
-              Excluir
+              {t('common.delete', 'Excluir')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

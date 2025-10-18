@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLocation } from "wouter";
 import { formatCurrency } from "@/lib/utils";
+import { useTranslation } from "@/contexts/LocalizationContext";
 
 interface CategorySummaryProps {
   isLoading: boolean;
@@ -19,6 +20,7 @@ interface CategorySummaryProps {
 
 export default function CategorySummary({ isLoading, categories }: CategorySummaryProps) {
   const [, navigate] = useLocation();
+  const { t } = useTranslation();
   
   const getIconComponent = (iconName: string) => {
     return <i className={`ri-${iconName}-line text-white`}></i>;
@@ -34,14 +36,14 @@ export default function CategorySummary({ isLoading, categories }: CategorySumma
       <Card className="glass-card neon-border rounded-2xl h-full">
         <CardContent className="p-5">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="font-space text-xl">Categorias</h2>
+            <h2 className="font-space text-xl">{t('dashboard.categories.title', 'Categorias')}</h2>
             <div>
               <Button 
                 variant="link" 
                 className="text-primary text-sm hover:text-secondary transition-colors p-0"
                 onClick={() => navigate("/categories")}
               >
-                Ver tudo
+                {t('dashboard.categories.view_all', 'Ver tudo')}
               </Button>
             </div>
           </div>
@@ -94,7 +96,7 @@ export default function CategorySummary({ isLoading, categories }: CategorySumma
               ))
             ) : (
               <div className="py-4 text-center text-gray-400">
-                Nenhuma categoria encontrada
+                {t('dashboard.categories.no_categories', 'Nenhuma categoria encontrada')}
               </div>
             )}
           </div>

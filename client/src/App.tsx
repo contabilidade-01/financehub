@@ -10,6 +10,7 @@ import { NotificationsProvider } from "@/hooks/use-notifications";
 import { AutoThemeProvider } from "@/components/AutoThemeProvider";
 import { User } from "@shared/schema";
 import { ExpiredSubscriptionOverlay } from "@/components/subscription/ExpiredSubscriptionOverlay";
+import { LocalizationProvider } from "@/contexts/LocalizationContext";
 
 interface SetupStatus {
   setupMode: boolean;
@@ -38,6 +39,8 @@ import MainLayout from "@/layouts/MainLayout";
 import ImpersonationBanner from "@/components/admin/ImpersonationBanner";
 import AdminStickyHeader from "@/components/admin/AdminStickyHeader";
 import CustomizePage from "@/pages/admin/customize";
+import LanguageSettings from "@/pages/admin/LanguageSettings";
+import LoadingScreen from "@/components/shared/LoadingScreen";
 
 function Router() {
   const [location] = useLocation();
@@ -74,11 +77,7 @@ function Router() {
 
   // Show loading state while checking authentication or setup status
   if (isLoading || setupLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-purple-500"></div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   // Handle unauthenticated users
@@ -195,6 +194,11 @@ function Router() {
                 <CustomizePage />
               </MainLayout>
             </Route>
+            <Route path="/admin/language-settings">
+              <MainLayout>
+                <LanguageSettings />
+              </MainLayout>
+            </Route>
           </>
         )}
         <Route component={NotFound} />
@@ -207,13 +211,15 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <NotificationsProvider>
-          <AutoThemeProvider showLoadingIndicator={true}>
-            <ImpersonationBanner />
-            <Toaster />
-            <Router />
-          </AutoThemeProvider>
-        </NotificationsProvider>
+        <LocalizationProvider>
+          <NotificationsProvider>
+            <AutoThemeProvider showLoadingIndicator={true}>
+              <ImpersonationBanner />
+              <Toaster />
+              <Router />
+            </AutoThemeProvider>
+          </NotificationsProvider>
+        </LocalizationProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );

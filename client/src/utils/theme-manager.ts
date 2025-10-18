@@ -1,5 +1,13 @@
 // Theme Manager - Sistema de Aplicação de Temas
 
+// Declarações globais para funções do script crítico
+declare global {
+  interface Window {
+    updateCriticalLogo?: (theme: string) => void;
+    removeCriticalLoading?: () => void;
+  }
+}
+
 export interface ThemeConfig {
   background: string;
   foreground: string;
@@ -186,6 +194,12 @@ export class ThemeManager {
     window.dispatchEvent(new CustomEvent('theme-changed', { 
       detail: { config, isPreview } 
     }));
+    
+    // Notificar script crítico sobre mudança de tema se não for preview
+    if (!isPreview && typeof window !== 'undefined' && window.updateCriticalLogo) {
+      const currentMode = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      window.updateCriticalLogo(currentMode);
+    }
   }
 
   // Converter HEX para HSL
@@ -289,6 +303,11 @@ export class ThemeManager {
   resetToDefault(mode: 'light' | 'dark'): void {
     console.log(`🎨 Aplicando tema padrão para ${mode} mode...`);
     this.applyTheme(defaultThemes.default, mode);
+    
+    // Notificar script crítico sobre a mudança
+    if (typeof window !== 'undefined' && window.updateCriticalLogo) {
+      window.updateCriticalLogo(mode);
+    }
   }
 
   // Aplicar tema crítico INSTANTANEAMENTE (para evitar flash)

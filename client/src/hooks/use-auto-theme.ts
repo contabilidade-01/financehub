@@ -44,7 +44,25 @@ export function useAutoTheme() {
   // Aplicar tema CRÍTICO IMEDIATAMENTE no primeiro render (antes de qualquer fetch)
   useEffect(() => {
     console.log('⚡ Aplicando tema CRÍTICO IMEDIATO para evitar flash...');
-    const immediateMode = (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+    
+    // Verificar preferência salva primeiro, depois sistema
+    let immediateMode = 'dark'; // fallback padrão
+    
+    try {
+      const savedTheme = typeof window !== 'undefined' ? localStorage.getItem('theme') : null;
+      if (savedTheme && (savedTheme === 'dark' || savedTheme === 'light')) {
+        immediateMode = savedTheme;
+        console.log(`🎨 Hook: Tema salvo encontrado: ${immediateMode}`);
+      } else {
+        // Fallback para preferência do sistema
+        immediateMode = (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+        console.log(`🎨 Hook: Usando preferência do sistema: ${immediateMode}`);
+      }
+    } catch (error) {
+      console.warn('⚠️ Hook: Erro ao acessar localStorage, usando preferência do sistema');
+      immediateMode = (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+    }
+    
     themeManager.applyCriticalTheme(immediateMode);
   }, []); // Executar IMEDIATAMENTE
 
@@ -106,8 +124,25 @@ export function useAutoTheme() {
         console.log('🚀 Iniciando carregamento IMEDIATO de tema...');
         
         // Detectar o modo IMEDIATAMENTE sem esperar next-themes
-        const initialMode = currentMode || 
-          (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        let initialMode = currentMode;
+        
+        if (!initialMode) {
+          try {
+            // Verificar preferência salva primeiro
+            const savedTheme = typeof window !== 'undefined' ? localStorage.getItem('theme') : null;
+            if (savedTheme && (savedTheme === 'dark' || savedTheme === 'light')) {
+              initialMode = savedTheme;
+              console.log(`🎨 Hook inicial: Tema salvo encontrado: ${initialMode}`);
+            } else {
+              // Fallback para preferência do sistema
+              initialMode = (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+              console.log(`🎨 Hook inicial: Usando preferência do sistema: ${initialMode}`);
+            }
+          } catch (error) {
+            console.warn('⚠️ Hook inicial: Erro ao acessar localStorage');
+            initialMode = (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          }
+        }
         
         if (initialMode !== 'system') {
           const mode = initialMode as 'light' | 'dark';
@@ -150,8 +185,23 @@ export function useAutoTheme() {
         setThemeLoadError(`Erro crítico: ${error}`);
         
         // FALLBACK CRÍTICO: Sempre aplicar um tema
-        const fallbackMode = currentMode || 
-          (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        let fallbackMode = currentMode;
+        
+        if (!fallbackMode) {
+          try {
+            // Verificar preferência salva como último recurso
+            const savedTheme = typeof window !== 'undefined' ? localStorage.getItem('theme') : null;
+            if (savedTheme && (savedTheme === 'dark' || savedTheme === 'light')) {
+              fallbackMode = savedTheme;
+              console.log(`🎨 Fallback crítico: Tema salvo encontrado: ${fallbackMode}`);
+            } else {
+              fallbackMode = (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+              console.log(`🎨 Fallback crítico: Usando sistema: ${fallbackMode}`);
+            }
+          } catch (error) {
+            fallbackMode = (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          }
+        }
         
         if (fallbackMode !== 'system') {
           console.log(`🆘 FALLBACK CRÍTICO: Aplicando tema padrão para ${fallbackMode} mode`);

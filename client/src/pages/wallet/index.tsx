@@ -12,9 +12,11 @@ import { ArrowUp, ArrowDown, Wallet as WalletIcon, Save } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { QuickTransactionForm } from "@/components/shared/QuickTransactionForm";
+import { useTranslation } from "@/contexts/LocalizationContext";
 
 export default function WalletPage() {
   const { toast } = useToast();
+  const { t } = useTranslation();
   const [isEditing, setIsEditing] = useState(false);
   const [walletName, setWalletName] = useState("");
   const [isUpdating, setIsUpdating] = useState(false);
@@ -33,8 +35,8 @@ export default function WalletPage() {
   const handleUpdateWallet = async () => {
     if (!walletName.trim()) {
       toast({
-        title: "Erro",
-        description: "O nome da carteira não pode estar vazio.",
+        title: t('common.error', 'Erro'),
+        description: t('wallet.name_required', 'O nome da carteira não pode estar vazio.'),
         variant: "destructive",
       });
       return;
@@ -49,13 +51,13 @@ export default function WalletPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/wallet/current"] });
       setIsEditing(false);
       toast({
-        title: "Sucesso",
-        description: "Carteira atualizada com sucesso.",
+        title: t('common.success', 'Sucesso'),
+        description: t('wallet.updated_success', 'Carteira atualizada com sucesso.'),
       });
     } catch (error) {
       toast({
-        title: "Erro",
-        description: "Não foi possível atualizar a carteira.",
+        title: t('common.error', 'Erro'),
+        description: t('wallet.update_error', 'Não foi possível atualizar a carteira.'),
         variant: "destructive",
       });
     } finally {
@@ -72,8 +74,8 @@ export default function WalletPage() {
     queryClient.invalidateQueries({ queryKey: ["/api/payment-methods/totals"] });
     
     toast({
-      title: "Transação adicionada",
-      description: `Nova ${transactionType === TransactionType.INCOME ? "receita" : "despesa"} registrada com sucesso.`,
+      title: t('wallet.transaction_added', 'Transação adicionada'),
+      description: t('wallet.transaction_success_description', `Nova ${transactionType === TransactionType.INCOME ? t('common.income', 'receita') : t('common.expenses', 'despesa')} registrada com sucesso.`),
     });
   };
 
@@ -85,8 +87,8 @@ export default function WalletPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
         >
-          <h1 className="text-2xl md:text-3xl font-bold mb-1">Minha Carteira</h1>
-          <p className="text-gray-400">Gerencie suas finanças em um só lugar</p>
+          <h1 className="text-2xl md:text-3xl font-bold mb-1">{t('wallet.page_title', 'Minha Carteira')}</h1>
+          <p className="text-gray-400">{t('wallet.page_description', 'Gerencie suas finanças em um só lugar')}</p>
         </motion.div>
       </div>
       
@@ -116,7 +118,7 @@ export default function WalletPage() {
                   variant="ghost" 
                   className="text-primary hover:bg-primary/10"
                 >
-                  Editar
+                  {t('common.edit', 'Edit')}
                 </Button>
               ) : (
                 <Button 
@@ -201,7 +203,7 @@ export default function WalletPage() {
                 }}
               >
                 <ArrowUp className="mr-2 h-4 w-4" />
-                Nova Receita
+                {t('transactions.new_income', 'New Income')}
               </Button>
               
               <Button 
@@ -213,7 +215,7 @@ export default function WalletPage() {
                 }}
               >
                 <ArrowDown className="mr-2 h-4 w-4" />
-                Nova Despesa
+                {t('transactions.new_expense', 'New Expense')}
               </Button>
             </CardContent>
           </Card>

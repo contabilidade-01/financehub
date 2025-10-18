@@ -17,6 +17,8 @@ import { Reminder } from '@shared/schema';
 import { PlusIcon, CalendarIcon, Bell, CheckCircle, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 import '../categories/category-modal.css';
+import { useTranslation } from '@/contexts/LocalizationContext';
+import { getMonthNames, getDayNames, getDayNamesLong } from '@/utils/localization';
 
 // Configurar localizador com moment
 moment.locale('pt-br');
@@ -48,6 +50,7 @@ export default function RemindersPage() {
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
 
   // Query para buscar lembretes
   const { data: reminders, isLoading, error } = useQuery({
@@ -62,14 +65,14 @@ export default function RemindersPage() {
       queryClient.invalidateQueries({ queryKey: ['/api/reminders'] });
       setIsCreateModalOpen(false);
       toast({
-        title: 'Lembrete criado com sucesso',
+        title: t('reminders.reminder_created', 'Lembrete criado com sucesso'),
         variant: 'default',
       });
     },
     onError: (error: any) => {
       toast({
-        title: 'Erro ao criar lembrete',
-        description: error.message || 'Ocorreu um erro ao criar o lembrete.',
+        title: t('reminders.error_create', 'Erro ao criar lembrete'),
+        description: error.message || t('reminders.error_create_desc', 'Ocorreu um erro ao criar o lembrete.'),
         variant: 'destructive',
       });
     },
@@ -82,14 +85,14 @@ export default function RemindersPage() {
       queryClient.invalidateQueries({ queryKey: ['/api/reminders'] });
       setIsDetailsModalOpen(false);
       toast({
-        title: 'Lembrete atualizado com sucesso',
+        title: t('reminders.reminder_updated', 'Lembrete atualizado com sucesso'),
         variant: 'default',
       });
     },
     onError: (error: any) => {
       toast({
-        title: 'Erro ao atualizar lembrete',
-        description: error.message || 'Ocorreu um erro ao atualizar o lembrete.',
+        title: t('reminders.error_update', 'Erro ao atualizar lembrete'),
+        description: error.message || t('reminders.error_update_desc', 'Ocorreu um erro ao atualizar o lembrete.'),
         variant: 'destructive',
       });
     },
@@ -102,14 +105,14 @@ export default function RemindersPage() {
       queryClient.invalidateQueries({ queryKey: ['/api/reminders'] });
       setIsDetailsModalOpen(false);
       toast({
-        title: 'Lembrete excluído com sucesso',
+        title: t('reminders.reminder_deleted', 'Lembrete excluído com sucesso'),
         variant: 'default',
       });
     },
     onError: (error: any) => {
       toast({
-        title: 'Erro ao excluir lembrete',
-        description: error.message || 'Ocorreu um erro ao excluir o lembrete.',
+        title: t('reminders.error_delete', 'Erro ao excluir lembrete'),
+        description: error.message || t('reminders.error_delete_desc', 'Ocorreu um erro ao excluir o lembrete.'),
         variant: 'destructive',
       });
     },
@@ -187,10 +190,10 @@ export default function RemindersPage() {
         <div>
           <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-blue-400 bg-clip-text text-transparent">
             <CalendarIcon className="inline mr-2 h-8 w-8 text-primary" />
-            Lembretes
+            {t('reminders.title', 'Lembretes')}
           </h1>
           <p className="text-gray-400 mt-1">
-            Gerencie seus compromissos e lembretes
+            {t('reminders.subtitle', 'Gerencie seus compromissos e lembretes')}
           </p>
         </div>
         <div className="w-full md:w-auto flex flex-col gap-2 md:flex-row md:items-center md:justify-end">
@@ -198,11 +201,11 @@ export default function RemindersPage() {
             <div className="flex gap-4 text-sm text-gray-400 w-full md:w-auto justify-between md:justify-end">
               <div className="flex items-center gap-1">
                 <Bell className="h-4 w-4" />
-                <span>{reminders.filter(r => !r.concluido).length} pendentes</span>
+                <span>{reminders.filter(r => !r.concluido).length} {t('reminders.pending', 'pending')}</span>
               </div>
               <div className="flex items-center gap-1">
                 <CheckCircle className="h-4 w-4" />
-                <span>{reminders.filter(r => r.concluido).length} concluídos</span>
+                <span>{reminders.filter(r => r.concluido).length} {t('reminders.completed', 'completed')}</span>
               </div>
             </div>
           )}
@@ -211,7 +214,7 @@ export default function RemindersPage() {
             className="w-full md:w-auto bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-600/90 text-white border-0"
           >
             <PlusIcon className="h-4 w-4 mr-2" />
-            Novo Lembrete
+            {t('reminders.new_reminder', 'Novo Lembrete')}
           </Button>
         </div>
       </motion.div>
@@ -226,15 +229,15 @@ export default function RemindersPage() {
           <CardHeader className="pb-4">
             <CardTitle className="text-xl font-bold flex items-center gap-2">
               <CalendarIcon className="h-5 w-5 text-primary" />
-              Calendário de Lembretes
+              {t('reminders.calendar_title', 'Reminders Calendar')}
             </CardTitle>
           </CardHeader>
           <CardContent className="p-6">
             {isLoading ? (
-              <Loading text="Carregando lembretes..." />
+              <Loading text={t('reminders.loading', 'Loading reminders...')} />
             ) : error ? (
               <div className="flex justify-center items-center h-96">
-                <p className="text-red-400">Erro ao carregar lembretes. Tente novamente mais tarde.</p>
+                <p className="text-red-400">{t('reminders.error_loading', 'Error loading reminders. Please try again later.')}</p>
               </div>
             ) : (
               <div className="h-[600px] calendar-container">
@@ -251,41 +254,35 @@ export default function RemindersPage() {
                   onRangeChange={handleRangeChange}
                   views={['month', 'week', 'day']}
                   messages={{
-                    today: 'Hoje',
-                    previous: 'Anterior',
-                    next: 'Próximo',
-                    month: 'Mês',
-                    week: 'Semana',
-                    day: 'Dia',
-                    agenda: 'Agenda',
-                    date: 'Data',
-                    time: 'Hora',
-                    event: 'Evento',
-                    noEventsInRange: 'Não há lembretes neste período',
-                    showMore: (total) => `+${total} mais`,
+                    today: t('calendar.today', 'Today'),
+                    previous: t('calendar.previous', 'Previous'),
+                    next: t('calendar.next', 'Next'),
+                    month: t('calendar.month', 'Month'),
+                    week: t('calendar.week', 'Week'),
+                    day: t('calendar.day', 'Day'),
+                    agenda: t('calendar.agenda', 'Agenda'),
+                    date: t('calendar.date', 'Date'),
+                    time: t('calendar.time', 'Time'),
+                    event: t('calendar.event', 'Event'),
+                    noEventsInRange: t('calendar.no_events', 'No reminders in this period'),
+                    showMore: (total) => `+${total} ${t('calendar.more', 'more')}`,
                   }}
                   formats={{
                     monthHeaderFormat: (date) => {
-                      const monthNames = [
-                        'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-                        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-                      ];
+                      const monthNames = getMonthNames(t);
                       return `${monthNames[date.getMonth()]} ${date.getFullYear()}`;
                     },
                     dayFormat: (date) => {
-                      const dayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+                      const dayNames = getDayNames(t);
                       return dayNames[date.getDay()];
                     },
                     dayHeaderFormat: (date) => {
-                      const dayNames = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
-                      const monthNames = [
-                        'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-                        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-                      ];
-                      return `${dayNames[date.getDay()]}, ${date.getDate()} de ${monthNames[date.getMonth()]}`;
+                      const dayNames = getDayNamesLong(t);
+                      const monthNames = getMonthNames(t);
+                      return `${dayNames[date.getDay()]}, ${date.getDate()} ${t('calendar.of', 'of')} ${monthNames[date.getMonth()]}`;
                     },
                     weekdayFormat: (date) => {
-                      const dayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+                      const dayNames = getDayNames(t);
                       return dayNames[date.getDay()];
                     },
                   }}
@@ -319,10 +316,10 @@ export default function RemindersPage() {
             
             <div className="category-modal-title">
               <Bell className="mr-2 h-5 w-5 inline" />
-              Novo Lembrete
+              {t('reminders.new_reminder', 'Novo Lembrete')}
             </div>
             <div className="category-modal-description">
-              Preencha os detalhes para criar um novo lembrete.
+              {t('reminders.new_reminder_desc', 'Preencha os detalhes para criar um novo lembrete.')}
             </div>
 
             <ReminderForm
@@ -348,10 +345,10 @@ export default function RemindersPage() {
             
             <div className="category-modal-title">
               <CalendarIcon className="mr-2 h-5 w-5 inline" />
-              Detalhes do Lembrete
+              {t('reminders.details_title', 'Detalhes do Lembrete')}
             </div>
             <div className="category-modal-description">
-              Visualize e edite os detalhes do lembrete.
+              {t('reminders.details_desc', 'Visualize e edite os detalhes do lembrete.')}
             </div>
 
             <ReminderDetails

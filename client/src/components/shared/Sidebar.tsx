@@ -22,6 +22,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { VersionDisplay } from "@/components/shared/VersionDisplay";
 import { ThemeToggleSimple } from "@/components/theme-toggle-simple";
 import { useTheme } from "next-themes";
+import { useTranslation } from "@/contexts/LocalizationContext";
 
 interface MenuItem {
   icon: React.ReactNode;
@@ -39,6 +40,7 @@ function Sidebar() {
   const { user: userData } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const { theme } = useTheme();
+  const { t } = useTranslation();
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [prevLogoUrl, setPrevLogoUrl] = useState<string | null>(null);
   const [hasCustomLogo, setHasCustomLogo] = useState<boolean | null>(null);
@@ -88,20 +90,20 @@ function Sidebar() {
   // Menu items do usuário
   const userMenuItems: MenuGroup[] = [
     {
-      label: "PRINCIPAL",
+      label: t('navigation.sections.main', 'PRINCIPAL'),
       items: [
-        { icon: <LayoutDashboard className="mr-3 h-4 w-4" />, text: "Dashboard", path: "/" },
-        { icon: <PlusCircle className="mr-3 h-4 w-4" />, text: "Transações", path: "/transactions" },
-        { icon: <BarChart3 className="mr-3 h-4 w-4" />, text: "Relatórios", path: "/reports" },
+        { icon: <LayoutDashboard className="mr-3 h-4 w-4" />, text: t('navigation.dashboard', 'Dashboard'), path: "/" },
+        { icon: <PlusCircle className="mr-3 h-4 w-4" />, text: t('navigation.transactions', 'Transações'), path: "/transactions" },
+        { icon: <BarChart3 className="mr-3 h-4 w-4" />, text: t('navigation.reports', 'Relatórios'), path: "/reports" },
       ]
     },
     {
-      label: "CONFIGURAÇÕES",
+      label: t('navigation.sections.settings', 'CONFIGURAÇÕES'),
       items: [
-        { icon: <CreditCard className="mr-3 h-4 w-4" />, text: "Formas de Pagamento", path: "/payment-methods" },
-        { icon: <Tag className="mr-3 h-4 w-4" />, text: "Categorias", path: "/categories" },
-        { icon: <CalendarDays className="mr-3 h-4 w-4" />, text: "Lembretes", path: "/reminders" },
-        { icon: <Settings className="mr-3 h-4 w-4" />, text: "Configurações", path: "/settings" },
+        { icon: <CreditCard className="mr-3 h-4 w-4" />, text: t('navigation.payment_methods', 'Formas de Pagamento'), path: "/payment-methods" },
+        { icon: <Tag className="mr-3 h-4 w-4" />, text: t('navigation.categories', 'Categorias'), path: "/categories" },
+        { icon: <CalendarDays className="mr-3 h-4 w-4" />, text: t('navigation.reminders', 'Lembretes'), path: "/reminders" },
+        { icon: <Settings className="mr-3 h-4 w-4" />, text: t('navigation.settings', 'Configurações'), path: "/settings" },
       ]
     }
   ];
@@ -109,11 +111,11 @@ function Sidebar() {
   // Menu items do admin
   const adminMenuItems: MenuGroup[] = [
     {
-      label: "ADMINISTRAÇÃO",
+      label: t('navigation.sections.admin', 'ADMINISTRAÇÃO'),
       items: [
-        { icon: <Shield className="mr-3 h-4 w-4" />, text: "Dashboard Admin", path: "/admin" },
-        { icon: <Users className="mr-3 h-4 w-4" />, text: "Usuários", path: "/admin/users" },
-        { icon: <Settings className="mr-3 h-4 w-4" />, text: "Personalizar", path: "/admin/customize" }
+        { icon: <Shield className="mr-3 h-4 w-4" />, text: t('navigation.admin_dashboard', 'Dashboard Admin'), path: "/admin" },
+        { icon: <Users className="mr-3 h-4 w-4" />, text: t('navigation.users', 'Usuários'), path: "/admin/users" },
+        { icon: <Settings className="mr-3 h-4 w-4" />, text: t('navigation.customize', 'Personalizar'), path: "/admin/customize" }
         
       ]
     }
@@ -321,7 +323,7 @@ function Sidebar() {
                     }}
                   >
                     <LogOut className={`mr-2 h-4 w-4 ${theme === 'light' ? 'text-gray-500' : 'text-gray-300'}`} /> 
-                    Sair
+                    {t('navigation.logout', 'Sair')}
                   </Button>
                 </div>
                 <div className="pt-1 w-full text-center pb-2">
@@ -439,7 +441,7 @@ function Sidebar() {
               }}
             >
               <LogOut className={`mr-2 h-4 w-4 ${theme === 'light' ? 'text-gray-500' : 'text-gray-300'}`} /> 
-              Sair
+              {t('navigation.logout', 'Sair')}
             </Button>
           </div>
           <div className={`pt-0 w-full text-center ${shouldApplyAdminOffset ? 'pb-16' : 'pb-2'}`}>

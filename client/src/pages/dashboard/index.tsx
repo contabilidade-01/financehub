@@ -8,6 +8,7 @@ import { TransactionForm } from "@/components/shared/TransactionForm";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { useTranslation } from "@/contexts/LocalizationContext";
 import { useState } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { PlusIcon, RefreshCw } from "lucide-react";
@@ -17,6 +18,7 @@ export default function Dashboard() {
   const [isTransactionFormOpen, setIsTransactionFormOpen] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
 
   const { data: userData } = useQuery<User>({
@@ -64,8 +66,8 @@ export default function Dashboard() {
     refetchSummary();
     queryClient.invalidateQueries({ queryKey: ["/api/payment-methods/totals"] });
     toast({
-      title: "Dados atualizados",
-      description: "Os dados financeiros foram atualizados com sucesso",
+      title: t('dashboard.data_updated', 'Dados atualizados'),
+      description: t('dashboard.data_updated_desc', 'Os dados financeiros foram atualizados com sucesso'),
       variant: "default",
     });
   };
@@ -75,8 +77,8 @@ export default function Dashboard() {
       <header className="mb-8">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between">
           <div className="mb-4 md:mb-0">
-            <h1 className="text-2xl md:text-3xl font-bold mb-1">Dashboard Financeiro</h1>
-            <p className="text-gray-400">Acompanhe e gerencie suas finanças</p>
+            <h1 className="text-2xl md:text-3xl font-bold mb-1">{t('dashboard.title', 'Dashboard Financeiro')}</h1>
+            <p className="text-gray-400">{t('dashboard.subtitle', 'Acompanhe e gerencie suas finanças')}</p>
           </div>
           <div className="flex space-x-3">
             <Button 
@@ -84,12 +86,13 @@ export default function Dashboard() {
               className="neon-border"
             >
               <PlusIcon className="mr-2 h-4 w-4" />
-              Nova Transação
+              {t('dashboard.new_transaction', 'Nova Transação')}
             </Button>
             <Button 
               variant="outline" 
               size="icon"
               onClick={refreshData}
+              title={t('dashboard.refresh_data', 'Atualizar dados')}
             >
               <RefreshCw className="h-4 w-4" />
             </Button>

@@ -9,6 +9,7 @@ import { ptBR } from 'date-fns/locale';
 import { CalendarIcon, Loader2, Clock } from 'lucide-react';
 import React, { useRef } from 'react';
 import ReactDOM from 'react-dom';
+import { useTranslation } from '@/contexts/LocalizationContext';
 
 interface ReminderFormProps {
   reminder?: {
@@ -33,6 +34,7 @@ export default function ReminderForm({
 }: ReminderFormProps) {
   const [titulo, setTitulo] = useState(reminder?.titulo || '');
   const [descricao, setDescricao] = useState(reminder?.descricao || '');
+  const { t } = useTranslation();
   
   // Set default time to 6:00 AM for new reminders
   const getDefaultDateTime = (date: Date) => {
@@ -64,30 +66,30 @@ export default function ReminderForm({
   return (
     <form onSubmit={handleSubmit}>
       <div className="category-form-field">
-        <label className="category-label">Título</label>
+        <label className="category-label">{t('reminders.title', 'Title')}</label>
         <input
           className="category-input"
           value={titulo}
           onChange={(e) => setTitulo(e.target.value)}
-          placeholder="Título do lembrete"
+          placeholder={t('reminders.title_placeholder', 'Reminder title')}
           required
         />
       </div>
 
       <div className="category-form-field">
-        <label className="category-label">Descrição (opcional)</label>
+        <label className="category-label">{t('reminders.description_optional', 'Description (optional)')}</label>
         <textarea
           className="category-input"
           value={descricao}
           onChange={(e) => setDescricao(e.target.value)}
-          placeholder="Descrição detalhada (opcional)"
+          placeholder={t('reminders.description_placeholder', 'Detailed description (optional)')}
           rows={3}
           style={{ resize: 'vertical', minHeight: '80px' }}
         />
       </div>
 
       <div className="category-form-field">
-        <label className="category-label">Data do Lembrete</label>
+        <label className="category-label">{t('reminders.reminder_date', 'Reminder Date')}</label>
         <div className="relative">
           <button
             ref={buttonRef}
@@ -106,7 +108,7 @@ export default function ReminderForm({
               {dataLembrete ? (
                 format(dataLembrete, "PPP", { locale: ptBR })
               ) : (
-                <span>Selecione uma data</span>
+                <span>{t('reminders.select_date', 'Select a date')}</span>
               )}
             </div>
           </button>
@@ -148,7 +150,7 @@ export default function ReminderForm({
               onCheckedChange={(checked) => setConcluido(!!checked)}
             />
             <label htmlFor="concluido" className="category-label" style={{ marginBottom: 0 }}>
-              Concluído
+              {t('reminders.completed', 'Completed')}
             </label>
           </div>
         </div>
@@ -161,7 +163,7 @@ export default function ReminderForm({
           onClick={onCancel}
           disabled={isSubmitting}
         >
-          Cancelar
+          {t('common.cancel', 'Cancel')}
         </button>
         <button 
           type="submit" 
@@ -171,10 +173,10 @@ export default function ReminderForm({
           {isSubmitting ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Salvando...
+              {t('common.saving', 'Saving...')}
             </>
           ) : (
-            'Salvar'
+            t('common.save', 'Save')
           )}
         </button>
       </div>

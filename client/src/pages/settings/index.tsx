@@ -32,6 +32,7 @@ import { Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { UnsavedChangesModal } from "@/components/ui/UnsavedChangesModal";
+import { useTranslation } from "@/contexts/LocalizationContext";
 
 // Schema para validação do perfil
 const profileSchema = z.object({
@@ -175,6 +176,7 @@ function ModalAnimadaErro({ open, onClose, mensagem, icone }: ModalAnimadaErroPr
 export default function SettingsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { t } = useTranslation();
   const [erroModal, setErroModal] = useState({ open: false, mensagem: "" });
   const [activeTab, setActiveTab] = useState("perfil");
 
@@ -226,8 +228,8 @@ export default function SettingsPage() {
       // Recarregar a página para atualizar os dados do usuário
       window.location.reload();
       toast({
-        title: "Perfil atualizado",
-        description: "Suas informações foram atualizadas com sucesso!",
+        title: t('settings.profile_updated', 'Perfil atualizado'),
+        description: t('settings.profile_updated_desc', 'Suas informações foram atualizadas com sucesso!'),
       });
     },
     onError: (error: any) => {
@@ -255,14 +257,14 @@ export default function SettingsPage() {
     onSuccess: () => {
       passwordForm.reset();
       toast({
-        title: "Senha alterada",
-        description: "Sua senha foi alterada com sucesso!",
+        title: t('settings.password_changed', 'Senha alterada'),
+        description: t('settings.password_changed_desc', 'Sua senha foi alterada com sucesso!'),
       });
     },
     onError: (error) => {
       toast({
-        title: "Erro",
-        description: "Não foi possível alterar sua senha. Verifique se a senha atual está correta.",
+        title: t('common.error', 'Erro'),
+        description: t('settings.password_change_error', 'Não foi possível alterar sua senha. Verifique se a senha atual está correta.'),
         variant: "destructive",
       });
     },
@@ -336,7 +338,7 @@ export default function SettingsPage() {
     return (
       <div className="container py-10">
         <div className="text-center">
-          <p>Carregando configurações...</p>
+          <p>{t('settings.loading', 'Carregando configurações...')}</p>
         </div>
       </div>
     );
@@ -344,22 +346,22 @@ export default function SettingsPage() {
 
   return (
     <div className="container py-10">
-      <h1 className="text-3xl font-bold mb-6">Configurações</h1>
+      <h1 className="text-3xl font-bold mb-6">{t('settings.title', 'Configurações')}</h1>
       
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className="mb-6">
-          <TabsTrigger value="perfil">Perfil</TabsTrigger>
-          <TabsTrigger value="seguranca">Segurança</TabsTrigger>
-          <TabsTrigger value="api">API</TabsTrigger>
-          <TabsTrigger value="assinatura">Assinatura</TabsTrigger>
+          <TabsTrigger value="perfil">{t('settings.profile', 'Perfil')}</TabsTrigger>
+          <TabsTrigger value="seguranca">{t('settings.security', 'Segurança')}</TabsTrigger>
+          <TabsTrigger value="api">{t('settings.api', 'API')}</TabsTrigger>
+          <TabsTrigger value="assinatura">{t('settings.subscription', 'Assinatura')}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="perfil">
           <Card>
             <CardHeader>
-              <CardTitle>Perfil Pessoal</CardTitle>
+              <CardTitle>{t('settings.personal_profile', 'Perfil Pessoal')}</CardTitle>
               <CardDescription>
-                Gerencie suas informações pessoais.
+                {t('settings.manage_personal_info', 'Gerencie suas informações pessoais.')}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -373,9 +375,9 @@ export default function SettingsPage() {
                     name="nome"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Nome completo</FormLabel>
+                        <FormLabel>{t('settings.full_name', 'Nome completo')}</FormLabel>
                         <FormControl>
-                          <Input placeholder="Seu nome completo" {...field} />
+                          <Input placeholder={t('placeholders.full_name', 'Seu nome completo')} {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -387,9 +389,9 @@ export default function SettingsPage() {
                     name="email"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>E-mail</FormLabel>
+                        <FormLabel>{t('common.email', 'E-mail')}</FormLabel>
                         <FormControl>
-                          <Input type="email" placeholder="seu@email.com" {...field} />
+                          <Input type="email" placeholder={t('placeholders.email_example', 'seu@email.com')} {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -401,7 +403,7 @@ export default function SettingsPage() {
                     name="telefone"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Telefone</FormLabel>
+                        <FormLabel>{t('common.phone', 'Telefone')}</FormLabel>
                         <FormControl>
                           <Input 
                             type="tel" 
@@ -410,7 +412,7 @@ export default function SettingsPage() {
                           />
                         </FormControl>
                         <FormDescription>
-                          Digite apenas os números com DDD
+                          {t('settings.phone_description', 'Digite apenas os números com DDD')}
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -421,7 +423,7 @@ export default function SettingsPage() {
                     type="submit" 
                     disabled={updateProfileMutation.isPending}
                   >
-                    {updateProfileMutation.isPending ? "Salvando..." : "Salvar alterações"}
+                    {updateProfileMutation.isPending ? t('common.saving', 'Salvando...') : t('common.save_changes', 'Salvar alterações')}
                   </Button>
                 </form>
               </Form>
@@ -432,9 +434,9 @@ export default function SettingsPage() {
         <TabsContent value="seguranca">
           <Card>
             <CardHeader>
-              <CardTitle>Alteração de Senha</CardTitle>
+              <CardTitle>{t('settings.password_change', 'Alteração de Senha')}</CardTitle>
               <CardDescription>
-                Altere sua senha de acesso.
+                {t('settings.change_password_desc', 'Altere sua senha de acesso.')}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -448,11 +450,11 @@ export default function SettingsPage() {
                     name="senha_atual"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Senha atual</FormLabel>
+                        <FormLabel>{t('settings.current_password', 'Senha atual')}</FormLabel>
                         <FormControl>
                           <Input 
                             type="password" 
-                            placeholder="Sua senha atual" 
+                            placeholder={t('settings.current_password_placeholder', 'Sua senha atual')} 
                             {...field} 
                           />
                         </FormControl>
@@ -466,16 +468,16 @@ export default function SettingsPage() {
                     name="nova_senha"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Nova senha</FormLabel>
+                        <FormLabel>{t('settings.new_password', 'Nova senha')}</FormLabel>
                         <FormControl>
                           <Input 
                             type="password" 
-                            placeholder="Sua nova senha" 
+                            placeholder={t('settings.new_password_placeholder', 'Sua nova senha')} 
                             {...field} 
                           />
                         </FormControl>
                         <FormDescription>
-                          Deve ter pelo menos 6 caracteres
+                          {t('settings.password_min_length', 'Deve ter pelo menos 6 caracteres')}
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -487,11 +489,11 @@ export default function SettingsPage() {
                     name="confirmar_senha"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Confirmar nova senha</FormLabel>
+                        <FormLabel>{t('settings.confirm_new_password', 'Confirmar nova senha')}</FormLabel>
                         <FormControl>
                           <Input 
                             type="password" 
-                            placeholder="Confirme sua nova senha" 
+                            placeholder={t('settings.confirm_password_placeholder', 'Confirme sua nova senha')} 
                             {...field} 
                           />
                         </FormControl>
@@ -504,7 +506,7 @@ export default function SettingsPage() {
                     type="submit" 
                     disabled={changePasswordMutation.isPending}
                   >
-                    {changePasswordMutation.isPending ? "Alterando..." : "Alterar senha"}
+                    {changePasswordMutation.isPending ? t('settings.changing', 'Alterando...') : t('settings.change_password', 'Alterar senha')}
                   </Button>
                 </form>
               </Form>
@@ -515,9 +517,9 @@ export default function SettingsPage() {
         <TabsContent value="api">
           <Card>
             <CardHeader>
-              <CardTitle>Tokens de API</CardTitle>
+              <CardTitle>{t('settings.api_tokens', 'Tokens de API')}</CardTitle>
               <CardDescription>
-                Gerencie seus tokens para acesso à API.
+                {t('settings.manage_api_tokens', 'Gerencie seus tokens para acesso à API.')}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -529,21 +531,21 @@ export default function SettingsPage() {
         <TabsContent value="assinatura">
           <Card>
             <CardHeader>
-              <CardTitle>Assinatura</CardTitle>
+              <CardTitle>{t('settings.subscription', 'Assinatura')}</CardTitle>
               <CardDescription>
-                Informações sobre sua assinatura.
+                {t('settings.subscription_info', 'Informações sobre sua assinatura.')}
               </CardDescription>
             </CardHeader>
             <CardContent>
               {user?.status_assinatura === "ativa" && (
                 <div className="p-4 border rounded-lg bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800">
-                  <h4 className="font-medium mb-2 text-green-800 dark:text-green-200">Assinatura Ativa</h4>
+                  <h4 className="font-medium mb-2 text-green-800 dark:text-green-200">{t('settings.subscription_active', 'Assinatura Ativa')}</h4>
                   <p className="text-sm text-green-600 dark:text-green-300 mb-2">
-                    Sua assinatura está ativa e em dia.
+                    {t('settings.subscription_active_desc', 'Sua assinatura está ativa e em dia.')}
                   </p>
                   {user?.data_expiracao_assinatura && (
                     <p className="text-sm text-green-600 dark:text-green-300">
-                      Expira em: {new Date(user.data_expiracao_assinatura).toLocaleDateString('pt-BR')}
+                      {t('settings.expires_on', 'Expira em')}: {new Date(user.data_expiracao_assinatura).toLocaleDateString('pt-BR')}
                     </p>
                   )}
                 </div>
@@ -561,8 +563,8 @@ export default function SettingsPage() {
                       : "text-gray-800 dark:text-gray-200"
                   }`}>
                     {user?.data_expiracao_assinatura && new Date(user.data_expiracao_assinatura) > new Date()
-                      ? "Assinatura Cancelada - Acesso Mantido"
-                      : "Assinatura Cancelada"
+                      ? t('settings.subscription_cancelled_access_maintained', 'Assinatura Cancelada - Acesso Mantido')
+                      : t('settings.subscription_cancelled', 'Assinatura Cancelada')
                     }
                   </h4>
                   <p className={`text-sm mb-2 ${
@@ -570,11 +572,11 @@ export default function SettingsPage() {
                       ? "text-orange-600 dark:text-orange-300"
                       : "text-gray-600 dark:text-gray-400"
                   }`}>
-                    Cancelada em: {new Date(user.data_cancelamento).toLocaleDateString('pt-BR')}
+                    {t('settings.cancelled_on', 'Cancelada em')}: {new Date(user.data_cancelamento).toLocaleDateString('pt-BR')}
                   </p>
                   {user?.data_expiracao_assinatura && new Date(user.data_expiracao_assinatura) > new Date() && (
                     <p className="text-sm text-orange-600 dark:text-orange-300 mb-2 font-medium">
-                      Você ainda tem acesso até: {new Date(user.data_expiracao_assinatura).toLocaleDateString('pt-BR')}
+                      {t('settings.access_until', 'Você ainda tem acesso até')}: {new Date(user.data_expiracao_assinatura).toLocaleDateString('pt-BR')}
                     </p>
                   )}
                   {user.motivo_cancelamento && (
@@ -583,7 +585,7 @@ export default function SettingsPage() {
                         ? "text-orange-600 dark:text-orange-300"
                         : "text-gray-600 dark:text-gray-400"
                     }`}>
-                      Motivo: {user.motivo_cancelamento}
+                      {t('settings.reason', 'Motivo')}: {user.motivo_cancelamento}
                     </p>
                   )}
                 </div>

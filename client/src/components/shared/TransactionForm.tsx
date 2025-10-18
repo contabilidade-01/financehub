@@ -8,6 +8,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "next-themes";
 import { Category, Transaction, TransactionStatus, TransactionType, PaymentMethod } from "@shared/schema";
 import { formatDate } from "@/lib/utils";
+import { useTranslation } from "@/contexts/LocalizationContext";
+import { translatePaymentMethodName, translateCategoryName } from "@/utils/localization";
 
 import {
   Form,
@@ -29,26 +31,26 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Loader2, ArrowUpIcon, ArrowDownIcon, Check, ChevronDown, X } from "lucide-react";
 
-// Custom schema for form validation
-const transactionFormSchema = z.object({
-  descricao: z.string().min(2, "Descrição deve ter pelo menos 2 caracteres"),
-  valor: z.string().min(1, "Valor é obrigatório").refine(
+// Custom schema for form validation - will be created dynamically with translations
+const createTransactionFormSchema = (t: (key: string, fallback: string) => string) => z.object({
+  descricao: z.string().min(2, t('validation.description_min_length', 'Description must be at least 2 characters')),
+  valor: z.string().min(1, t('validation.amount_required', 'Amount is required')).refine(
     (value) => !isNaN(parseFloat(value)) && parseFloat(value) > 0,
-    "Valor deve ser maior que zero"
+    t('validation.amount_positive', 'Amount must be greater than zero')
   ),
   categoria_id: z.number({
-    required_error: "Categoria é obrigatória",
-    invalid_type_error: "Categoria é obrigatória",
+    required_error: t('validation.category_required', 'Category is required'),
+    invalid_type_error: t('validation.category_required', 'Category is required'),
   }),
   forma_pagamento_id: z.number({
-    required_error: "Forma de pagamento é obrigatória",
-    invalid_type_error: "Forma de pagamento é obrigatória",
+    required_error: t('validation.payment_method_required', 'Payment method is required'),
+    invalid_type_error: t('validation.payment_method_required', 'Payment method is required'),
   }),
-  tipo: z.string().min(1, "Tipo é obrigatório"),
-  data_transacao: z.string().min(1, "Data é obrigatória"),
+  tipo: z.string().min(1, t('validation.type_required', 'Type is required')),
+  data_transacao: z.string().min(1, t('validation.date_required', 'Date is required')),
 });
 
-type TransactionFormValues = z.infer<typeof transactionFormSchema>;
+type TransactionFormValues = z.infer<ReturnType<typeof createTransactionFormSchema>>;
 
 interface TransactionFormProps {
   transaction?: Transaction | null;
@@ -59,6 +61,10 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
   const { theme } = useTheme();
+  const { t } = useTranslation();
+  
+  // Create schema with translations
+  const transactionFormSchema = createTransactionFormSchema(t);
   
   // Fetch categories
   const { data: categories, isLoading: isCategoriesLoading } = useQuery<Category[]>({
@@ -121,8 +127,8 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
   const onSubmit = async (data: TransactionFormValues) => {
     if (!wallet?.id) {
       toast({
-        title: "Erro",
-        description: "Nenhuma carteira disponível",
+        title: t('common.error', 'Error'),
+        description: t('transactions.no_wallet_available', 'No wallet available'),
         variant: "destructive",
       });
       return;
@@ -151,8 +157,8 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
         });
         console.log("Resposta da atualização:", response);
         toast({
-          title: "Transação atualizada",
-          description: "A transação foi atualizada com sucesso.",
+          title: t('transactions.transaction_updated', 'Transaction updated'),
+          description: t('transactions.update_success', 'Transaction was successfully updated.'),
         });
       } else {
         const response = await apiRequest("/api/transactions", {
@@ -161,8 +167,8 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
         });
         console.log("Resposta da criação:", response);
         toast({
-          title: "Transação criada",
-          description: "A transação foi criada com sucesso.",
+          title: t('transactions.transaction_created', 'Transaction created'),
+          description: t('transactions.create_success', 'Transaction was successfully created.'),
         });
       }
       
@@ -176,11 +182,11 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
       form.reset();
     } catch (error: any) {
       console.error("Erro ao salvar transação:", error);
-      const errorMessage = error?.message || "Não foi possível salvar a transação.";
+      const errorMessage = error?.message || t('transactions.save_error', 'Could not save the transaction.');
       const detailedError = error?.errors ? JSON.stringify(error.errors) : "";
       
       toast({
-        title: "Erro",
+        title: t('common.error', 'Error'),
         description: `${errorMessage} ${detailedError}`,
         variant: "destructive",
       });
@@ -196,12 +202,12 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
       <div className="modal-header-sticky">
         <div className="flex flex-col items-center w-full">
           <h2 className="text-2xl font-semibold">
-            {transaction ? "Editar Transação" : "Nova Transação"}
+            {transaction ? t('transactions.edit_transaction', 'Edit Transaction') : t('transactions.new_transaction', 'New Transaction')}
           </h2>
           <p className="text-sm text-muted-foreground mt-1">
             {transaction
-              ? "Edite os detalhes da transação abaixo."
-              : "Preencha os detalhes para registrar uma nova transação."}
+              ? t('transactions.edit_description', 'Edit the transaction details below.')
+              : t('transactions.fill_details', 'Fill in the details to record a new transaction.')}
           </p>
         </div>
       </div>
@@ -213,7 +219,7 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
               name="tipo"
               render={({ field }) => (
                 <FormItem className="flex-1">
-                  <FormLabel>Tipo</FormLabel>
+                  <FormLabel>{t('transactions.type', 'Type')}</FormLabel>
                   <div className="flex space-x-2">
                     <Button
                       type="button"
@@ -251,9 +257,9 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
             name="descricao"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Descrição</FormLabel>
+                <FormLabel>{t('transactions.description', 'Description')}</FormLabel>
                 <FormControl>
-                  <Input placeholder="Descrição da transação" {...field} />
+                  <Input placeholder={t('transactions.description_placeholder', 'Transaction description')} {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -266,7 +272,7 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
               name="valor"
               render={({ field }) => (
                 <FormItem className="flex-1">
-                  <FormLabel>Valor</FormLabel>
+                  <FormLabel>{t('transactions.amount', 'Amount')}</FormLabel>
                   <FormControl>
                     <Input
                       type="number"
@@ -286,7 +292,7 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
               name="data_transacao"
               render={({ field }) => (
                 <FormItem className="flex-1">
-                  <FormLabel>Data</FormLabel>
+                  <FormLabel>{t('transactions.date', 'Date')}</FormLabel>
                   <FormControl>
                     <Input type="date" {...field} />
                   </FormControl>
@@ -342,7 +348,7 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
                               className="w-3 h-3 rounded-full mr-2" 
                               style={{ backgroundColor: selectedCategory.cor || "#6C63FF" }}
                             ></div>
-                            {selectedCategory.nome}
+                            {translateCategoryName(selectedCategory.nome, t)}
                           </div>
                         ) : (
                           <span className="text-muted-foreground">Selecione uma categoria</span>
@@ -357,7 +363,7 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
                           {isCategoriesLoading ? (
                             <div className="flex items-center justify-center p-2">
                               <Loader2 className="h-4 w-4" />
-                              <span className="ml-2">Carregando...</span>
+                              <span className="ml-2">{t('common.loading', 'Loading...')}</span>
                             </div>
                           ) : filteredCategories?.length === 0 ? (
                             <div className="p-2 text-center text-sm">
@@ -384,7 +390,7 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
                                     className="w-3 h-3 rounded-full mr-2" 
                                     style={{ backgroundColor: category.cor || "#6C63FF" }}
                                   ></div>
-                                  {category.nome}
+                                  {translateCategoryName(category.nome, t)}
                                 </div>
                               </button>
                             ))
@@ -432,7 +438,7 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
                         disabled={isPaymentMethodsLoading}
                       >
                         <span className={selectedPaymentMethod ? "" : "text-muted-foreground"}>
-                          {selectedPaymentMethod ? selectedPaymentMethod.nome : "Selecione uma forma de pagamento"}
+                          {selectedPaymentMethod ? translatePaymentMethodName(selectedPaymentMethod.nome, t) : "Selecione uma forma de pagamento"}
                         </span>
                         <ChevronDown className="h-4 w-4 opacity-50" />
                       </button>
@@ -452,7 +458,7 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
                               }}
                             >
                               <Check className={`mr-2 h-4 w-4 ${field.value === pm.id ? "opacity-100" : "opacity-0"}`} />
-                              <span>{pm.nome}</span>
+                              <span>{translatePaymentMethodName(pm.nome, t)}</span>
                               {pm.global && (
                                 <span className="ml-auto text-xs text-muted-foreground">(Global)</span>
                               )}

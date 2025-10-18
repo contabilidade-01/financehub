@@ -18,18 +18,9 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { InsertUser } from "@shared/schema";
 import { useTheme } from "next-themes";
+import { useTranslation } from "@/contexts/LocalizationContext";
 
-const registerSchema = z.object({
-  nome: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
-  email: z.string().email("Email inválido"),
-  senha: z.string().min(6, "A senha deve ter pelo menos 6 caracteres"),
-  confirmarSenha: z.string().min(6, "Confirme sua senha"),
-  telefone: z.string().min(12, "Telefone obrigatório"),
-  remoteJid: z.string(),
-}).refine((data) => data.senha === data.confirmarSenha, {
-  message: "As senhas não coincidem",
-  path: ["confirmarSenha"],
-});
+// Schema será criado dentro do componente para ter acesso ao t()
 
 type RegisterFormValues = z.infer<typeof registerSchema>;
 
@@ -80,6 +71,22 @@ export default function Register() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { theme } = useTheme();
+  const { t } = useTranslation();
+  
+  // Schema de validação com localização
+  const registerSchema = z.object({
+    nome: z.string().min(2, t('validation.name_min_length', 'Nome deve ter pelo menos 2 caracteres')),
+    email: z.string().email(t('validation.email_invalid', 'Email inválido')),
+    senha: z.string().min(6, t('validation.password_min_length', 'A senha deve ter pelo menos 6 caracteres')),
+    confirmarSenha: z.string().min(6, t('validation.confirm_password', 'Confirme sua senha')),
+    telefone: z.string().min(12, t('validation.phone_required', 'Telefone obrigatório')),
+    remoteJid: z.string(),
+  }).refine((data) => data.senha === data.confirmarSenha, {
+    message: t('validation.passwords_not_match', 'As senhas não coincidem'),
+    path: ["confirmarSenha"],
+  });
+  
+  type RegisterFormValues = z.infer<typeof registerSchema>;
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [isLogoChecking, setIsLogoChecking] = useState(false);
   const [logoChecked, setLogoChecked] = useState(false);
@@ -144,14 +151,14 @@ export default function Register() {
         data: { ...userData, telefone }
       });
       toast({
-        title: "Conta criada com sucesso",
-        description: "Você já pode fazer login no sistema.",
+        title: t('register.success_title', 'Conta criada com sucesso'),
+        description: t('register.success_description', 'Você já pode fazer login no sistema.'),
       });
       window.location.href = "/";
     } catch (error) {
       toast({
-        title: "Erro no cadastro",
-        description: "Não foi possível criar sua conta. Tente novamente.",
+        title: t('register.error_title', 'Erro no cadastro'),
+        description: t('register.error_description', 'Não foi possível criar sua conta. Tente novamente.'),
         variant: "destructive",
       });
     } finally {
@@ -178,15 +185,15 @@ export default function Register() {
             )}
           </div>
           {!logoUrl && logoChecked && (
-            <p className="text-gray-400 mt-2">Seu controle financeiro pessoal</p>
+            <p className="text-gray-400 mt-2">{t('register.tagline', 'Seu controle financeiro pessoal')}</p>
           )}
         </div>
 
         <Card className="glass-card neon-border">
           <CardHeader>
-            <CardTitle>Criar Conta</CardTitle>
+            <CardTitle>{t('register.title', 'Criar Conta')}</CardTitle>
             <CardDescription>
-              Preencha os dados abaixo para criar sua conta
+              {t('register.description', 'Preencha os dados abaixo para criar sua conta')}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -197,9 +204,9 @@ export default function Register() {
                   name="nome"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Nome</FormLabel>
+                      <FormLabel>{t('common.name', 'Nome')}</FormLabel>
                       <FormControl>
-                        <Input placeholder="Seu nome completo" {...field} />
+                        <Input placeholder={t('placeholders.full_name', 'Seu nome completo')} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -210,9 +217,9 @@ export default function Register() {
                   name="email"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Email</FormLabel>
+                      <FormLabel>{t('common.email', 'Email')}</FormLabel>
                       <FormControl>
-                        <Input placeholder="email@exemplo.com" {...field} />
+                        <Input placeholder={t('placeholders.email_example', 'email@exemplo.com')} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -223,7 +230,7 @@ export default function Register() {
                   name="senha"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Senha</FormLabel>
+                      <FormLabel>{t('common.password', 'Senha')}</FormLabel>
                       <FormControl>
                         <Input type="password" placeholder="******" {...field} />
                       </FormControl>
@@ -236,7 +243,7 @@ export default function Register() {
                   name="confirmarSenha"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Confirmar Senha</FormLabel>
+                      <FormLabel>{t('register.confirm_password', 'Confirmar Senha')}</FormLabel>
                       <FormControl>
                         <Input type="password" placeholder="******" {...field} />
                       </FormControl>
@@ -249,7 +256,7 @@ export default function Register() {
                   name="telefone"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Telefone</FormLabel>
+                      <FormLabel>{t('common.phone', 'Telefone')}</FormLabel>
                       <FormControl>
                         <PhoneInput
                           value={field.value || ""}
@@ -263,16 +270,16 @@ export default function Register() {
                   )}
                 />
                 <Button type="submit" className="w-full" disabled={isLoading}>
-                  {isLoading ? "Criando conta..." : "Criar conta"}
+                  {isLoading ? t('register.creating', 'Criando conta...') : t('register.create_button', 'Criar conta')}
                 </Button>
               </form>
             </Form>
           </CardContent>
           <CardFooter className="flex justify-center">
             <p className="text-sm text-gray-400">
-              Já tem uma conta?{" "}
+              {t('register.have_account', 'Já tem uma conta?')}{" "}
               <Button variant="link" className="p-0" onClick={() => navigate("/")}>
-                Fazer login
+                {t('register.login_link', 'Fazer login')}
               </Button>
             </p>
           </CardFooter>

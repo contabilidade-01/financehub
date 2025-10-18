@@ -13,7 +13,13 @@
     "brunostart": "npm install && npm audit fix && NODE_ENV=development tsx server/index.ts",
     "check": "tsc",
     "db:push": "node scripts/db-push-confirm.cjs",
-    "db:seed": "node scripts/seed-globals.cjs"
+    "db:seed": "node scripts/seed-globals.cjs",
+    "migrate:localization": "tsx migrate_localization.js",
+    "verify:localization": "tsx verify_localization.js",
+    "verify:localization:files": "tsx verify_localization.js --files-only",
+    "verify:localization:with-tests": "tsx verify_localization.js --with-tests",
+    "import:locale": "tsx import_locales.js",
+    "import:locale:list": "tsx import_locales.js --list"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

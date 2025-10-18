@@ -31,15 +31,17 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { useTheme } from "next-themes";
+import { useTranslation } from "@/contexts/LocalizationContext";
+import { translateCategoryType, translateCategoryName } from "@/utils/localization";
 
-const categorySchema = z.object({
-  nome: z.string().min(1, "Nome é obrigatório"),
-  tipo: z.string().min(1, "Tipo é obrigatório"),
-  cor: z.string().min(1, "Cor é obrigatória"),
-  icone: z.string().min(1, "Ícone é obrigatório"),
+const createCategorySchema = (t: (key: string, fallback: string) => string) => z.object({
+  nome: z.string().min(1, t('categories.form.name_required', 'Name is required')),
+  tipo: z.string().min(1, t('categories.form.type_required', 'Type is required')),
+  cor: z.string().min(1, t('categories.form.color_required', 'Color is required')),
+  icone: z.string().min(1, t('categories.form.icon_required', 'Icon is required')),
 });
 
-type CategoryFormValues = z.infer<typeof categorySchema>;
+type CategoryFormValues = z.infer<ReturnType<typeof createCategorySchema>>;
 
 // Componentes customizados para os dropdowns
 interface CustomSelectProps {
@@ -47,9 +49,10 @@ interface CustomSelectProps {
   value: string;
   onChange: (value: string) => void;
   options: { value: string; label: string }[];
+  t?: (key: string, fallback: string) => string;
 }
 
-function CustomSelect({ label, value, onChange, options }: CustomSelectProps) {
+function CustomSelect({ label, value, onChange, options, t }: CustomSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const selectRef = useRef<HTMLDivElement>(null);
   
@@ -82,7 +85,7 @@ function CustomSelect({ label, value, onChange, options }: CustomSelectProps) {
         {selectedOption ? (
           <span>{selectedOption.label}</span>
         ) : (
-          <span style={{ color: '#9ca3af' }}>Selecione {label.toLowerCase()}</span>
+          <span style={{ color: '#9ca3af' }}>{t ? t('categories.form.select', 'Selecione') : 'Selecione'} {label.toLowerCase()}</span>
         )}
         <ChevronDown size={16} />
       </button>
@@ -261,6 +264,7 @@ function CustomIconSelect({ label, value, onChange, icons }: CustomIconSelectPro
 }
 
 export default function Categories() {
+  const { t } = useTranslation();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [deletingCategory, setDeletingCategory] = useState<Category | null>(null);
@@ -269,6 +273,8 @@ export default function Categories() {
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const { toast } = useToast();
   const { theme } = useTheme();
+  
+  const categorySchema = createCategorySchema(t);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -312,7 +318,7 @@ export default function Categories() {
           data: data
         });
         toast({
-          title: "Categoria atualizada",
+          title: t('categories.category_updated', 'Categoria atualizada'),
           description: "A categoria foi atualizada com sucesso.",
         });
       } else {
@@ -321,7 +327,7 @@ export default function Categories() {
           data: data
         });
         toast({
-          title: "Categoria criada",
+          title: t('categories.category_created', 'Categoria criada'),
           description: "A categoria foi criada com sucesso.",
         });
       }
@@ -331,7 +337,7 @@ export default function Categories() {
       form.reset();
     } catch (error) {
       toast({
-        title: "Erro",
+        title: t('transactions.error', 'Erro'),
         description: "Não foi possível salvar a categoria.",
         variant: "destructive",
       });
@@ -345,13 +351,13 @@ export default function Categories() {
       });
       queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
       toast({
-        title: "Categoria excluída",
+        title: t('categories.category_deleted', 'Categoria excluída'),
         description: "A categoria foi excluída com sucesso.",
       });
       setDeletingCategory(null);
     } catch (error) {
       toast({
-        title: "Erro",
+        title: t('transactions.error', 'Erro'),
         description: "Não foi possível excluir a categoria.",
         variant: "destructive",
       });
@@ -382,37 +388,37 @@ export default function Categories() {
 
   // Available icons for categories
   const icons = [
-    { value: "home", label: "Casa" },
-    { value: "car", label: "Carro" },
-    { value: "food", label: "Alimentação" },
-    { value: "health", label: "Saúde" },
-    { value: "school", label: "Educação" },
-    { value: "entertainment", label: "Lazer" },
-    { value: "clothing", label: "Roupas" },
-    { value: "services", label: "Serviços" },
-    { value: "salary", label: "Salário" },
-    { value: "freelance", label: "Freelance" },
-    { value: "investments", label: "Investimentos" },
-    { value: "gift", label: "Presente" },
-    { value: "refund", label: "Reembolso" },
-    { value: "misc-income", label: "Outras Receitas" },
-    { value: "misc-expense", label: "Outros Gastos" },
-    { value: "tag", label: "Tag" }
+    { value: "home", label: t('categories.icons.home', 'Casa') },
+    { value: "car", label: t('categories.icons.car', 'Carro') },
+    { value: "food", label: t('categories.icons.food', 'Food') },
+    { value: "health", label: t('categories.icons.health', 'Health') },
+    { value: "school", label: t('categories.icons.school', 'Education') },
+    { value: "entertainment", label: t('categories.icons.entertainment', 'Entertainment') },
+    { value: "clothing", label: t('categories.icons.clothing', 'Roupas') },
+    { value: "services", label: t('categories.icons.services', 'Serviços') },
+    { value: "salary", label: t('categories.icons.salary', 'Salary') },
+    { value: "freelance", label: t('categories.icons.freelance', 'Freelance') },
+    { value: "investments", label: t('categories.icons.investments', 'Investments') },
+    { value: "gift", label: t('categories.icons.gift', 'Presente') },
+    { value: "refund", label: t('categories.icons.refund', 'Reembolso') },
+    { value: "misc-income", label: t('categories.icons.misc_income', 'Other Income') },
+    { value: "misc-expense", label: t('categories.icons.misc_expense', 'Other Expenses') },
+    { value: "tag", label: t('categories.icons.tag', 'Tag') }
   ];
 
   // Available colors for categories
   const colors = [
-    { value: "#FF5733", label: "Vermelho" },
-    { value: "#3498DB", label: "Azul" },
-    { value: "#F1C40F", label: "Amarelo" },
-    { value: "#2ECC71", label: "Verde" },
-    { value: "#9B59B6", label: "Roxo" },
-    { value: "#E67E22", label: "Laranja" },
-    { value: "#1ABC9C", label: "Turquesa" },
-    { value: "#34495E", label: "Azul Escuro" },
-    { value: "#95A5A6", label: "Cinza" },
-    { value: "#6C63FF", label: "Roxo (Primário)" },
-    { value: "#00FF9D", label: "Verde Neon (Secundário)" }
+    { value: "#FF5733", label: t('categories.colors.red', 'Vermelho') },
+    { value: "#3498DB", label: t('categories.colors.blue', 'Azul') },
+    { value: "#F1C40F", label: t('categories.colors.yellow', 'Amarelo') },
+    { value: "#2ECC71", label: t('categories.colors.green', 'Verde') },
+    { value: "#9B59B6", label: t('categories.colors.purple', 'Roxo') },
+    { value: "#E67E22", label: t('categories.colors.orange', 'Laranja') },
+    { value: "#1ABC9C", label: t('categories.colors.turquoise', 'Turquesa') },
+    { value: "#34495E", label: t('categories.colors.dark_blue', 'Azul Escuro') },
+    { value: "#95A5A6", label: t('categories.colors.gray', 'Cinza') },
+    { value: "#6C63FF", label: t('categories.colors.purple', 'Roxo') + " (Primário)" },
+    { value: "#00FF9D", label: t('categories.colors.green', 'Verde') + " Neon (Secundário)" }
   ];
 
   const getIconComponent = (iconName: string) => {
@@ -429,8 +435,8 @@ export default function Categories() {
             transition={{ duration: 0.3 }}
             className="mb-4 md:mb-0"
           >
-            <h1 className="text-2xl md:text-3xl font-bold mb-1">Categorias</h1>
-            <p className="text-gray-400">Gerencie as categorias de transações</p>
+            <h1 className="text-2xl md:text-3xl font-bold mb-1">{t('categories.title', 'Categorias')}</h1>
+            <p className="text-gray-400">{t('categories.subtitle', 'Organize suas receitas e despesas')}</p>
           </motion.div>
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -439,7 +445,7 @@ export default function Categories() {
           >
             <Button onClick={openNewCategoryDialog} className="neon-border">
               <PlusIcon className="mr-2 h-4 w-4" />
-              Nova Categoria
+              {t('categories.new_category', 'Nova Categoria')}
             </Button>
           </motion.div>
         </div>
@@ -455,7 +461,7 @@ export default function Categories() {
           <div className="flex flex-col md:flex-row gap-4 mb-6">
             <div className="flex-1">
               <Input
-                placeholder="Buscar categorias..."
+                placeholder={t('placeholders.search_categories', 'Search categories...')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="bg-dark-purple/10"
@@ -467,18 +473,18 @@ export default function Categories() {
                 onChange={(e) => setTypeFilter(e.target.value)}
                 className="w-[140px] bg-dark-purple/10 h-10 rounded-md border border-input px-3 py-2 text-sm"
               >
-                <option value="all">Todos</option>
-                <option value={TransactionType.INCOME}>Receitas</option>
-                <option value={TransactionType.EXPENSE}>Despesas</option>
+                <option value="all">{t('common.all', 'All')}</option>
+                <option value={TransactionType.INCOME}>{t('common.income', 'Income')}</option>
+                <option value={TransactionType.EXPENSE}>{t('common.expenses', 'Expenses')}</option>
               </select>
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {isLoading ? (
-              <div className="col-span-full py-4 text-center">Carregando...</div>
+              <div className="col-span-full py-4 text-center">{t('common.loading', 'Loading...')}</div>
             ) : filteredCategories?.length === 0 ? (
-              <div className="col-span-full py-4 text-center">Nenhuma categoria encontrada</div>
+              <div className="col-span-full py-4 text-center">{t('categories.no_categories_found', 'No categories found')}</div>
             ) : (
               filteredCategories?.map((category) => (
                 <motion.div
@@ -500,9 +506,9 @@ export default function Categories() {
                       )}
                     </div>
                     <div>
-                      <h3 className={`font-medium ${theme === 'light' ? 'text-gray-900' : ''}`}>{category.nome}</h3>
+                      <h3 className={`font-medium ${theme === 'light' ? 'text-gray-900' : ''}`}>{translateCategoryName(category.nome, t)}</h3>
                       <span className={`text-xs ${theme === 'light' ? (category.tipo === TransactionType.INCOME ? 'text-green-600' : 'text-red-600') : (category.tipo === TransactionType.INCOME ? 'text-green-400' : 'text-red-400')}`}>
-                        {category.tipo}
+                        {translateCategoryType(category.tipo, t)}
                       </span>
                     </div>
                   </div>
@@ -538,7 +544,7 @@ export default function Categories() {
                                 className={`flex items-center w-full px-3 py-2 text-sm rounded-t-md ${theme === 'light' ? 'text-gray-700 hover:bg-gray-100' : 'text-white hover:bg-slate-700'}`}
                               >
                                 <PencilIcon className="mr-2 h-4 w-4" />
-                                <span>Editar</span>
+                                <span>{t('common.edit', 'Edit')}</span>
                               </button>
                               <button
                                 onClick={() => {
@@ -548,7 +554,7 @@ export default function Categories() {
                                 className={`flex items-center w-full px-3 py-2 text-sm rounded-b-md ${theme === 'light' ? 'text-red-600 hover:bg-gray-100' : 'text-red-400 hover:bg-slate-700'}`}
                               >
                                 <Trash2Icon className="mr-2 h-4 w-4" />
-                                <span>Excluir</span>
+                                <span>{t('common.delete', 'Delete')}</span>
                               </button>
                             </div>
                           </>
@@ -577,7 +583,7 @@ export default function Categories() {
             </button>
             
             <div className="category-modal-title">
-              {editingCategory ? "Editar Categoria" : "Nova Categoria"}
+              {editingCategory ? t('categories.edit_category', 'Editar Categoria') : t('categories.new_category', 'Nova Categoria')}
             </div>
             <div className="category-modal-description">
               {editingCategory
@@ -587,34 +593,35 @@ export default function Categories() {
 
             <form onSubmit={form.handleSubmit(onSubmit)}>
               <div className="category-form-field">
-                <label className="category-label">Nome</label>
+                <label className="category-label">{t('categories.form.name', 'Nome')}</label>
                 <input
                   className="category-input"
-                  placeholder="Nome da categoria"
+                  placeholder={t('categories.form.name_placeholder', 'Nome da categoria')}
                   value={form.watch("nome") || ""}
                   onChange={(e) => form.setValue("nome", e.target.value)}
                 />
               </div>
 
               <CustomSelect
-                label="Tipo"
+                label={t('categories.form.type', 'Tipo')}
                 value={form.watch("tipo")}
                 onChange={(value: string) => form.setValue("tipo", value)}
                 options={[
-                  { value: TransactionType.EXPENSE, label: "Despesa" },
-                  { value: TransactionType.INCOME, label: "Receita" }
+                  { value: TransactionType.EXPENSE, label: t('categories.form.expense', 'Despesa') },
+                  { value: TransactionType.INCOME, label: t('categories.form.income', 'Receita') }
                 ]}
+                t={t}
               />
 
               <CustomColorSelect
-                label="Cor"
+                label={t('categories.form.color', 'Cor')}
                 value={form.watch("cor")}
                 onChange={(value: string) => form.setValue("cor", value)}
                 colors={colors}
               />
 
               <CustomIconSelect
-                label="Ícone"
+                label={t('categories.form.icon', 'Ícone')}
                 value={form.watch("icone")}
                 onChange={(value: string) => form.setValue("icone", value)}
                 icons={icons}
@@ -626,10 +633,10 @@ export default function Categories() {
                   className="category-btn category-btn-secondary"
                   onClick={() => setIsDialogOpen(false)}
                 >
-                  Cancelar
+                  {t('common.cancel', 'Cancelar')}
                 </button>
                 <button type="submit" className="category-btn category-btn-primary">
-                  {editingCategory ? "Salvar alterações" : "Criar categoria"}
+                  {editingCategory ? t('categories.form.save_changes', 'Salvar alterações') : t('categories.form.create_category', 'Criar categoria')}
                 </button>
               </div>
             </form>
@@ -640,7 +647,7 @@ export default function Categories() {
       <AlertDialog open={!!deletingCategory} onOpenChange={(open) => !open && setDeletingCategory(null)}>
         <AlertDialogContent className="glass-card">
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir categoria</AlertDialogTitle>
+            <AlertDialogTitle>{t('categories.delete_category', 'Delete Category')}</AlertDialogTitle>
             <AlertDialogDescription>
               Tem certeza que deseja excluir esta categoria? Esta ação não pode ser desfeita.
               <br />
@@ -655,7 +662,7 @@ export default function Categories() {
               onClick={() => deletingCategory && handleDeleteCategory(deletingCategory.id)}
               className="bg-destructive"
             >
-              Excluir
+              {t('common.delete', 'Delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

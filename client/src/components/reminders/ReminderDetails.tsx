@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Check, Edit, Loader2, Trash2 } from 'lucide-react';
+import { useTranslation } from '@/contexts/LocalizationContext';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -43,6 +44,7 @@ export default function ReminderDetails({
 }: ReminderDetailsProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const { t } = useTranslation();
 
   const handleEdit = () => {
     setIsEditing(true);
@@ -97,7 +99,7 @@ export default function ReminderDetails({
           <div className="flex items-center space-x-1">
             {reminder.concluido && (
               <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                <Check className="w-3 h-3 mr-1" /> Concluído
+                <Check className="w-3 h-3 mr-1" /> {t('reminders.completed', 'Completed')}
               </span>
             )}
           </div>
@@ -115,11 +117,11 @@ export default function ReminderDetails({
 
       <div className="flex justify-between pt-4">
         <Button variant="outline" onClick={onCancel}>
-          Fechar
+          {t('common.close', 'Close')}
         </Button>
         <div className="space-x-2">
           <Button variant="outline" onClick={handleEdit} disabled={isDeleting}>
-            <Edit className="w-4 h-4 mr-1" /> Editar
+            <Edit className="w-4 h-4 mr-1" /> {t('common.edit', 'Edit')}
           </Button>
           <Button
             variant="destructive"
@@ -128,30 +130,30 @@ export default function ReminderDetails({
           >
             {isDeleting ? (
               <>
-                <Loader2 className="w-4 h-4 mr-1 animate-spin" /> Excluindo...
+                <Loader2 className="w-4 h-4 mr-1 animate-spin" /> {t('common.deleting', 'Deleting...')}
               </>
             ) : (
               <>
-                <Trash2 className="w-4 h-4 mr-1" /> Excluir
+                <Trash2 className="w-4 h-4 mr-1" /> {t('common.delete', 'Delete')}
               </>
             )}
           </Button>
         </div>
       </div>
 
-      {/* Diálogo de confirmação de exclusão */}
+      {/* Delete confirmation dialog */}
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir Lembrete</AlertDialogTitle>
+            <AlertDialogTitle>{t('reminders.delete_reminder', 'Delete Reminder')}</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja excluir este lembrete? Esta ação não pode ser desfeita.
+              {t('reminders.delete_confirmation', 'Are you sure you want to delete this reminder? This action cannot be undone.')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={cancelDelete}>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel onClick={cancelDelete}>{t('common.cancel', 'Cancel')}</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">
-              Excluir
+              {t('common.delete', 'Delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

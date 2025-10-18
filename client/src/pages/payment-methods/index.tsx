@@ -16,15 +16,17 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { insertPaymentMethodSchema, type PaymentMethod } from "@shared/schema";
 import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
+import { useTranslation } from "@/contexts/LocalizationContext";
+import { translatePaymentMethodName } from "@/utils/localization";
 
-const formSchema = insertPaymentMethodSchema.extend({
-  nome: z.string().min(1, "Nome é obrigatório"),
+const createFormSchema = (t: (key: string, fallback: string) => string) => insertPaymentMethodSchema.extend({
+  nome: z.string().min(1, t('validation.name_required', 'Name is required')),
   descricao: z.string().optional(),
   icone: z.string().optional(),
   cor: z.string().optional()
 });
 
-type FormData = z.infer<typeof formSchema>;
+type FormData = z.infer<ReturnType<typeof createFormSchema>>;
 
 const getPaymentMethodIcon = (nome: string, icone?: string) => {
   if (icone) return icone;
@@ -54,6 +56,9 @@ export default function PaymentMethodsPage() {
   const [editingMethod, setEditingMethod] = useState<PaymentMethod | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
+
+  const formSchema = createFormSchema(t);
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -269,9 +274,9 @@ export default function PaymentMethodsPage() {
     <div className="container mx-auto p-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-bold">Formas de Pagamento</h1>
+          <h1 className="text-3xl font-bold">{t('payment_methods.title', 'Formas de Pagamento')}</h1>
           <p className="text-muted-foreground">
-            Gerencie suas formas de pagamento personalizadas
+            {t('payment_methods.subtitle', 'Gerencie suas formas de pagamento personalizadas')}
           </p>
         </div>
         <div className="w-full md:w-auto flex md:block justify-end">
@@ -279,13 +284,13 @@ export default function PaymentMethodsPage() {
           <DialogTrigger asChild>
               <Button onClick={handleNewPaymentMethod} className="w-full md:w-auto">
               <Plus className="h-4 w-4 mr-2" />
-              Nova Forma de Pagamento
+              {t('payment_methods.new_method', 'New Payment Method')}
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>
-                {editingMethod ? "Editar Forma de Pagamento" : "Nova Forma de Pagamento"}
+                {editingMethod ? t('payment_methods.edit_method', 'Edit Payment Method') : t('payment_methods.new_method', 'New Payment Method')}
               </DialogTitle>
             </DialogHeader>
             
@@ -296,9 +301,9 @@ export default function PaymentMethodsPage() {
                   name="nome"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Nome *</FormLabel>
+                      <FormLabel>{t('common.name', 'Name')} *</FormLabel>
                       <FormControl>
-                        <Input placeholder="Ex: Cartão de Débito" {...field} />
+                        <Input placeholder={t('payment_methods.form.name_placeholder', 'Ex: Debit Card')} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -310,10 +315,10 @@ export default function PaymentMethodsPage() {
                   name="descricao"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Descrição</FormLabel>
+                      <FormLabel>{t('common.description', 'Description')}</FormLabel>
                       <FormControl>
                         <Textarea 
-                          placeholder="Descrição opcional da forma de pagamento"
+                          placeholder={t('payment_methods.form.description_placeholder', 'Optional payment method description')}
                           {...field}
                         />
                       </FormControl>
@@ -328,7 +333,7 @@ export default function PaymentMethodsPage() {
                     name="icone"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Ícone</FormLabel>
+                        <FormLabel>{t('common.icon', 'Ícone')}</FormLabel>
                         <FormControl>
                           <Input placeholder="CreditCard, Smartphone, etc." {...field} />
                         </FormControl>
@@ -342,7 +347,7 @@ export default function PaymentMethodsPage() {
                     name="cor"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Cor</FormLabel>
+                        <FormLabel>{t('common.color', 'Cor')}</FormLabel>
                         <FormControl>
                           <Input type="color" {...field} />
                         </FormControl>
@@ -354,13 +359,13 @@ export default function PaymentMethodsPage() {
                 
                 <div className="flex justify-end gap-2">
                   <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                    Cancelar
+                    {t('common.cancel', 'Cancel')}
                   </Button>
                   <Button 
                     type="submit" 
                     disabled={createMutation.isPending || updateMutation.isPending}
                   >
-                    {editingMethod ? "Atualizar" : "Criar"}
+                    {editingMethod ? t('common.update', 'Update') : t('common.create', 'Create')}
                   </Button>
                 </div>
               </form>
@@ -386,10 +391,10 @@ export default function PaymentMethodsPage() {
                     />
                   </div>
                   <div>
-                    <CardTitle className="text-lg">{method.nome}</CardTitle>
+                    <CardTitle className="text-lg">{translatePaymentMethodName(method.nome, t)}</CardTitle>
                     {method.global && (
                       <Badge variant="secondary" className="text-xs">
-                        Global
+                        {t('common.global', 'Global')}
                       </Badge>
                     )}
                   </div>
@@ -424,9 +429,9 @@ export default function PaymentMethodsPage() {
               )}
               <div className="border-t pt-3 mt-3">
                 <div className="space-y-2">
-                  <div className="text-sm text-muted-foreground mb-2">Total acumulado</div>
+                  <div className="text-sm text-muted-foreground mb-2">{t('payment_methods.total_accumulated', 'Total Accumulated')}</div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Receitas:</span>
+                    <span className="text-sm text-muted-foreground">{t('common.income_label', 'Income:')}</span>
                     {isTotalsFetching ? (
                       <Skeleton className="h-4 w-20" />
                     ) : (
@@ -436,7 +441,7 @@ export default function PaymentMethodsPage() {
                     )}
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Despesas:</span>
+                    <span className="text-sm text-muted-foreground">{t('common.expenses_label', 'Expenses:')}</span>
                     {isTotalsFetching ? (
                       <Skeleton className="h-4 w-20" />
                     ) : (
@@ -455,13 +460,13 @@ export default function PaymentMethodsPage() {
       {paymentMethods.length === 0 && (
         <div className="text-center py-12">
           <CreditCard className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-          <h3 className="text-lg font-medium mb-2">Nenhuma forma de pagamento encontrada</h3>
+          <h3 className="text-lg font-medium mb-2">{t('payment_methods.no_methods', 'No payment methods found')}</h3>
           <p className="text-muted-foreground mb-4">
-            Crie sua primeira forma de pagamento personalizada
+            {t('payment_methods.create_first', 'Create your first custom payment method')}
           </p>
           <Button onClick={handleNewPaymentMethod}>
             <Plus className="h-4 w-4 mr-2" />
-            Nova Forma de Pagamento
+            {t('payment_methods.new_method', 'New Payment Method')}
           </Button>
         </div>
       )}

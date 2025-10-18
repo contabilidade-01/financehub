@@ -25,6 +25,7 @@ import { Calendar as CalendarIcon, Download, Filter, PieChart as PieChartIcon } 
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { useTranslation } from "@/contexts/LocalizationContext";
 
 // Tipos para os dados de resumo
 interface MonthlyData {
@@ -50,6 +51,7 @@ interface SummaryData {
 }
 
 export default function ReportsPage() {
+  const { t } = useTranslation();
   const [period, setPeriod] = useState("month");
 
   const { data: walletData, isLoading: isLoadingWallet } = useQuery<Wallet>({
@@ -238,19 +240,19 @@ export default function ReportsPage() {
     const filteredTransactions = getFilteredTransactions();
     
     if (!filteredTransactions || filteredTransactions.length === 0) {
-      alert("Não há transações para exportar neste período.");
+      alert(t('reports.no_transactions_to_export', 'Não há transações para exportar neste período.'));
       return;
     }
     
     // Criar cabeçalho do CSV
     const headers = [
-      "Data",
-      "Descrição",
-      "Tipo",
-      "Categoria",
-      "Forma de Pagamento",
-      "Valor",
-      "Status"
+      t('reports.csv.date', 'Data'),
+      t('reports.csv.description', 'Descrição'),
+      t('reports.csv.type', 'Tipo'),
+      t('reports.csv.category', 'Categoria'),
+      t('reports.csv.payment_method', 'Forma de Pagamento'),
+      t('reports.csv.amount', 'Valor'),
+      t('reports.csv.status', 'Status')
     ];
     
     // Criar linhas do CSV
@@ -262,8 +264,8 @@ export default function ReportsPage() {
         formattedDate,
         transaction.descricao,
         transaction.tipo,
-        transaction.categoria_name || "Não categorizada",
-        transaction.metodo_pagamento || "Não especificado",
+        transaction.categoria_name || t('reports.csv.uncategorized', 'Não categorizada'),
+        transaction.metodo_pagamento || t('reports.csv.not_specified', 'Não especificado'),
         transaction.valor.toString().replace('.', ','),
         transaction.status
       ];
@@ -279,9 +281,9 @@ export default function ReportsPage() {
       .reduce((sum, t) => sum + Number(t.valor), 0);
     
     rows.push([]);
-    rows.push(["", "", "", "", "Total Receitas:", totalReceitas.toString().replace('.', ','), ""]);
-    rows.push(["", "", "", "", "Total Despesas:", totalDespesas.toString().replace('.', ','), ""]);
-    rows.push(["", "", "", "", "Saldo:", (totalReceitas - totalDespesas).toString().replace('.', ','), ""]);
+    rows.push(["", "", "", "", t('reports.csv.total_income', 'Total Receitas:'), totalReceitas.toString().replace('.', ','), ""]);
+    rows.push(["", "", "", "", t('reports.csv.total_expenses', 'Total Despesas:'), totalDespesas.toString().replace('.', ','), ""]);
+    rows.push(["", "", "", "", t('reports.csv.balance', 'Saldo:'), (totalReceitas - totalDespesas).toString().replace('.', ','), ""]);
     
     // Converter para formato CSV
     const csvContent = [
@@ -298,10 +300,10 @@ export default function ReportsPage() {
     const url = URL.createObjectURL(blob);
     
     // Definir nome do arquivo
-    const periodText = period === "month" ? "mes_atual" : 
-                      period === "quarter" ? "trimestre" : 
-                      "ano";
-    const fileName = `transacoes_${periodText}_${new Date().toISOString().split('T')[0]}.csv`;
+    const periodText = period === "month" ? t('reports.csv.current_month', 'mes_atual') : 
+                      period === "quarter" ? t('reports.csv.quarter', 'trimestre') : 
+                      t('reports.csv.year', 'ano');
+    const fileName = `${t('reports.csv.filename_prefix', 'transacoes')}_${periodText}_${new Date().toISOString().split('T')[0]}.csv`;
     
     link.setAttribute("href", url);
     link.setAttribute("download", fileName);
@@ -447,8 +449,8 @@ export default function ReportsPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
         >
-          <h1 className="text-2xl md:text-3xl font-bold mb-1">Relatórios</h1>
-          <p className="text-gray-400">Acompanhe suas finanças com análises detalhadas</p>
+          <h1 className="text-2xl md:text-3xl font-bold mb-1">{t('reports.title', 'Relatórios')}</h1>
+          <p className="text-gray-400">{t('reports.subtitle', 'Análise detalhada das suas finanças')}</p>
         </motion.div>
         <div className="flex gap-2 mt-4 md:mt-0">
           <Select value={period} onValueChange={setPeriod}>
@@ -456,9 +458,9 @@ export default function ReportsPage() {
               <SelectValue placeholder="Período" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="month">Este mês</SelectItem>
-              <SelectItem value="quarter">Último trimestre</SelectItem>
-              <SelectItem value="year">Este ano</SelectItem>
+              <SelectItem value="month">{t('reports.this_month', 'Este mês')}</SelectItem>
+              <SelectItem value="quarter">{t('reports.last_quarter', 'Último trimestre')}</SelectItem>
+              <SelectItem value="year">{t('reports.this_year', 'Este ano')}</SelectItem>
             </SelectContent>
           </Select>
           <Button 
@@ -467,7 +469,7 @@ export default function ReportsPage() {
             onClick={handleExportCSV}
           >
             <Download className="h-4 w-4" />
-            Exportar CSV
+            {t('reports.export_csv', 'Exportar CSV')}
           </Button>
         </div>
       </div>
@@ -480,7 +482,7 @@ export default function ReportsPage() {
         >
           <Card className="glass-card neon-border">
             <CardHeader className="pb-2">
-              <CardTitle className="text-xl font-bold">Receitas vs Despesas</CardTitle>
+              <CardTitle className="text-xl font-bold">{t('reports.income_vs_expenses', 'Income vs Expenses')}</CardTitle>
             </CardHeader>
             <CardContent>
               {isLoadingSummary ? (
@@ -523,8 +525,8 @@ export default function ReportsPage() {
                         return null;
                       }}
                     />
-                    <Bar dataKey="income" name="Receitas" radius={[4, 4, 0, 0]} fill="#4ade80" fillOpacity={0.8} />
-                    <Bar dataKey="expense" name="Despesas" radius={[4, 4, 0, 0]} fill="#f87171" fillOpacity={0.8} />
+                    <Bar dataKey="income" name={t('reports.chart.income', 'Income')} radius={[4, 4, 0, 0]} fill="#4ade80" fillOpacity={0.8} />
+                    <Bar dataKey="expense" name={t('reports.chart.expenses', 'Expenses')} radius={[4, 4, 0, 0]} fill="#f87171" fillOpacity={0.8} />
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -539,7 +541,7 @@ export default function ReportsPage() {
         >
           <Card className="glass-card neon-border">
             <CardHeader className="pb-2">
-              <CardTitle className="text-xl font-bold">Fluxo de Caixa</CardTitle>
+              <CardTitle className="text-xl font-bold">{t('reports.cash_flow', 'Cash Flow')}</CardTitle>
             </CardHeader>
             <CardContent>
               {isLoadingSummary ? (
@@ -580,7 +582,7 @@ export default function ReportsPage() {
                     <Line
                       type="monotone"
                       dataKey="balance"
-                      name="Saldo"
+                      name={t('reports.chart.balance', 'Saldo')}
                       stroke="#8884d8"
                       strokeWidth={2}
                       dot={{ r: 4 }}
@@ -601,7 +603,7 @@ export default function ReportsPage() {
       >
         <Card className="glass-card neon-border mb-6">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xl font-bold">Despesas por Categoria</CardTitle>
+            <CardTitle className="text-xl font-bold">{t('reports.expenses_by_category', 'Expenses by Category')}</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoadingSummary ? (
@@ -609,10 +611,9 @@ export default function ReportsPage() {
             ) : getCategoryData().length === 0 ? (
               <div className="flex flex-col items-center justify-center h-[400px] text-center">
                 <PieChartIcon className="w-16 h-16 text-gray-400 mb-4" />
-                <h3 className="text-xl font-bold text-gray-300 mb-2">Sem dados para exibir</h3>
+                <h3 className="text-xl font-bold text-gray-300 mb-2">{t('reports.no_data', 'No data found for the selected period')}</h3>
                 <p className="text-gray-400 max-w-md">
-                  Você ainda não possui despesas registradas neste período. Comece a registrar suas transações para
-                  visualizar este relatório.
+                  {t('reports.no_data_description', 'You don\'t have any expenses recorded for this period yet. Start recording your transactions to view this report.')}
                 </p>
               </div>
             ) : (
@@ -663,7 +664,7 @@ export default function ReportsPage() {
                   </ResponsiveContainer>
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold mb-4">Detalhamento</h3>
+                  <h3 className="text-lg font-bold mb-4">{t('reports.breakdown', 'Detalhamento')}</h3>
                   <div className="space-y-4">
                     {getCategoryData().map((category: CategoryData, index: number) => (
                       <div key={index}>
@@ -704,12 +705,12 @@ export default function ReportsPage() {
       >
         <Card className="glass-card neon-border">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xl font-bold">Resumo Financeiro</CardTitle>
+            <CardTitle className="text-xl font-bold">{t('reports.financial_summary', 'Financial Summary')}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="space-y-2">
-                <h3 className="text-sm text-gray-400">Total de Receitas</h3>
+                <h3 className="text-sm text-gray-400">{t('reports.total_income', 'Total Income')}</h3>
                 <p className="text-2xl font-orbitron text-green-400">
                   {isLoadingSummary ? (
                     <Skeleton className="h-8 w-32" />
@@ -719,7 +720,7 @@ export default function ReportsPage() {
                 </p>
               </div>
               <div className="space-y-2">
-                <h3 className="text-sm text-gray-400">Total de Despesas</h3>
+                <h3 className="text-sm text-gray-400">{t('reports.total_expenses', 'Total Expenses')}</h3>
                 <p className="text-2xl font-orbitron text-red-400">
                   {isLoadingSummary ? (
                     <Skeleton className="h-8 w-32" />
@@ -729,7 +730,7 @@ export default function ReportsPage() {
                 </p>
               </div>
               <div className="space-y-2">
-                <h3 className="text-sm text-gray-400">Saldo Atual</h3>
+                <h3 className="text-sm text-gray-400">{t('reports.current_balance', 'Current Balance')}</h3>
                 <p 
                   className={`text-2xl font-orbitron ${
                     Number(walletData?.saldo_atual || 0) >= 0 ? "text-primary" : "text-red-400"

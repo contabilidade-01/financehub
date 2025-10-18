@@ -20,10 +20,11 @@ import { LoginUser } from "@shared/schema";
 import { VersionDisplay } from "@/components/shared/VersionDisplay";
 import { useTheme } from "next-themes";
 import { useEffect } from "react";
+import { useTranslation } from "@/contexts/LocalizationContext";
 
-const loginSchema = z.object({
-  email: z.string().email("Email inválido"),
-  senha: z.string().min(6, "A senha deve ter pelo menos 6 caracteres"),
+const createLoginSchema = (t: (key: string, fallback: string) => string) => z.object({
+  email: z.string().email(t('login.validation.email_invalid', 'Email inválido')),
+  senha: z.string().min(6, t('login.validation.password_min', 'A senha deve ter pelo menos 6 caracteres')),
 });
 
 export default function Login() {
@@ -31,6 +32,7 @@ export default function Login() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { theme } = useTheme();
+  const { t } = useTranslation();
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [isLogoChecking, setIsLogoChecking] = useState(false);
   const [logoChecked, setLogoChecked] = useState(false);
@@ -70,7 +72,7 @@ export default function Login() {
   }, [theme]);
 
   const form = useForm<LoginUser>({
-    resolver: zodResolver(loginSchema),
+    resolver: zodResolver(createLoginSchema(t)),
     defaultValues: {
       email: "",
       senha: "",
@@ -139,14 +141,14 @@ export default function Login() {
               </>
             )}
           </div>
-          <p className="text-gray-400 mt-2">Seu controle financeiro pessoal</p>
+          <p className="text-gray-400 mt-2">{t('login.subtitle', 'Seu controle financeiro pessoal')}</p>
         </div>
 
         <Card className="glass-card neon-border">
           <CardHeader>
-            <CardTitle>Entrar</CardTitle>
+            <CardTitle>{t('login.title', 'Entrar')}</CardTitle>
             <CardDescription>
-              Digite suas credenciais para acessar sua conta
+              {t('login.description', 'Digite suas credenciais para acessar sua conta')}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -157,9 +159,9 @@ export default function Login() {
                   name="email"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Email</FormLabel>
+                      <FormLabel>{t('login.email_label', 'Email')}</FormLabel>
                       <FormControl>
-                        <Input placeholder="email@exemplo.com" {...field} />
+                        <Input placeholder={t('login.email_placeholder', 'email@exemplo.com')} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -170,16 +172,16 @@ export default function Login() {
                   name="senha"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Senha</FormLabel>
+                      <FormLabel>{t('login.password_label', 'Senha')}</FormLabel>
                       <FormControl>
-                        <Input type="password" placeholder="******" {...field} />
+                        <Input type="password" placeholder={t('login.password_placeholder', '******')} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
                 <Button type="submit" className="w-full" disabled={isLoading}>
-                  {isLoading ? "Entrando..." : "Entrar"}
+                  {isLoading ? t('login.logging_in', 'Entrando...') : t('login.submit', 'Entrar')}
                 </Button>
               </form>
             </Form>

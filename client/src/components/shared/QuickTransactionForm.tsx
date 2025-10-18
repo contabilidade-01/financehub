@@ -6,6 +6,7 @@ import { z } from "zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Category, PaymentMethod, TransactionStatus, TransactionType, Wallet } from "@shared/schema";
+import { useTranslation } from "@/contexts/LocalizationContext";
 
 import {
   Form,
@@ -26,30 +27,30 @@ import { Button } from "@/components/ui/button";
 import { Loader2, Check, ChevronDown } from "lucide-react";
 
 // Esquema de validação simplificado para transações rápidas
-const quickTransactionSchema = z.object({
+const createQuickTransactionSchema = (t: (key: string, fallback: string) => string) => z.object({
   descricao: z.string().min(3, {
-    message: "A descrição deve ter pelo menos 3 caracteres.",
+    message: t('validation.description_min_length', 'Description must be at least 3 characters.'),
   }),
   valor: z.string().min(1, {
-    message: "O valor é obrigatório.",
+    message: t('validation.amount_required', 'Amount is required.'),
   }),
   categoria_id: z.number({
-    required_error: "Selecione uma categoria.",
-    invalid_type_error: "Categoria inválida."
+    required_error: t('validation.category_required', 'Select a category.'),
+    invalid_type_error: t('validation.invalid_category', 'Invalid category.')
   }),
   forma_pagamento_id: z.number({
-    required_error: "Selecione uma forma de pagamento.",
-    invalid_type_error: "Forma de pagamento inválida."
+    required_error: t('validation.payment_method_required', 'Select a payment method.'),
+    invalid_type_error: t('validation.invalid_payment_method', 'Invalid payment method.')
   }),
   data_transacao: z.string({
-    required_error: "A data é obrigatória.",
+    required_error: t('validation.date_required', 'Date is required.'),
   }),
   tipo: z.enum([TransactionType.EXPENSE, TransactionType.INCOME], {
-    required_error: "O tipo é obrigatório.",
+    required_error: t('validation.type_required', 'Type is required.'),
   })
 });
 
-type QuickTransactionValues = z.infer<typeof quickTransactionSchema>;
+type QuickTransactionValues = z.infer<ReturnType<typeof createQuickTransactionSchema>>;
 
 interface QuickTransactionFormProps {
   tipo: TransactionType;
@@ -60,6 +61,9 @@ interface QuickTransactionFormProps {
 export function QuickTransactionForm({ tipo, onSuccess, onCancel }: QuickTransactionFormProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { t } = useTranslation();
+  
+  const quickTransactionSchema = createQuickTransactionSchema(t);
 
   // Buscar categorias
   const { data: categories = [], isLoading: isCategoriesLoading } = useQuery<Category[]>({
@@ -175,10 +179,10 @@ export function QuickTransactionForm({ tipo, onSuccess, onCancel }: QuickTransac
     <>
       <DialogHeader>
         <DialogTitle className="text-2xl">
-          {tipo === TransactionType.INCOME ? "Nova Receita" : "Nova Despesa"}
+          {tipo === TransactionType.INCOME ? t('transactions.new_income', 'New Income') : t('transactions.new_expense', 'New Expense')}
         </DialogTitle>
         <DialogDescription>
-          Preencha os detalhes para registrar uma nova {tipo === TransactionType.INCOME ? "receita" : "despesa"}.
+          {tipo === TransactionType.INCOME ? t('transactions.fill_details_income', 'Fill in the details to record a new income.') : t('transactions.fill_details_expense', 'Fill in the details to record a new expense.')}
         </DialogDescription>
       </DialogHeader>
       <Form {...form}>
@@ -188,9 +192,9 @@ export function QuickTransactionForm({ tipo, onSuccess, onCancel }: QuickTransac
             name="descricao"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Descrição</FormLabel>
+                <FormLabel>{t('transactions.description', 'Description')}</FormLabel>
                 <FormControl>
-                  <Input placeholder="Descrição da transação" {...field} />
+                  <Input placeholder={t('transactions.description_placeholder', 'Transaction description')} {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -203,7 +207,7 @@ export function QuickTransactionForm({ tipo, onSuccess, onCancel }: QuickTransac
               name="valor"
               render={({ field }) => (
                 <FormItem className="flex-1">
-                  <FormLabel>Valor</FormLabel>
+                  <FormLabel>{t('transactions.amount', 'Amount')}</FormLabel>
                   <FormControl>
                     <Input
                       type="number"
@@ -223,7 +227,7 @@ export function QuickTransactionForm({ tipo, onSuccess, onCancel }: QuickTransac
               name="data_transacao"
               render={({ field }) => (
                 <FormItem className="flex-1">
-                  <FormLabel>Data</FormLabel>
+                  <FormLabel>{t('transactions.date', 'Date')}</FormLabel>
                   <FormControl>
                     <Input type="date" {...field} />
                   </FormControl>
@@ -265,7 +269,7 @@ export function QuickTransactionForm({ tipo, onSuccess, onCancel }: QuickTransac
               
               return (
                 <FormItem className="relative">
-                  <FormLabel>Categoria</FormLabel>
+                  <FormLabel>{t('transactions.category', 'Category')}</FormLabel>
                   <div ref={selectRef} className="relative">
                     <FormControl>
                       <button
@@ -282,7 +286,7 @@ export function QuickTransactionForm({ tipo, onSuccess, onCancel }: QuickTransac
                             {selectedCategory.nome}
                           </div>
                         ) : (
-                          <span className="text-muted-foreground">Selecione uma categoria</span>
+                          <span className="text-muted-foreground">{t('transactions.select_category', 'Select a category')}</span>
                         )}
                         <ChevronDown className="h-4 w-4 opacity-50" />
                       </button>
@@ -294,11 +298,11 @@ export function QuickTransactionForm({ tipo, onSuccess, onCancel }: QuickTransac
                           {isCategoriesLoading ? (
                             <div className="flex items-center justify-center p-2">
                               <Loader2 className="h-4 w-4" />
-                              <span className="ml-2">Carregando...</span>
+                              <span className="ml-2">{t('common.loading', 'Loading...')}</span>
                             </div>
                           ) : filteredCategories?.length === 0 ? (
                             <div className="p-2 text-center text-sm">
-                              Nenhuma categoria disponível
+                              {t('transactions.no_categories', 'No categories available')}
                             </div>
                           ) : (
                             filteredCategories?.map((category) => (
@@ -368,7 +372,7 @@ export function QuickTransactionForm({ tipo, onSuccess, onCancel }: QuickTransac
               
               return (
                 <FormItem className="relative">
-                  <FormLabel>Forma de Pagamento</FormLabel>
+                  <FormLabel>{t('transactions.payment_method', 'Payment Method')}</FormLabel>
                   <div ref={selectRef} className="relative">
                     <FormControl>
                       <button
@@ -379,7 +383,7 @@ export function QuickTransactionForm({ tipo, onSuccess, onCancel }: QuickTransac
                         {selectedPaymentMethod ? (
                           <span>{selectedPaymentMethod.nome}</span>
                         ) : (
-                          <span className="text-muted-foreground">Selecione uma forma de pagamento</span>
+                          <span className="text-muted-foreground">{t('transactions.select_payment_method', 'Select a payment method')}</span>
                         )}
                         <ChevronDown className="h-4 w-4 opacity-50" />
                       </button>
@@ -391,11 +395,11 @@ export function QuickTransactionForm({ tipo, onSuccess, onCancel }: QuickTransac
                           {isPaymentMethodsLoading ? (
                             <div className="flex items-center justify-center p-2">
                               <Loader2 className="h-4 w-4" />
-                              <span className="ml-2">Carregando...</span>
+                              <span className="ml-2">{t('common.loading', 'Loading...')}</span>
                             </div>
                           ) : paymentMethods.length === 0 ? (
                             <div className="p-2 text-center text-sm">
-                              Nenhuma forma de pagamento disponível
+                              {t('transactions.no_payment_methods', 'No payment methods available')}
                             </div>
                           ) : (
                             paymentMethods.map((paymentMethod) => (
@@ -434,11 +438,11 @@ export function QuickTransactionForm({ tipo, onSuccess, onCancel }: QuickTransac
               onClick={onCancel}
               className="md:w-auto"
             >
-              Cancelar
+              {t('common.cancel', 'Cancel')}
             </Button>
             <Button type="submit" disabled={isSubmitting} className="md:w-auto">
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4" />}
-              Salvar
+              {t('common.save', 'Save')}
             </Button>
           </DialogFooter>
         </form>

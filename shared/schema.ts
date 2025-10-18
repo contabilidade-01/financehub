@@ -335,3 +335,73 @@ export type UpdateReminder = z.infer<typeof updateReminderSchema>;
 // User Session Admin types
 export type UserSessionAdmin = typeof userSessionsAdmin.$inferSelect;
 export type InsertUserSessionAdmin = typeof userSessionsAdmin.$inferInsert;
+
+// System Localization table
+export const systemLocalization = pgTable("system_localization", {
+  id: serial("id").primaryKey(),
+  localeCode: varchar("locale_code", { length: 10 }).notNull().unique(),
+  localeName: varchar("locale_name", { length: 100 }).notNull(),
+  isActive: boolean("is_active").notNull().default(false),
+  isDefault: boolean("is_default").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).default(sql`(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')`),
+  createdBy: integer("created_by").references(() => users.id),
+  updatedAt: timestamp("updated_at", { withTimezone: true }),
+  updatedBy: integer("updated_by").references(() => users.id),
+});
+
+// Localization Strings table
+export const localizationStrings = pgTable("localization_strings", {
+  id: serial("id").primaryKey(),
+  stringKey: varchar("string_key", { length: 255 }).notNull(),
+  localeCode: varchar("locale_code", { length: 10 }).notNull().references(() => systemLocalization.localeCode, { onDelete: 'cascade' }),
+  stringValue: text("string_value").notNull(),
+  stringContext: varchar("string_context", { length: 500 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).default(sql`(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')`),
+  updatedAt: timestamp("updated_at", { withTimezone: true }),
+}, (table) => [
+  unique().on(table.stringKey, table.localeCode)
+]);
+
+// Schemas de validação para localização
+export const insertLocalizationSchema = createInsertSchema(systemLocalization).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true 
+});
+
+export const updateLocalizationSchema = createInsertSchema(systemLocalization).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true,
+  createdBy: true 
+}).partial();
+
+export const insertStringSchema = createInsertSchema(localizationStrings).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true 
+});
+
+export const updateStringSchema = createInsertSchema(localizationStrings).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true 
+}).partial();
+
+// Types para localização
+export type SystemLocalization = typeof systemLocalization.$inferSelect;
+export type LocalizationString = typeof localizationStrings.$inferSelect;
+export type InsertLocalization = z.infer<typeof insertLocalizationSchema>;
+export type UpdateLocalization = z.infer<typeof updateLocalizationSchema>;
+export type InsertString = z.infer<typeof insertStringSchema>;
+export type UpdateString = z.infer<typeof updateStringSchema>;
+
+// Enum para códigos de idioma ISO 639-1
+export enum LanguageCode {
+  PT_BR = 'pt-br',  // Português Brasileiro
+  EN_US = 'en-us',  // Inglês Americano
+  ES_ES = 'es-es',  // Espanhol Europeu
+  FR_FR = 'fr-fr',  // Francês França
+  DE_DE = 'de-de',  // Alemão Alemanha
+  IT_IT = 'it-it',  // Italiano Itália
+}

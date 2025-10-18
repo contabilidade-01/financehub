@@ -12,6 +12,7 @@ import { ArrowRight as ArrowRightIcon } from "lucide-react";
 import { ArrowUpIcon, ArrowDownIcon, ArrowRightFromLine, MoreVertical, Pencil, Trash2 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useWebSocket } from "@/hooks/useWebSocket";
+import { useTranslation } from "@/contexts/LocalizationContext";
 
 import {
   AlertDialog,
@@ -40,6 +41,7 @@ export default function RecentTransactions({ isLoading, transactions, onRefetch 
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const { toast } = useToast();
   const { theme } = useTheme();
+  const { t } = useTranslation();
   
   // WebSocket para atualizações em tempo real
   const { isConnected } = useWebSocket();
@@ -72,14 +74,14 @@ export default function RecentTransactions({ isLoading, transactions, onRefetch 
       queryClient.invalidateQueries({ queryKey: ["/api/payment-methods/totals"] });
       onRefetch();
       toast({
-        title: "Transação excluída",
-        description: "A transação foi excluída com sucesso.",
+        title: t('transactions.transaction_deleted', 'Transação excluída'),
+        description: t('transactions.delete_success', 'A transação foi excluída com sucesso.'),
       });
       setDeletingTransaction(null);
     } catch (error) {
       toast({
-        title: "Erro",
-        description: "Não foi possível excluir a transação.",
+        title: t('transactions.error', 'Erro'),
+        description: t('transactions.delete_error', 'Não foi possível excluir a transação.'),
         variant: "destructive",
       });
     }
@@ -89,20 +91,20 @@ export default function RecentTransactions({ isLoading, transactions, onRefetch 
     <span className={`px-2 py-1 rounded-lg ${
       transaction.tipo === TransactionType.INCOME ? 'bg-green-500/10 text-green-400' : 'bg-primary/10 text-primary'
     } text-xs`}>
-      Categoria
+      {t('transactions.table.category', 'Categoria')}
     </span>
   );
   
   const getStatusDisplay = (status: string) => {
     switch (status) {
       case TransactionStatus.COMPLETED:
-        return <span className="px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 text-xs">Efetivada</span>;
+        return <span className="px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 text-xs">{t('transactions.filters.completed', 'Efetivada')}</span>;
       case TransactionStatus.PENDING:
-        return <span className="px-2 py-1 rounded-lg bg-yellow-500/10 text-yellow-400 text-xs">Pendente</span>;
+        return <span className="px-2 py-1 rounded-lg bg-yellow-500/10 text-yellow-400 text-xs">{t('transactions.filters.pending', 'Pendente')}</span>;
       case TransactionStatus.SCHEDULED:
-        return <span className="px-2 py-1 rounded-lg bg-blue-500/10 text-blue-400 text-xs">Agendada</span>;
+        return <span className="px-2 py-1 rounded-lg bg-blue-500/10 text-blue-400 text-xs">{t('transactions.filters.scheduled', 'Agendada')}</span>;
       case TransactionStatus.CANCELED:
-        return <span className="px-2 py-1 rounded-lg bg-red-500/10 text-red-400 text-xs">Cancelada</span>;
+        return <span className="px-2 py-1 rounded-lg bg-red-500/10 text-red-400 text-xs">{t('transactions.filters.cancelled', 'Cancelada')}</span>;
       default:
         return <span className="px-2 py-1 rounded-lg bg-gray-500/10 text-gray-400 text-xs">{status}</span>;
     }
@@ -117,7 +119,7 @@ export default function RecentTransactions({ isLoading, transactions, onRefetch 
       <Card className={`neon-border rounded-2xl ${theme === 'light' ? 'bg-white' : 'glass-card'}`}>
         <CardContent className={`p-5 ${theme === 'light' ? 'text-gray-900' : ''}`}>
           <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
-            <h2 className="font-space text-xl mb-3 md:mb-0">Transações Recentes</h2>
+            <h2 className="font-space text-xl mb-3 md:mb-0">{t('dashboard.recent_transactions.title', 'Transações Recentes')}</h2>
             <div className="flex flex-wrap gap-2">
               <Button 
                 size="sm"
@@ -125,7 +127,7 @@ export default function RecentTransactions({ isLoading, transactions, onRefetch 
                 className={transactionFilter === "all" ? "bg-primary/20" : ""}
                 onClick={() => setTransactionFilter("all")}
               >
-                Todas
+                {t('dashboard.recent_transactions.all', 'Todas')}
               </Button>
               <Button 
                 size="sm"
@@ -134,7 +136,7 @@ export default function RecentTransactions({ isLoading, transactions, onRefetch 
                 onClick={() => setTransactionFilter("income")}
               >
                 <ArrowUpIcon className="h-4 w-4 mr-1" />
-                Receitas
+                {t('dashboard.recent_transactions.income', 'Receitas')}
               </Button>
               <Button 
                 size="sm"
@@ -143,7 +145,7 @@ export default function RecentTransactions({ isLoading, transactions, onRefetch 
                 onClick={() => setTransactionFilter("expense")}
               >
                 <ArrowDownIcon className="h-4 w-4 mr-1" />
-                Despesas
+                {t('dashboard.recent_transactions.expenses', 'Despesas')}
               </Button>
             </div>
           </div>
@@ -152,12 +154,12 @@ export default function RecentTransactions({ isLoading, transactions, onRefetch 
             <table className={`w-full min-w-[640px] ${theme === 'light' ? 'bg-white' : ''}`}>
               <thead>
                 <tr>
-                  <th className={`text-left pb-4 text-xs font-orbitron tracking-wider ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>DESCRIÇÃO</th>
-                  <th className={`text-left pb-4 text-xs font-orbitron tracking-wider ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>CATEGORIA</th>
-                  <th className={`text-left pb-4 text-xs font-orbitron tracking-wider ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>DATA</th>
-                  <th className={`text-left pb-4 text-xs font-orbitron tracking-wider ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>VALOR</th>
-                  <th className={`text-left pb-4 text-xs font-orbitron tracking-wider ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>STATUS</th>
-                  <th className={`text-right pb-4 text-xs font-orbitron tracking-wider ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>AÇÕES</th>
+                  <th className={`text-left pb-4 text-xs font-orbitron tracking-wider ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>{t('transactions.table.description', 'DESCRIÇÃO')}</th>
+                  <th className={`text-left pb-4 text-xs font-orbitron tracking-wider ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>{t('transactions.table.category', 'CATEGORIA')}</th>
+                  <th className={`text-left pb-4 text-xs font-orbitron tracking-wider ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>{t('transactions.table.date', 'DATA')}</th>
+                  <th className={`text-left pb-4 text-xs font-orbitron tracking-wider ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>{t('transactions.table.value', 'VALOR')}</th>
+                  <th className={`text-left pb-4 text-xs font-orbitron tracking-wider ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>{t('transactions.table.status', 'STATUS')}</th>
+                  <th className={`text-right pb-4 text-xs font-orbitron tracking-wider ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>{t('transactions.table.actions', 'AÇÕES')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -183,7 +185,7 @@ export default function RecentTransactions({ isLoading, transactions, onRefetch 
                 ) : filteredTransactions?.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="py-6 text-center text-gray-400">
-                      Nenhuma transação encontrada
+                      {t('transactions.table.no_transactions', 'Nenhuma transação encontrada')}
                     </td>
                   </tr>
                 ) : (
@@ -255,7 +257,7 @@ export default function RecentTransactions({ isLoading, transactions, onRefetch 
                                   className="flex items-center w-full px-3 py-2 text-sm text-white hover:bg-slate-700 rounded-t-md"
                                 >
                                   <Pencil className="mr-2 h-4 w-4" />
-                                  <span>Editar</span>
+                                  <span>{t('transactions.edit_transaction', 'Editar')}</span>
                                 </button>
                                 <button
                                   onClick={() => {
@@ -265,7 +267,7 @@ export default function RecentTransactions({ isLoading, transactions, onRefetch 
                                   className="flex items-center w-full px-3 py-2 text-sm text-red-400 hover:bg-slate-700 rounded-b-md"
                                 >
                                   <Trash2 className="mr-2 h-4 w-4" />
-                                  <span>Excluir</span>
+                                  <span>{t('transactions.delete_transaction', 'Excluir')}</span>
                                 </button>
                               </div>
                             </>
@@ -285,7 +287,7 @@ export default function RecentTransactions({ isLoading, transactions, onRefetch 
               onClick={() => navigate("/transactions")}
               className="bg-dark-purple/20 hover:bg-dark-purple/40 text-primary hover:text-white"
             >
-              <span>Ver mais transações</span>
+              <span>{t('dashboard.recent_transactions.view_more', 'Ver mais transações')}</span>
               <ArrowRightIcon className="ml-2 h-4 w-4" />
             </Button>
           </div>
@@ -302,8 +304,8 @@ export default function RecentTransactions({ isLoading, transactions, onRefetch 
               queryClient.invalidateQueries({ queryKey: ["/api/wallet/current"] });
               queryClient.invalidateQueries({ queryKey: ["/api/dashboard/summary"] });
               toast({
-                title: "Transação atualizada",
-                description: "A transação foi atualizada com sucesso.",
+                title: t('transactions.transaction_updated', 'Transação atualizada'),
+                description: t('transactions.update_success', 'A transação foi atualizada com sucesso.'),
               });
             }}
           />
@@ -313,18 +315,18 @@ export default function RecentTransactions({ isLoading, transactions, onRefetch 
       <AlertDialog open={!!deletingTransaction} onOpenChange={(open) => !open && setDeletingTransaction(null)}>
         <AlertDialogContent className="glass-card">
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir transação</AlertDialogTitle>
+            <AlertDialogTitle>{t('transactions.delete_transaction', 'Excluir transação')}</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja excluir esta transação? Esta ação não pode ser desfeita.
+              {t('transactions.confirm_delete', 'Tem certeza que deseja excluir esta transação? Esta ação não pode ser desfeita.')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel>{t('common.cancel', 'Cancelar')}</AlertDialogCancel>
             <AlertDialogAction 
               onClick={() => deletingTransaction && handleDeleteTransaction(deletingTransaction.id)}
               className="bg-destructive"
             >
-              Excluir
+              {t('common.delete', 'Excluir')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

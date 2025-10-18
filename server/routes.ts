@@ -9,10 +9,12 @@ import {
   checkImpersonation,
   requireSuperAdmin,
 } from "./middleware/adminAuth.middleware";
+import { localizationMiddleware } from "./middleware/localization.middleware";
 import { setupSwagger } from "./swagger";
 import { initializeWebSocketServer } from "./websocket";
 import { WahaWebhookController } from "./controllers/waha-webhook.controller";
 import { WahaSessionWebhooksController } from "./controllers/waha-session-webhooks.controller";
+import * as localizationController from "./controllers/localization.controller";
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -86,6 +88,9 @@ import themesRouter from "./routes/themes";
 export async function registerRoutes(app: Express): Promise<Server> {
   // Configurar documentação Swagger
   setupSwagger(app);
+  
+  // Aplicar middleware de localização em todas as rotas
+  app.use(localizationMiddleware);
 
   // Chart Image Generation (DEVE VIR PRIMEIRO para evitar interceptação)
   app.get("/api/charts/bar", combinedAuth, chartController.generateBarChartSVG);
@@ -605,6 +610,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to read changelog" });
     }
   });
+
+  // ==========================================
+  // ROTAS DE LOCALIZAÇÃO
+  // ==========================================
+  
+  // Rotas públicas de localização
+  app.get('/api/localization/default', localizationController.getDefaultLocale);
+  app.get('/api/localization/strings/:localeCode', localizationController.getLocalizationStrings);
+
+  // Rotas de administração de localização (apenas super admin)
+  app.get('/api/admin/localization', auth, requireSuperAdmin, localizationController.getLocales);
+  app.post('/api/admin/localization', auth, requireSuperAdmin, localizationController.createLocale);
+  app.put('/api/admin/localization/:id', auth, requireSuperAdmin, localizationController.updateLocale);
+  app.delete('/api/admin/localization/:id', auth, requireSuperAdmin, localizationController.deleteLocale);
+  app.get('/api/admin/localization/active', auth, requireSuperAdmin, localizationController.getActiveLocales);
+
+  // Importação de strings via JSON (apenas super admin)
+  app.post('/api/admin/localization/:localeCode/import', auth, requireSuperAdmin, localizationController.importStringsFromJson);
 
   const httpServer = createServer(app);
   

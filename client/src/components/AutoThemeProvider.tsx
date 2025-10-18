@@ -11,6 +11,35 @@ export function AutoThemeProvider({ children, showLoadingIndicator = false }: Au
   const { isThemeLoaded, themeLoadError } = useAutoTheme();
   const [isInitialRender, setIsInitialRender] = useState(true);
   
+  // Função para obter texto localizado sem depender do Context
+  const getLocalizedLoadingText = () => {
+    const cachedLocale = localStorage.getItem('financehub_locale');
+    if (cachedLocale) {
+      switch (cachedLocale) {
+        case 'es-es':
+          return 'Finalizando carga del tema...';
+        case 'en-us':
+          return 'Finalizing theme loading...';
+        default:
+          return 'Finalizando carregamento do tema...';
+      }
+    }
+    
+    const defaultLocale = sessionStorage.getItem('default_locale');
+    if (defaultLocale) {
+      switch (defaultLocale) {
+        case 'es-es':
+          return 'Finalizando carga del tema...';
+        case 'en-us':
+          return 'Finalizing theme loading...';
+        default:
+          return 'Finalizando carregamento do tema...';
+      }
+    }
+    
+    return 'Finalizando carregamento do tema...';
+  };
+  
   // Aguardar pelo menos 100ms para garantir que o tema seja aplicado
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -54,7 +83,7 @@ export function AutoThemeProvider({ children, showLoadingIndicator = false }: Au
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent mx-auto mb-4"></div>
           <h2 className="text-lg font-semibold text-foreground mb-2">FinanceHub</h2>
-          <p className="text-sm text-muted-foreground">Finalizando carregamento do tema...</p>
+          <p className="text-sm text-muted-foreground">{getLocalizedLoadingText()}</p>
         </div>
       </div>
     );

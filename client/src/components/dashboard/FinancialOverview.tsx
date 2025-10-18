@@ -18,6 +18,7 @@ import { formatCurrency } from "@/lib/utils";
 import { useTheme } from "next-themes";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { useTranslation } from "@/contexts/LocalizationContext";
 
 interface FinancialOverviewProps {
   isLoading: boolean;
@@ -31,6 +32,7 @@ interface FinancialOverviewProps {
 export default function FinancialOverview({ isLoading, chartData }: FinancialOverviewProps) {
   const [viewType, setViewType] = useState<"monthly" | "annual">("monthly");
   const { theme } = useTheme();
+  const { t } = useTranslation();
   
   // Buscar dados específicos baseado no tipo de visualização
   const { data: filteredData, isLoading: isFilteredLoading } = useQuery({
@@ -143,12 +145,12 @@ export default function FinancialOverview({ isLoading, chartData }: FinancialOve
     if (active && payload && payload.length) {
       return (
         <div className={`${theme === 'light' ? 'bg-white text-gray-900' : 'glass'} p-2 rounded-lg text-sm`}>
-          <p className="font-orbitron text-xs mb-1">{viewType === "monthly" ? `Dia ${label}` : label}</p>
+          <p className="font-orbitron text-xs mb-1">{viewType === "monthly" ? `${t('dashboard.overview.day', 'Dia')} ${label}` : label}</p>
           <p className="text-secondary font-medium">
-            Receitas: {formatCurrency(payload[0].value)}
+            {t('dashboard.overview.income', 'Receitas')}: {formatCurrency(payload[0].value)}
           </p>
           <p className="text-red-400 font-medium">
-            Despesas: {formatCurrency(payload[1].value)}
+            {t('dashboard.overview.expenses', 'Despesas')}: {formatCurrency(payload[1].value)}
           </p>
         </div>
       );
@@ -178,7 +180,7 @@ export default function FinancialOverview({ isLoading, chartData }: FinancialOve
         <div className={`${theme === 'light' ? 'bg-white shadow-md' : 'glass-card neon-border'} rounded-2xl h-full relative z-10`}>
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="font-space text-xl" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Visão Geral</h2>
+              <h2 className="font-space text-xl" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{t('dashboard.overview.title', 'Visão Geral')}</h2>
               <div className="flex space-x-2">
                 <Button
                   size="sm"
@@ -186,7 +188,7 @@ export default function FinancialOverview({ isLoading, chartData }: FinancialOve
                   onClick={() => setViewType("monthly")}
                   className={viewType === "monthly" ? "bg-primary/20" : ""}
                 >
-                  Mensal
+                  {t('dashboard.overview.monthly', 'Mensal')}
                 </Button>
                 <Button
                   size="sm"
@@ -194,7 +196,7 @@ export default function FinancialOverview({ isLoading, chartData }: FinancialOve
                   onClick={() => setViewType("annual")}
                   className={viewType === "annual" ? "bg-primary/20" : ""}
                 >
-                  Anual
+                  {t('dashboard.overview.annual', 'Anual')}
                 </Button>
               </div>
             </div>
@@ -254,11 +256,11 @@ export default function FinancialOverview({ isLoading, chartData }: FinancialOve
             <div className="flex justify-center space-x-10 mt-4">
               <div className="flex items-center">
                 <div className="w-3 h-3 rounded-full bg-secondary mr-2"></div>
-                <span className={`text-sm ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>Receitas</span>
+                <span className={`text-sm ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>{t('dashboard.overview.income', 'Receitas')}</span>
               </div>
               <div className="flex items-center">
                 <div className="w-3 h-3 rounded-full bg-red-500 mr-2"></div>
-                <span className={`text-sm ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>Despesas</span>
+                <span className={`text-sm ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>{t('dashboard.overview.expenses', 'Despesas')}</span>
               </div>
             </div>
           </CardContent>

@@ -4,6 +4,7 @@ import { formatCurrency } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowUpIcon, ArrowDownIcon, WalletIcon } from "lucide-react";
 import { useTheme } from "next-themes";
+import { useTranslation } from "@/contexts/LocalizationContext";
 
 interface WalletSummaryProps {
   isWalletLoading: boolean;
@@ -47,6 +48,7 @@ const itemVariants = {
 
 export default function WalletSummary({ isWalletLoading, isSummaryLoading, walletData, summaryData }: WalletSummaryProps) {
   const { theme } = useTheme();
+  const { t } = useTranslation();
   // Calculate monthly change percentage (placeholder for now)
   const monthlyChangePercentage = 2.5;
   
@@ -88,9 +90,9 @@ export default function WalletSummary({ isWalletLoading, isSummaryLoading, walle
           <div className="relative z-10">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4">
               <div>
-                <h2 className={`font-space text-xl ${theme === 'light' ? 'text-gray-900' : ''}`}>Sua Carteira</h2>
+                <h2 className={`font-space text-xl ${theme === 'light' ? 'text-gray-900' : ''}`}>{t('wallet.title', 'Sua Carteira')}</h2>
                 <p className={`${theme === 'light' ? 'text-gray-500' : 'text-gray-400'} text-sm`}>
-                  Atualizado em {new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                  {t('wallet.updated_on', 'Atualizado em')} {new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })}
                 </p>
               </div>
               <div className="mt-3 md:mt-0">
@@ -98,7 +100,7 @@ export default function WalletSummary({ isWalletLoading, isSummaryLoading, walle
                   {isWalletLoading ? (
                     <Skeleton className="h-4 w-16" />
                   ) : (
-                    walletData?.nome || "Principal"
+                    walletData?.nome || t('wallet.main_wallet', 'Principal')
                   )}
                 </span>
               </div>
@@ -126,7 +128,7 @@ export default function WalletSummary({ isWalletLoading, isSummaryLoading, walle
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${theme === 'light' ? 'bg-primary/10' : 'bg-secondary/20'}`}>
                       <WalletIcon className={`h-4 w-4 ${theme === 'light' ? 'text-primary' : 'text-secondary'}`} />
                     </div>
-                    <span className={`${theme === 'light' ? 'text-gray-700' : 'text-gray-300'} text-sm font-semibold`}>Saldo Atual</span>
+                    <span className={`${theme === 'light' ? 'text-gray-700' : 'text-gray-300'} text-sm font-semibold`}>{t('wallet.current_balance', 'Current Balance')}</span>
                   </div>
                   {isWalletLoading ? (
                     <Skeleton className="h-8 w-32 mb-2" />
@@ -141,7 +143,7 @@ export default function WalletSummary({ isWalletLoading, isSummaryLoading, walle
                   )}
                   <p className={`${theme === 'light' ? 'text-green-600' : 'text-green-400'} text-sm flex items-center font-medium`}>
                     <ArrowUpIcon className={`h-3 w-3 mr-1 ${theme === 'light' ? 'text-green-600' : 'text-green-400'}`} />
-                    <span>+{monthlyChangePercentage}% este mês</span>
+                    <span>+{monthlyChangePercentage}% {t('wallet.this_month', 'este mês')}</span>
                   </p>
                 </div>
               </motion.div>
@@ -167,7 +169,7 @@ export default function WalletSummary({ isWalletLoading, isSummaryLoading, walle
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${theme === 'light' ? 'bg-green-100' : 'bg-green-500/20'}`}>
                       <ArrowUpIcon className={`h-4 w-4 ${theme === 'light' ? 'text-green-600' : 'text-green-500'}`} />
                     </div>
-                    <span className={`${theme === 'light' ? 'text-gray-700' : 'text-gray-300'} text-sm font-semibold`}>Receitas (Mês)</span>
+                    <span className={`${theme === 'light' ? 'text-gray-700' : 'text-gray-300'} text-sm font-semibold`}>{t('wallet.monthly_income', 'Monthly Income')}</span>
                   </div>
                   {isSummaryLoading ? (
                     <Skeleton className="h-8 w-32 mb-2" />
@@ -178,7 +180,7 @@ export default function WalletSummary({ isWalletLoading, isSummaryLoading, walle
                   )}
                   <p className={`${theme === 'light' ? 'text-green-600' : 'text-green-400'} text-sm flex items-center font-medium`}>
                     <ArrowUpIcon className={`h-3 w-3 mr-1 ${theme === 'light' ? 'text-green-600' : 'text-green-400'}`} />
-                    <span>+12% vs. último mês</span>
+                    <span>+12% {t('wallet.vs_last_month', 'vs. último mês')}</span>
                   </p>
                 </div>
               </motion.div>
@@ -204,7 +206,7 @@ export default function WalletSummary({ isWalletLoading, isSummaryLoading, walle
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${theme === 'light' ? 'bg-red-100' : 'bg-red-500/20'}`}>
                       <ArrowDownIcon className={`h-4 w-4 ${theme === 'light' ? 'text-red-600' : 'text-red-500'}`} />
                     </div>
-                    <span className={`${theme === 'light' ? 'text-gray-700' : 'text-gray-300'} text-sm font-semibold`}>Despesas (Mês)</span>
+                    <span className={`${theme === 'light' ? 'text-gray-700' : 'text-gray-300'} text-sm font-semibold`}>{t('wallet.monthly_expenses', 'Monthly Expenses')}</span>
                   </div>
                   {isSummaryLoading ? (
                     <Skeleton className="h-8 w-32 mb-2" />
@@ -215,7 +217,7 @@ export default function WalletSummary({ isWalletLoading, isSummaryLoading, walle
                   )}
                   <p className={`${theme === 'light' ? 'text-red-600' : 'text-red-400'} text-sm flex items-center font-medium`}>
                     <ArrowDownIcon className={`h-3 w-3 mr-1 ${theme === 'light' ? 'text-red-600' : 'text-red-400'}`} />
-                    <span>-5% vs. último mês</span>
+                    <span>-5% {t('wallet.vs_last_month', 'vs. último mês')}</span>
                   </p>
                 </div>
               </motion.div>

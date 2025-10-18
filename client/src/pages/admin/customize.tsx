@@ -6,11 +6,13 @@ import { WhatsAppChatModal } from '@/components/whatsapp-chat-modal';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { useNotifications } from '@/hooks/use-notifications';
-import { Trash2, AlertTriangle, Palette, MessageSquare, Settings, Smartphone, CheckCircle2, XCircle, Phone, User, Wifi, WifiOff, Loader2, ChevronDown, ChevronRight, Link2, RefreshCw, Users, Plus, Play, Square, Edit2, QrCode, Key, MessageCircle, Bell, Copy, RotateCcw, Sparkles } from 'lucide-react';
+import { Trash2, AlertTriangle, Palette, MessageSquare, Settings, Smartphone, CheckCircle2, XCircle, Phone, User, Wifi, WifiOff, Loader2, ChevronDown, ChevronRight, Link2, RefreshCw, Users, Plus, Play, Square, Edit2, QrCode, Key, MessageCircle, Bell, Copy, RotateCcw, Sparkles, Globe } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 import { ThemeCustomizer } from '@/components/theme-customizer';
+import { LanguageSelector } from '@/components/admin/LanguageSelector';
+import { useLocalization, useTranslation } from '@/contexts/LocalizationContext';
 
 // Função para formatar número de telefone
 const formatPhoneNumber = (phone: string) => {
@@ -43,6 +45,159 @@ const formatPhoneNumber = (phone: string) => {
   
   return phone;
 };
+
+// Componente para gerenciamento de idiomas
+function LanguageManagementSection() {
+  const { t, locale, availableLocales, isLoading, error } = useLocalization();
+  const { theme } = useTheme();
+  const { toast } = useToast();
+
+  if (isLoading) {
+    return (
+      <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
+        <CardContent className="flex items-center justify-center py-10">
+          <Loader2 className="h-6 w-6 animate-spin mr-2" />
+          {t('admin.customize.loading_language', 'Carregando configurações de idioma...')}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
+        <CardContent className="flex items-center justify-center py-10 text-destructive">
+          <AlertTriangle className="h-6 w-6 mr-2" />
+          {t('admin.customize.error_loading', 'Erro ao carregar configurações')}: {error}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const currentLocale = availableLocales.find(l => l.localeCode === locale);
+
+  return (
+    <div className="space-y-6">
+      {/* Status Atual do Idioma */}
+      <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
+        <CardHeader>
+          <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} flex items-center gap-2`}>
+            <Globe className="h-5 w-5" />
+            {t('admin.customize.current_language', 'Idioma Atual do Sistema')}
+          </CardTitle>
+          <CardDescription className={`${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>
+            {t('admin.customize.current_language_desc', 'Idioma atualmente ativo em todo o sistema')}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="bg-muted rounded-lg p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold">
+                  {currentLocale?.localeName || 'Português Brasil'}
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Código: {currentLocale?.localeCode || locale}
+                </p>
+                {currentLocale?.isDefault && (
+                  <div className="flex items-center gap-1 mt-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    <span className="text-sm text-green-600">Idioma Padrão</span>
+                  </div>
+                )}
+              </div>
+              <LanguageSelector variant="default" />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Idiomas Disponíveis */}
+      <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
+        <CardHeader>
+          <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} flex items-center gap-2`}>
+            <Settings className="h-5 w-5" />
+            Idiomas Disponíveis
+          </CardTitle>
+          <CardDescription className={`${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>
+            Lista de todos os idiomas configurados no sistema
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {availableLocales.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Globe className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>Nenhum idioma configurado</p>
+              <p className="text-sm">Configure idiomas através do painel administrativo</p>
+            </div>
+          ) : (
+            <div className="grid gap-4">
+              {availableLocales.map((lang) => (
+                <div 
+                  key={lang.localeCode}
+                  className={`p-4 rounded-lg border ${
+                    lang.localeCode === locale 
+                      ? 'border-primary bg-primary/5' 
+                      : 'border-border'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-medium">{lang.localeName}</h4>
+                      <p className="text-sm text-muted-foreground">
+                        {lang.localeCode}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {lang.isDefault && (
+                        <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
+                          Padrão
+                        </span>
+                      )}
+                      {lang.localeCode === locale && (
+                        <span className="px-2 py-1 bg-primary text-primary-foreground text-xs rounded-full">
+                          Ativo
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Gerenciamento Avançado */}
+      <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
+        <CardHeader>
+          <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} flex items-center gap-2`}>
+            <Settings className="h-5 w-5" />
+            Gerenciamento Avançado
+          </CardTitle>
+          <CardDescription className={`${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>
+            Acesso ao painel completo de configuração de idiomas
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Para configurações avançadas como adicionar novos idiomas, importar traduções 
+              ou modificar configurações do sistema, acesse o painel dedicado.
+            </p>
+            <Button 
+              onClick={() => window.location.href = '/admin/language-settings'}
+              className="w-full sm:w-auto"
+            >
+              <Globe className="h-4 w-4 mr-2" />
+              Abrir Painel de Idiomas
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 // Componente para testar notificações
 function NotificationTestingCard() {
@@ -383,6 +538,7 @@ function NotificationTestingCard() {
 export default function CustomizePage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { t } = useTranslation();
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -1585,7 +1741,7 @@ export default function CustomizePage() {
 
   return (
     <div className="container mx-auto py-10">
-      <h1 className="text-3xl font-bold mb-6">Personalização do Sistema</h1>
+      <h1 className="text-3xl font-bold mb-6">{t('admin.customize.title', 'Personalização do Sistema')}</h1>
       
       <div className="flex gap-6">
         {/* Sidebar */}
@@ -1594,7 +1750,7 @@ export default function CustomizePage() {
             <CardHeader>
               <CardTitle className={`flex items-center gap-2 ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>
                 <Settings className="h-5 w-5" />
-                Configurações
+                {t('admin.customize.settings', 'Configurações')}
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
@@ -1628,6 +1784,16 @@ export default function CustomizePage() {
                 >
                   <Sparkles className="h-4 w-4" />
                   Personalizar Cores
+                </button>
+                <button
+                  onClick={() => setActiveTab("idiomas")}
+                  className={cn(
+                    "w-full text-left px-4 py-3 hover:bg-muted transition-colors flex items-center gap-3",
+                    activeTab === "idiomas" && "bg-muted border-r-2 border-primary"
+                  )}
+                >
+                  <Globe className="h-4 w-4" />
+                  {t('admin.customize.system_languages', 'Idiomas do Sistema')}
                 </button>
                 {false && (
                 <button
@@ -2067,9 +2233,9 @@ export default function CustomizePage() {
 
                   {/* Configurações Gerais */}
                   <div className="p-4 border rounded-lg bg-gray-50 dark:bg-gray-900">
-                    <h3 className="font-medium mb-2">Configurações Gerais</h3>
+                    <h3 className="font-medium mb-2">{t('admin.customize.general_settings', 'Configurações Gerais')}</h3>
                     <p className="text-sm text-muted-foreground mb-4">
-                      Configurações adicionais para as mensagens de boas vindas.
+                      {t('admin.customize.general_settings_desc', 'Configurações adicionais para as mensagens de boas vindas.')}
                     </p>
                     <div className="space-y-4">
                       <div className="flex items-center gap-2">
@@ -2140,6 +2306,10 @@ export default function CustomizePage() {
             <div>
               <ThemeCustomizer />
             </div>
+          )}
+
+          {activeTab === "idiomas" && (
+            <LanguageManagementSection />
           )}
 
           {false && activeTab === "waha" && (
