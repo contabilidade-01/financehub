@@ -1,6 +1,7 @@
 import React from 'react';
 import { AlertTriangle, Save, X } from 'lucide-react';
 import { Button } from './button';
+import { useTranslation } from '@/contexts/LocalizationContext';
 
 interface UnsavedChangesModalProps {
   open: boolean;
@@ -15,6 +16,8 @@ export function UnsavedChangesModal({
   onDiscard, 
   onCancel 
 }: UnsavedChangesModalProps) {
+  const { t } = useTranslation();
+  
   if (!open) return null;
 
   return (
@@ -36,13 +39,12 @@ export function UnsavedChangesModal({
 
           {/* Título */}
           <h3 className="text-lg font-semibold text-center mb-2 text-gray-900 dark:text-white">
-            Alterações não salvas
+            {t('unsaved_changes.title', 'Alterações não salvas')}
           </h3>
 
           {/* Mensagem */}
           <p className="text-gray-600 dark:text-gray-300 text-center mb-6 leading-relaxed">
-            Você tem alterações não salvas que serão perdidas se continuar. 
-            Deseja salvar suas alterações antes de prosseguir?
+            {t('unsaved_changes.message', 'Você tem alterações não salvas que serão perdidas se continuar. Deseja salvar suas alterações antes de prosseguir?')}
           </p>
 
           {/* Botões de ação */}
@@ -53,7 +55,7 @@ export function UnsavedChangesModal({
               className="w-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center gap-2"
             >
               <Save className="w-4 h-4" />
-              Salvar alterações
+              {t('unsaved_changes.save_changes', 'Salvar alterações')}
             </Button>
 
             {/* Botão secundário - Descartar */}
@@ -63,7 +65,7 @@ export function UnsavedChangesModal({
               className="w-full border-red-300 text-red-600 hover:bg-red-50 dark:border-red-600 dark:text-red-400 dark:hover:bg-red-900/20 flex items-center justify-center gap-2"
             >
               <X className="w-4 h-4" />
-              Descartar alterações
+              {t('unsaved_changes.discard_changes', 'Descartar alterações')}
             </Button>
 
             {/* Botão terciário - Cancelar */}
@@ -72,7 +74,7 @@ export function UnsavedChangesModal({
               variant="ghost"
               className="w-full text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
             >
-              Cancelar
+              {t('common.cancel', 'Cancelar')}
             </Button>
           </div>
         </div>

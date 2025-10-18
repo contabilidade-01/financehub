@@ -232,7 +232,7 @@ export default function Register() {
                     <FormItem>
                       <FormLabel>{t('common.password', 'Senha')}</FormLabel>
                       <FormControl>
-                        <Input type="password" placeholder="******" {...field} />
+                        <Input type="password" placeholder={t('register.password_placeholder', '******')} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -245,7 +245,7 @@ export default function Register() {
                     <FormItem>
                       <FormLabel>{t('register.confirm_password', 'Confirmar Senha')}</FormLabel>
                       <FormControl>
-                        <Input type="password" placeholder="******" {...field} />
+                        <Input type="password" placeholder={t('register.confirm_password_placeholder', '******')} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -261,7 +261,7 @@ export default function Register() {
                         <PhoneInput
                           value={field.value || ""}
                           onChange={val => field.onChange(val)}
-                          placeholder="(41) 9 8503-7379"
+                          placeholder={t('register.phone_placeholder', '(41) 9 8503-7379')}
                           error={!!form.formState.errors.telefone}
                         />
                       </FormControl>

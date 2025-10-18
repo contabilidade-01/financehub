@@ -4,6 +4,7 @@ import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { useTranslation } from '@/contexts/LocalizationContext';
 
 import {
   Card,
@@ -60,21 +61,16 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Copy, Key, Trash2, Lock, RefreshCcw } from 'lucide-react';
 
-// Schema para criação de token
-const createTokenSchema = z.object({
-  nome: z.string().min(1, "O nome é obrigatório"),
-  descricao: z.string().optional(),
-});
+type CreateTokenInput = {
+  nome: string;
+  descricao?: string;
+};
 
-// Schema para atualização de token
-const updateTokenSchema = z.object({
-  nome: z.string().min(1, "O nome é obrigatório"),
-  descricao: z.string().optional(),
-  ativo: z.boolean().default(true),
-});
-
-type CreateTokenInput = z.infer<typeof createTokenSchema>;
-type UpdateTokenInput = z.infer<typeof updateTokenSchema>;
+type UpdateTokenInput = {
+  nome: string;
+  descricao?: string;
+  ativo: boolean;
+};
 
 interface ApiToken {
   id: number;
@@ -90,6 +86,20 @@ interface ApiToken {
 
 export function ApiTokensList() {
   const { toast } = useToast();
+  const { t } = useTranslation();
+
+  // Schema para criação de token
+  const createTokenSchema = z.object({
+    nome: z.string().min(1, t('validation.name_required', 'O nome é obrigatório')),
+    descricao: z.string().optional(),
+  });
+
+  // Schema para atualização de token
+  const updateTokenSchema = z.object({
+    nome: z.string().min(1, t('validation.name_required', 'O nome é obrigatório')),
+    descricao: z.string().optional(),
+    ativo: z.boolean().default(true),
+  });
   const [newTokenData, setNewTokenData] = useState<ApiToken | null>(null);
   const [tokenToEdit, setTokenToEdit] = useState<ApiToken | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -146,14 +156,14 @@ export function ApiTokensList() {
       queryClient.invalidateQueries({ queryKey: ['/api/tokens'] });
       form.reset();
       toast({
-        title: "Token criado com sucesso",
-        description: "O token foi criado com sucesso. Copie o token completo agora, pois ele não será mostrado novamente.",
+        title: t('api_tokens.toast.created_success', 'Token criado com sucesso'),
+        description: t('api_tokens.toast.created_description', 'O token foi criado com sucesso. Copie o token completo agora, pois ele não será mostrado novamente.'),
       });
     },
     onError: (error) => {
       toast({
-        title: "Erro ao criar token",
-        description: "Ocorreu um erro ao criar o token. Por favor, tente novamente.",
+        title: t('api_tokens.toast.create_error', 'Erro ao criar token'),
+        description: t('api_tokens.toast.create_error_description', 'Ocorreu um erro ao criar o token. Por favor, tente novamente.'),
         variant: "destructive",
       });
     },
@@ -173,14 +183,14 @@ export function ApiTokensList() {
       setEditDialogOpen(false);
       editForm.reset();
       toast({
-        title: "Token atualizado",
-        description: "O token foi atualizado com sucesso.",
+        title: t('api_tokens.toast.updated_success', 'Token atualizado'),
+        description: t('api_tokens.toast.updated_description', 'O token foi atualizado com sucesso.'),
       });
     },
     onError: (error) => {
       toast({
-        title: "Erro ao atualizar token",
-        description: "Ocorreu um erro ao atualizar o token. Por favor, tente novamente.",
+        title: t('api_tokens.toast.update_error', 'Erro ao atualizar token'),
+        description: t('api_tokens.toast.update_error_description', 'Ocorreu um erro ao atualizar o token. Por favor, tente novamente.'),
         variant: "destructive",
       });
     },
@@ -196,14 +206,14 @@ export function ApiTokensList() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/tokens'] });
       toast({
-        title: "Token removido",
-        description: "O token foi removido com sucesso.",
+        title: t('api_tokens.toast.removed_success', 'Token removido'),
+        description: t('api_tokens.toast.removed_description', 'O token foi removido com sucesso.'),
       });
     },
     onError: (error) => {
       toast({
-        title: "Erro ao remover token",
-        description: "Ocorreu um erro ao remover o token. Por favor, tente novamente.",
+        title: t('api_tokens.toast.remove_error', 'Erro ao remover token'),
+        description: t('api_tokens.toast.remove_error_description', 'Ocorreu um erro ao remover o token. Por favor, tente novamente.'),
         variant: "destructive",
       });
     },
@@ -213,8 +223,8 @@ export function ApiTokensList() {
   const copyToken = (token: string) => {
     navigator.clipboard.writeText(token);
     toast({
-      title: "Token copiado",
-      description: "O token foi copiado para a área de transferência.",
+      title: t('api_tokens.toast.copied', 'Token copiado'),
+      description: t('api_tokens.toast.copied_description', 'O token foi copiado para a área de transferência.'),
     });
   };
 
@@ -245,13 +255,13 @@ export function ApiTokensList() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Tokens de API</CardTitle>
-          <CardDescription>Gerencie seus tokens de acesso à API</CardDescription>
+          <CardTitle>{t('api_tokens.title', 'Tokens de API')}</CardTitle>
+          <CardDescription>{t('api_tokens.description', 'Gerencie seus tokens de acesso à API')}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col items-center justify-center p-4">
-            <p className="text-gray-500 mb-2">Erro ao carregar tokens</p>
-            <Button onClick={() => refetch()}>Tentar novamente</Button>
+            <p className="text-gray-500 mb-2">{t('api_tokens.error_loading', 'Erro ao carregar tokens')}</p>
+            <Button onClick={() => refetch()}>{t('common.try_again', 'Tentar novamente')}</Button>
           </div>
         </CardContent>
       </Card>
@@ -261,20 +271,20 @@ export function ApiTokensList() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Tokens de API</CardTitle>
-        <CardDescription>Gerencie seus tokens de acesso à API</CardDescription>
+        <CardTitle>{t('api_tokens.title', 'Tokens de API')}</CardTitle>
+        <CardDescription>{t('api_tokens.description', 'Gerencie seus tokens de acesso à API')}</CardDescription>
       </CardHeader>
       <CardContent>
         {isLoading ? (
           <div className="flex justify-center py-8">
-            <p>Carregando tokens...</p>
+            <p>{t('api_tokens.loading', 'Carregando tokens...')}</p>
           </div>
         ) : tokens.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-8">
             <Key size={48} className="text-gray-400 mb-4" />
-            <p className="text-gray-500 mb-4">Você ainda não possui tokens de API</p>
+            <p className="text-gray-500 mb-4">{t('api_tokens.empty_state', 'Você ainda não possui tokens de API')}</p>
             <p className="text-gray-500 text-sm text-center mb-6">
-              Tokens de API permitem que aplicativos externos acessem seus dados de forma segura.
+              {t('api_tokens.empty_description', 'Tokens de API permitem que aplicativos externos acessem seus dados de forma segura.')}
             </p>
           </div>
         ) : (
@@ -286,9 +296,9 @@ export function ApiTokensList() {
                   <div className="flex items-center justify-between gap-2">
                     <div className="font-medium text-base flex-1">{token.nome}</div>
                     {token.ativo ? (
-                      <Badge variant="default">Ativo</Badge>
+                      <Badge variant="default">{t('common.status.active', 'Ativo')}</Badge>
                     ) : (
-                      <Badge variant="secondary">Inativo</Badge>
+                      <Badge variant="secondary">{t('common.status.inactive', 'Inativo')}</Badge>
                     )}
                   </div>
                   {token.descricao && (
@@ -307,7 +317,7 @@ export function ApiTokensList() {
                     </Button>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-gray-400 mt-1">
-                    <span>Criado:</span>
+                    <span>{t('api_tokens.actions.created', 'Criado')}:</span>
                     {token.data_criacao && (
                       <span>
                         {formatDistanceToNow(new Date(token.data_criacao), {
@@ -325,17 +335,17 @@ export function ApiTokensList() {
                           size="sm"
                           className="text-blue-500 border-blue-500 hover:bg-blue-900/20"
                           onClick={() => { setTokenToRotate(token); setRotateModalOpen(true); }}
-                          title="Rotacionar MasterToken"
+                          title={t('api_tokens.tooltip.rotate_master', 'Rotacionar MasterToken')}
                         >
                           <RefreshCcw className="h-4 w-4 mr-2 animate-spin-slow" />
-                          Rotacionar
+                          {t('api_tokens.actions.rotate', 'Rotacionar')}
                         </Button>
                         <Button
                           variant="ghost"
                           size="icon"
                           className="text-gray-500"
                           onClick={() => setMasterTokenModalOpen(true)}
-                          aria-label="MasterToken não pode ser removido"
+                          aria-label={t('api_tokens.master_token_protected_aria', 'MasterToken não pode ser removido')}
                         >
                           <Lock size={18} />
                         </Button>
@@ -347,7 +357,7 @@ export function ApiTokensList() {
                           size="sm"
                           onClick={() => openEditDialog(token)}
                         >
-                          Editar
+                          {t('api_tokens.actions.edit', 'Editar')}
                         </Button>
                         <Button
                           variant="ghost"
@@ -370,11 +380,11 @@ export function ApiTokensList() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Nome</TableHead>
-                  <TableHead>Token</TableHead>
-                  <TableHead>Criado em</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Ações</TableHead>
+                  <TableHead>{t('api_tokens.table.name', 'Nome')}</TableHead>
+                  <TableHead>{t('api_tokens.table.token', 'Token')}</TableHead>
+                  <TableHead>{t('api_tokens.table.created_at', 'Criado em')}</TableHead>
+                  <TableHead>{t('api_tokens.table.status', 'Status')}</TableHead>
+                  <TableHead>{t('api_tokens.table.actions', 'Ações')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -411,9 +421,9 @@ export function ApiTokensList() {
                     </TableCell>
                     <TableCell>
                       {token.ativo ? (
-                        <Badge variant="default">Ativo</Badge>
+                        <Badge variant="default">{t('common.status.active', 'Ativo')}</Badge>
                       ) : (
-                        <Badge variant="secondary">Inativo</Badge>
+                        <Badge variant="secondary">{t('common.status.inactive', 'Inativo')}</Badge>
                       )}
                     </TableCell>
                     <TableCell>
@@ -425,17 +435,17 @@ export function ApiTokensList() {
                                 size="sm"
                                 className="text-blue-500 border-blue-500 hover:bg-blue-900/20"
                                 onClick={() => { setTokenToRotate(token); setRotateModalOpen(true); }}
-                                title="Rotacionar MasterToken"
+                                title={t('api_tokens.tooltip.rotate_master', 'Rotacionar MasterToken')}
                               >
                                 <RefreshCcw className="h-4 w-4 mr-2 animate-spin-slow" />
-                                Rotacionar
+                                {t('api_tokens.actions.rotate', 'Rotacionar')}
                               </Button>
                               <Button
                                 variant="ghost"
                                 size="icon"
                                 className="text-gray-500"
                                 onClick={() => setMasterTokenModalOpen(true)}
-                                aria-label="MasterToken não pode ser removido"
+                                aria-label={t('api_tokens.master_token_protected_aria', 'MasterToken não pode ser removido')}
                               >
                                 <Lock size={18} />
                               </Button>
@@ -447,7 +457,7 @@ export function ApiTokensList() {
                           size="sm"
                           onClick={() => openEditDialog(token)}
                         >
-                          Editar
+                          {t('api_tokens.actions.edit', 'Editar')}
                         </Button>
                             <Button
                               variant="ghost"
@@ -473,19 +483,19 @@ export function ApiTokensList() {
         <div />
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
-            <Button>Criar novo token</Button>
+            <Button>{t('api_tokens.create_new', 'Criar novo token')}</Button>
           </DialogTrigger>
           <DialogContent>
             {newTokenData ? (
               <>
                 <DialogHeader>
-                  <DialogTitle>Token criado com sucesso</DialogTitle>
+                  <DialogTitle>{t('api_tokens.modal.created_title', 'Token criado com sucesso')}</DialogTitle>
                   <DialogDescription>
-                    Copie o token abaixo. Por segurança, ele não será mostrado novamente.
+                    {t('api_tokens.modal.created_description', 'Copie o token abaixo. Por segurança, ele não será mostrado novamente.')}
                   </DialogDescription>
                 </DialogHeader>
                 <div className="my-4">
-                  <p className="mb-2 text-sm font-medium">Token completo:</p>
+                  <p className="mb-2 text-sm font-medium">{t('api_tokens.modal.complete_token', 'Token completo:')}</p>
                   <div className="flex gap-2 items-center">
                     <code className="bg-gray-800 text-gray-100 p-2 rounded text-sm break-all">
                       {newTokenData.token}
@@ -504,16 +514,16 @@ export function ApiTokensList() {
                     setNewTokenData(null);
                     setDialogOpen(false);
                   }}>
-                    Concluído
+                    {t('common.done', 'Concluído')}
                   </Button>
                 </DialogFooter>
               </>
             ) : (
               <>
                 <DialogHeader>
-                  <DialogTitle>Criar novo token de API</DialogTitle>
+                  <DialogTitle>{t('api_tokens.modal.create_title', 'Criar novo token de API')}</DialogTitle>
                   <DialogDescription>
-                    Crie um novo token para acessar a API do sistema.
+                    {t('api_tokens.modal.create_description', 'Crie um novo token para acessar a API do sistema.')}
                   </DialogDescription>
                 </DialogHeader>
                 <Form {...form}>
@@ -523,12 +533,12 @@ export function ApiTokensList() {
                       name="nome"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Nome</FormLabel>
+                          <FormLabel>{t('common.name', 'Nome')}</FormLabel>
                           <FormControl>
-                            <Input placeholder="Nome do token" {...field} />
+                            <Input placeholder={t('api_tokens.form.name_placeholder', 'Nome do token')} {...field} />
                           </FormControl>
                           <FormDescription>
-                            Um nome descritivo para identificar o token.
+                            {t('api_tokens.form.name_description', 'Um nome descritivo para identificar o token.')}
                           </FormDescription>
                           <FormMessage />
                         </FormItem>
@@ -539,15 +549,15 @@ export function ApiTokensList() {
                       name="descricao"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Descrição</FormLabel>
+                          <FormLabel>{t('common.description', 'Descrição')}</FormLabel>
                           <FormControl>
                             <Textarea
-                              placeholder="Descreva a finalidade deste token"
+                              placeholder={t('api_tokens.form.description_placeholder', 'Descreva a finalidade deste token')}
                               {...field}
                             />
                           </FormControl>
                           <FormDescription>
-                            Uma descrição opcional para o token.
+                            {t('api_tokens.form.description_help', 'Uma descrição opcional para o token.')}
                           </FormDescription>
                           <FormMessage />
                         </FormItem>
@@ -555,7 +565,7 @@ export function ApiTokensList() {
                     />
                     <DialogFooter>
                       <Button type="submit" disabled={createMutation.isPending}>
-                        {createMutation.isPending ? "Criando..." : "Criar token"}
+                        {createMutation.isPending ? t('api_tokens.form.creating', 'Criando...') : t('api_tokens.form.create', 'Criar token')}
                       </Button>
                     </DialogFooter>
                   </form>
@@ -568,9 +578,9 @@ export function ApiTokensList() {
         <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Editar token</DialogTitle>
+              <DialogTitle>{t('api_tokens.modal.edit_title', 'Editar token')}</DialogTitle>
               <DialogDescription>
-                Atualize as informações do token.
+                {t('api_tokens.modal.edit_description', 'Atualize as informações do token.')}
               </DialogDescription>
             </DialogHeader>
             <Form {...editForm}>
@@ -580,9 +590,9 @@ export function ApiTokensList() {
                   name="nome"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Nome</FormLabel>
+                      <FormLabel>{t('api_tokens.form.name', 'Nome')}</FormLabel>
                       <FormControl>
-                        <Input placeholder="Nome do token" {...field} />
+                        <Input placeholder={t('api_tokens.form.name_placeholder', 'Nome do token')} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -593,10 +603,10 @@ export function ApiTokensList() {
                   name="descricao"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Descrição</FormLabel>
+                      <FormLabel>{t('api_tokens.form.description', 'Descrição')}</FormLabel>
                       <FormControl>
                         <Textarea
-                          placeholder="Descreva a finalidade deste token"
+                          placeholder={t('api_tokens.form.description_placeholder', 'Descreva a finalidade deste token')}
                           {...field}
                           value={field.value || ""}
                         />
@@ -612,10 +622,10 @@ export function ApiTokensList() {
                     <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
                       <div className="space-y-0.5">
                         <FormLabel className="text-base">
-                          Ativo
+                          {t('api_tokens.form.active', 'Ativo')}
                         </FormLabel>
                         <FormDescription>
-                          Quando desativado, o token não poderá ser usado para acessar a API.
+                          {t('api_tokens.form.active_description', 'Quando desativado, o token não poderá ser usado para acessar a API.')}
                         </FormDescription>
                       </div>
                       <FormControl>
@@ -636,10 +646,10 @@ export function ApiTokensList() {
                       setEditDialogOpen(false);
                     }}
                   >
-                    Cancelar
+                    {t('api_tokens.form.cancel', 'Cancelar')}
                   </Button>
                   <Button type="submit" disabled={updateMutation.isPending}>
-                    {updateMutation.isPending ? "Salvando..." : "Salvar alterações"}
+                    {updateMutation.isPending ? t('api_tokens.form.saving', 'Salvando...') : t('api_tokens.form.save_changes', 'Salvar alterações')}
                   </Button>
                 </DialogFooter>
               </form>

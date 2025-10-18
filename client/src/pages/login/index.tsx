@@ -188,9 +188,9 @@ export default function Login() {
           </CardContent>
           <CardFooter className="flex justify-center">
             <p className="text-sm text-gray-400">
-              Não tem uma conta?{" "}
+              {t('login.no_account', 'Não tem uma conta?')}{" "}
               <Button variant="link" className="p-0" onClick={() => navigate("/register")}>
-                Criar conta
+                {t('login.create_account_link', 'Criar conta')}
               </Button>
             </p>
           </CardFooter>

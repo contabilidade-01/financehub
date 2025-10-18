@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -6,25 +6,7 @@ import { Label } from '../../components/ui/label';
 import { Alert, AlertDescription } from '../../components/ui/alert';
 import { Progress } from '../../components/ui/progress';
 import { CheckCircle, Database, User, Settings, Shield } from 'lucide-react';
-
-const steps = [
-  {
-    title: 'Conexão com Banco de Dados',
-    icon: <Database className="h-6 w-6 text-blue-600" />,
-  },
-  {
-    title: 'Usuário Administrador',
-    icon: <User className="h-6 w-6 text-blue-600" />,
-  },
-  {
-    title: 'Confirmação',
-    icon: <Shield className="h-6 w-6 text-blue-600" />,
-  },
-  {
-    title: 'Conclusão',
-    icon: <CheckCircle className="h-6 w-6 text-green-600" />,
-  },
-];
+import { useTranslation } from '@/contexts/LocalizationContext';
 
 export default function SetupWizard() {
   const [currentStep, setCurrentStep] = useState(1);
@@ -36,6 +18,26 @@ export default function SetupWizard() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [apiToken, setApiToken] = useState<string | null>(null);
+  const { t } = useTranslation();
+
+  const steps = [
+    {
+      title: t('setup.steps.database_connection', 'Conexão com Banco de Dados'),
+      icon: <Database className="h-6 w-6 text-blue-600" />,
+    },
+    {
+      title: t('setup.steps.admin_user', 'Usuário Administrador'),
+      icon: <User className="h-6 w-6 text-blue-600" />,
+    },
+    {
+      title: t('setup.steps.review', 'Confirmação'),
+      icon: <Shield className="h-6 w-6 text-blue-600" />,
+    },
+    {
+      title: t('setup.steps.finish', 'Conclusão'),
+      icon: <CheckCircle className="h-6 w-6 text-green-600" />,
+    },
+  ];
 
   // Substituir testConnection por saveDbUrl
   const saveDbUrl = async () => {
@@ -53,10 +55,10 @@ export default function SetupWizard() {
         setSuccess(data.message);
         setCurrentStep(2);
       } else {
-        setError(data.message || 'Erro desconhecido');
+        setError(data.message || t('setup.errors.unknown', 'Erro desconhecido'));
       }
     } catch (err) {
-      setError('Erro de rede ou servidor');
+      setError(t('setup.errors.network', 'Erro de rede ou servidor'));
     }
     setLoading(false);
   };
@@ -77,10 +79,10 @@ export default function SetupWizard() {
         setSuccess(data.message);
         setCurrentStep(3);
       } else {
-        setError(data.message || 'Erro desconhecido');
+        setError(data.message || t('setup.errors.unknown', 'Erro desconhecido'));
       }
     } catch (err) {
-      setError('Erro de rede ou servidor');
+      setError(t('setup.errors.network', 'Erro de rede ou servidor'));
     }
     setLoading(false);
   };
@@ -102,10 +104,10 @@ export default function SetupWizard() {
         setApiToken(data.apiToken || null);
         setCurrentStep(4);
       } else {
-        setError(data.message || 'Erro desconhecido');
+        setError(data.message || t('setup.errors.unknown', 'Erro desconhecido'));
       }
     } catch (err) {
-      setError('Erro de rede ou servidor');
+      setError(t('setup.errors.network', 'Erro de rede ou servidor'));
     }
       setLoading(false);
   };
@@ -115,7 +117,7 @@ export default function SetupWizard() {
     setError(null);
     setTimeout(() => {
       setLoading(false);
-      setSuccess('Setup concluído com sucesso!');
+      setSuccess(t('setup.auto.success', 'Setup concluído com sucesso!'));
       setCurrentStep(4);
     }, 1200);
   };
@@ -126,7 +128,9 @@ export default function SetupWizard() {
         <CardHeader className="text-center pb-2">
           <div className="flex items-center justify-center gap-2 mb-2">
             <Settings className="h-8 w-8 text-blue-600" />
-            <CardTitle className="text-2xl font-bold tracking-tight">Setup Wizard</CardTitle>
+            <CardTitle className="text-2xl font-bold tracking-tight">
+              {t('setup.title', 'Setup Wizard')}
+            </CardTitle>
           </div>
           <div className="flex justify-center gap-4 mb-2">
             {steps.map((step, idx) => (
@@ -142,33 +146,41 @@ export default function SetupWizard() {
           {currentStep === 1 && (
             <form className="space-y-6" onSubmit={e => { e.preventDefault(); saveDbUrl(); }}>
               <div>
-                <Label htmlFor="dbUrl">URL do Banco de Dados</Label>
+                <Label htmlFor="dbUrl">
+                  {t('setup.database.url_label', 'URL do Banco de Dados')}
+                </Label>
                 <Input
                   id="dbUrl"
                   type="text"
-                  placeholder="postgresql://usuario:senha@host:porta/banco"
+                  placeholder={t('setup.database.url_placeholder', 'postgresql://usuario:senha@host:porta/banco')}
                   value={dbUrl}
                   onChange={e => setDbUrl(e.target.value)}
                   className="mt-1"
                   required
                 />
-                <p className="text-xs text-gray-500 mt-1">Exemplo: postgresql://usuario:senha@localhost:5432/financeiro</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {t('setup.database.url_example', 'Exemplo: postgresql://usuario:senha@localhost:5432/financeiro')}
+                </p>
               </div>
               {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
               {success && <Alert className="border-green-200 bg-green-50"><AlertDescription className="text-green-800">{success}</AlertDescription></Alert>}
               <Button type="submit" className="w-full" disabled={loading || !dbUrl}>
-                {loading ? 'Testando conexão...' : 'Testar e Salvar Conexão'}
+                {loading
+                  ? t('setup.database.testing', 'Testando conexão...')
+                  : t('setup.database.submit', 'Testar e Salvar Conexão')}
               </Button>
             </form>
           )}
           {currentStep === 2 && (
             <form className="space-y-6" onSubmit={e => { e.preventDefault(); createAdmin(); }}>
               <div>
-                <Label htmlFor="adminName">Nome do Administrador</Label>
+                <Label htmlFor="adminName">
+                  {t('setup.admin.name_label', 'Nome do Administrador')}
+                </Label>
                 <Input
                   id="adminName"
                   type="text"
-                  placeholder="Nome completo"
+                  placeholder={t('setup.admin.name_placeholder', 'Nome completo')}
                   value={adminName}
                   onChange={e => setAdminName(e.target.value)}
                   className="mt-1"
@@ -176,11 +188,13 @@ export default function SetupWizard() {
                 />
               </div>
               <div>
-                <Label htmlFor="adminEmail">Email</Label>
+                <Label htmlFor="adminEmail">
+                  {t('setup.admin.email_label', 'Email')}
+                </Label>
                 <Input
                   id="adminEmail"
                   type="email"
-                  placeholder="admin@exemplo.com"
+                  placeholder={t('setup.admin.email_placeholder', 'admin@exemplo.com')}
                   value={adminEmail}
                   onChange={e => setAdminEmail(e.target.value)}
                   className="mt-1"
@@ -188,11 +202,13 @@ export default function SetupWizard() {
                 />
               </div>
               <div>
-                <Label htmlFor="adminPassword">Senha</Label>
+                <Label htmlFor="adminPassword">
+                  {t('setup.admin.password_label', 'Senha')}
+                </Label>
                 <Input
                   id="adminPassword"
                   type="password"
-                  placeholder="Senha segura"
+                  placeholder={t('setup.admin.password_placeholder', 'Senha segura')}
                   value={adminPassword}
                   onChange={e => setAdminPassword(e.target.value)}
                   className="mt-1"
@@ -203,10 +219,10 @@ export default function SetupWizard() {
               {success && <Alert className="border-green-200 bg-green-50"><AlertDescription className="text-green-800">{success}</AlertDescription></Alert>}
               <div className="flex gap-2">
                 <Button type="button" variant="outline" className="flex-1" onClick={() => setCurrentStep(1)}>
-                  Voltar
+                  {t('common.back', 'Voltar')}
                 </Button>
                 <Button type="submit" className="flex-1" disabled={loading}>
-                  {loading ? 'Salvando...' : 'Próximo'}
+                  {loading ? t('setup.admin.saving', 'Salvando...') : t('setup.admin.next', 'Próximo')}
                 </Button>
               </div>
             </form>
@@ -215,14 +231,14 @@ export default function SetupWizard() {
             <div className="space-y-6">
               <Alert>
                 <AlertDescription>
-                  <strong>O setup irá:</strong>
+                  <strong>{t('setup.review.summary_title', 'O setup irá:')}</strong>
                   <ul className="mt-2 space-y-1 text-sm">
-                    <li>• Criar todas as tabelas necessárias</li>
-                    <li>• Criar usuário superadmin: <span className="font-mono">{adminEmail}</span></li>
-                    <li>• Criar carteira padrão</li>
-                    <li>• Inserir categorias globais (Alimentação, Transporte, etc.)</li>
-                    <li>• Inserir formas de pagamento (PIX, Cartão, Dinheiro)</li>
-                    <li>• Gerar token API</li>
+                    <li>• {t('setup.review.items.tables', 'Criar todas as tabelas necessárias')}</li>
+                    <li>• {t('setup.review.items.superadmin', 'Criar usuário superadmin')}: <span className="font-mono">{adminEmail}</span></li>
+                    <li>• {t('setup.review.items.wallet', 'Criar carteira padrão')}</li>
+                    <li>• {t('setup.review.items.categories', 'Inserir categorias globais (Alimentação, Transporte, etc.)')}</li>
+                    <li>• {t('setup.review.items.payment_methods', 'Inserir formas de pagamento (PIX, Cartão, Dinheiro)')}</li>
+                    <li>• {t('setup.review.items.api_token', 'Gerar token API')}</li>
                   </ul>
                 </AlertDescription>
               </Alert>
@@ -230,10 +246,12 @@ export default function SetupWizard() {
               {success && <Alert className="border-green-200 bg-green-50"><AlertDescription className="text-green-800">{success}</AlertDescription></Alert>}
               <div className="flex gap-2">
                 <Button type="button" variant="outline" className="flex-1" onClick={() => setCurrentStep(2)}>
-                  Voltar
+                  {t('common.back', 'Voltar')}
                 </Button>
                 <Button type="button" className="flex-1 bg-green-600 hover:bg-green-700" onClick={finishSetup} disabled={loading}>
-                  {loading ? 'Executando Setup...' : 'Executar Setup'}
+                  {loading
+                    ? t('setup.review.running', 'Executando Setup...')
+                    : t('setup.review.run_button', 'Executar Setup')}
                 </Button>
               </div>
             </div>
@@ -241,18 +259,23 @@ export default function SetupWizard() {
           {currentStep === 4 && (
             <div className="space-y-6 text-center">
               <CheckCircle className="h-12 w-12 text-green-600 mx-auto mb-2" />
-              <h2 className="text-2xl font-bold text-green-700">Setup Concluído!</h2>
+              <h2 className="text-2xl font-bold text-green-700">
+                {t('setup.complete.title', 'Setup Concluído!')}
+              </h2>
               <Alert className="border-green-200 bg-green-50">
                 <AlertDescription className="text-green-800">
                   <div className="space-y-2">
-                    <p><strong>Sistema configurado com sucesso!</strong></p>
-                    <p>Você pode agora fazer login com as credenciais do administrador.</p>
+                    <p><strong>{t('setup.complete.success', 'Sistema configurado com sucesso!')}</strong></p>
+                    <p>{t('setup.complete.login_hint', 'Você pode agora fazer login com as credenciais do administrador.')}</p>
                     <p className="text-sm">
-                      <strong>Email:</strong> {adminEmail}<br/>
-                      <strong>Senha:</strong> {adminPassword}
+                      <strong>{t('common.email', 'Email')}:</strong> {adminEmail}<br/>
+                      <strong>{t('common.password', 'Senha')}:</strong> {adminPassword}
                     </p>
                     {apiToken && (
-                      <p className="text-sm mt-2"><strong>Token API:</strong> <span className="font-mono">{apiToken}</span></p>
+                      <p className="text-sm mt-2">
+                        <strong>{t('setup.complete.api_token', 'Token API')}:</strong>{' '}
+                        <span className="font-mono">{apiToken}</span>
+                      </p>
                     )}
                   </div>
                 </AlertDescription>
@@ -261,7 +284,7 @@ export default function SetupWizard() {
                 onClick={() => window.location.href = '/login'} 
                 className="w-full bg-blue-600 hover:bg-blue-700"
               >
-                Ir para Login
+                {t('setup.complete.go_to_login', 'Ir para Login')}
               </Button>
             </div>
           )}

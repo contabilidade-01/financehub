@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ApiTokensList } from "@/components/settings/ApiTokensList";
@@ -32,31 +32,45 @@ import { Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { UnsavedChangesModal } from "@/components/ui/UnsavedChangesModal";
-import { useTranslation } from "@/contexts/LocalizationContext";
+import { useLocalization, useTranslation } from "@/contexts/LocalizationContext";
 
-// Schema para validação do perfil
-const profileSchema = z.object({
-  nome: z.string().min(1, "O nome é obrigatório"),
-  email: z.string().email("E-mail inválido"),
-  telefone: z.string().optional().refine((val) => {
-    if (!val || val.trim() === "") return true;
-    const digits = val.replace(/\D/g, "");
-    return digits.length === 10 || digits.length === 11;
-  }, "Telefone deve ter DDD e número válido (10 ou 11 dígitos)"),
-});
+const createProfileSchema = (t: (key: string, fallback: string) => string) =>
+  z.object({
+    nome: z.string().min(1, t('settings.validation.name_required', 'O nome é obrigatório')),
+    email: z.string().email(t('settings.validation.email_invalid', 'E-mail inválido')),
+    telefone: z
+      .string()
+      .optional()
+      .refine((val) => {
+        if (!val || val.trim() === '') return true;
+        const digits = val.replace(/\D/g, '');
+        return digits.length === 10 || digits.length === 11;
+      }, t('settings.validation.phone_invalid', 'Telefone deve ter DDD e número válido (10 ou 11 dígitos)')),
+  });
 
-// Schema para validação da senha
-const passwordSchema = z.object({
-  senha_atual: z.string().min(6, "A senha atual é obrigatória"),
-  nova_senha: z.string().min(6, "A nova senha deve ter pelo menos 6 caracteres"),
-  confirmar_senha: z.string().min(6, "Confirme a nova senha"),
-}).refine((data) => data.nova_senha === data.confirmar_senha, {
-  message: "As senhas não coincidem",
-  path: ["confirmar_senha"],
-});
+const createPasswordSchema = (t: (key: string, fallback: string) => string) =>
+  z
+    .object({
+      senha_atual: z.string().min(6, t('settings.validation.current_password_required', 'A senha atual é obrigatória')),
+      nova_senha: z.string().min(6, t('settings.validation.new_password_min', 'A nova senha deve ter pelo menos 6 caracteres')),
+      confirmar_senha: z.string().min(6, t('settings.validation.confirm_password_required', 'Confirme a nova senha')),
+    })
+    .refine((data) => data.nova_senha === data.confirmar_senha, {
+      message: t('settings.validation.passwords_not_match', 'As senhas não coincidem'),
+      path: ['confirmar_senha'],
+    });
 
-type ProfileFormValues = z.infer<typeof profileSchema>;
-type PasswordFormValues = z.infer<typeof passwordSchema>;
+type ProfileFormValues = {
+  nome: string;
+  email: string;
+  telefone?: string;
+};
+
+type PasswordFormValues = {
+  senha_atual: string;
+  nova_senha: string;
+  confirmar_senha: string;
+};
 
 // Função de formatação igual ao admin
 const formatPhone = (value: string) => {
@@ -79,7 +93,7 @@ const formatPhone = (value: string) => {
 };
 
 // Novo componente de input de telefone com +55 fixo (igual admin)
-function PhoneInput({ value, onChange, placeholder, error }: { value: string; onChange: (v: string) => void; placeholder?: string; error?: boolean }) {
+function PhoneInput({ value, onChange, placeholder, error, t }: { value: string; onChange: (v: string) => void; placeholder?: string; error?: boolean; t: (key: string, fallback: string) => string }) {
   const formatPhone = (val: string) => {
     const digits = val.replace(/\D/g, "");
     if (!digits) return "";
@@ -110,7 +124,7 @@ function PhoneInput({ value, onChange, placeholder, error }: { value: string; on
           if (val.length > 11) val = val.slice(0, 11);
           onChange(val);
         }}
-        placeholder={placeholder || "(41) 9 8503-7379"}
+        placeholder={placeholder || t('settings.phone_placeholder', '(41) 9 8503-7379')}
         style={{ paddingLeft: 44 }}
         className={`admin-user-form-input${error ? ' border border-red-500' : ''}`}
         maxLength={16}
@@ -126,8 +140,10 @@ type ModalAnimadaErroProps = {
   onClose: () => void;
   mensagem: string;
   icone?: React.ReactNode;
+  titulo: string;
+  fecharLabel: string;
 };
-function ModalAnimadaErro({ open, onClose, mensagem, icone }: ModalAnimadaErroProps) {
+function ModalAnimadaErro({ open, onClose, mensagem, icone, titulo, fecharLabel }: ModalAnimadaErroProps) {
   if (!open) return null;
   return (
     <div
@@ -148,14 +164,14 @@ function ModalAnimadaErro({ open, onClose, mensagem, icone }: ModalAnimadaErroPr
           )}
         </div>
         <div className="text-center text-lg font-semibold text-red-600 mb-2">
-          Erro
+          {titulo}
         </div>
         <div className="text-center text-gray-700 mb-4">{mensagem}</div>
         <button
           className="mt-2 px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition"
           onClick={onClose}
         >
-          Fechar
+          {fecharLabel}
         </button>
       </div>
       <style>{`
@@ -177,6 +193,27 @@ export default function SettingsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const { t } = useTranslation();
+  const { locale } = useLocalization();
+  const normalizedLocale = useMemo(
+    () => (locale ? locale.replace(/([a-z]{2})-([a-z]{2})/, (_: string, lang: string, region: string) => `${lang}-${region.toUpperCase()}`) : "pt-BR"),
+    [locale]
+  );
+  const dateFormatter = useMemo(() => new Intl.DateTimeFormat(normalizedLocale), [normalizedLocale]);
+  const profileSchema = useMemo(() => createProfileSchema(t), [t]);
+  const passwordSchema = useMemo(() => createPasswordSchema(t), [t]);
+  const formatLocalizedDate = useCallback(
+    (value: Date | string | null | undefined) => {
+      if (!value) {
+        return '';
+      }
+      const date = value instanceof Date ? value : new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        return '';
+      }
+      return dateFormatter.format(date);
+    },
+    [dateFormatter]
+  );
   const [erroModal, setErroModal] = useState({ open: false, mensagem: "" });
   const [activeTab, setActiveTab] = useState("perfil");
 
@@ -233,12 +270,8 @@ export default function SettingsPage() {
       });
     },
     onError: (error: any) => {
-      let mensagem = "Não foi possível atualizar seu perfil.";
-      if (error?.response?.data?.message) {
-        mensagem = error.response.data.message;
-      } else if (error?.message) {
-        mensagem = error.message;
-      }
+      const defaultMessage = t('settings.update_profile_error', 'Não foi possível atualizar seu perfil.');
+      const mensagem = error?.response?.data?.message || error?.message || defaultMessage;
       setErroModal({ open: true, mensagem });
     },
   });
@@ -405,10 +438,10 @@ export default function SettingsPage() {
                       <FormItem>
                         <FormLabel>{t('common.phone', 'Telefone')}</FormLabel>
                         <FormControl>
-                          <Input 
-                            type="tel" 
-                            placeholder="(11) 99999-9999" 
-                            {...field} 
+                          <Input
+                            type="tel"
+                            placeholder={t('settings.phone_placeholder', '(11) 99999-9999')}
+                            {...field}
                           />
                         </FormControl>
                         <FormDescription>
@@ -545,7 +578,7 @@ export default function SettingsPage() {
                   </p>
                   {user?.data_expiracao_assinatura && (
                     <p className="text-sm text-green-600 dark:text-green-300">
-                      {t('settings.expires_on', 'Expira em')}: {new Date(user.data_expiracao_assinatura).toLocaleDateString('pt-BR')}
+                  {t('settings.expires_on', 'Expira em')}: {formatLocalizedDate(user.data_expiracao_assinatura)}
                     </p>
                   )}
                 </div>
@@ -572,11 +605,11 @@ export default function SettingsPage() {
                       ? "text-orange-600 dark:text-orange-300"
                       : "text-gray-600 dark:text-gray-400"
                   }`}>
-                    {t('settings.cancelled_on', 'Cancelada em')}: {new Date(user.data_cancelamento).toLocaleDateString('pt-BR')}
+                    {t('settings.cancelled_on', 'Cancelada em')}: {formatLocalizedDate(user.data_cancelamento)}
                   </p>
                   {user?.data_expiracao_assinatura && new Date(user.data_expiracao_assinatura) > new Date() && (
                     <p className="text-sm text-orange-600 dark:text-orange-300 mb-2 font-medium">
-                      {t('settings.access_until', 'Você ainda tem acesso até')}: {new Date(user.data_expiracao_assinatura).toLocaleDateString('pt-BR')}
+                      {t('settings.access_until', 'Você ainda tem acesso até')}: {formatLocalizedDate(user.data_expiracao_assinatura)}
                     </p>
                   )}
                   {user.motivo_cancelamento && (
@@ -608,6 +641,8 @@ export default function SettingsPage() {
         open={erroModal.open}
         onClose={() => setErroModal({ open: false, mensagem: "" })}
         mensagem={erroModal.mensagem}
+        titulo={t('common.error', 'Erro')}
+        fecharLabel={t('common.close', 'Fechar')}
       />
     </div>
   );

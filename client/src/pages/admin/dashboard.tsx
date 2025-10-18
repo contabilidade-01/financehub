@@ -24,6 +24,7 @@ import {
 import { User } from "@shared/schema";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as PieChartComponent, Cell, BarChart, Bar, Pie } from 'recharts';
 import { useTheme } from "next-themes";
+import { useLocalization, useTranslation } from "@/contexts/LocalizationContext";
 
 interface AdminStats {
   totalUsers: number;
@@ -65,6 +66,11 @@ export default function AdminDashboard() {
     message: ''
   });
   const { toast } = useToast();
+  const { t } = useTranslation();
+  const { locale } = useLocalization();
+  const normalizedLocale = locale
+    ? locale.replace(/([a-z]{2})-([a-z]{2})/, (_, lang, region) => `${lang}-${region.toUpperCase()}`)
+    : "pt-BR";
 
   // Buscar estatísticas do sistema
   const { data: stats, isLoading: statsLoading } = useQuery<AdminStats>({
@@ -105,8 +111,11 @@ export default function AdminDashboard() {
       console.log(`Iniciando personificação do usuário: ${userName} (ID: ${userId})`);
       
       toast({
-        title: "Processando",
-        description: `Iniciando personificação do usuário ${userName}...`,
+        title: t("admin.dashboard.toast.impersonate_start.title", "Processando"),
+        description: t(
+          "admin.dashboard.toast.impersonate_start.description",
+          "Iniciando personificação do usuário {{userName}}..."
+        ).replace("{{userName}}", userName),
       });
       
       const response = await fetch("/api/admin/impersonate", {
@@ -120,8 +129,11 @@ export default function AdminDashboard() {
 
       if (response.ok) {
         toast({
-          title: "Sucesso!",
-          description: `Personificação do usuário ${userName} realizada com sucesso. Redirecionando...`,
+          title: t("admin.dashboard.toast.impersonate_success.title", "Sucesso!"),
+          description: t(
+            "admin.dashboard.toast.impersonate_success.description",
+            "Personificação do usuário {{userName}} realizada com sucesso. Redirecionando..."
+          ).replace("{{userName}}", userName),
         });
         
         // Aguardar um pouco para mostrar o toast antes de redirecionar
@@ -133,30 +145,30 @@ export default function AdminDashboard() {
         console.error('Erro na personificação:', error);
         
         toast({
-          title: "Erro na Personificação",
-          description: error.error || 'Não foi possível personificar o usuário.',
+          title: t("admin.dashboard.toast.impersonate_error.title", "Erro na Personificação"),
+          description: error.error || t("admin.dashboard.toast.impersonate_error.description", "Não foi possível personificar o usuário."),
           variant: "destructive",
         });
         
         setErrorModal({
           isOpen: true,
-          title: 'Erro na Personificação',
-          message: error.error || 'Ocorreu um erro ao tentar personificar o usuário.'
+          title: t("admin.dashboard.error_modal.title", "Erro na Personificação"),
+          message: error.error || t("admin.dashboard.error_modal.generic", "Ocorreu um erro ao tentar personificar o usuário."),
         });
       }
     } catch (error) {
       console.error('Erro na personificação:', error);
       
       toast({
-        title: "Erro Inesperado",
-        description: 'Ocorreu um erro de conexão. Tente novamente.',
+        title: t("admin.dashboard.toast.impersonate_unexpected.title", "Erro Inesperado"),
+        description: t("admin.dashboard.toast.impersonate_unexpected.description", "Ocorreu um erro de conexão. Tente novamente."),
         variant: "destructive",
       });
       
       setErrorModal({
         isOpen: true,
-        title: 'Erro na Personificação',
-        message: 'Ocorreu um erro inesperado ao tentar personificar o usuário.'
+        title: t("admin.dashboard.error_modal.title", "Erro na Personificação"),
+        message: t("admin.dashboard.error_modal.unexpected", "Ocorreu um erro inesperado ao tentar personificar o usuário."),
       });
     } finally {
       setSelectedAction(null);
@@ -190,18 +202,18 @@ export default function AdminDashboard() {
   const getUserStatusBadge = (user: User) => {
     // Seguindo as regras definidas em REGRASUSUARIO.md
     if (user.data_cancelamento) {
-      return <Badge variant="destructive">Cancelado</Badge>;
+      return <Badge variant="destructive">{t("admin.dashboard.user_status.cancelled", "Cancelado")}</Badge>;
     }
     if (!user.ativo) {
-      return <Badge variant="secondary">Inativo</Badge>;
+      return <Badge variant="secondary">{t("admin.dashboard.user_status.inactive", "Inativo")}</Badge>;
     }
-    return <Badge variant="default">Ativo</Badge>;
+    return <Badge variant="default">{t("admin.dashboard.user_status.active", "Ativo")}</Badge>;
   };
 
   const formatLastAccess = (date: string | Date | null) => {
-    if (!date) return "Nunca";
+    if (!date) return t("admin.dashboard.last_access.never", "Nunca");
     const dateObj = typeof date === 'string' ? new Date(date) : date;
-    return dateObj.toLocaleDateString("pt-BR", {
+    return dateObj.toLocaleDateString(normalizedLocale, {
       day: "2-digit",
       month: "2-digit", 
       year: "numeric",
@@ -234,87 +246,101 @@ export default function AdminDashboard() {
       <div>
         <h1 className={`text-3xl font-bold mb-2 flex items-center gap-2 ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}> 
           <Shield className="h-8 w-8 text-purple-500" />
-          Dashboard SaaS - FinanceHub
+          {t("admin.dashboard.header.title", "Dashboard SaaS - FinanceHub")}
         </h1>
-        <p className={`${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>Visão geral administrativa da plataforma</p>
+        <p className={`${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>
+          {t("admin.dashboard.header.subtitle", "Visão geral administrativa da plataforma")}
+        </p>
       </div>
 
       {/* Métricas Principais */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} text-sm font-medium`}>Total de Usuários</CardTitle>
+            <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} text-sm font-medium`}>
+              {t("admin.dashboard.metrics.total_users.title", "Total de Usuários")}
+            </CardTitle>
             <Users className="h-4 w-4 text-blue-400" />
           </CardHeader>
           <CardContent>
             <div className={`text-2xl font-bold ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>{stats?.totalUsers || 0}</div>
             <p className="text-xs text-green-400 mt-1">
-              +{Math.round(((stats?.totalUsers || 0) / 5) * 100)}% crescimento
+              +{Math.round(((stats?.totalUsers || 0) / 5) * 100)}% {t("admin.dashboard.metrics.total_users.growth_suffix", "crescimento")}
             </p>
           </CardContent>
         </Card>
 
         <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} text-sm font-medium`}>Usuários Ativos</CardTitle>
+            <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} text-sm font-medium`}>
+              {t("admin.dashboard.metrics.active_users.title", "Usuários Ativos")}
+            </CardTitle>
             <Activity className="h-4 w-4 text-green-400" />
           </CardHeader>
           <CardContent>
             <div className={`text-2xl font-bold ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>{stats?.activeUsers || 0}</div>
             <p className="text-xs text-green-400 mt-1">
-              {Math.round(((stats?.activeUsers || 0) / (stats?.totalUsers || 1)) * 100)}% taxa de ativação
+              {Math.round(((stats?.activeUsers || 0) / (stats?.totalUsers || 1)) * 100)}% {t("admin.dashboard.metrics.active_users.rate_suffix", "taxa de ativação")}
             </p>
           </CardContent>
         </Card>
 
         <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} text-sm font-medium`}>Transações</CardTitle>
+            <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} text-sm font-medium`}>
+              {t("admin.dashboard.metrics.transactions.title", "Transações")}
+            </CardTitle>
             <TrendingUp className="h-4 w-4 text-yellow-400" />
           </CardHeader>
           <CardContent>
             <div className={`text-2xl font-bold ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>{stats?.totalTransactions || 0}</div>
             <p className="text-xs text-yellow-400 mt-1">
-              Média: {Math.round((stats?.totalTransactions || 0) / (stats?.activeUsers || 1))} por usuário
+              {t("admin.dashboard.metrics.transactions.average_prefix", "Média:")} {Math.round((stats?.totalTransactions || 0) / (stats?.activeUsers || 1))} {t("admin.dashboard.metrics.transactions.average_suffix", "por usuário")}
             </p>
           </CardContent>
         </Card>
 
         <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} text-sm font-medium`}>Usuários Cancelados</CardTitle>
+            <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} text-sm font-medium`}>
+              {t("admin.dashboard.metrics.cancelled_users.title", "Usuários Cancelados")}
+            </CardTitle>
             <UserX className="h-4 w-4 text-red-400" />
           </CardHeader>
           <CardContent>
             <div className={`text-2xl font-bold ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>{stats?.canceledUsers || 0}</div>
             <p className="text-xs text-red-400 mt-1">
-              {Math.round(((stats?.canceledUsers || 0) / (stats?.totalUsers || 1)) * 100)}% da base
+              {Math.round(((stats?.canceledUsers || 0) / (stats?.totalUsers || 1)) * 100)}% {t("admin.dashboard.metrics.cancelled_users.base_suffix", "da base")}
             </p>
           </CardContent>
         </Card>
 
         <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} text-sm font-medium`}>Usuários Inativos</CardTitle>
+            <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} text-sm font-medium`}>
+              {t("admin.dashboard.metrics.inactive_users.title", "Usuários Inativos")}
+            </CardTitle>
             <AlertTriangle className="h-4 w-4 text-orange-400" />
           </CardHeader>
           <CardContent>
             <div className={`text-2xl font-bold ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>{stats?.inactiveUsers || 0}</div>
             <p className="text-xs text-orange-400 mt-1">
-              {Math.round(((stats?.inactiveUsers || 0) / (stats?.totalUsers || 1)) * 100)}% inativos
+              {Math.round(((stats?.inactiveUsers || 0) / (stats?.totalUsers || 1)) * 100)}% {t("admin.dashboard.metrics.inactive_users.base_suffix", "inativos")}
             </p>
           </CardContent>
         </Card>
 
         <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} text-sm font-medium`}>Carteiras</CardTitle>
+            <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} text-sm font-medium`}>
+              {t("admin.dashboard.metrics.wallets.title", "Carteiras")}
+            </CardTitle>
             <CreditCard className="h-4 w-4 text-purple-400" />
           </CardHeader>
           <CardContent>
             <div className={`text-2xl font-bold ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>{stats?.totalWallets || 0}</div>
             <p className="text-xs text-purple-400 mt-1">
-              {Math.round(((stats?.totalWallets || 0) / (stats?.totalUsers || 1)) * 100)}% com carteiras
+              {Math.round(((stats?.totalWallets || 0) / (stats?.totalUsers || 1)) * 100)}% {t("admin.dashboard.metrics.wallets.base_suffix", "com carteiras")}
             </p>
           </CardContent>
         </Card>
@@ -327,10 +353,10 @@ export default function AdminDashboard() {
           <CardHeader>
             <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} flex items-center gap-2`}>
               <BarChart3 className="h-5 w-5" />
-              Crescimento de Usuários
+              {t("admin.dashboard.charts.user_growth.title", "Crescimento de Usuários")}
             </CardTitle>
             <CardDescription className={`${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>
-              Evolução mensal da base de usuários
+              {t("admin.dashboard.charts.user_growth.description", "Evolução mensal da base de usuários")}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -347,8 +373,8 @@ export default function AdminDashboard() {
                     color: '#fff'
                   }}
                 />
-                <Line type="monotone" dataKey="users" stroke="#3B82F6" strokeWidth={2} name="Total" />
-                <Line type="monotone" dataKey="activeUsers" stroke="#10B981" strokeWidth={2} name="Ativos" />
+                <Line type="monotone" dataKey="users" stroke="#3B82F6" strokeWidth={2} name={t("admin.dashboard.charts.user_growth.series.total", "Total")} />
+                <Line type="monotone" dataKey="activeUsers" stroke="#10B981" strokeWidth={2} name={t("admin.dashboard.charts.user_growth.series.active", "Ativos")} />
               </LineChart>
             </ResponsiveContainer>
           </CardContent>
@@ -359,10 +385,10 @@ export default function AdminDashboard() {
           <CardHeader>
             <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} flex items-center gap-2`}>
               <TrendingUp className="h-5 w-5" />
-              Volume de Transações
+              {t("admin.dashboard.charts.transaction_volume.title", "Volume de Transações")}
             </CardTitle>
             <CardDescription className={`${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>
-              Evolução mensal do volume transacional
+              {t("admin.dashboard.charts.transaction_volume.description", "Evolução mensal do volume transacional")}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -379,7 +405,7 @@ export default function AdminDashboard() {
                     color: '#fff'
                   }}
                 />
-                <Bar dataKey="transactions" fill="#F59E0B" name="Quantidade" />
+                <Bar dataKey="transactions" fill="#F59E0B" name={t("admin.dashboard.charts.transaction_volume.series.transactions", "Quantidade")} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -393,10 +419,10 @@ export default function AdminDashboard() {
           <CardHeader>
             <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} flex items-center gap-2`}>
               <PieChart className="h-5 w-5" />
-              Distribuição de Usuários
+              {t("admin.dashboard.charts.user_distribution.title", "Distribuição de Usuários")}
             </CardTitle>
             <CardDescription className={`${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>
-              Por status conforme regras de negócio
+              {t("admin.dashboard.charts.user_distribution.description", "Por status conforme regras de negócio")}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -434,10 +460,10 @@ export default function AdminDashboard() {
           <CardHeader>
             <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} flex items-center gap-2`}>
               <Activity className="h-5 w-5" />
-              Atividade Recente
+              {t("admin.dashboard.charts.recent_activity.title", "Atividade Recente")}
             </CardTitle>
             <CardDescription className={`${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>
-              Últimos 7 dias de atividade do sistema
+              {t("admin.dashboard.charts.recent_activity.description", "Últimos 7 dias de atividade do sistema")}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -454,8 +480,8 @@ export default function AdminDashboard() {
                     color: '#fff'
                   }}
                 />
-                <Line type="monotone" dataKey="users" stroke="#10B981" strokeWidth={2} name="Usuários Ativos" />
-                <Line type="monotone" dataKey="transactions" stroke="#F59E0B" strokeWidth={2} name="Transações" />
+                <Line type="monotone" dataKey="users" stroke="#10B981" strokeWidth={2} name={t("admin.dashboard.charts.recent_activity.series.users", "Usuários Ativos")} />
+                <Line type="monotone" dataKey="transactions" stroke="#F59E0B" strokeWidth={2} name={t("admin.dashboard.charts.recent_activity.series.transactions", "Transações")} />
               </LineChart>
             </ResponsiveContainer>
           </CardContent>
@@ -467,17 +493,17 @@ export default function AdminDashboard() {
         <CardHeader>
           <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} flex items-center gap-2`}>
             <UserCog className="h-5 w-5" />
-            Gerenciamento de Usuários
+            {t("admin.dashboard.recent_users.title", "Gerenciamento de Usuários")}
           </CardTitle>
           <CardDescription className={`${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>
-            Últimos usuários cadastrados e ações administrativas
+            {t("admin.dashboard.recent_users.description", "Últimos usuários cadastrados e ações administrativas")}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="recent" className="w-full">
             <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="recent">Usuários Recentes</TabsTrigger>
-              <TabsTrigger value="distribution">Distribuição de Carteiras</TabsTrigger>
+              <TabsTrigger value="recent">{t("admin.dashboard.recent_users.tabs.recent", "Usuários Recentes")}</TabsTrigger>
+              <TabsTrigger value="distribution">{t("admin.dashboard.recent_users.tabs.wallet_distribution", "Distribuição de Carteiras")}</TabsTrigger>
             </TabsList>
             
             <TabsContent value="recent" className="mt-6">
@@ -492,11 +518,21 @@ export default function AdminDashboard() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-gray-700">
-                        <th className={`text-left py-3 px-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>Nome</th>
-                        <th className={`text-left py-3 px-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>Email</th>
-                        <th className={`text-left py-3 px-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>Status</th>
-                        <th className={`text-left py-3 px-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>Data Cadastro</th>
-                        <th className={`text-left py-3 px-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>Ações</th>
+                        <th className={`text-left py-3 px-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>
+                          {t("admin.dashboard.recent_users.table.headers.name", "Nome")}
+                        </th>
+                        <th className={`text-left py-3 px-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>
+                          {t("admin.dashboard.recent_users.table.headers.email", "Email")}
+                        </th>
+                        <th className={`text-left py-3 px-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>
+                          {t("admin.dashboard.recent_users.table.headers.status", "Status")}
+                        </th>
+                        <th className={`text-left py-3 px-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>
+                          {t("admin.dashboard.recent_users.table.headers.created_at", "Data Cadastro")}
+                        </th>
+                        <th className={`text-left py-3 px-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>
+                          {t("admin.dashboard.recent_users.table.headers.actions", "Ações")}
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -517,9 +553,9 @@ export default function AdminDashboard() {
                               {selectedAction === `impersonate-${user.id}` ? (
                                 <span className="flex items-center gap-2">
                                   <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin"></div>
-                                  Processando...
+                                  {t("admin.dashboard.recent_users.actions.processing", "Processando...")}
                                 </span>
-                              ) : "Impersonificar"}
+                              ) : t("admin.dashboard.recent_users.actions.impersonate", "Impersonificar")}
                             </Button>
                           </td>
                         </tr>
@@ -536,14 +572,17 @@ export default function AdminDashboard() {
                 <div className="flex items-start gap-3">
                   <Database className={`h-5 w-5 mt-0.5 flex-shrink-0 ${theme === 'light' ? 'text-blue-500' : 'text-blue-400'}`} />
                   <div>
-                    <h4 className={`font-semibold mb-2 ${theme === 'light' ? 'text-gray-900' : 'text-blue-200'}`}>Critério de Distribuição</h4>
+                    <h4 className={`font-semibold mb-2 ${theme === 'light' ? 'text-gray-900' : 'text-blue-200'}`}>
+                      {t("admin.dashboard.wallet_distribution.criteria_title", "Critério de Distribuição")}
+                    </h4>
                     <p className={`text-sm leading-relaxed ${theme === 'light' ? 'text-gray-700' : 'text-blue-300/80'}`}>
-                      As carteiras são distribuídas por faixas de <strong>saldo atual</strong> calculado em tempo real. 
-                      O saldo é obtido pela soma de todas as receitas menos todas as despesas da carteira, 
-                      incluindo transações pendentes e agendadas.
+                      {t("admin.dashboard.wallet_distribution.criteria_intro", "As carteiras são distribuídas por faixas de")}{" "}
+                      <strong>{t("admin.dashboard.wallet_distribution.criteria_highlight", "saldo atual")}</strong>{" "}
+                      {t("admin.dashboard.wallet_distribution.criteria_detail", "calculado em tempo real. O saldo é obtido pela soma de todas as receitas menos todas as despesas da carteira, incluindo transações pendentes e agendadas.")}
                     </p>
                     <div className={`mt-3 text-xs ${theme === 'light' ? 'text-gray-500' : 'text-blue-300/60'}`}>
-                      <span className="font-medium">Atualização:</span> Os dados são recalculados automaticamente a cada consulta
+                      <span className="font-medium">{t("admin.dashboard.wallet_distribution.update_label", "Atualização:")}</span>{" "}
+                      {t("admin.dashboard.wallet_distribution.update_description", "Os dados são recalculados automaticamente a cada consulta")}
                     </div>
                   </div>
                 </div>
@@ -579,13 +618,13 @@ export default function AdminDashboard() {
                             {range.range}
                           </div>
                           <div className={`text-xs ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}> 
-                            {index === 0 && "Carteiras com saldo baixo"}
-                            {index === 1 && "Carteiras com saldo médio"}
-                            {index === 2 && "Carteiras com saldo alto"}
+                            {index === 0 && t("admin.dashboard.wallet_distribution.labels.low", "Carteiras com saldo baixo")}
+                            {index === 1 && t("admin.dashboard.wallet_distribution.labels.medium", "Carteiras com saldo médio")}
+                            {index === 2 && t("admin.dashboard.wallet_distribution.labels.high", "Carteiras com saldo alto")}
                           </div>
                           {!isLoading && (
                             <div className={`mt-2 text-xs ${theme === 'light' ? 'text-gray-600' : 'text-gray-500'}`}> 
-                              {((range.count / (analyticsData?.walletDistribution?.reduce((acc, r) => acc + r.count, 0) || 1)) * 100).toFixed(1)}% do total
+                              {((range.count / (analyticsData?.walletDistribution?.reduce((acc, r) => acc + r.count, 0) || 1)) * 100).toFixed(1)}% {t("admin.dashboard.wallet_distribution.percentage_suffix", "do total")}
                             </div>
                           )}
                         </div>
@@ -598,9 +637,10 @@ export default function AdminDashboard() {
               {/* Rodapé informativo */}
               <div className={`mt-4 text-xs text-center ${theme === 'light' ? 'text-gray-500' : 'text-gray-500'}`}> 
                 <p>
-                  Distribuição baseada no saldo atual de cada carteira • 
-                  Inclui transações de todos os status • 
-                  Última atualização: {new Date().toLocaleString('pt-BR')}
+                  {t(
+                    "admin.dashboard.wallet_distribution.footer",
+                    "Distribuição baseada no saldo atual de cada carteira • Inclui transações de todos os status • Última atualização: {{timestamp}}"
+                  ).replace("{{timestamp}}", new Date().toLocaleString(normalizedLocale))}
                 </p>
               </div>
             </TabsContent>
@@ -652,7 +692,7 @@ export default function AdminDashboard() {
                 onClick={() => setErrorModal({ ...errorModal, isOpen: false })}
                 className={`px-6 py-2 rounded-lg font-medium transition-colors duration-200 shadow-lg ${theme === 'light' ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-red-600 hover:bg-red-700 text-white'}`}
               >
-                Entendi
+                {t("admin.dashboard.error_modal.close", "Entendi")}
               </Button>
             </div>
           </div>

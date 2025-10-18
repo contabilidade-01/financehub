@@ -231,7 +231,7 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
                       }}
                     >
                       <ArrowDownIcon className="mr-2 h-4 w-4" />
-                      Despesa
+                      {t('transactions.type_labels.expense', 'Despesa')}
                     </Button>
                     <Button
                       type="button"
@@ -243,7 +243,7 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
                       }}
                     >
                       <ArrowUpIcon className="mr-2 h-4 w-4" />
-                      Receita
+                      {t('transactions.type_labels.income', 'Receita')}
                     </Button>
                   </div>
                   <FormMessage />
@@ -334,7 +334,7 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
               
               return (
                 <FormItem className="relative">
-                  <FormLabel>Categoria</FormLabel>
+                  <FormLabel>{t('transactions.category', 'Categoria')}</FormLabel>
                   <div ref={selectRef} className="relative">
                     <FormControl>
                       <button
@@ -351,7 +351,7 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
                             {translateCategoryName(selectedCategory.nome, t)}
                           </div>
                         ) : (
-                          <span className="text-muted-foreground">Selecione uma categoria</span>
+                          <span className="text-muted-foreground">{t('transactions.select_category', 'Selecione uma categoria')}</span>
                         )}
                         <ChevronDown className="h-4 w-4 opacity-50" />
                       </button>
@@ -428,7 +428,7 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
               
               return (
                 <FormItem>
-                  <FormLabel>Forma de Pagamento</FormLabel>
+                  <FormLabel>{t('transactions.payment_method.label', 'Forma de Pagamento')}</FormLabel>
                   <div className="relative" ref={selectRef}>
                     <FormControl>
                       <button
@@ -438,7 +438,9 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
                         disabled={isPaymentMethodsLoading}
                       >
                         <span className={selectedPaymentMethod ? "" : "text-muted-foreground"}>
-                          {selectedPaymentMethod ? translatePaymentMethodName(selectedPaymentMethod.nome, t) : "Selecione uma forma de pagamento"}
+                          {selectedPaymentMethod
+                            ? translatePaymentMethodName(selectedPaymentMethod.nome, t)
+                            : t('transactions.payment_method.placeholder', 'Selecione uma forma de pagamento')}
                         </span>
                         <ChevronDown className="h-4 w-4 opacity-50" />
                       </button>
@@ -446,7 +448,9 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
                     {isOpen && (
                       <div className={`relative top-full left-0 right-0 z-50 mt-1 max-h-60 overflow-auto rounded-md border p-1 shadow-md ${theme === 'light' ? 'bg-white border-gray-200' : 'bg-popover border-gray-700'} text-popover-foreground`}>
                         {isPaymentMethodsLoading ? (
-                          <div className="px-2 py-1.5 text-sm text-muted-foreground">Carregando...</div>
+                          <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                            {t('common.loading', 'Carregando...')}
+                          </div>
                         ) : paymentMethods && paymentMethods.length > 0 ? (
                           paymentMethods.map((pm) => (
                             <div
@@ -460,12 +464,16 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
                               <Check className={`mr-2 h-4 w-4 ${field.value === pm.id ? "opacity-100" : "opacity-0"}`} />
                               <span>{translatePaymentMethodName(pm.nome, t)}</span>
                               {pm.global && (
-                                <span className="ml-auto text-xs text-muted-foreground">(Global)</span>
+                                <span className="ml-auto text-xs text-muted-foreground">
+                                  ({t('transactions.payment_method.global_badge', 'Global')})
+                                </span>
                               )}
                             </div>
                           ))
                         ) : (
-                          <div className="px-2 py-1.5 text-sm text-muted-foreground">Nenhuma forma de pagamento disponível</div>
+                          <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                            {t('transactions.payment_method.empty', 'Nenhuma forma de pagamento disponível')}
+                          </div>
                         )}
                       </div>
                     )}
@@ -479,7 +487,9 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
           <div className="flex justify-end pt-4">
             <Button type="submit" disabled={isSubmitting} className="w-full md:w-auto">
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4" />}
-              {transaction ? "Salvar alterações" : "Criar transação"}
+              {transaction
+                ? t('transactions.submit.update', 'Salvar alterações')
+                : t('transactions.submit.create', 'Criar transação')}
             </Button>
           </div>
         </form>

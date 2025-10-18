@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
 import { useTheme } from "next-themes";
+import { useTranslation } from "@/contexts/LocalizationContext";
 
 interface DatabaseTable {
   name: string;
@@ -28,6 +29,7 @@ export default function DatabasePage() {
   const { toast } = useToast();
   const { user } = useAuth();
   const { theme } = useTheme();
+  const { t } = useTranslation();
 
   const { data: databaseInfo, isLoading, refetch } = useQuery<DatabaseInfo>({
     queryKey: ["/api/admin/database/tables"],
@@ -43,7 +45,7 @@ export default function DatabasePage() {
       });
 
       if (!response.ok) {
-        throw new Error("Erro ao gerar DDL");
+        throw new Error(t("admin.database.download.error", "Erro ao gerar DDL"));
       }
 
       const blob = await response.blob();
@@ -57,14 +59,14 @@ export default function DatabasePage() {
       document.body.removeChild(a);
 
       toast({
-        title: "DDL baixado com sucesso",
-        description: "O arquivo SQL foi salvo no seu computador.",
+        title: t("admin.database.download.success_title", "DDL baixado com sucesso"),
+        description: t("admin.database.download.success_description", "O arquivo SQL foi salvo no seu computador."),
       });
     } catch (error) {
       console.error("Erro ao baixar DDL:", error);
       toast({
-        title: "Erro ao baixar DDL",
-        description: "Não foi possível gerar o arquivo SQL.",
+        title: t("admin.database.download.toast_error_title", "Erro ao baixar DDL"),
+        description: t("admin.database.download.toast_error_description", "Não foi possível gerar o arquivo SQL."),
         variant: "destructive",
       });
     } finally {
@@ -75,8 +77,8 @@ export default function DatabasePage() {
   const handleRefresh = () => {
     refetch();
     toast({
-      title: "Atualizando...",
-      description: "Lista de tabelas atualizada.",
+      title: t("admin.database.refresh.title", "Atualizando..."),
+      description: t("admin.database.refresh.description", "Lista de tabelas atualizada."),
     });
   };
 
@@ -88,15 +90,26 @@ export default function DatabasePage() {
     try {
       const res = await apiRequest('/api/admin/reset-globals', { method: 'POST' });
       if (res.success) {
-        setResetSuccess(res.message || 'Globais resetados com sucesso!');
-        toast({ title: 'Reset concluído', description: res.message || 'Globais resetados com sucesso!' });
+        setResetSuccess(res.message || t('admin.database.reset.success_default', 'Globais resetados com sucesso!'));
+        toast({
+          title: t('admin.database.reset.toast_success_title', 'Reset concluído'),
+          description: res.message || t('admin.database.reset.success_default', 'Globais resetados com sucesso!'),
+        });
       } else {
-        setResetError(res.message || 'Erro ao resetar globais');
-        toast({ title: 'Erro ao resetar globais', description: res.message || 'Erro ao resetar globais', variant: 'destructive' });
+        setResetError(res.message || t('admin.database.reset.error_default', 'Erro ao resetar globais'));
+        toast({
+          title: t('admin.database.reset.toast_error_title', 'Erro ao resetar globais'),
+          description: res.message || t('admin.database.reset.error_default', 'Erro ao resetar globais'),
+          variant: 'destructive',
+        });
       }
     } catch (err: any) {
-      setResetError(err?.message || 'Erro ao resetar globais');
-      toast({ title: 'Erro ao resetar globais', description: err?.message || 'Erro ao resetar globais', variant: 'destructive' });
+      setResetError(err?.message || t('admin.database.reset.error_default', 'Erro ao resetar globais'));
+      toast({
+        title: t('admin.database.reset.toast_error_title', 'Erro ao resetar globais'),
+        description: err?.message || t('admin.database.reset.error_default', 'Erro ao resetar globais'),
+        variant: 'destructive',
+      });
     }
     setResetLoading(false);
   };
@@ -107,10 +120,10 @@ export default function DatabasePage() {
         <div>
           <h1 className="text-3xl font-bold flex items-center gap-2">
             <Database className="h-8 w-8" />
-            Gerenciamento do Banco de Dados
+            {t("admin.database.title", "Gerenciamento do Banco de Dados")}
           </h1>
           <p className="text-muted-foreground mt-2">
-            Visualize e gerencie a estrutura do banco de dados
+            {t("admin.database.subtitle", "Visualize e gerencie a estrutura do banco de dados")}
           </p>
         </div>
         
@@ -121,7 +134,7 @@ export default function DatabasePage() {
             disabled={isLoading}
           >
             <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-            Atualizar
+            {t("common.refresh", "Atualizar")}
           </Button>
           
           <Button
@@ -129,17 +142,21 @@ export default function DatabasePage() {
             disabled={isDownloading}
           >
             <Download className={`h-4 w-4 mr-2 ${isDownloading ? 'animate-spin' : ''}`} />
-            {isDownloading ? "Gerando..." : "Baixar DDL"}
+            {isDownloading
+              ? t("admin.database.download.generating", "Gerando...")
+              : t("admin.database.download.button", "Baixar DDL")}
           </Button>
           {user?.tipo_usuario === 'superadmin' && (
             <Button
               onClick={handleResetGlobals}
               disabled={resetLoading}
               className="bg-orange-600 hover:bg-orange-700"
-              title="Remove e recria as categorias e formas de pagamento globais padrão"
+              title={t("admin.database.reset.tooltip", "Remove e recria as categorias e formas de pagamento globais padrão")}
             >
               <RotateCcw className={`h-4 w-4 mr-2 ${resetLoading ? 'animate-spin' : ''}`} />
-              {resetLoading ? 'Resetando...' : 'Resetar Globais'}
+              {resetLoading
+                ? t("admin.database.reset.loading", "Resetando...")
+                : t("admin.database.reset.button", "Resetar Globais")}
             </Button>
           )}
         </div>
@@ -153,7 +170,7 @@ export default function DatabasePage() {
           <CardHeader>
             <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} flex items-center gap-2`}>
               <FileText className="h-5 w-5" />
-              Estatísticas do Banco
+              {t("admin.database.stats.title", "Estatísticas do Banco")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -163,7 +180,7 @@ export default function DatabasePage() {
                   {databaseInfo?.total || 0}
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  Total de Tabelas
+                  {t("admin.database.stats.total_tables", "Total de Tabelas")}
                 </div>
               </div>
               
@@ -172,7 +189,7 @@ export default function DatabasePage() {
                   {databaseInfo?.tables?.filter(t => t.type === 'BASE TABLE').length || 0}
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  Tabelas Base
+                  {t("admin.database.stats.base_tables", "Tabelas Base")}
                 </div>
               </div>
               
@@ -181,7 +198,7 @@ export default function DatabasePage() {
                   {databaseInfo?.tables?.filter(t => t.type === 'VIEW').length || 0}
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  Views
+                  {t("admin.database.stats.views", "Views")}
                 </div>
               </div>
             </div>
@@ -193,22 +210,22 @@ export default function DatabasePage() {
           <CardHeader>
             <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} flex items-center gap-2`}>
               <Database className="h-5 w-5" />
-              Tabelas do Banco de Dados
+              {t("admin.database.table_list.title", "Tabelas do Banco de Dados")}
             </CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
               <div className="flex items-center justify-center py-8">
                 <RefreshCw className="h-6 w-6 animate-spin mr-2" />
-                Carregando tabelas...
+                {t("admin.database.table_list.loading", "Carregando tabelas...")}
               </div>
             ) : databaseInfo?.tables && databaseInfo.tables.length > 0 ? (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Nome da Tabela</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead>{t("admin.database.table_list.columns.name", "Nome da Tabela")}</TableHead>
+                    <TableHead>{t("admin.database.table_list.columns.type", "Tipo")}</TableHead>
+                    <TableHead>{t("admin.database.table_list.columns.status", "Status")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -224,7 +241,7 @@ export default function DatabasePage() {
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="text-green-600 border-green-600">
-                          Ativa
+                          {t("admin.database.table_list.status.active", "Ativa")}
                         </Badge>
                       </TableCell>
                     </TableRow>
@@ -233,7 +250,7 @@ export default function DatabasePage() {
               </Table>
             ) : (
               <div className="text-center py-8 text-muted-foreground">
-                Nenhuma tabela encontrada
+                {t("admin.database.table_list.empty", "Nenhuma tabela encontrada")}
               </div>
             )}
           </CardContent>
@@ -242,26 +259,28 @@ export default function DatabasePage() {
         {/* Informações do DDL */}
         <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
           <CardHeader>
-            <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>Download do DDL</CardTitle>
+            <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>
+              {t("admin.database.download.section_title", "Download do DDL")}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                O DDL (Data Definition Language) contém todos os comandos SQL necessários para recriar a estrutura completa do banco de dados, incluindo:
+                {t("admin.database.download.description", "O DDL (Data Definition Language) contém todos os comandos SQL necessários para recriar a estrutura completa do banco de dados, incluindo:")}
               </p>
               
               <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
-                <li>Criação de todas as tabelas</li>
-                <li>Definição de colunas e tipos de dados</li>
-                <li>Constraints (Primary Keys, Foreign Keys, Unique)</li>
-                <li>Índices</li>
-                <li>Comentários sobre a estrutura</li>
+                <li>{t("admin.database.download.list.tables", "Criação de todas as tabelas")}</li>
+                <li>{t("admin.database.download.list.columns", "Definição de colunas e tipos de dados")}</li>
+                <li>{t("admin.database.download.list.constraints", "Constraints (Primary Keys, Foreign Keys, Unique)")}</li>
+                <li>{t("admin.database.download.list.indexes", "Índices")}</li>
+                <li>{t("admin.database.download.list.comments", "Comentários sobre a estrutura")}</li>
               </ul>
               
               <div className="bg-muted p-4 rounded-lg">
-                <p className="text-sm font-medium mb-2">⚠️ Importante:</p>
+                <p className="text-sm font-medium mb-2">{t("admin.database.download.notice.title", "⚠️ Importante:")}</p>
                 <p className="text-sm text-muted-foreground">
-                  Este arquivo contém apenas a estrutura do banco. Para migrar dados, use a funcionalidade de migration disponível no sistema.
+                  {t("admin.database.download.notice.description", "Este arquivo contém apenas a estrutura do banco. Para migrar dados, use a funcionalidade de migration disponível no sistema.")}
                 </p>
               </div>
             </div>

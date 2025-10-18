@@ -49,6 +49,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useTheme } from "next-themes";
 import { useTranslation } from "@/contexts/LocalizationContext";
+import { translateCategoryName, translatePaymentMethodName } from "@/utils/localization";
 import { motion, AnimatePresence } from "framer-motion";
 
 // Custom dropdown components with proper positioning - copied from working modal
@@ -322,7 +323,7 @@ function CategoryFilterDropdown({
   const getDisplayText = () => {
     if (value === "all") return t('transactions.filters.all_categories', 'Todas as categorias');
     const category = categories.find(cat => cat.id.toString() === value);
-    return category ? category.nome : t('transactions.filters.all_categories', 'Todas as categorias');
+    return category ? translateCategoryName(category.nome, t) : t('transactions.filters.all_categories', 'Todas as categorias');
   };
 
   return (
@@ -376,7 +377,7 @@ function CategoryFilterDropdown({
                       className="w-3 h-3 rounded-full mr-2" 
                       style={{ backgroundColor: category.cor || "#6C63FF" }}
                     ></div>
-                    {category.nome}
+                    {translateCategoryName(category.nome, t)}
                   </div>
                 </button>
               ))}
@@ -422,7 +423,7 @@ function PaymentMethodFilterDropdown({
   const getDisplayText = () => {
     if (value === "all") return t('transactions.filters.all_payment_methods', 'Todas as formas');
     const method = paymentMethods.find(pm => pm.id.toString() === value);
-    return method ? method.nome : t('transactions.filters.all_payment_methods', 'Todas as formas');
+    return method ? translatePaymentMethodName(method.nome, t) : t('transactions.filters.all_payment_methods', 'Todas as formas');
   };
 
   return (
@@ -471,7 +472,7 @@ function PaymentMethodFilterDropdown({
                       <Check className="h-4 w-4" />
                     </span>
                   )}
-                  {method.nome}
+                  {translatePaymentMethodName(method.nome, t)}
                 </button>
               ))}
             </div>
@@ -581,6 +582,28 @@ export default function Transactions() {
     queryKey: ["/api/payment-methods"]
   });
 
+  const getStatusLabel = (status: TransactionStatus) => {
+    switch (status) {
+      case TransactionStatus.COMPLETED:
+        return t('transactions.filters.completed', 'Efetivadas');
+      case TransactionStatus.PENDING:
+        return t('transactions.filters.pending', 'Pendentes');
+      case TransactionStatus.SCHEDULED:
+        return t('transactions.filters.scheduled', 'Agendadas');
+      case TransactionStatus.CANCELED:
+        return t('transactions.filters.cancelled', 'Canceladas');
+      default:
+        return status;
+    }
+  };
+
+  const getPaymentMethodDisplay = (transaction: Transaction) => {
+    if (transaction.metodo_pagamento) {
+      return translatePaymentMethodName(transaction.metodo_pagamento, t);
+    }
+    return getPaymentMethodName(transaction.forma_pagamento_id ?? null);
+  };
+
   const filteredTransactions = transactions?.filter(transaction => {
     const matchesType = typeFilter === "all" || transaction.tipo === typeFilter;
     const matchesStatus = statusFilter === "all" || transaction.status === statusFilter;
@@ -637,13 +660,13 @@ export default function Transactions() {
   const getCategoryName = (categoryId: number | null) => {
     if (!categoryId) return t('transactions.table.uncategorized', 'Sem categoria');
     const category = categories?.find(c => c.id === categoryId);
-    return category?.nome || t('transactions.table.category_not_found', 'Categoria não encontrada');
+    return category ? translateCategoryName(category.nome, t) : t('transactions.table.category_not_found', 'Categoria não encontrada');
   };
 
   const getPaymentMethodName = (paymentMethodId: number | null) => {
     if (!paymentMethodId) return t('transactions.table.not_specified', 'Não informado');
     const method = paymentMethods?.find(m => m.id === paymentMethodId);
-    return method?.nome || t('transactions.table.method_not_found', 'Método não encontrado');
+    return method ? translatePaymentMethodName(method.nome, t) : t('transactions.table.method_not_found', 'Método não encontrado');
   };
 
   // Limpar badges quando transações são carregadas (usuário visualizou a lista)
@@ -723,9 +746,11 @@ export default function Transactions() {
         <div className={`p-5 ${theme === 'light' ? 'text-gray-900' : ''}`}>
           <div className="flex flex-col md:flex-row gap-4 mb-6 md:items-end">
             <div className="flex-1">
-              <label className="text-sm font-medium text-muted-foreground block mb-1">{t('transactions.filters.search', 'Busca')}</label>
+              <label className="text-sm font-medium text-muted-foreground block mb-1">
+                {t('transactions.filters.search_label', 'Busca')}
+              </label>
               <Input
-                placeholder={t('transactions.filters.search', 'Buscar transações...')}
+                placeholder={t('transactions.filters.search_placeholder', 'Buscar transações...')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="bg-dark-purple/10 h-10"
@@ -820,13 +845,13 @@ export default function Transactions() {
                             </div>
                             <div>
                               <div className="font-medium">{transaction.descricao}</div>
-                              <div className="text-xs text-gray-400">{transaction.metodo_pagamento}</div>
+                              <div className="text-xs text-gray-400">{getPaymentMethodDisplay(transaction)}</div>
                             </div>
                           </div>
                         </td>
                         <td className="py-4 whitespace-nowrap">
                           <span className="px-2 py-1 rounded-lg bg-primary/10 text-primary text-xs">
-                            {categories?.find(cat => cat.id === transaction.categoria_id)?.nome || 'Não identificada'}
+                            {getCategoryName(transaction.categoria_id ?? null)}
                           </span>
                         </td>
                         <td className="py-4 whitespace-nowrap">
@@ -849,7 +874,7 @@ export default function Transactions() {
                             ${theme !== 'light' && transaction.status === TransactionStatus.SCHEDULED ? 'bg-blue-500/10 text-blue-400' : ''}
                             ${theme !== 'light' && transaction.status === TransactionStatus.CANCELED ? 'bg-red-500/10 text-red-400' : ''}
                           `}>
-                            {transaction.status}
+                            {getStatusLabel(transaction.status)}
                           </span>
                         </td>
                         <td className="py-4 whitespace-nowrap text-right">
@@ -870,9 +895,11 @@ export default function Transactions() {
           {/* Mobile Card View */}
           <div className="md:hidden space-y-4">
             {isLoading ? (
-              <div className="text-center py-8 text-gray-400">Carregando...</div>
+              <div className="text-center py-8 text-gray-400">{t('common.loading', 'Carregando...')}</div>
             ) : filteredTransactions?.length === 0 ? (
-              <div className="text-center py-8 text-gray-400">Nenhuma transação encontrada</div>
+              <div className="text-center py-8 text-gray-400">
+                {t('transactions.table.no_transactions', 'Nenhuma transação encontrada')}
+              </div>
             ) : (
               filteredTransactions?.map((transaction) => (
                 <TransactionCard 
@@ -891,7 +918,7 @@ export default function Transactions() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="font-medium text-white truncate">{transaction.descricao}</div>
-                        <div className="text-sm text-gray-400">{transaction.metodo_pagamento}</div>
+                        <div className="text-sm text-gray-400">{getPaymentMethodDisplay(transaction)}</div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 ml-2">
@@ -915,7 +942,7 @@ export default function Transactions() {
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-gray-400">{t('transactions.table.category', 'Categoria')}:</span>
                       <span className="px-2 py-1 rounded-lg bg-primary/10 text-primary text-xs">
-                        {categories?.find(cat => cat.id === transaction.categoria_id)?.nome || t('transactions.table.uncategorized', 'Não identificada')}
+                        {getCategoryName(transaction.categoria_id ?? null)}
                       </span>
                     </div>
                     
@@ -936,7 +963,7 @@ export default function Transactions() {
                         ${theme !== 'light' && transaction.status === TransactionStatus.SCHEDULED ? 'bg-blue-500/10 text-blue-400' : ''}
                         ${theme !== 'light' && transaction.status === TransactionStatus.CANCELED ? 'bg-red-500/10 text-red-400' : ''}
                       `}>
-                        {transaction.status}
+                        {getStatusLabel(transaction.status)}
                       </span>
                     </div>
                   </div>

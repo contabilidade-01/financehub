@@ -15,6 +15,7 @@ import { Trash2, Edit, Plus, UserPlus, Shield, User as UserIcon, RotateCcw, Chec
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useTheme } from "next-themes";
+import { useLocalization, useTranslation } from "@/contexts/LocalizationContext";
 
 interface UserWithStats extends User {
   transactionCount: number;
@@ -84,6 +85,11 @@ function PhoneInput({ value, onChange, placeholder, error }: { value: string; on
 
 export default function AdminUsers() {
   const { theme } = useTheme();
+  const { t } = useTranslation();
+  const { locale } = useLocalization();
+  const normalizedLocale = locale
+    ? locale.replace(/([a-z]{2})-([a-z]{2})/, (_, lang, region) => `${lang}-${region.toUpperCase()}`)
+    : "pt-BR";
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
@@ -143,13 +149,13 @@ export default function AdminUsers() {
       setIsCreateModalOpen(false);
       setCreateForm({ nome: "", email: "", senha: "", tipo_usuario: "usuario", telefone: "" });
       toast({
-        title: "Sucesso",
-        description: "Usuário criado com sucesso",
+        title: t("admin.users.toast.create_success.title", "Sucesso"),
+        description: t("admin.users.toast.create_success.description", "Usuário criado com sucesso"),
       });
     },
     onError: (error: any) => {
       let fieldErrs: { telefone?: string; email?: string } = {};
-      let msg = error.message || "Erro ao criar usuário";
+      let msg = error.message || t("admin.users.toast.create_error.fallback", "Erro ao criar usuário");
       if (msg.toLowerCase().includes("telefone")) {
         fieldErrs.telefone = msg;
       }
@@ -157,7 +163,10 @@ export default function AdminUsers() {
         fieldErrs.email = msg;
       }
       setFieldErrors(fieldErrs);
-      setErrorModal({ isOpen: true, message: msg });
+      setErrorModal({
+        isOpen: true,
+        message: msg,
+      });
     },
   });
 
@@ -170,14 +179,14 @@ export default function AdminUsers() {
       setIsEditModalOpen(false);
       setSelectedUser(null);
       toast({
-        title: "Sucesso",
-        description: "Usuário atualizado com sucesso",
+        title: t("admin.users.toast.update_success.title", "Sucesso"),
+        description: t("admin.users.toast.update_success.description", "Usuário atualizado com sucesso"),
       });
     },
     onError: (error: any) => {
       toast({
-        title: "Erro",
-        description: error.message || "Erro ao atualizar usuário",
+        title: t("admin.users.toast.update_error.title", "Erro"),
+        description: error.message || t("admin.users.toast.update_error.description", "Erro ao atualizar usuário"),
         variant: "destructive",
       });
     },
@@ -189,14 +198,14 @@ export default function AdminUsers() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
       toast({
-        title: "Sucesso",
-        description: "Usuário desativado com sucesso",
+        title: t("admin.users.toast.delete_success.title", "Sucesso"),
+        description: t("admin.users.toast.delete_success.description", "Usuário desativado com sucesso"),
       });
     },
     onError: (error: any) => {
       toast({
-        title: "Erro",
-        description: error.message || "Erro ao desativar usuário",
+        title: t("admin.users.toast.delete_error.title", "Erro"),
+        description: error.message || t("admin.users.toast.delete_error.description", "Erro ao desativar usuário"),
         variant: "destructive",
       });
     },
@@ -233,8 +242,13 @@ export default function AdminUsers() {
       // Revalidar para garantir sincronização
       queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
       toast({
-        title: "Status Atualizado",
-        description: `Usuário ${variables.nome} foi ${variables.ativo ? 'ativado' : 'desativado'} com sucesso`,
+        title: t("admin.users.toast.toggle_success.title", "Status Atualizado"),
+        description: t(
+          "admin.users.toast.toggle_success.description",
+          "Usuário {{userName}} foi {{status}} com sucesso"
+        )
+          .replace("{{userName}}", variables.nome)
+          .replace("{{status}}", variables.ativo ? t("admin.users.status.active", "ativado") : t("admin.users.status.inactive", "desativado")),
       });
     },
     onError: (error: any, variables, context) => {
@@ -246,8 +260,13 @@ export default function AdminUsers() {
         queryClient.setQueryData(['/api/admin/users'], context.previousUsers);
       }
       toast({
-        title: "Erro",
-        description: `Erro ao ${variables.ativo ? 'ativar' : 'desativar'} usuário ${variables.nome}`,
+        title: t("admin.users.toast.toggle_error.title", "Erro"),
+        description: t(
+          "admin.users.toast.toggle_error.description",
+          "Erro ao {{action}} usuário {{userName}}"
+        )
+          .replace("{{action}}", variables.ativo ? t("admin.users.status.activate", "ativar") : t("admin.users.status.deactivate", "desativar"))
+          .replace("{{userName}}", variables.nome),
         variant: "destructive",
       });
     },
@@ -268,8 +287,8 @@ export default function AdminUsers() {
     },
     onError: (error: any) => {
       toast({
-        title: "Erro",
-        description: error.message || "Erro ao resetar dados do usuário",
+        title: t("admin.users.toast.reset_error.title", "Erro"),
+        description: error.message || t("admin.users.toast.reset_error.description", "Erro ao resetar dados do usuário"),
         variant: "destructive",
       });
     },
@@ -278,7 +297,7 @@ export default function AdminUsers() {
   const handleCreateUser = () => {
     // Validação antes de enviar
     if (createForm.telefone && createForm.telefone.length > 0 && (createForm.telefone.length < 10 || createForm.telefone.length > 11)) {
-      setPhoneError("Telefone deve ter 10 ou 11 dígitos");
+      setPhoneError(t("admin.users.validation.phone_length", "Telefone deve ter 10 ou 11 dígitos"));
       return;
     }
     // Garantir que o telefone enviado seja só números e comece com 55
@@ -312,7 +331,7 @@ export default function AdminUsers() {
   const handleUpdateUser = () => {
     if (!selectedUser) return;
     if (editForm.telefone && editForm.telefone.length > 0 && (editForm.telefone.length < 10 || editForm.telefone.length > 11)) {
-      setEditPhoneError("Telefone deve ter 10 ou 11 dígitos");
+      setEditPhoneError(t("admin.users.validation.phone_length", "Telefone deve ter 10 ou 11 dígitos"));
       return;
     }
     let telefoneLimpo = editForm.telefone ? editForm.telefone.replace(/\D/g, "") : undefined;
@@ -326,7 +345,7 @@ export default function AdminUsers() {
   };
 
   const handleDeleteUser = (id: number) => {
-    if (confirm("Tem certeza que deseja desativar este usuário?")) {
+    if (confirm(t("admin.users.confirm.deactivate", "Tem certeza que deseja desativar este usuário?"))) {
       deleteUserMutation.mutate(id);
     }
   };
@@ -361,8 +380,11 @@ export default function AdminUsers() {
       setSelectedAction(`impersonate-${userId}`);
       
       toast({
-        title: "Processando",
-        description: `Iniciando personificação do usuário ${userName}...`,
+        title: t("admin.users.toast.impersonate_start.title", "Processando"),
+        description: t(
+          "admin.users.toast.impersonate_start.description",
+          "Iniciando personificação do usuário {{userName}}..."
+        ).replace("{{userName}}", userName),
       });
       
       const response = await fetch("/api/admin/impersonate", {
@@ -374,8 +396,11 @@ export default function AdminUsers() {
 
       if (response.ok) {
         toast({
-          title: "Sucesso!",
-          description: `Personificação do usuário ${userName} realizada com sucesso. Redirecionando...`,
+          title: t("admin.users.toast.impersonate_success.title", "Sucesso!"),
+          description: t(
+            "admin.users.toast.impersonate_success.description",
+            "Personificação do usuário {{userName}} realizada com sucesso. Redirecionando..."
+          ).replace("{{userName}}", userName),
         });
         
         setTimeout(() => {
@@ -384,15 +409,15 @@ export default function AdminUsers() {
       } else {
         const error = await response.json();
         toast({
-          title: "Erro na Personificação",
-          description: error.error || 'Não foi possível personificar o usuário.',
+          title: t("admin.users.toast.impersonate_error.title", "Erro na Personificação"),
+          description: error.error || t("admin.users.toast.impersonate_error.description", "Não foi possível personificar o usuário."),
           variant: "destructive",
         });
       }
     } catch (error) {
       toast({
-        title: "Erro Inesperado",
-        description: 'Ocorreu um erro de conexão. Tente novamente.',
+        title: t("admin.users.toast.impersonate_unexpected.title", "Erro Inesperado"),
+        description: t("admin.users.toast.impersonate_unexpected.description", "Ocorreu um erro de conexão. Tente novamente."),
         variant: "destructive",
       });
     } finally {
@@ -403,35 +428,66 @@ export default function AdminUsers() {
   const getTipoUsuarioBadge = (tipo: string) => {
     switch (tipo) {
       case "super_admin":
-        return <Badge variant="destructive" className="gap-1"><Shield className="h-3 w-3" />Super Admin</Badge>;
+        return (
+          <Badge variant="destructive" className="gap-1">
+            <Shield className="h-3 w-3" />
+            {t("admin.users.badges.super_admin", "Super Admin")}
+          </Badge>
+        );
       case "admin":
-        return <Badge variant="secondary" className="gap-1"><UserIcon className="h-3 w-3" />Admin</Badge>;
+        return (
+          <Badge variant="secondary" className="gap-1">
+            <UserIcon className="h-3 w-3" />
+            {t("admin.users.badges.admin", "Admin")}
+          </Badge>
+        );
       default:
-        return <Badge variant="outline" className="gap-1"><UserIcon className="h-3 w-3" />Usuário</Badge>;
+        return (
+          <Badge variant="outline" className="gap-1">
+            <UserIcon className="h-3 w-3" />
+            {t("admin.users.badges.user", "Usuário")}
+          </Badge>
+        );
     }
   };
 
   const getStatusBadge = (user: UserWithStats) => {
     if (user.status_assinatura === 'cancelada' || user.data_cancelamento) {
-      return <Badge className={`${theme === 'light' ? 'bg-red-500 text-white' : 'bg-red-600'} `}>Cancelado</Badge>;
+      return (
+        <Badge className={`${theme === 'light' ? 'bg-red-500 text-white' : 'bg-red-600'} `}>
+          {t("admin.users.badges.cancelled", "Cancelado")}
+        </Badge>
+      );
     }
     if (!user.ativo) {
-      return <Badge className={`${theme === 'light' ? 'bg-yellow-400 text-gray-900' : ''}`} variant={theme === 'light' ? undefined : 'destructive'}>Inativo</Badge>;
+      return (
+        <Badge className={`${theme === 'light' ? 'bg-yellow-400 text-gray-900' : ''}`} variant={theme === 'light' ? undefined : 'destructive'}>
+          {t("admin.users.badges.inactive", "Inativo")}
+        </Badge>
+      );
     }
     if (user.tipo_usuario === "super_admin") {
-      return <Badge className={`${theme === 'light' ? 'bg-purple-500 text-white' : 'bg-purple-600'}`}>Super Admin</Badge>;
+      return (
+        <Badge className={`${theme === 'light' ? 'bg-purple-500 text-white' : 'bg-purple-600'}`}>
+          {t("admin.users.badges.super_admin", "Super Admin")}
+        </Badge>
+      );
     }
-    return <Badge className={`${theme === 'light' ? 'bg-emerald-400 text-white' : ''}`} variant={theme === 'light' ? undefined : 'default'}>Ativo</Badge>;
+    return (
+      <Badge className={`${theme === 'light' ? 'bg-emerald-400 text-white' : ''}`} variant={theme === 'light' ? undefined : 'default'}>
+        {t("admin.users.badges.active", "Ativo")}
+      </Badge>
+    );
   };
 
   const formatLastAccess = (date: string | Date | null) => {
-    if (!date) return "Nunca";
+    if (!date) return t("admin.users.last_access.never", "Nunca");
     const dateObj = typeof date === 'string' ? new Date(date) : date;
-    return dateObj.toLocaleDateString('pt-BR');
+    return dateObj.toLocaleDateString(normalizedLocale);
   };
 
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
+    return new Intl.NumberFormat(normalizedLocale, {
       style: 'currency',
       currency: 'BRL'
     }).format(value);
@@ -474,9 +530,11 @@ export default function AdminUsers() {
         <div>
           <h1 className={`text-3xl font-bold mb-2 flex items-center gap-2 ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>
             <UserCog className="h-8 w-8 text-purple-500" />
-            Gerenciar Usuários
+            {t("admin.users.header.title", "Gerenciar Usuários")}
           </h1>
-          <p className={`${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>Controle completo sobre os usuários do sistema</p>
+          <p className={`${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>
+            {t("admin.users.header.subtitle", "Controle completo sobre os usuários do sistema")}
+          </p>
         </div>
         
         <Button 
@@ -484,7 +542,7 @@ export default function AdminUsers() {
           className="gap-2 neon-border"
         >
           <Plus className="h-4 w-4" />
-          Novo Usuário
+          {t("admin.users.actions.new_user", "Novo Usuário")}
         </Button>
         
         {/* Modal Novo Usuário com CSS Exclusivo */}
@@ -494,7 +552,7 @@ export default function AdminUsers() {
               <div className="admin-user-modal-header">
                 <div className="admin-user-modal-title">
                   <UserPlus className="admin-user-modal-icon" />
-                  <span>Novo Usuário</span>
+                  <span>{t("admin.users.create_modal.title", "Novo Usuário")}</span>
                 </div>
                 <button 
                   onClick={() => setIsCreateModalOpen(false)}
@@ -506,18 +564,22 @@ export default function AdminUsers() {
               
               <div className="admin-user-modal-content">
                 <div className="admin-user-form-group">
-                  <label className="admin-user-form-label">Nome Completo</label>
+                  <label className="admin-user-form-label">
+                    {t("admin.users.create_modal.fields.full_name.label", "Nome Completo")}
+                  </label>
                   <input
                     type="text"
                     value={createForm.nome}
                     onChange={(e) => setCreateForm(prev => ({ ...prev, nome: e.target.value }))}
-                    placeholder="Digite o nome completo"
+                    placeholder={t("admin.users.create_modal.fields.full_name.placeholder", "Digite o nome completo")}
                     className="admin-user-form-input"
                   />
                 </div>
                 
                 <div className="admin-user-form-group">
-                  <label className="admin-user-form-label">Email</label>
+                  <label className="admin-user-form-label">
+                    {t("admin.users.create_modal.fields.email.label", "Email")}
+                  </label>
                   <input
                     type="email"
                     value={createForm.email}
@@ -525,50 +587,56 @@ export default function AdminUsers() {
                       setCreateForm(prev => ({ ...prev, email: e.target.value }));
                       setFieldErrors((prev) => ({ ...prev, email: undefined }));
                     }}
-                    placeholder="usuario@exemplo.com"
+                    placeholder={t("admin.users.create_modal.fields.email.placeholder", "usuario@exemplo.com")}
                     className={`admin-user-form-input${fieldErrors.email ? ' border border-red-500' : ''}`}
                   />
                   {fieldErrors.email && <div style={{ color: 'red', fontSize: 12 }}>{fieldErrors.email}</div>}
                 </div>
                 
                 <div className="admin-user-form-group">
-                  <label className="admin-user-form-label">Senha</label>
+                  <label className="admin-user-form-label">
+                    {t("admin.users.create_modal.fields.password.label", "Senha")}
+                  </label>
                   <input
                     type="password"
                     value={createForm.senha}
                     onChange={(e) => setCreateForm(prev => ({ ...prev, senha: e.target.value }))}
-                    placeholder="Senha segura (mín. 8 caracteres)"
+                    placeholder={t("admin.users.create_modal.fields.password.placeholder", "Senha segura (mín. 8 caracteres)")}
                     className="admin-user-form-input"
                   />
                 </div>
                 
                 <div className="admin-user-form-group">
-                  <label className="admin-user-form-label">Tipo de Usuário</label>
+                  <label className="admin-user-form-label">
+                    {t("admin.users.create_modal.fields.role.label", "Tipo de Usuário")}
+                  </label>
                   <select 
                     value={createForm.tipo_usuario}
                     onChange={(e) => setCreateForm(prev => ({ ...prev, tipo_usuario: e.target.value as "usuario" | "admin" | "super_admin" }))}
                     className="admin-user-form-select"
                   >
-                    <option value="usuario">Usuário Padrão</option>
-                    <option value="admin">Administrador</option>
-                    <option value="super_admin">Super Administrador</option>
+                    <option value="usuario">{t("admin.users.roles.user", "Usuário Padrão")}</option>
+                    <option value="admin">{t("admin.users.roles.admin", "Administrador")}</option>
+                    <option value="super_admin">{t("admin.users.roles.super_admin", "Super Administrador")}</option>
                   </select>
                 </div>
                 
                 <div className="admin-user-form-group">
-                  <label className="admin-user-form-label">Telefone</label>
+                  <label className="admin-user-form-label">
+                    {t("admin.users.create_modal.fields.phone.label", "Telefone")}
+                  </label>
                   <PhoneInput
                     value={createForm.telefone || ""}
                     onChange={val => {
                       setCreateForm(prev => ({ ...prev, telefone: val }));
                       if (val.length > 0 && (val.length < 10 || val.length > 11)) {
-                        setPhoneError("Telefone deve ter DDD e número válido (10 ou 11 dígitos)");
+                        setPhoneError(t("admin.users.validation.phone_detailed", "Telefone deve ter DDD e número válido (10 ou 11 dígitos)"));
                       } else {
                         setPhoneError("");
                       }
                       setFieldErrors((prev) => ({ ...prev, telefone: undefined }));
                     }}
-                    placeholder="(41) 9 8503-7379"
+                    placeholder={t("admin.users.create_modal.fields.phone.placeholder", "(41) 9 8503-7379")}
                     error={!!(phoneError || fieldErrors.telefone)}
                   />
                   {(phoneError || fieldErrors.telefone) && <div style={{ color: 'red', fontSize: 12 }}>{phoneError || fieldErrors.telefone}</div>}
@@ -579,14 +647,16 @@ export default function AdminUsers() {
                     onClick={() => setIsCreateModalOpen(false)}
                     className="admin-user-btn-secondary"
                   >
-                    Cancelar
+                    {t("common.cancel", "Cancelar")}
                   </button>
                   <button 
                     onClick={handleCreateUser}
                     disabled={createUserMutation.isPending}
                     className="admin-user-btn-primary"
                   >
-                    {createUserMutation.isPending ? "Criando..." : "Criar Usuário"}
+                    {createUserMutation.isPending
+                      ? t("admin.users.create_modal.actions.creating", "Criando...")
+                      : t("admin.users.create_modal.actions.submit", "Criar Usuário")}
                   </button>
                 </div>
               </div>
@@ -598,9 +668,11 @@ export default function AdminUsers() {
       {/* Filtro de busca */}
       <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}> 
         <CardHeader>
-          <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>Buscar Usuários</CardTitle>
+          <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>
+            {t("admin.users.search.title", "Buscar Usuários")}
+          </CardTitle>
           <Input
-            placeholder="Buscar por nome ou email..."
+            placeholder={t("admin.users.search.placeholder", "Buscar por nome ou email...")}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className={`max-w-sm ${theme === 'light' ? 'bg-white border-gray-300 text-gray-900 placeholder-gray-400' : 'bg-gray-800 border-gray-700 text-white'}`}
@@ -613,10 +685,10 @@ export default function AdminUsers() {
         <CardHeader>
           <CardTitle className={`flex items-center gap-2 ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}> 
             <Users className="h-5 w-5" />
-            Lista de Usuários
+            {t("admin.users.tabs.title", "Lista de Usuários")}
           </CardTitle>
           <CardDescription className="text-gray-400">
-            Visualize e gerencie usuários por categoria
+            {t("admin.users.tabs.description", "Visualize e gerencie usuários por categoria")}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -624,15 +696,15 @@ export default function AdminUsers() {
             <TabsList className="grid w-full grid-cols-3 mb-6">
               <TabsTrigger value="active" className="flex items-center gap-2">
                 <Users className="h-4 w-4" />
-                Usuários Ativos
+                {t("admin.users.tabs.active", "Usuários Ativos")}
               </TabsTrigger>
               <TabsTrigger value="canceled" className="flex items-center gap-2">
                 <UserX className="h-4 w-4" />
-                Cancelados
+                {t("admin.users.tabs.cancelled", "Cancelados")}
               </TabsTrigger>
               <TabsTrigger value="inactive" className="flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4" />
-                Inativos
+                {t("admin.users.tabs.inactive", "Inativos")}
               </TabsTrigger>
             </TabsList>
 
@@ -672,10 +744,10 @@ export default function AdminUsers() {
                             {getWalletBalanceBadge(user.walletBalance || 0)}
                           </div>
                           <p className={`text-sm ${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>
-                            {user.email} • {user.transactionCount} transações
+                            {user.email} • {user.transactionCount} {t("admin.users.list.transaction_count_suffix", "transações")}
                           </p>
                           <p className={`text-xs ${theme === 'light' ? 'text-gray-400' : 'text-gray-500'}`}>
-                            Cadastro: {user.data_cadastro ? new Date(user.data_cadastro).toLocaleDateString('pt-BR') : 'N/A'} • Último acesso: {formatLastAccess(user.lastAccess)}
+                            {t("admin.users.list.registered_label", "Cadastro")}: {user.data_cadastro ? new Date(user.data_cadastro).toLocaleDateString(normalizedLocale) : t("admin.users.list.not_available", "N/A")} • {t("admin.users.list.last_access_label", "Último acesso")}: {formatLastAccess(user.lastAccess)}
                           </p>
                         </div>
                       </div>
@@ -685,7 +757,12 @@ export default function AdminUsers() {
                             checked={user.ativo}
                             onCheckedChange={() => handleToggleStatus(user)}
                             disabled={togglingUserId === user.id || toggleUserStatusMutation.isPending}
-                          title={user.ativo ? "Desativar usuário" : "Ativar usuário"} />
+                            title={
+                              user.ativo
+                                ? t("admin.users.actions.deactivate_user", "Desativar usuário")
+                                : t("admin.users.actions.activate_user", "Ativar usuário")
+                            }
+                          />
                           {togglingUserId === user.id && (
                             <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                           )}
@@ -697,7 +774,7 @@ export default function AdminUsers() {
                             onClick={() => handleImpersonate(user.id, user.nome)}
                             disabled={selectedAction === `impersonate-${user.id}`}
                             className="text-blue-600 hover:text-blue-700 neon-border"
-                            title="Personificar usuário"
+                            title={t("admin.users.actions.impersonate_user", "Personificar usuário")}
                           >
                             <Eye className="h-3 w-3" />
                           </Button>
@@ -707,7 +784,8 @@ export default function AdminUsers() {
                           size="sm"
                           onClick={() => handleEditUser(user)}
                           className="neon-border"
-                        title="Editar usuário">
+                          title={t("admin.users.actions.edit_user", "Editar usuário")}
+                        >
                           <Edit className="h-3 w-3" />
                         </Button>
                         <Button
@@ -716,7 +794,7 @@ export default function AdminUsers() {
                           onClick={() => handleResetUser(user)}
                           disabled={resetUserMutation.isPending}
                           className="text-orange-600 hover:text-orange-700 neon-border"
-                          title="Resetar dados do usuário"
+                          title={t("admin.users.actions.reset_user", "Resetar dados do usuário")}
                         >
                           <RotateCcw className="h-3 w-3" />
                         </Button>
@@ -726,7 +804,8 @@ export default function AdminUsers() {
                           onClick={() => handleDeleteUser(user.id)}
                           disabled={deleteUserMutation.isPending}
                           className="neon-border"
-                        title="Desativar usuário">
+                          title={t("admin.users.actions.deactivate_user", "Desativar usuário")}
+                        >
                           <Trash2 className="h-3 w-3" />
                         </Button>
                       </div>
@@ -770,15 +849,17 @@ export default function AdminUsers() {
                             {getWalletBalanceBadge(user.walletBalance || 0)}
                           </div>
                           <p className="text-sm text-gray-400">
-                            {user.email} • {user.transactionCount} transações
+                            {user.email} • {user.transactionCount} {t("admin.users.list.transaction_count_suffix", "transações")}
                           </p>
                           <p className="text-xs text-gray-500">
-                            Cadastro: {user.data_cadastro ? new Date(user.data_cadastro).toLocaleDateString('pt-BR') : 'N/A'}
+                            {t("admin.users.list.registered_label", "Cadastro")}: {user.data_cadastro ? new Date(user.data_cadastro).toLocaleDateString(normalizedLocale) : t("admin.users.list.not_available", "N/A")}
                           </p>
                           <div className="text-xs text-red-400 mt-1">
-                            <div>Cancelado em: {user.data_cancelamento ? new Date(user.data_cancelamento).toLocaleDateString('pt-BR') : 'N/A'}</div>
+                            <div>
+                              {t("admin.users.list.cancelled_at", "Cancelado em")}: {user.data_cancelamento ? new Date(user.data_cancelamento).toLocaleDateString(normalizedLocale) : t("admin.users.list.not_available", "N/A")}
+                            </div>
                             {user.motivo_cancelamento && (
-                              <div>Motivo: {user.motivo_cancelamento}</div>
+                              <div>{t("admin.users.list.cancel_reason", "Motivo")}: {user.motivo_cancelamento}</div>
                             )}
                           </div>
                         </div>
@@ -789,7 +870,12 @@ export default function AdminUsers() {
                             checked={user.ativo}
                             onCheckedChange={() => handleToggleStatus(user)}
                             disabled={togglingUserId === user.id || toggleUserStatusMutation.isPending}
-                          title={user.ativo ? "Desativar usuário" : "Ativar usuário"} />
+                            title={
+                              user.ativo
+                                ? t("admin.users.actions.deactivate_user", "Desativar usuário")
+                                : t("admin.users.actions.activate_user", "Ativar usuário")
+                            }
+                          />
                           {togglingUserId === user.id && (
                             <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                           )}
@@ -802,7 +888,7 @@ export default function AdminUsers() {
                             onClick={() => handleImpersonate(user.id, user.nome)}
                             disabled={selectedAction === `impersonate-${user.id}`}
                             className="text-blue-600 hover:text-blue-700 neon-border"
-                            title="Personificar usuário"
+                            title={t("admin.users.actions.impersonate_user", "Personificar usuário")}
                           >
                             <Eye className="h-3 w-3" />
                           </Button>
@@ -812,7 +898,8 @@ export default function AdminUsers() {
                           size="sm"
                           onClick={() => handleEditUser(user)}
                           className="neon-border"
-                        title="Editar usuário">
+                          title={t("admin.users.actions.edit_user", "Editar usuário")}
+                        >
                           <Edit className="h-3 w-3" />
                         </Button>
                         <Button
@@ -821,7 +908,7 @@ export default function AdminUsers() {
                           onClick={() => handleResetUser(user)}
                           disabled={resetUserMutation.isPending}
                           className="text-orange-600 hover:text-orange-700 neon-border"
-                          title="Resetar dados do usuário"
+                          title={t("admin.users.actions.reset_user", "Resetar dados do usuário")}
                         >
                           <RotateCcw className="h-3 w-3" />
                         </Button>
@@ -829,7 +916,7 @@ export default function AdminUsers() {
                     </div>
                   )) || (
                     <div className="text-center py-8 text-gray-400">
-                      Nenhum usuário cancelado encontrado
+                      {t("admin.users.empty_states.cancelled", "Nenhum usuário cancelado encontrado")}
                     </div>
                   )}
                 </div>
@@ -871,10 +958,10 @@ export default function AdminUsers() {
                             {getWalletBalanceBadge(user.walletBalance || 0)}
                           </div>
                           <p className="text-sm text-gray-400">
-                            {user.email} • {user.transactionCount} transações
+                            {user.email} • {user.transactionCount} {t("admin.users.list.transaction_count_suffix", "transações")}
                           </p>
                           <p className="text-xs text-gray-500">
-                            Cadastro: {user.data_cadastro ? new Date(user.data_cadastro).toLocaleDateString('pt-BR') : 'N/A'} • Último acesso: {formatLastAccess(user.lastAccess)}
+                            {t("admin.users.list.registered_label", "Cadastro")}: {user.data_cadastro ? new Date(user.data_cadastro).toLocaleDateString(normalizedLocale) : t("admin.users.list.not_available", "N/A")} • {t("admin.users.list.last_access_label", "Último acesso")}: {formatLastAccess(user.lastAccess)}
                           </p>
                         </div>
                       </div>
@@ -885,7 +972,7 @@ export default function AdminUsers() {
                             variant="destructive"
                             size="icon"
                             className={`${theme === 'light' ? 'bg-red-500 hover:bg-red-600' : 'bg-transparent hover:bg-red-900'}`}
-                            title="Excluir usuário permanentemente"
+                            title={t("admin.users.actions.delete_user", "Excluir usuário permanentemente")}
                             onClick={() => setSelectedUser(user)}
                           >
                             <Trash2 className={`h-5 w-5 ${theme === 'light' ? 'text-white' : 'text-red-500'}`} />
@@ -896,7 +983,12 @@ export default function AdminUsers() {
                             checked={user.ativo}
                             onCheckedChange={() => handleToggleStatus(user)}
                             disabled={togglingUserId === user.id || toggleUserStatusMutation.isPending}
-                          title={user.ativo ? "Desativar usuário" : "Ativar usuário"} />
+                            title={
+                              user.ativo
+                                ? t("admin.users.actions.deactivate_user", "Desativar usuário")
+                                : t("admin.users.actions.activate_user", "Ativar usuário")
+                            }
+                          />
                           {togglingUserId === user.id && (
                             <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                           )}
@@ -909,7 +1001,7 @@ export default function AdminUsers() {
                             onClick={() => handleImpersonate(user.id, user.nome)}
                             disabled={selectedAction === `impersonate-${user.id}`}
                             className="text-blue-600 hover:text-blue-700 neon-border"
-                            title="Personificar usuário"
+                            title={t("admin.users.actions.impersonate_user", "Personificar usuário")}
                           >
                             <Eye className="h-3 w-3" />
                           </Button>
@@ -919,7 +1011,8 @@ export default function AdminUsers() {
                           size="sm"
                           onClick={() => handleEditUser(user)}
                           className="neon-border"
-                        title="Editar usuário">
+                          title={t("admin.users.actions.edit_user", "Editar usuário")}
+                        >
                           <Edit className="h-3 w-3" />
                         </Button>
                         <Button
@@ -928,7 +1021,7 @@ export default function AdminUsers() {
                           onClick={() => handleResetUser(user)}
                           disabled={resetUserMutation.isPending}
                           className="text-orange-600 hover:text-orange-700 neon-border"
-                          title="Resetar dados do usuário"
+                          title={t("admin.users.actions.reset_user", "Resetar dados do usuário")}
                         >
                           <RotateCcw className="h-3 w-3" />
                         </Button>
@@ -936,7 +1029,7 @@ export default function AdminUsers() {
                     </div>
                   )) || (
                     <div className="text-center py-8 text-gray-400">
-                      Nenhum usuário inativo encontrado
+                      {t("admin.users.empty_states.inactive", "Nenhum usuário inativo encontrado")}
                     </div>
                   )}
                 </div>
@@ -950,124 +1043,140 @@ export default function AdminUsers() {
       {isEditModalOpen && (
         <div className="admin-edit-modal-overlay">
           <div className="admin-edit-modal-container">
-            <div className="admin-edit-modal-header">
-              <div className="admin-edit-modal-title">
-                <Edit className="admin-edit-modal-icon" />
-                <span>Editar Usuário</span>
-              </div>
-              <button 
-                onClick={() => setIsEditModalOpen(false)}
-                className="admin-edit-modal-close"
-              >
+      <div className="admin-edit-modal-header">
+        <div className="admin-edit-modal-title">
+          <Edit className="admin-edit-modal-icon" />
+          <span>{t("admin.users.edit_modal.title", "Editar Usuário")}</span>
+        </div>
+        <button 
+          onClick={() => setIsEditModalOpen(false)}
+          className="admin-edit-modal-close"
+        >
                 ×
               </button>
             </div>
             
-            <div className="admin-edit-modal-content">
-              <div className="admin-edit-form-group">
-                <label className="admin-edit-form-label">Nome Completo</label>
-                <input
-                  type="text"
-                  value={editForm.nome}
-                  onChange={(e) => setEditForm(prev => ({ ...prev, nome: e.target.value }))}
-                  placeholder="Digite o nome completo"
-                  className="admin-edit-form-input"
-                />
-              </div>
-              
-              <div className="admin-edit-form-group">
-                <label className="admin-edit-form-label">Email</label>
-                <input
-                  type="email"
-                  value={editForm.email}
-                  onChange={(e) => setEditForm(prev => ({ ...prev, email: e.target.value }))}
-                  placeholder="usuario@exemplo.com"
-                  className="admin-edit-form-input"
-                />
-              </div>
-              
-              <div className="admin-edit-form-group">
-                <label className="admin-edit-form-label">Tipo de Usuário</label>
-                <select 
-                  value={editForm.tipo_usuario}
-                  onChange={(e) => setEditForm(prev => ({ ...prev, tipo_usuario: e.target.value as "usuario" | "admin" | "super_admin" }))}
-                  className="admin-edit-form-select"
-                >
-                  <option value="usuario">Usuário Padrão</option>
-                  <option value="admin">Administrador</option>
-                  <option value="super_admin">Super Administrador</option>
-                </select>
-              </div>
-              
-              <div className="admin-edit-form-group">
-                <div className="admin-edit-switch-container">
-                  <Switch
-                    checked={editForm.ativo}
-                    onCheckedChange={(checked) => setEditForm(prev => ({ ...prev, ativo: checked }))}
-                    className="admin-edit-switch"
-                  />
-                  <label className="admin-edit-form-label">Usuário Ativo</label>
-                </div>
-              </div>
+      <div className="admin-edit-modal-content">
+        <div className="admin-edit-form-group">
+          <label className="admin-edit-form-label">
+            {t("admin.users.edit_modal.fields.full_name.label", "Nome Completo")}
+          </label>
+          <input
+            type="text"
+            value={editForm.nome}
+            onChange={(e) => setEditForm(prev => ({ ...prev, nome: e.target.value }))}
+            placeholder={t("admin.users.edit_modal.fields.full_name.placeholder", "Digite o nome completo")}
+            className="admin-edit-form-input"
+          />
+        </div>
+        
+        <div className="admin-edit-form-group">
+          <label className="admin-edit-form-label">
+            {t("admin.users.edit_modal.fields.email.label", "Email")}
+          </label>
+          <input
+            type="email"
+            value={editForm.email}
+            onChange={(e) => setEditForm(prev => ({ ...prev, email: e.target.value }))}
+            placeholder={t("admin.users.edit_modal.fields.email.placeholder", "usuario@exemplo.com")}
+            className="admin-edit-form-input"
+          />
+        </div>
+        
+        <div className="admin-edit-form-group">
+          <label className="admin-edit-form-label">
+            {t("admin.users.edit_modal.fields.role.label", "Tipo de Usuário")}
+          </label>
+          <select 
+            value={editForm.tipo_usuario}
+            onChange={(e) => setEditForm(prev => ({ ...prev, tipo_usuario: e.target.value as "usuario" | "admin" | "super_admin" }))}
+            className="admin-edit-form-select"
+          >
+            <option value="usuario">{t("admin.users.roles.user", "Usuário Padrão")}</option>
+            <option value="admin">{t("admin.users.roles.admin", "Administrador")}</option>
+            <option value="super_admin">{t("admin.users.roles.super_admin", "Super Administrador")}</option>
+          </select>
+        </div>
+        
+        <div className="admin-edit-form-group">
+          <div className="admin-edit-switch-container">
+            <Switch
+              checked={editForm.ativo}
+              onCheckedChange={(checked) => setEditForm(prev => ({ ...prev, ativo: checked }))}
+              className="admin-edit-switch"
+            />
+            <label className="admin-edit-form-label">
+              {t("admin.users.edit_modal.fields.active.label", "Usuário Ativo")}
+            </label>
+          </div>
+        </div>
 
-              <div className="admin-edit-form-group">
-                <label className="admin-edit-form-label">Nova Senha (deixe em branco para não alterar)</label>
-                <input
-                  type="password"
-                  value={editForm.nova_senha}
-                  onChange={(e) => setEditForm(prev => ({ ...prev, nova_senha: e.target.value }))}
-                  placeholder="Digite a nova senha"
-                  className="admin-edit-form-input"
-                />
-              </div>
+        <div className="admin-edit-form-group">
+          <label className="admin-edit-form-label">
+            {t("admin.users.edit_modal.fields.password.label", "Nova Senha (deixe em branco para não alterar)")}
+          </label>
+          <input
+            type="password"
+            value={editForm.nova_senha}
+            onChange={(e) => setEditForm(prev => ({ ...prev, nova_senha: e.target.value }))}
+            placeholder={t("admin.users.edit_modal.fields.password.placeholder", "Digite a nova senha")}
+            className="admin-edit-form-input"
+          />
+        </div>
 
-              <div className="admin-edit-form-group">
-                <label className="admin-edit-form-label">Data de Expiração da Assinatura</label>
-                <input
-                  type="date"
-                  value={editForm.data_expiracao_assinatura}
-                  onChange={(e) => setEditForm(prev => ({ ...prev, data_expiracao_assinatura: e.target.value }))}
-                  className="admin-edit-form-input"
-                />
-                <div className="text-xs text-gray-400 mt-1">
-                  Deixe em branco para assinatura ilimitada
-                </div>
-              </div>
-              
-              <div className="admin-edit-form-group">
-                <label className="admin-edit-form-label">Telefone</label>
-                <PhoneInput
-                  value={editForm.telefone || ""}
-                  onChange={val => {
-                    setEditForm(prev => ({ ...prev, telefone: val }));
-                    if (val.length > 0 && (val.length < 10 || val.length > 11)) {
-                      setEditPhoneError("Telefone deve ter DDD e número válido (10 ou 11 dígitos)");
-                    } else {
-                      setEditPhoneError("");
-                    }
-                  }}
-                  placeholder="(41) 9 8503-7379"
-                  error={!!editPhoneError}
-                />
-                {editPhoneError && <div style={{ color: 'red', fontSize: 12 }}>{editPhoneError}</div>}
-              </div>
-              
-              <div className="admin-edit-modal-actions">
-                <button 
-                  onClick={() => setIsEditModalOpen(false)}
-                  className="admin-edit-btn-secondary"
-                >
-                  Cancelar
-                </button>
-                <button 
-                  onClick={handleUpdateUser}
-                  disabled={updateUserMutation.isPending}
-                  className="admin-edit-btn-primary"
-                >
-                  {updateUserMutation.isPending ? "Atualizando..." : "Atualizar Usuário"}
-                </button>
-              </div>
-            </div>
+        <div className="admin-edit-form-group">
+          <label className="admin-edit-form-label">
+            {t("admin.users.edit_modal.fields.subscription_expiration.label", "Data de Expiração da Assinatura")}
+          </label>
+          <input
+            type="date"
+            value={editForm.data_expiracao_assinatura}
+            onChange={(e) => setEditForm(prev => ({ ...prev, data_expiracao_assinatura: e.target.value }))}
+            className="admin-edit-form-input"
+          />
+          <div className="text-xs text-gray-400 mt-1">
+            {t("admin.users.edit_modal.fields.subscription_expiration.hint", "Deixe em branco para assinatura ilimitada")}
+          </div>
+        </div>
+        
+        <div className="admin-edit-form-group">
+          <label className="admin-edit-form-label">
+            {t("admin.users.edit_modal.fields.phone.label", "Telefone")}
+          </label>
+          <PhoneInput
+            value={editForm.telefone || ""}
+            onChange={val => {
+              setEditForm(prev => ({ ...prev, telefone: val }));
+              if (val.length > 0 && (val.length < 10 || val.length > 11)) {
+                setEditPhoneError(t("admin.users.validation.phone_detailed", "Telefone deve ter DDD e número válido (10 ou 11 dígitos)"));
+              } else {
+                setEditPhoneError("");
+              }
+            }}
+            placeholder={t("admin.users.edit_modal.fields.phone.placeholder", "(41) 9 8503-7379")}
+            error={!!editPhoneError}
+          />
+          {editPhoneError && <div style={{ color: 'red', fontSize: 12 }}>{editPhoneError}</div>}
+        </div>
+        
+        <div className="admin-edit-modal-actions">
+          <button 
+            onClick={() => setIsEditModalOpen(false)}
+            className="admin-edit-btn-secondary"
+          >
+            {t("common.cancel", "Cancelar")}
+          </button>
+          <button 
+            onClick={handleUpdateUser}
+            disabled={updateUserMutation.isPending}
+            className="admin-edit-btn-primary"
+          >
+            {updateUserMutation.isPending
+              ? t("admin.users.edit_modal.actions.saving", "Atualizando...")
+              : t("admin.users.edit_modal.actions.submit", "Atualizar Usuário")}
+          </button>
+        </div>
+      </div>
           </div>
         </div>
       )}
@@ -1078,42 +1187,42 @@ export default function AdminUsers() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-orange-400">
               <RotateCcw className="h-5 w-5" />
-              Resetar Dados do Usuário
+              {t("admin.users.reset_modal.title", "Resetar Dados do Usuário")}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="p-4 bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 rounded-lg">
               <p className="text-sm text-orange-800 dark:text-orange-200">
-                <strong>Atenção:</strong> Esta ação irá remover permanentemente:
+                <strong>{t("admin.users.reset_modal.warning.attention", "Atenção")}:</strong> {t("admin.users.reset_modal.warning.intro", "Esta ação irá remover permanentemente:")}
               </p>
               <ul className="mt-2 text-sm text-orange-700 dark:text-orange-300 list-disc list-inside space-y-1">
-                <li>Todas as transações</li>
-                <li>Todos os lembretes</li>
-                <li>Todas as categorias personalizadas</li>
-                <li>Tokens de API extras (mantém apenas 1)</li>
-                <li>Reseta o saldo da carteira para R$ 0,00</li>
+                <li>{t("admin.users.reset_modal.warning.items.transactions", "Todas as transações")}</li>
+                <li>{t("admin.users.reset_modal.warning.items.reminders", "Todos os lembretes")}</li>
+                <li>{t("admin.users.reset_modal.warning.items.categories", "Todas as categorias personalizadas")}</li>
+                <li>{t("admin.users.reset_modal.warning.items.tokens", "Tokens de API extras (mantém apenas 1)")}</li>
+                <li>{t("admin.users.reset_modal.warning.items.wallet", "Reseta o saldo da carteira para R$ 0,00")}</li>
               </ul>
               <p className="mt-2 text-sm text-orange-800 dark:text-orange-200">
-                <strong>Será mantido:</strong> Usuário, senha e dados básicos da conta.
+                <strong>{t("admin.users.reset_modal.warning.keep_title", "Será mantido")}:</strong> {t("admin.users.reset_modal.warning.keep_description", "Usuário, senha e dados básicos da conta.")}
               </p>
             </div>
             
             {selectedUser && (
               <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
                 <p className="text-sm">
-                  <strong>Usuário:</strong> {selectedUser.nome}
+                  <strong>{t("admin.users.reset_modal.user_label", "Usuário")}:</strong> {selectedUser.nome}
                 </p>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  <strong>Email:</strong> {selectedUser.email}
+                  <strong>{t("admin.users.reset_modal.email_label", "Email")}:</strong> {selectedUser.email}
                 </p>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  <strong>Transações atuais:</strong> {selectedUser.transactionCount}
+                  <strong>{t("admin.users.reset_modal.transactions_label", "Transações atuais")}:</strong> {selectedUser.transactionCount}
                 </p>
               </div>
             )}
 
             <p className="text-sm text-gray-600 dark:text-gray-400">
-              Tem certeza que deseja resetar todos os dados deste usuário? Esta ação não pode ser desfeita.
+              {t("admin.users.reset_modal.confirm_question", "Tem certeza que deseja resetar todos os dados deste usuário? Esta ação não pode ser desfeita.")}
             </p>
           </div>
           <div className="flex gap-3 justify-end">
@@ -1122,7 +1231,7 @@ export default function AdminUsers() {
               onClick={() => setIsResetModalOpen(false)}
               disabled={resetUserMutation.isPending}
             >
-              Cancelar
+              {t("common.cancel", "Cancelar")}
             </Button>
             <Button
               variant="destructive"
@@ -1130,7 +1239,9 @@ export default function AdminUsers() {
               disabled={resetUserMutation.isPending}
               className="bg-orange-600 hover:bg-orange-700"
             >
-              {resetUserMutation.isPending ? "Resetando..." : "Confirmar Reset"}
+              {resetUserMutation.isPending
+                ? t("admin.users.reset_modal.actions.confirming", "Resetando...")
+                : t("admin.users.reset_modal.actions.confirm", "Confirmar Reset")}
             </Button>
           </div>
         </DialogContent>
@@ -1148,10 +1259,10 @@ export default function AdminUsers() {
             {/* Título */}
             <div className="space-y-2">
               <h2 className="text-xl font-semibold text-green-400">
-                Reset Concluído com Sucesso!
+                {t("admin.users.reset_success.title", "Reset Concluído com Sucesso!")}
               </h2>
               <p className="text-sm text-gray-400">
-                Os dados do usuário foram resetados conforme solicitado.
+                {t("admin.users.reset_success.description", "Os dados do usuário foram resetados conforme solicitado.")}
               </p>
             </div>
 
@@ -1159,11 +1270,15 @@ export default function AdminUsers() {
             {selectedUser && (
               <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 space-y-2">
                 <div className="text-sm">
-                  <span className="font-medium text-gray-900 dark:text-gray-100">Nome:</span>
+                  <span className="font-medium text-gray-900 dark:text-gray-100">
+                    {t("admin.users.reset_success.user.name_label", "Nome")}:
+                  </span>
                   <span className="ml-2 text-gray-700 dark:text-gray-300">{selectedUser.nome}</span>
                 </div>
                 <div className="text-sm">
-                  <span className="font-medium text-gray-900 dark:text-gray-100">Email:</span>
+                  <span className="font-medium text-gray-900 dark:text-gray-100">
+                    {t("admin.users.reset_success.user.email_label", "Email")}:
+                  </span>
                   <span className="ml-2 text-gray-700 dark:text-gray-300">{selectedUser.email}</span>
                 </div>
               </div>
@@ -1173,39 +1288,53 @@ export default function AdminUsers() {
             {resetResult && resetResult.resetData && (
               <div className="bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800 rounded-lg p-4">
                 <h4 className="font-medium text-green-800 dark:text-green-400 mb-3 text-sm">
-                  Resumo do Reset:
+                  {t("admin.users.reset_success.summary.title", "Resumo do Reset:")}
                 </h4>
                 <div className="grid grid-cols-2 gap-3 text-xs">
                   <div className="flex justify-between">
-                    <span className="text-green-700 dark:text-green-300">Transações:</span>
+                    <span className="text-green-700 dark:text-green-300">
+                      {t("admin.users.reset_success.summary.transactions", "Transações")}:
+                    </span>
                     <span className="font-medium text-green-800 dark:text-green-200">
-                      {resetResult.resetData.transactionsRemoved} removidas
+                      {t("admin.users.reset_success.summary.removed_count_feminine", "{{count}} removidas")
+                        .replace("{{count}}", String(resetResult.resetData.transactionsRemoved))}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-green-700 dark:text-green-300">Lembretes:</span>
+                    <span className="text-green-700 dark:text-green-300">
+                      {t("admin.users.reset_success.summary.reminders", "Lembretes")}:
+                    </span>
                     <span className="font-medium text-green-800 dark:text-green-200">
-                      {resetResult.resetData.remindersRemoved} removidos
+                      {t("admin.users.reset_success.summary.removed_count_masculine", "{{count}} removidos")
+                        .replace("{{count}}", String(resetResult.resetData.remindersRemoved))}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-green-700 dark:text-green-300">Categorias:</span>
+                    <span className="text-green-700 dark:text-green-300">
+                      {t("admin.users.reset_success.summary.categories", "Categorias")}:
+                    </span>
                     <span className="font-medium text-green-800 dark:text-green-200">
-                      {resetResult.resetData.categoriesRemoved} removidas
+                      {t("admin.users.reset_success.summary.removed_count_feminine", "{{count}} removidas")
+                        .replace("{{count}}", String(resetResult.resetData.categoriesRemoved))}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-green-700 dark:text-green-300">Tokens extras:</span>
+                    <span className="text-green-700 dark:text-green-300">
+                      {t("admin.users.reset_success.summary.tokens", "Tokens extras")}:
+                    </span>
                     <span className="font-medium text-green-800 dark:text-green-200">
-                      {resetResult.resetData.tokensRemoved} removidos
+                      {t("admin.users.reset_success.summary.removed_count_masculine", "{{count}} removidos")
+                        .replace("{{count}}", String(resetResult.resetData.tokensRemoved))}
                     </span>
                   </div>
                 </div>
                 <div className="mt-3 pt-3 border-t border-green-200 dark:border-green-700">
                   <div className="flex justify-between text-xs">
-                    <span className="text-green-700 dark:text-green-300">Saldo da carteira:</span>
+                    <span className="text-green-700 dark:text-green-300">
+                      {t("admin.users.reset_success.summary.wallet", "Saldo da carteira")}:
+                    </span>
                     <span className="font-medium text-green-800 dark:text-green-200">
-                      Resetado para R$ 0,00
+                      {t("admin.users.reset_success.summary.wallet_reset", "Resetado para R$ 0,00")}
                     </span>
                   </div>
                 </div>
@@ -1217,7 +1346,7 @@ export default function AdminUsers() {
               onClick={closeSuccessModal}
               className="w-full bg-green-600 hover:bg-green-700"
             >
-              Entendido
+              {t("admin.users.reset_success.actions.close", "Entendido")}
             </Button>
           </div>
         </DialogContent>
@@ -1242,7 +1371,7 @@ export default function AdminUsers() {
               </div>
             </div>
             <h3 className="text-xl font-bold text-center mb-2 text-red-600 dark:text-white">
-              Erro ao criar usuário
+              {t("admin.users.error_modal.title", "Erro ao criar usuário")}
             </h3>
             <div className="w-16 h-1 bg-red-500 rounded-full mx-auto mb-4"></div>
             <div className="border rounded-lg p-4 mb-6 bg-red-50 border-red-200 dark:bg-red-500/10 dark:border-red-500/20">
@@ -1255,7 +1384,7 @@ export default function AdminUsers() {
                 onClick={() => setErrorModal({ ...errorModal, isOpen: false })}
                 className="px-6 py-2 rounded-lg font-medium transition-colors duration-200 shadow-lg bg-red-600 hover:bg-red-700 text-white"
               >
-                Entendi
+                {t("admin.users.error_modal.close", "Entendi")}
               </Button>
             </div>
           </div>
@@ -1269,23 +1398,32 @@ export default function AdminUsers() {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-red-500">
                 <Trash2 className="h-5 w-5" />
-                Excluir Usuário Permanentemente
+                {t("admin.users.delete_modal.title", "Excluir Usuário Permanentemente")}
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
               <div className="p-4 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg">
                 <p className="text-sm text-red-800 dark:text-red-200">
-                  <strong>Atenção:</strong> Esta ação irá remover <b>definitivamente</b> todos os dados deste usuário do sistema. Não será possível recuperar!
+                  <strong>{t("admin.users.delete_modal.attention", "Atenção")}:</strong>{" "}
+                  {t("admin.users.delete_modal.warning", "Esta ação irá remover definitivamente todos os dados deste usuário do sistema. Não será possível recuperar!")}
                 </p>
               </div>
               <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                <p className="text-sm"><strong>Usuário:</strong> {selectedUser.nome}</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400"><strong>Email:</strong> {selectedUser.email}</p>
+                <p className="text-sm">
+                  <strong>{t("admin.users.delete_modal.user_label", "Usuário")}:</strong> {selectedUser.nome}
+                </p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  <strong>{t("admin.users.delete_modal.email_label", "Email")}:</strong> {selectedUser.email}
+                </p>
               </div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Tem certeza que deseja excluir este usuário permanentemente?</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                {t("admin.users.delete_modal.confirm_question", "Tem certeza que deseja excluir este usuário permanentemente?")}
+              </p>
             </div>
             <div className="flex gap-3 justify-end">
-              <Button variant="outline" onClick={() => setSelectedUser(null)}>Cancelar</Button>
+              <Button variant="outline" onClick={() => setSelectedUser(null)}>
+                {t("common.cancel", "Cancelar")}
+              </Button>
               <Button
                 variant="destructive"
                 className="bg-red-600 hover:bg-red-700"
@@ -1294,12 +1432,15 @@ export default function AdminUsers() {
                   setSelectedUser(null);
                   queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
                   toast({
-                    title: "Usuário excluído permanentemente",
-                    description: `Todos os dados do usuário ${selectedUser.nome} foram removidos do sistema.`
+                    title: t("admin.users.toast.delete_permanent.title", "Usuário excluído permanentemente"),
+                    description: t(
+                      "admin.users.toast.delete_permanent.description",
+                      "Todos os dados do usuário {{userName}} foram removidos do sistema."
+                    ).replace("{{userName}}", selectedUser.nome),
                   });
                 }}
               >
-                Excluir Permanentemente
+                {t("admin.users.delete_modal.confirm_action", "Excluir Permanentemente")}
               </Button>
             </div>
           </DialogContent>

@@ -13,6 +13,7 @@ interface LocalizationContextType {
     isDefault: boolean;
   }>;
   invalidateCache: () => void;
+  refreshTranslations: () => Promise<void>;
   changeLocale: (newLocale: string) => Promise<void>;
 }
 
@@ -30,8 +31,8 @@ const CACHE_KEYS = {
   CACHE_TIMESTAMP: 'financehub_cache_timestamp',
 };
 
-// Cache válido por 10 minutos
-const CACHE_DURATION = 10 * 60 * 1000;
+// Cache desabilitado para sempre buscar traduções atualizadas do banco
+const CACHE_DURATION = 0; // 0 = sem cache
 
 interface CachedData {
   locale: string;
@@ -63,8 +64,8 @@ export const LocalizationProvider: React.FC<LocalizationProviderProps> = ({ chil
         const timestamp = parseInt(cachedTimestamp);
         const now = Date.now();
         
-        // Verificar se o cache ainda é válido
-        if (now - timestamp < CACHE_DURATION) {
+        // Verificar se o cache ainda é válido (com CACHE_DURATION = 0, sempre será inválido)
+        if (CACHE_DURATION > 0 && now - timestamp < CACHE_DURATION) {
           return {
             locale: cachedLocale,
             translations: JSON.parse(cachedTranslations),
@@ -135,7 +136,7 @@ export const LocalizationProvider: React.FC<LocalizationProviderProps> = ({ chil
     queryKey: ['localizationStrings', locale],
     queryFn: async () => {
       try {
-        const response = await fetch(`/api/localization/strings/${locale}`);
+        const response = await fetch(`/api/localization/strings/${locale}?t=${Date.now()}`);
         if (!response.ok) {
           return {};
         }
@@ -180,7 +181,7 @@ export const LocalizationProvider: React.FC<LocalizationProviderProps> = ({ chil
             
             // Buscar traduções imediatamente
             try {
-              const translationsResponse = await fetch(`/api/localization/strings/${defaultLocaleData.localeCode}`);
+              const translationsResponse = await fetch(`/api/localization/strings/${defaultLocaleData.localeCode}?t=${Date.now()}`);
               if (translationsResponse.ok) {
                 const translationsData = await translationsResponse.json();
                 console.log('🌐 Traduções carregadas:', Object.keys(translationsData).length, 'strings');
@@ -260,47 +261,123 @@ export const LocalizationProvider: React.FC<LocalizationProviderProps> = ({ chil
   // Função de tradução
   const t = (key: string, fallback?: string): string => {
     const translation = translations[key];
+    
+    // Log quando uma tradução não é encontrada
+    if (!translation && fallback !== key) {
+      console.warn(`🌐 Tradução não encontrada para chave: "${key}" (idioma: ${locale})`);
+    }
+    
     return translation || fallback || key;
   };
 
   // Função para trocar idioma instantaneamente
   const changeLocale = async (newLocale: string): Promise<void> => {
     try {
-      console.log(`🌐 Trocando idioma para: ${newLocale}`);
+      console.log(`🌐 Trocando idioma de "${locale}" para: "${newLocale}"`);
       
-      // Buscar traduções do novo idioma
-      const response = await fetch(`/api/localization/strings/${newLocale}`);
+      // Verificar se já é o idioma atual
+      if (newLocale === locale) {
+        console.log('🌐 Idioma já é o atual, forçando refresh...');
+        await refreshTranslations();
+        return;
+      }
+      
+      // Limpar cache antes de buscar novo idioma
+      clearCache();
+      
+      // Buscar traduções do novo idioma sempre fresh do servidor
+      const response = await fetch(`/api/localization/strings/${newLocale}?t=${Date.now()}&cache=false`);
       if (response.ok) {
         const newTranslations = await response.json();
+        
+        console.log(`🌐 Traduções recebidas para ${newLocale}:`, {
+          totalKeys: Object.keys(newTranslations).length,
+          sampleKeys: Object.keys(newTranslations).slice(0, 5),
+          hasSettingsSection: 'settings' in newTranslations,
+          hasCommonSection: 'common' in newTranslations
+        });
         
         // Atualizar estado imediatamente
         setLocale(newLocale);
         setTranslations(newTranslations);
         
-        // Salvar no cache
+        // Salvar no cache com novo timestamp
         saveToCache({
           locale: newLocale,
           translations: newTranslations,
           availableLocales: availableLocales,
         });
         
-        console.log(`🌐 Idioma alterado para ${newLocale} com ${Object.keys(newTranslations).length} traduções`);
+        console.log(`🌐 ✅ Idioma alterado com sucesso para ${newLocale} com ${Object.keys(newTranslations).length} traduções`);
+        
+        // Invalidar queries do React Query para forçar refresh
+        if (typeof window !== 'undefined') {
+          // Usar import dinâmico para acessar queryClient
+          import('@/lib/queryClient').then(({ queryClient }) => {
+            queryClient.invalidateQueries({ queryKey: ['localizationStrings'] });
+            queryClient.invalidateQueries({ queryKey: ['availableLocales'] });
+            queryClient.invalidateQueries({ queryKey: ['defaultLocale'] });
+            console.log('🌐 Queries do React Query invalidadas');
+          }).catch(error => {
+            console.warn('Erro ao invalidar queries:', error);
+          });
+        }
       } else {
-        throw new Error(`Falha ao carregar traduções para ${newLocale}`);
+        throw new Error(`Falha ao carregar traduções para ${newLocale}: ${response.status} ${response.statusText}`);
       }
     } catch (error) {
-      console.error('Erro ao trocar idioma:', error);
+      console.error('❌ Erro ao trocar idioma:', error);
       throw error;
     }
   };
 
-  // Função para invalidar cache
-  const invalidateCache = () => {
+  // Função para limpar cache sem reload (para troca de idioma)
+  const clearCache = () => {
     try {
       localStorage.removeItem(CACHE_KEYS.LOCALE);
       localStorage.removeItem(CACHE_KEYS.TRANSLATIONS);
       localStorage.removeItem(CACHE_KEYS.AVAILABLE_LOCALES);
       localStorage.removeItem(CACHE_KEYS.CACHE_TIMESTAMP);
+      console.log('🌐 Cache de localização limpo');
+    } catch (error) {
+      console.warn('Erro ao limpar cache:', error);
+    }
+  };
+
+  // Função para atualizar traduções do idioma atual
+  const refreshTranslations = async (): Promise<void> => {
+    try {
+      console.log(`🌐 Atualizando traduções para: ${locale}`);
+      
+      // Buscar traduções atuais do servidor
+      const response = await fetch(`/api/localization/strings/${locale}?t=${Date.now()}`);
+      if (response.ok) {
+        const newTranslations = await response.json();
+        
+        // Atualizar estado
+        setTranslations(newTranslations);
+        
+        // Salvar no cache
+        saveToCache({
+          locale,
+          translations: newTranslations,
+          availableLocales: availableLocales,
+        });
+        
+        console.log(`🌐 Traduções atualizadas: ${Object.keys(newTranslations).length} strings`);
+      } else {
+        throw new Error(`Falha ao carregar traduções para ${locale}`);
+      }
+    } catch (error) {
+      console.error('Erro ao atualizar traduções:', error);
+      throw error;
+    }
+  };
+
+  // Função para invalidar cache com reload (para casos extremos)
+  const invalidateCache = () => {
+    try {
+      clearCache();
       console.log('🌐 Cache de localização invalidado');
       
       // Forçar atualização
@@ -320,6 +397,7 @@ export const LocalizationProvider: React.FC<LocalizationProviderProps> = ({ chil
     error: null,
     availableLocales,
     invalidateCache,
+    refreshTranslations,
     changeLocale,
   };
 

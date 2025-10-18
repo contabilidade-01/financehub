@@ -2899,6 +2899,166 @@ DROP FUNCTION IF EXISTS ensure_single_default_locale();
 
 ---
 
+## 🔧 Resolução de Chaves de Tradução Faltantes
+
+### 📊 Identificação de Chaves Faltantes
+
+Quando o sistema estiver funcionando e aparecerem erros no console como:
+```
+🌐 Tradução não encontrada para chave: "payment_methods.title" (idioma: es-es)
+```
+
+### 🛠️ Processo de Resolução Automática
+
+#### 1. **Identificar o Padrão das Chaves Faltantes**
+```bash
+# Analisar os logs do console para identificar:
+# - Seção da chave (ex: payment_methods, reminders, transactions)
+# - Tipo de chave (título, campo de formulário, placeholder, etc.)
+# - Idioma afetado (es-es, en-us)
+```
+
+#### 2. **Localizar a Seção nos Arquivos de Tradução**
+```bash
+# Encontrar a seção correspondente em pt-br.json (idioma base)
+grep -n "payment_methods": locales/pt-br.json
+
+# Verificar se as chaves existem nos outros idiomas
+grep -A 10 -B 5 "payment_methods" locales/es-es.json
+grep -A 10 -B 5 "payment_methods" locales/en-us.json
+```
+
+#### 3. **Adicionar as Chaves Faltantes**
+
+**Estrutura padrão para adicionar chaves:**
+```json
+// Em pt-br.json (idioma base)
+"payment_methods": {
+  "title": "Formas de Pagamento",
+  "subtitle": "Gerencie suas formas de pagamento",
+  "new_method": "Nova Forma de Pagamento",
+  "names": {
+    "PIX": "PIX",
+    "Cartão de Crédito": "Cartão de Crédito"
+  }
+}
+
+// Em es-es.json (tradução espanhola)
+"payment_methods": {
+  "title": "Métodos de Pago",
+  "subtitle": "Gestiona tus métodos de pago", 
+  "new_method": "Nuevo Método de Pago",
+  "names": {
+    "PIX": "PIX",
+    "Cartão de Crédito": "Tarjeta de Crédito"
+  }
+}
+
+// Em en-us.json (tradução inglesa)
+"payment_methods": {
+  "title": "Payment Methods",
+  "subtitle": "Manage your payment methods",
+  "new_method": "New Payment Method", 
+  "names": {
+    "PIX": "PIX",
+    "Cartão de Crédito": "Credit Card"
+  }
+}
+```
+
+#### 4. **Importar para o Banco de Dados**
+```bash
+# Executar o script de importação rápida
+node super_fast_import.cjs all
+
+# Verificar o resultado:
+# ✅ pt-br: XXX chaves importadas
+# ✅ en-us: XXX chaves importadas  
+# ✅ es-es: XXX chaves importadas
+```
+
+### 📋 Tipos Comuns de Chaves por Seção
+
+#### **Páginas Principais**
+```json
+{
+  "title": "Título da Página",
+  "subtitle": "Descrição da página", 
+  "new_item": "Novo Item",
+  "edit_item": "Editar Item",
+  "delete_item": "Excluir Item"
+}
+```
+
+#### **Formulários**
+```json
+{
+  "fill_details": "Preencha os detalhes",
+  "type": "Tipo",
+  "description": "Descrição",
+  "description_placeholder": "Descrição do item",
+  "amount": "Valor",
+  "date": "Data"
+}
+```
+
+#### **Nomes Dinâmicos (Categorias, Métodos de Pagamento)**
+```json
+{
+  "names": {
+    "Nome_Original_PT": "Tradução Correspondente"
+  }
+}
+```
+
+### 🚀 Script de Automação (Futuro)
+
+Para automatizar este processo, pode ser criado um script que:
+
+```bash
+#!/bin/bash
+# auto-fix-missing-keys.sh
+
+echo "🔍 Analisando logs para chaves faltantes..."
+
+# 1. Extrair chaves faltantes dos logs
+# 2. Identificar padrões e seções
+# 3. Sugerir traduções automáticas
+# 4. Aplicar mudanças nos arquivos JSON
+# 5. Executar importação para banco
+
+echo "✅ Chaves faltantes resolvidas automaticamente!"
+```
+
+### 📝 Checklist de Resolução
+
+- [ ] **Identificar** chaves faltantes nos logs do console
+- [ ] **Localizar** seção correspondente no arquivo pt-br.json
+- [ ] **Verificar** se a estrutura existe nos outros idiomas
+- [ ] **Adicionar** chaves faltantes em todos os 3 arquivos (pt-br, es-es, en-us)
+- [ ] **Executar** importação: `node super_fast_import.cjs all`
+- [ ] **Verificar** se os erros no console foram resolvidos
+- [ ] **Testar** a funcionalidade na interface em todos os idiomas
+
+### ⚡ Casos de Exemplo Resolvidos
+
+1. **Reminders Page**: Adicionadas chaves `title`, `subtitle`, `new_reminder`, `title_placeholder`, `description_placeholder`
+2. **Calendar**: Adicionadas chaves `calendar.months.*` e `calendar.days.*`
+3. **Categories**: Adicionada seção `categories.names.*` para tradução de nomes dinâmicos
+4. **Payment Methods**: Adicionadas chaves de página e seção `payment_methods.names.*`
+5. **Transaction Form**: Adicionadas chaves de formulário `fill_details`, `type`, `description`, etc.
+
+### 🎯 Resultado Esperado
+
+Após seguir este processo, todos os erros do tipo:
+```
+🌐 Tradução não encontrada para chave: "xxx" (idioma: es-es)
+```
+
+Devem ser completamente eliminados, garantindo que a interface funcione perfeitamente em todos os idiomas suportados.
+
+---
+
 ## 🎯 Resumo Executivo
 
 Este plano de localização é **PRODUCTION-READY** e segue todas as melhores práticas:

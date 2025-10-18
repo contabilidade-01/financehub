@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { motion } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
-import { Wallet, Transaction } from "@shared/schema";
+import { Wallet, Transaction, TransactionStatus, TransactionType } from "@shared/schema";
 import { formatCurrency } from "@/lib/utils";
 import {
   BarChart,
@@ -25,7 +25,8 @@ import { Calendar as CalendarIcon, Download, Filter, PieChart as PieChartIcon } 
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { useTranslation } from "@/contexts/LocalizationContext";
+import { useLocalization, useTranslation } from "@/contexts/LocalizationContext";
+import { translateCategoryName, translatePaymentMethodName } from "@/utils/localization";
 
 // Tipos para os dados de resumo
 interface MonthlyData {
@@ -37,6 +38,7 @@ interface MonthlyData {
 interface CategoryData {
   categoryId: number;
   name: string;
+  displayName?: string;
   total: number;
   color: string;
   icon: string;
@@ -50,9 +52,63 @@ interface SummaryData {
   totalExpenses: number;
 }
 
+const MONTH_KEY_ORDER = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+const MONTH_ALIAS_MAP: Record<string, string> = {
+  jan: 'Jan',
+  ene: 'Jan',
+  feb: 'Feb',
+  fev: 'Feb',
+  mar: 'Mar',
+  abr: 'Apr',
+  apr: 'Apr',
+  may: 'May',
+  mai: 'May',
+  jun: 'Jun',
+  jul: 'Jul',
+  aug: 'Aug',
+  ago: 'Aug',
+  sep: 'Sep',
+  set: 'Sep',
+  oct: 'Oct',
+  out: 'Oct',
+  nov: 'Nov',
+  dec: 'Dec',
+  dez: 'Dec'
+};
+
 export default function ReportsPage() {
   const { t } = useTranslation();
+  const { locale } = useLocalization();
   const [period, setPeriod] = useState("month");
+  const normalizedLocale = useMemo(
+    () => (locale ? locale.replace(/([a-z]{2})-([a-z]{2})/, (_, lang, region) => `${lang}-${region.toUpperCase()}`) : "pt-BR"),
+    [locale]
+  );
+  const monthFormatter = useMemo(
+    () => new Intl.DateTimeFormat(normalizedLocale, { month: "short" }),
+    [normalizedLocale]
+  );
+  const dateFormatter = useMemo(() => new Intl.DateTimeFormat(normalizedLocale), [normalizedLocale]);
+
+  const canonicalizeMonth = useCallback((month: string | undefined) => {
+    if (!month) return MONTH_KEY_ORDER[0];
+    const normalized = month.trim().toLowerCase().replace(/\./g, "");
+    const key = normalized.slice(0, 3);
+    return MONTH_ALIAS_MAP[key] ?? MONTH_KEY_ORDER.find((item) => item.toLowerCase().startsWith(key)) ?? MONTH_KEY_ORDER[0];
+  }, []);
+
+  const formatMonthLabel = useCallback(
+    (monthKey: string) => {
+      const index = MONTH_KEY_ORDER.indexOf(monthKey);
+      if (index === -1) {
+        return monthKey;
+      }
+      const formatted = monthFormatter.format(new Date(2000, index, 1)).replace(/\.$/, "");
+      return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+    },
+    [monthFormatter]
+  );
 
   const { data: walletData, isLoading: isLoadingWallet } = useQuery<Wallet>({
     queryKey: ["/api/wallet/current"],
@@ -76,113 +132,64 @@ export default function ReportsPage() {
 
   // Função para filtrar dados baseado no período selecionado
   const getFilteredData = (): MonthlyData[] => {
-    const monthNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
     const currentDate = new Date();
-    const currentMonth = currentDate.getMonth(); // 0-11
-    
-    // Se não há dados, retornar estrutura vazia baseada no período
-    if (!summaryData || !summaryData.monthlyData || summaryData.monthlyData.length === 0) {
+    const currentMonthIndex = currentDate.getMonth();
+
+    const canonicalData = (summaryData?.monthlyData ?? []).map((entry) => ({
+      monthKey: canonicalizeMonth(entry.month),
+      income: entry.income ?? 0,
+      expense: entry.expense ?? 0,
+    }));
+
+    const createEntry = (monthKey: string, income = 0, expense = 0): MonthlyData => ({
+      month: formatMonthLabel(monthKey),
+      income,
+      expense,
+    });
+
+    const findDataForKey = (monthKey: string) => canonicalData.find((item) => item.monthKey === monthKey);
+
+    if (canonicalData.length === 0) {
       if (period === "month") {
-        return [{ month: monthNames[currentMonth], income: 0, expense: 0 }];
-      } else if (period === "quarter") {
-        // Últimos 3 meses
-        const months = [];
+        const currentKey = MONTH_KEY_ORDER[currentMonthIndex];
+        return [createEntry(currentKey)];
+      }
+      if (period === "quarter") {
+        const months: MonthlyData[] = [];
         for (let i = 2; i >= 0; i--) {
-          const monthIndex = (currentMonth - i + 12) % 12;
-          months.push({ month: monthNames[monthIndex], income: 0, expense: 0 });
+          const index = (currentMonthIndex - i + 12) % 12;
+          months.push(createEntry(MONTH_KEY_ORDER[index]));
         }
         return months;
-      } else {
-        // Ano completo - retornar todos os 12 meses vazios
-        return monthNames.map(month => ({ month, income: 0, expense: 0 }));
       }
+      return MONTH_KEY_ORDER.map((key) => createEntry(key));
     }
-
-    // Log para debug
-    console.log("Dados do backend:", summaryData.monthlyData);
-    console.log("Período selecionado:", period);
-    console.log("Mês atual:", currentMonth, monthNames[currentMonth]);
-
-    const allData = summaryData.monthlyData;
 
     if (period === "month") {
-      // Filtrar apenas o mês atual
-      // O backend retorna "Sep" enquanto esperamos "Set" para setembro
-      const currentMonthName = monthNames[currentMonth];
-      
-      // Procurar pelo mês atual nos dados
-      // Setembro pode vir como "Sep" ou "Set"
-      const monthData = allData.find(d => {
-        // Normalizar comparação - Sep -> Set
-        const normalizedMonth = d.month === "Sep" ? "Set" : d.month;
-        return normalizedMonth === currentMonthName;
-      });
-      
-      if (monthData) {
-        // Normalizar o nome do mês antes de retornar
-        const normalizedData = {
-          ...monthData,
-          month: monthData.month === "Sep" ? "Set" : monthData.month
-        };
-        return [normalizedData];
-      }
-      
-      // Caso contrário, retornar estrutura vazia para o mês atual
-      return [{ month: currentMonthName, income: 0, expense: 0 }];
-      
-    } else if (period === "quarter") {
-      // Últimos 3 meses
-      const quarterData = [];
-      
-      for (let i = 2; i >= 0; i--) {
-        const targetMonth = (currentMonth - i + 12) % 12;
-        const targetMonthName = monthNames[targetMonth];
-        
-        // Procurar dados com normalização
-        const monthData = allData.find(d => {
-          const normalizedMonth = d.month === "Sep" ? "Set" : d.month;
-          return normalizedMonth === targetMonthName;
-        });
-        
-        if (monthData) {
-          // Normalizar o nome do mês
-          quarterData.push({
-            ...monthData,
-            month: monthData.month === "Sep" ? "Set" : monthData.month
-          });
-        } else {
-          quarterData.push({ month: targetMonthName, income: 0, expense: 0 });
-        }
-      }
-      
-      return quarterData;
-      
-    } else if (period === "year") {
-      // Para o ano completo, garantir que todos os 12 meses estejam presentes
-      const yearData = monthNames.map(monthName => {
-        const monthData = allData.find(d => {
-          const normalizedMonth = d.month === "Sep" ? "Set" : d.month;
-          return normalizedMonth === monthName;
-        });
-        
-        if (monthData) {
-          return {
-            ...monthData,
-            month: monthData.month === "Sep" ? "Set" : monthData.month
-          };
-        }
-        
-        return { month: monthName, income: 0, expense: 0 };
-      });
-      
-      return yearData;
+      const currentKey = MONTH_KEY_ORDER[currentMonthIndex];
+      const monthData = findDataForKey(currentKey);
+      return [createEntry(currentKey, monthData?.income ?? 0, monthData?.expense ?? 0)];
     }
-    
-    // Fallback - retornar todos os dados disponíveis com normalização
-    return allData.map(d => ({
-      ...d,
-      month: d.month === "Sep" ? "Set" : d.month
-    }));
+
+    if (period === "quarter") {
+      const quarterData: MonthlyData[] = [];
+      for (let i = 2; i >= 0; i--) {
+        const index = (currentMonthIndex - i + 12) % 12;
+        const key = MONTH_KEY_ORDER[index];
+        const data = findDataForKey(key);
+        quarterData.push(createEntry(key, data?.income ?? 0, data?.expense ?? 0));
+      }
+      return quarterData;
+    }
+
+    if (period === "year") {
+      return MONTH_KEY_ORDER.map((key) => {
+        const data = findDataForKey(key);
+        return createEntry(key, data?.income ?? 0, data?.expense ?? 0);
+      });
+    }
+
+    return canonicalData.map((item) => createEntry(item.monthKey, item.income, item.expense));
   };
 
   // Gerar dados de exemplo para visualização
@@ -197,13 +204,69 @@ export default function ReportsPage() {
     }));
   };
 
-  const getCategoryData = (): CategoryData[] => {
-    return (summaryData && summaryData.expensesByCategory && summaryData.expensesByCategory.length > 0)
-      ? summaryData.expensesByCategory 
-      : [];
-  };
+  const getCategoryData = useCallback((): CategoryData[] => {
+    const baseCategories = summaryData?.expensesByCategory ?? [];
+    return baseCategories.map((category) => ({
+      ...category,
+      displayName: translateCategoryName(category.name, t),
+    }));
+  }, [summaryData, t]);
+
+  const isIncomeType = useCallback((type: Transaction["tipo"]) => {
+    const normalized = type?.toString().toLowerCase();
+    return (
+      normalized === String(TransactionType.INCOME).toLowerCase() ||
+      normalized === "receita" ||
+      normalized === "income"
+    );
+  }, []);
+
+  const isExpenseType = useCallback((type: Transaction["tipo"]) => {
+    const normalized = type?.toString().toLowerCase();
+    return (
+      normalized === String(TransactionType.EXPENSE).toLowerCase() ||
+      normalized === "despesa" ||
+      normalized === "expense"
+    );
+  }, []);
+
+  const getTransactionTypeLabel = useCallback(
+    (type: Transaction["tipo"]) => {
+      if (isIncomeType(type)) {
+        return t("reports.csv.type_income", "Receita");
+      }
+      if (isExpenseType(type)) {
+        return t("reports.csv.type_expense", "Despesa");
+      }
+      return type?.toString() ?? "";
+    },
+    [isExpenseType, isIncomeType, t]
+  );
+
+  const getStatusLabel = useCallback(
+    (status: TransactionStatus | string) => {
+      const normalized = status?.toString().toLowerCase();
+      if (!normalized) return "";
+      if (normalized.includes("complete") || normalized.includes("efetiv")) {
+        return t("reports.csv.status_completed", "Efetivada");
+      }
+      if (normalized.includes("pend")) {
+        return t("reports.csv.status_pending", "Pendente");
+      }
+      if (normalized.includes("sched") || normalized.includes("agend")) {
+        return t("reports.csv.status_scheduled", "Agendada");
+      }
+      if (normalized.includes("cancel")) {
+        return t("reports.csv.status_cancelled", "Cancelada");
+      }
+      return status?.toString() ?? "";
+    },
+    [t]
+  );
 
   const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#A569BD", "#FF6B6B", "#6BCB77", "#4D96FF"];
+
+  const categoryData = useMemo(() => getCategoryData(), [getCategoryData]);
 
   // Função para filtrar transações por período
   const getFilteredTransactions = () => {
@@ -257,33 +320,39 @@ export default function ReportsPage() {
     
     // Criar linhas do CSV
     const rows = filteredTransactions.map(transaction => {
-      const date = new Date(transaction.data_transacao);
-      const formattedDate = `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
+      const formattedDate = dateFormatter.format(new Date(transaction.data_transacao));
+      const categoryLabel = transaction.categoria_name
+        ? translateCategoryName(transaction.categoria_name, t)
+        : t('reports.csv.uncategorized', 'Não categorizada');
+      const paymentLabel = transaction.metodo_pagamento
+        ? translatePaymentMethodName(transaction.metodo_pagamento, t)
+        : t('reports.csv.not_specified', 'Não especificado');
+      const amountValue = Number(transaction.valor ?? 0).toFixed(2).replace('.', ',');
       
       return [
         formattedDate,
         transaction.descricao,
-        transaction.tipo,
-        transaction.categoria_name || t('reports.csv.uncategorized', 'Não categorizada'),
-        transaction.metodo_pagamento || t('reports.csv.not_specified', 'Não especificado'),
-        transaction.valor.toString().replace('.', ','),
-        transaction.status
+        getTransactionTypeLabel(transaction.tipo),
+        categoryLabel,
+        paymentLabel,
+        amountValue,
+        getStatusLabel(transaction.status)
       ];
     });
     
     // Adicionar linha de totais
     const totalReceitas = filteredTransactions
-      .filter(t => t.tipo === "Receita")
+      .filter(t => isIncomeType(t.tipo))
       .reduce((sum, t) => sum + Number(t.valor), 0);
     
     const totalDespesas = filteredTransactions
-      .filter(t => t.tipo === "Despesa")
+      .filter(t => isExpenseType(t.tipo))
       .reduce((sum, t) => sum + Number(t.valor), 0);
     
     rows.push([]);
-    rows.push(["", "", "", "", t('reports.csv.total_income', 'Total Receitas:'), totalReceitas.toString().replace('.', ','), ""]);
-    rows.push(["", "", "", "", t('reports.csv.total_expenses', 'Total Despesas:'), totalDespesas.toString().replace('.', ','), ""]);
-    rows.push(["", "", "", "", t('reports.csv.balance', 'Saldo:'), (totalReceitas - totalDespesas).toString().replace('.', ','), ""]);
+    rows.push(["", "", "", "", t('reports.csv.total_income', 'Total Receitas:'), totalReceitas.toFixed(2).replace('.', ','), ""]);
+    rows.push(["", "", "", "", t('reports.csv.total_expenses', 'Total Despesas:'), totalDespesas.toFixed(2).replace('.', ','), ""]);
+    rows.push(["", "", "", "", t('reports.csv.balance', 'Saldo:'), (totalReceitas - totalDespesas).toFixed(2).replace('.', ','), ""]);
     
     // Converter para formato CSV
     const csvContent = [
@@ -455,7 +524,7 @@ export default function ReportsPage() {
         <div className="flex gap-2 mt-4 md:mt-0">
           <Select value={period} onValueChange={setPeriod}>
             <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Período" />
+              <SelectValue placeholder={t('reports.period_placeholder', 'Período')} />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="month">{t('reports.this_month', 'Este mês')}</SelectItem>
@@ -608,7 +677,7 @@ export default function ReportsPage() {
           <CardContent>
             {isLoadingSummary ? (
               <Skeleton className="w-full h-[400px]" />
-            ) : getCategoryData().length === 0 ? (
+            ) : categoryData.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-[400px] text-center">
                 <PieChartIcon className="w-16 h-16 text-gray-400 mb-4" />
                 <h3 className="text-xl font-bold text-gray-300 mb-2">{t('reports.no_data', 'No data found for the selected period')}</h3>
@@ -622,19 +691,19 @@ export default function ReportsPage() {
                   <ResponsiveContainer width="100%" height={300}>
                     <PieChart>
                       <Pie
-                        data={getCategoryData()}
+                        data={categoryData}
                         cx="50%"
                         cy="50%"
                         labelLine={false}
                         outerRadius={100}
                         fill="#8884d8"
                         dataKey="total"
-                        nameKey="name"
+                        nameKey="displayName"
                         label={({ name, percent }: { name: string; percent: number }) => 
                           `${name}: ${(percent * 100).toFixed(0)}%`
                         }
                       >
-                        {getCategoryData().map((entry: CategoryData, index: number) => (
+                        {categoryData.map((entry: CategoryData, index: number) => (
                           <Cell key={`cell-${index}`} fill={entry.color || COLORS[index % COLORS.length]} />
                         ))}
                       </Pie>
@@ -666,7 +735,7 @@ export default function ReportsPage() {
                 <div>
                   <h3 className="text-lg font-bold mb-4">{t('reports.breakdown', 'Detalhamento')}</h3>
                   <div className="space-y-4">
-                    {getCategoryData().map((category: CategoryData, index: number) => (
+                    {categoryData.map((category: CategoryData, index: number) => (
                       <div key={index}>
                         <div className="flex items-center justify-between mb-1">
                           <div className="flex items-center">
@@ -674,7 +743,7 @@ export default function ReportsPage() {
                               className="w-3 h-3 rounded-full mr-2"
                               style={{ backgroundColor: category.color || COLORS[index % COLORS.length] }}
                             ></div>
-                            <span>{category.name}</span>
+                            <span>{category.displayName ?? category.name}</span>
                           </div>
                           <span className="font-orbitron">{formatCurrency(Number(category.total))}</span>
                         </div>

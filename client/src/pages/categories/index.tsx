@@ -159,7 +159,7 @@ function CustomColorSelect({ label, value, onChange, colors }: CustomColorSelect
             {selectedColor.label}
           </div>
         ) : (
-          <span style={{ color: '#9ca3af' }}>Selecione a cor</span>
+          <span style={{ color: '#9ca3af' }}>{t('categories.form.select_color', 'Selecione a cor')}</span>
         )}
         <ChevronDown size={16} />
       </button>
@@ -234,7 +234,7 @@ function CustomIconSelect({ label, value, onChange, icons }: CustomIconSelectPro
             {selectedIcon.label}
           </div>
         ) : (
-          <span style={{ color: '#9ca3af' }}>Selecione o ícone</span>
+          <span style={{ color: '#9ca3af' }}>{t('categories.form.select_icon', 'Selecione o ícone')}</span>
         )}
         <ChevronDown size={16} />
       </button>
@@ -562,7 +562,7 @@ export default function Categories() {
                       </div>
                     )}
                     {category.global && (
-                      <span className={`text-xs px-2 py-1 rounded-full ${theme === 'light' ? 'bg-gray-100 text-gray-700' : 'bg-primary/20'}`}>Global</span>
+                      <span className={`text-xs px-2 py-1 rounded-full ${theme === 'light' ? 'bg-gray-100 text-gray-700' : 'bg-primary/20'}`}>{t('categories.scope.global', 'Global')}</span>
                     )}
                   </div>
                 </motion.div>
@@ -657,7 +657,7 @@ export default function Categories() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel>{t('common.cancel', 'Cancelar')}</AlertDialogCancel>
             <AlertDialogAction 
               onClick={() => deletingCategory && handleDeleteCategory(deletingCategory.id)}
               className="bg-destructive"

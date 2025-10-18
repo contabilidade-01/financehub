@@ -41,11 +41,13 @@ import AdminStickyHeader from "@/components/admin/AdminStickyHeader";
 import CustomizePage from "@/pages/admin/customize";
 import LanguageSettings from "@/pages/admin/LanguageSettings";
 import LoadingScreen from "@/components/shared/LoadingScreen";
+import { useTranslation } from "@/contexts/LocalizationContext";
 
 function Router() {
   const [location] = useLocation();
   const { isAuthenticated, isLoading, user } = useAuth();
   const { isSubscriptionExpired, hasActiveAccess, expirationDate } = useSubscriptionStatus();
+  const { t } = useTranslation();
 
   const { data: userData } = useQuery<User>({
     queryKey: ["/api/users/profile"],
@@ -164,8 +166,10 @@ function Router() {
             <Route path="/subscription/renew">
               <MainLayout>
                 <div className="container py-10">
-                  <h1 className="text-3xl font-bold mb-6">Renovar Assinatura</h1>
-                  <p>Página de renovação em desenvolvimento.</p>
+                  <h1 className="text-3xl font-bold mb-6">
+                    {t("subscription.renew.title", "Renovar Assinatura")}
+                  </h1>
+                  <p>{t("subscription.renew.description", "Página de renovação em desenvolvimento.")}</p>
                 </div>
               </MainLayout>
             </Route>

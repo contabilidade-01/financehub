@@ -13,8 +13,8 @@
     "email": "Email",
     "password": "Senha",
     "phone": "Telefone",
-    "description": "Descrição",
-    "icon": "Ícone",
+    "description": "Descri\u00e7\u00e3o",
+    "icon": "\u00cdcone",
     "color": "Cor",
     "income": "receita",
     "expenses": "despesa",
@@ -22,36 +22,52 @@
     "expenses_label": "Despesas:",
     "all": "Todos",
     "global": "Global",
-    "save_changes": "Salvar alterações",
-    "not_found_title": "404 Página Não Encontrada",
-    "not_found_description": "Você esqueceu de adicionar a página ao roteador?",
+    "save_changes": "Salvar altera\u00e7\u00f5es",
+    "not_found_title": "404 P\u00e1gina N\u00e3o Encontrada",
+    "not_found_description": "Voc\u00ea esqueceu de adicionar a p\u00e1gina ao roteador?",
     "saving": "Salvando...",
     "confirm": "Confirmar",
     "yes": "Sim",
-    "no": "Não",
+    "no": "N\u00e3o",
     "close": "Fechar",
     "loading_system": "Carregando sistema...",
     "toggle_theme": "Alternar tema",
-    "loading_theme": "Finalizando carregamento do tema..."
+    "loading_theme": "Finalizando carregamento do tema...",
+    "back": "Voltar",
+    "refresh": "Atualizar",
+    "try_again": "Tentar novamente",
+    "done": "Concluído",
+    "active": "Ativo",
+    "inactive": "Inativo",
+    "status": {
+      "active": "Ativo",
+      "inactive": "Inativo"
+    }
+  },
+  "unsaved_changes": {
+    "title": "Alterações não salvas",
+    "message": "Você tem alterações não salvas que serão perdidas se continuar. Deseja salvar suas alterações antes de prosseguir?",
+    "save_changes": "Salvar alterações",
+    "discard_changes": "Descartar alterações"
   },
   "navigation": {
     "dashboard": "Dashboard",
-    "transactions": "Transações",
+    "transactions": "Transa\u00e7\u00f5es",
     "categories": "Categorias",
     "wallets": "Carteiras",
-    "reports": "Relatórios",
-    "settings": "Configurações",
-    "admin": "Administração",
+    "reports": "Relat\u00f3rios",
+    "settings": "Configura\u00e7\u00f5es",
+    "admin": "Administra\u00e7\u00e3o",
     "logout": "Sair",
     "payment_methods": "Formas de Pagamento",
     "reminders": "Lembretes",
     "admin_dashboard": "Dashboard Admin",
-    "users": "Usuários",
+    "users": "Usu\u00e1rios",
     "customize": "Personalizar",
     "sections": {
       "main": "PRINCIPAL",
-      "settings": "CONFIGURAÇÕES",
-      "admin": "ADMINISTRAÇÃO"
+      "settings": "CONFIGURA\u00c7\u00d5ES",
+      "admin": "ADMINISTRA\u00c7\u00c3O"
     }
   },
   "login": {
@@ -65,95 +81,76 @@
     "submit": "Entrar",
     "logging_in": "Entrando...",
     "validation": {
-      "email_invalid": "Email inválido",
+      "email_invalid": "Email inv\u00e1lido",
       "password_min": "A senha deve ter pelo menos 6 caracteres"
-    }
+    },
+    "no_account": "N\u00e3o tem uma conta?",
+    "create_account_link": "Criar conta"
   },
   "dashboard": {
     "title": "Dashboard Financeiro",
-    "subtitle": "Acompanhe e gerencie suas finanças",
-    "overview": "Visão Geral",
-    "totalBalance": "Saldo Total",
-    "monthlyIncome": "Receita Mensal",
-    "monthlyExpenses": "Despesas Mensais",
-    "welcomeMessage": "Bem-vindo ao seu controle financeiro!",
-    "new_transaction": "Nova Transação",
-    "refresh_data": "Atualizar dados",
-    "data_updated": "Dados atualizados",
-    "data_updated_desc": "Os dados financeiros foram atualizados com sucesso",
+    "subtitle": "Acompanhe e gerencie suas finan\u00e7as",
     "overview": {
-      "title": "Visão Geral",
+      "title": "Vis\u00e3o Geral",
       "monthly": "Mensal",
       "annual": "Anual",
       "day": "Dia",
       "income": "Receitas",
       "expenses": "Despesas"
     },
+    "totalBalance": "Saldo Total",
+    "monthlyIncome": "Receita Mensal",
+    "monthlyExpenses": "Despesas Mensais",
+    "welcomeMessage": "Bem-vindo ao seu controle financeiro!",
+    "new_transaction": "Nova Transa\u00e7\u00e3o",
+    "refresh_data": "Atualizar dados",
+    "data_updated": "Dados atualizados",
+    "data_updated_desc": "Os dados financeiros foram atualizados com sucesso",
     "categories": {
       "title": "Categorias",
       "view_all": "Ver tudo",
       "no_categories": "Nenhuma categoria encontrada"
     },
     "recent_transactions": {
-      "title": "Transações Recentes",
+      "title": "Transa\u00e7\u00f5es Recentes",
       "all": "Todas",
       "income": "Receitas",
       "expenses": "Despesas",
-      "view_more": "Ver mais transações"
+      "view_more": "Ver mais transa\u00e7\u00f5es"
     }
   },
   "transactions": {
-    "title": "Transações",
-    "subtitle": "Gerencie suas transações financeiras",
-    "new_transaction": "Nova Transação",
-    "edit_transaction": "Editar Transação",
-    "delete_transaction": "Excluir Transação",
-    "transaction_created": "Transação criada",
-    "transaction_updated": "Transação atualizada",
-    "transaction_deleted": "Transação excluída",
+    "title": "Transa\u00e7\u00f5es",
+    "subtitle": "Gerencie suas transa\u00e7\u00f5es financeiras",
+    "new_transaction": "Nova Transa\u00e7\u00e3o",
+    "edit_transaction": "Editar Transa\u00e7\u00e3o",
+    "delete_transaction": "Excluir Transa\u00e7\u00e3o",
+    "transaction_created": "Transa\u00e7\u00e3o criada",
+    "transaction_updated": "Transa\u00e7\u00e3o atualizada",
+    "transaction_deleted": "Transa\u00e7\u00e3o exclu\u00edda",
     "error": "Erro",
-    "confirm_delete": "Tem certeza que deseja excluir esta transação? Esta ação não pode ser desfeita.",
-    "delete_success": "A transação foi excluída com sucesso.",
-    "delete_error": "Não foi possível excluir a transação.",
-    "update_success": "A transação foi atualizada com sucesso.",
-    "create_success": "A transação foi criada com sucesso.",
+    "confirm_delete": "Tem certeza que deseja excluir esta transa\u00e7\u00e3o? Esta a\u00e7\u00e3o n\u00e3o pode ser desfeita.",
+    "delete_success": "A transa\u00e7\u00e3o foi exclu\u00edda com sucesso.",
+    "delete_error": "N\u00e3o foi poss\u00edvel excluir a transa\u00e7\u00e3o.",
+    "update_success": "A transa\u00e7\u00e3o foi atualizada com sucesso.",
+    "create_success": "A transa\u00e7\u00e3o foi criada com sucesso.",
     "realtime_active": "Tempo real ativo",
     "disconnected": "Desconectado",
-    "clear_all": "Limpar todas"
-  },
-  "validation": {
-    "name_min_length": "Nome deve ter pelo menos 2 caracteres",
-    "email_invalid": "Email inválido",
-    "password_min_length": "A senha deve ter pelo menos 6 caracteres",
-    "confirm_password": "Confirme sua senha",
-    "phone_required": "Telefone obrigatório",
-    "passwords_not_match": "As senhas não coincidem",
-    "name_required": "Nome é obrigatório"
-  },
-  "register": {
-    "title": "Criar Conta",
-    "description": "Preencha os dados abaixo para criar sua conta",
-    "tagline": "Seu controle financeiro pessoal",
-    "confirm_password": "Confirmar Senha",
-    "creating": "Criando conta...",
-    "create_button": "Criar conta",
-    "have_account": "Já tem uma conta?",
-    "login_link": "Fazer login",
-    "success_title": "Conta criada com sucesso",
-    "success_description": "Você já pode fazer login no sistema.",
-    "error_title": "Erro no cadastro",
-    "error_description": "Não foi possível criar sua conta. Tente novamente."
-  },
-  "placeholders": {
-    "full_name": "Seu nome completo",
-    "email_example": "email@exemplo.com",
-    "search_categories": "Buscar categorias...",
-    "transaction_description": "Descrição da transação",
-    "reminder_title": "Título do lembrete",
-    "detailed_description": "Descrição detalhada (opcional)"
-  }
+    "clear_all": "Limpar todas",
+    "type_labels": {
+      "expense": "Despesa",
+      "income": "Receita"
+    },
+    "payment_method": {
+      "label": "Forma de Pagamento",
+      "placeholder": "Selecione uma forma de pagamento",
+      "empty": "Nenhuma forma de pagamento dispon\u00edvel",
+      "global_badge": "Global"
+    },
     "filters": {
-      "search": "Buscar transações...",
+      "search": "Buscar transa\u00e7\u00f5es...",
+      "search_label": "Busca",
+      "search_placeholder": "Buscar transa\u00e7\u00f5es...",
       "type": "Tipo",
       "all_types": "Todos os tipos",
       "income": "Receitas",
@@ -171,18 +168,71 @@
       "clear_filters": "Limpar Filtros"
     },
     "table": {
-      "description": "DESCRIÇÃO",
+      "description": "DESCRI\u00c7\u00c3O",
       "category": "CATEGORIA",
       "date": "DATA",
       "value": "VALOR",
       "status": "STATUS",
-      "actions": "AÇÕES",
-      "no_transactions": "Nenhuma transação encontrada",
-      "uncategorized": "Não categorizada",
-      "not_specified": "Não especificado",
-      "category_not_found": "Categoria não encontrada",
-      "method_not_found": "Método não encontrado"
-    }
+      "actions": "A\u00c7\u00d5ES",
+      "no_transactions": "Nenhuma transa\u00e7\u00e3o encontrada",
+      "uncategorized": "N\u00e3o categorizada",
+      "not_specified": "N\u00e3o especificado",
+      "category_not_found": "Categoria n\u00e3o encontrada",
+      "method_not_found": "M\u00e9todo n\u00e3o encontrado"
+    },
+    "submit": {
+      "update": "Salvar altera\u00e7\u00f5es",
+      "create": "Criar transa\u00e7\u00e3o"
+    },
+    "select_category": "Selecione uma categoria",
+    "category": "Categoria",
+    "fill_details": "Preencha os detalhes da transação",
+    "type": "Tipo",
+    "description": "Descrição",
+    "description_placeholder": "Descrição da transação",
+    "amount": "Valor",
+    "date": "Data"
+  },
+  "validation": {
+    "name_min_length": "Nome deve ter pelo menos 2 caracteres",
+    "email_invalid": "Email inv\u00e1lido",
+    "password_min_length": "A senha deve ter pelo menos 6 caracteres",
+    "confirm_password": "Confirme sua senha",
+    "phone_required": "Telefone obrigat\u00f3rio",
+    "passwords_not_match": "As senhas n\u00e3o coincidem",
+    "name_required": "Nome \u00e9 obrigat\u00f3rio",
+    "description_min_length": "A descri\u00e7\u00e3o deve ter pelo menos 2 caracteres",
+    "amount_required": "O valor \u00e9 obrigat\u00f3rio",
+    "amount_positive": "O valor deve ser maior que zero",
+    "category_required": "A categoria \u00e9 obrigat\u00f3ria",
+    "payment_method_required": "A forma de pagamento \u00e9 obrigat\u00f3ria",
+    "type_required": "O tipo \u00e9 obrigat\u00f3rio",
+    "date_required": "A data \u00e9 obrigat\u00f3ria"
+  },
+  "register": {
+    "title": "Criar Conta",
+    "description": "Preencha os dados abaixo para criar sua conta",
+    "tagline": "Seu controle financeiro pessoal",
+    "confirm_password": "Confirmar Senha",
+    "creating": "Criando conta...",
+    "create_button": "Criar conta",
+    "have_account": "J\u00e1 tem uma conta?",
+    "login_link": "Fazer login",
+    "success_title": "Conta criada com sucesso",
+    "success_description": "Voc\u00ea j\u00e1 pode fazer login no sistema.",
+    "error_title": "Erro no cadastro",
+    "error_description": "N\u00e3o foi poss\u00edvel criar sua conta. Tente novamente.",
+    "password_placeholder": "******",
+    "confirm_password_placeholder": "******",
+    "phone_placeholder": "(41) 9 8503-7379"
+  },
+  "placeholders": {
+    "full_name": "Seu nome completo",
+    "email_example": "email@exemplo.com",
+    "search_categories": "Buscar categorias...",
+    "transaction_description": "Descri\u00e7\u00e3o da transa\u00e7\u00e3o",
+    "reminder_title": "T\u00edtulo do lembrete",
+    "detailed_description": "Descri\u00e7\u00e3o detalhada (opcional)"
   },
   "categories": {
     "title": "Categorias",
@@ -192,33 +242,38 @@
     "delete_category": "Excluir Categoria",
     "category_created": "Categoria criada",
     "category_updated": "Categoria atualizada",
-    "category_deleted": "Categoria excluída",
+    "category_deleted": "Categoria exclu\u00edda",
     "form": {
       "name": "Nome",
       "name_placeholder": "Nome da categoria",
-      "name_required": "Nome é obrigatório",
+      "name_required": "Nome \u00e9 obrigat\u00f3rio",
       "type": "Tipo",
-      "type_required": "Tipo é obrigatório",
+      "type_required": "Tipo \u00e9 obrigat\u00f3rio",
       "color": "Cor",
-      "color_required": "Cor é obrigatória",
-      "icon": "Ícone",
-      "icon_required": "Ícone é obrigatório",
+      "color_required": "Cor \u00e9 obrigat\u00f3ria",
+      "icon": "\u00cdcone",
+      "icon_required": "\u00cdcone \u00e9 obrigat\u00f3rio",
       "expense": "Despesa",
       "income": "Receita",
-      "save_changes": "Salvar alterações",
+      "save_changes": "Salvar altera\u00e7\u00f5es",
       "create_category": "Criar categoria",
-      "select": "Selecione"
+      "select": "Selecione",
+      "select_color": "Selecione a cor",
+      "select_icon": "Selecione o ícone"
+    },
+    "scope": {
+      "global": "Global"
     },
     "icons": {
       "home": "Casa",
       "car": "Carro",
-      "food": "Alimentação",
-      "health": "Saúde",
-      "school": "Educação",
+      "food": "Alimenta\u00e7\u00e3o",
+      "health": "Sa\u00fade",
+      "school": "Educa\u00e7\u00e3o",
       "entertainment": "Lazer",
       "clothing": "Roupas",
-      "services": "Serviços",
-      "salary": "Salário",
+      "services": "Servi\u00e7os",
+      "salary": "Sal\u00e1rio",
       "freelance": "Freelance",
       "investments": "Investimentos",
       "gift": "Presente",
@@ -237,161 +292,264 @@
       "turquoise": "Turquesa",
       "dark_blue": "Azul Escuro",
       "gray": "Cinza"
+    },
+    "names": {
+      "Alimentação": "Alimentação",
+      "Doações": "Doações",
+      "Educação": "Educação",
+      "Freelance": "Freelance",
+      "Imposto": "Imposto",
+      "Investimento": "Investimento",
+      "Investimentos": "Investimentos",
+      "Lazer": "Lazer",
+      "Moradia": "Moradia",
+      "Outros": "Outros",
+      "Pets": "Pets",
+      "Salário": "Salário",
+      "Saude": "Saúde",
+      "Transporte": "Transporte",
+      "Vestuário": "Vestuário",
+      "Viagem": "Viagem"
     }
   },
   "reports": {
-    "title": "Relatórios",
-    "subtitle": "Análise detalhada das suas finanças",
-    "generate_report": "Gerar Relatório",
-    "period": "Período",
-    "start_date": "Data Inicial",
-    "end_date": "Data Final",
-    "download_pdf": "Baixar PDF",
-    "no_data": "Nenhum dado encontrado para o período selecionado",
-    "no_data_description": "Você ainda não possui despesas registradas neste período. Comece a registrar suas transações para visualizar este relatório.",
-    "this_month": "Este mês",
-    "last_quarter": "Último trimestre",
+    "months": {
+      "jan": "Jan",
+      "feb": "Fev",
+      "mar": "Mar",
+      "apr": "Abr",
+      "may": "Mai",
+      "jun": "Jun",
+      "jul": "Jul",
+      "aug": "Ago",
+      "sep": "Set",
+      "oct": "Out",
+      "nov": "Nov",
+      "dec": "Dez"
+    },
+    "period_placeholder": "Per\u00edodo",
+    "this_month": "Este m\u00eas",
+    "last_quarter": "\u00daltimo trimestre",
     "this_year": "Este ano",
     "export_csv": "Exportar CSV",
     "income_vs_expenses": "Receitas vs Despesas",
     "cash_flow": "Fluxo de Caixa",
     "expenses_by_category": "Despesas por Categoria",
+    "no_data": "Sem dados para exibir",
+    "no_data_description": "Voc\u00ea ainda n\u00e3o possui despesas registradas neste per\u00edodo. Comece a registrar suas transa\u00e7\u00f5es para visualizar este relat\u00f3rio.",
+    "no_transactions_to_export": "N\u00e3o h\u00e1 transa\u00e7\u00f5es para exportar neste per\u00edodo.",
     "breakdown": "Detalhamento",
     "financial_summary": "Resumo Financeiro",
     "total_income": "Total de Receitas",
     "total_expenses": "Total de Despesas",
     "current_balance": "Saldo Atual",
-    "no_transactions_to_export": "Não há transações para exportar neste período.",
+    "chart": {
+      "income": "Receitas",
+      "expenses": "Despesas",
+      "balance": "Saldo"
+    },
     "csv": {
       "date": "Data",
-      "description": "Descrição",
+      "description": "Descri\u00e7\u00e3o",
       "type": "Tipo",
       "category": "Categoria",
       "payment_method": "Forma de Pagamento",
       "amount": "Valor",
       "status": "Status",
-      "uncategorized": "Não categorizada",
-      "not_specified": "Não especificado",
+      "uncategorized": "N\u00e3o categorizada",
+      "not_specified": "N\u00e3o especificado",
       "total_income": "Total Receitas:",
       "total_expenses": "Total Despesas:",
       "balance": "Saldo:",
       "current_month": "mes_atual",
       "quarter": "trimestre",
       "year": "ano",
-      "filename_prefix": "transacoes"
+      "filename_prefix": "transacoes",
+      "type_income": "Receita",
+      "type_expense": "Despesa",
+      "status_completed": "Efetivada",
+      "status_pending": "Pendente",
+      "status_scheduled": "Agendada",
+      "status_cancelled": "Cancelada"
     },
-    "chart": {
-      "income": "Receitas",
-      "expenses": "Despesas",
-      "balance": "Saldo"
-    }
+    "title": "Relat\u00f3rios",
+    "subtitle": "An\u00e1lise detalhada das suas finan\u00e7as"
   },
   "payment_methods": {
     "title": "Formas de Pagamento",
-    "subtitle": "Gerencie seus métodos de pagamento",
+    "subtitle": "Gerencie suas formas de pagamento",
     "new_method": "Nova Forma de Pagamento",
-    "edit_method": "Editar Forma de Pagamento",
-    "delete_method": "Excluir Forma de Pagamento",
-    "method_created": "Forma de pagamento criada",
-    "method_updated": "Forma de pagamento atualizada",
-    "method_deleted": "Forma de pagamento excluída",
+    "total_accumulated": "Total acumulado",
+    "no_methods": "Nenhuma forma de pagamento encontrada",
+    "create_first": "Crie sua primeira forma de pagamento personalizada",
+    "names": {
+      "Cartão de Crédito": "Cartão de Crédito",
+      "Cartão de Débito": "Cartão de Débito",
+      "Cheque": "Cheque",
+      "Dinheiro": "Dinheiro",
+      "PIX": "PIX",
+      "TED/DOC": "TED/DOC"
+    },
     "form": {
-      "name": "Nome",
       "name_placeholder": "Nome da forma de pagamento",
-      "name_required": "Nome é obrigatório",
-      "description": "Descrição",
-      "description_placeholder": "Descrição opcional",
-      "active": "Ativo",
-      "save_changes": "Salvar alterações",
-      "create_method": "Criar forma de pagamento"
+      "description_placeholder": "Descrição (opcional)"
     }
   },
   "reminders": {
     "title": "Lembretes",
-    "subtitle": "Gerencie seus lembretes financeiros",
+    "subtitle": "Gerencie seus lembretes e notificações",
     "new_reminder": "Novo Lembrete",
-    "edit_reminder": "Editar Lembrete",
+    "reminder_created": "Lembrete criado com sucesso",
+    "error_create": "Erro ao criar lembrete",
+    "error_create_desc": "Ocorreu um erro ao criar o lembrete.",
+    "reminder_updated": "Lembrete atualizado com sucesso",
+    "error_update": "Erro ao atualizar lembrete",
+    "error_update_desc": "Ocorreu um erro ao atualizar o lembrete.",
+    "reminder_deleted": "Lembrete exclu\u00eddo com sucesso",
+    "error_delete": "Erro ao excluir lembrete",
+    "error_delete_desc": "Ocorreu um erro ao excluir o lembrete.",
+    "pending": "pendentes",
+    "completed": "conclu\u00eddos",
+    "calendar_title": "Calend\u00e1rio de Lembretes",
+    "loading": "Carregando lembretes...",
+    "error_loading": "Erro ao carregar lembretes. Tente novamente mais tarde.",
+    "new_reminder_desc": "Preencha os detalhes para criar um novo lembrete.",
+    "details_title": "Detalhes do Lembrete",
+    "details_desc": "Visualize e edite os detalhes do lembrete.",
+    "description_optional": "Descrição (opcional)",
+    "title_placeholder": "Título do lembrete",
+    "description_placeholder": "Descrição do lembrete (opcional)",
+    "reminder_date": "Data do Lembrete",
+    "select_date": "Selecione uma data",
     "delete_reminder": "Excluir Lembrete",
-    "reminder_created": "Lembrete criado",
-    "reminder_updated": "Lembrete atualizado",
-    "reminder_deleted": "Lembrete excluído",
-    "form": {
-      "title": "Título",
-      "title_placeholder": "Título do lembrete",
-      "title_required": "Título é obrigatório",
-      "description": "Descrição",
-      "description_placeholder": "Descrição do lembrete",
-      "date": "Data",
-      "time": "Hora",
-      "active": "Ativo",
-      "save_changes": "Salvar alterações",
-      "create_reminder": "Criar lembrete"
+    "delete_confirmation": "Tem certeza que deseja excluir este lembrete? Esta ação não pode ser desfeita."
+  },
+  "calendar": {
+    "today": "Hoje",
+    "previous": "Anterior",
+    "next": "Próximo",
+    "month": "Mês",
+    "week": "Semana",
+    "day": "Dia",
+    "agenda": "Agenda",
+    "date": "Data",
+    "time": "Hora",
+    "event": "Evento",
+    "no_events": "Nenhum lembrete neste período",
+    "more": "mais",
+    "of": "de",
+    "months": {
+      "january": "Janeiro",
+      "february": "Fevereiro",
+      "march": "Março",
+      "april": "Abril",
+      "may": "Maio",
+      "june": "Junho",
+      "july": "Julho",
+      "august": "Agosto",
+      "september": "Setembro",
+      "october": "Outubro",
+      "november": "Novembro",
+      "december": "Dezembro"
+    },
+    "days": {
+      "sun": "Dom",
+      "mon": "Seg",
+      "tue": "Ter",
+      "wed": "Qua",
+      "thu": "Qui",
+      "fri": "Sex",
+      "sat": "Sáb",
+      "sunday": "Domingo",
+      "monday": "Segunda-feira",
+      "tuesday": "Terça-feira",
+      "wednesday": "Quarta-feira",
+      "thursday": "Quinta-feira",
+      "friday": "Sexta-feira",
+      "saturday": "Sábado"
     }
   },
   "settings": {
-    "title": "Configurações",
-    "subtitle": "Gerencie suas preferências e perfil",
-    "profile": "Perfil",
-    "password": "Senha",
-    "subscription": "Assinatura",
-    "form": {
-      "name": "Nome",
-      "name_placeholder": "Seu nome completo",
-      "name_required": "O nome é obrigatório",
-      "email": "Email",
-      "current_password": "Senha Atual",
-      "current_password_placeholder": "Sua senha atual",
-      "current_password_required": "A senha atual é obrigatória",
-      "new_password": "Nova Senha",
-      "new_password_placeholder": "Sua nova senha",
-      "new_password_required": "A nova senha é obrigatória",
-      "confirm_password": "Confirmar Senha",
-      "confirm_password_placeholder": "Confirme sua nova senha",
-      "confirm_password_required": "Confirme a nova senha",
-      "passwords_no_match": "As senhas não coincidem",
-      "save_changes": "Salvar alterações",
-      "change_password": "Alterar senha",
-      "saving": "Salvando...",
-      "changing": "Alterando..."
-    },
+    "loading": "Carregando configura\u00e7\u00f5es...",
     "profile_updated": "Perfil atualizado",
+    "profile_updated_desc": "Suas informa\u00e7\u00f5es foram atualizadas com sucesso!",
     "password_changed": "Senha alterada",
+    "password_changed_desc": "Sua senha foi alterada com sucesso!",
+    "password_change_error": "N\u00e3o foi poss\u00edvel alterar sua senha. Verifique se a senha atual est\u00e1 correta.",
+    "security": "Seguran\u00e7a",
+    "api": "API",
+    "personal_profile": "Perfil Pessoal",
+    "manage_personal_info": "Gerencie suas informa\u00e7\u00f5es pessoais.",
+    "full_name": "Nome completo",
+    "phone_description": "Digite apenas os n\u00fameros com DDD",
+    "password_change": "Altera\u00e7\u00e3o de Senha",
+    "change_password_desc": "Altere sua senha de acesso.",
+    "current_password": "Senha atual",
+    "current_password_placeholder": "Sua senha atual",
+    "new_password": "Nova senha",
+    "new_password_placeholder": "Sua nova senha",
+    "password_min_length": "Deve ter pelo menos 6 caracteres",
+    "confirm_new_password": "Confirmar nova senha",
+    "confirm_password_placeholder": "Confirme sua nova senha",
+    "changing": "Alterando...",
+    "api_tokens": "Tokens de API",
+    "manage_api_tokens": "Gerencie seus tokens para acesso \u00e0 API.",
+    "subscription_info": "Informa\u00e7\u00f5es sobre sua assinatura.",
     "subscription_active": "Assinatura Ativa",
-    "subscription_cancelled": "Assinatura Cancelada"
+    "subscription_active_desc": "Sua assinatura est\u00e1 ativa e em dia.",
+    "expires_on": "Expira em",
+    "subscription_cancelled_access_maintained": "Assinatura Cancelada - Acesso Mantido",
+    "subscription_cancelled": "Assinatura Cancelada",
+    "cancelled_on": "Cancelada em",
+    "access_until": "Voc\u00ea ainda tem acesso at\u00e9",
+    "reason": "Motivo",
+    "profile": "Perfil",
+    "phone_placeholder": "(11) 99999-9999",
+    "subscription": "Assinatura",
+    "update_profile_error": "N\u00e3o foi poss\u00edvel atualizar seu perfil.",
+    "validation": {
+      "name_required": "O nome \u00e9 obrigat\u00f3rio",
+      "email_invalid": "E-mail inv\u00e1lido",
+      "phone_invalid": "Telefone deve ter DDD e n\u00famero v\u00e1lido (10 ou 11 d\u00edgitos)",
+      "current_password_required": "A senha atual \u00e9 obrigat\u00f3ria",
+      "new_password_min": "A nova senha deve ter pelo menos 6 caracteres",
+      "confirm_password_required": "Confirme a nova senha",
+      "passwords_not_match": "As senhas n\u00e3o coincidem"
+    }
   },
   "wallet": {
     "title": "Sua Carteira",
     "subtitle": "Visualize o saldo da sua carteira",
     "current_balance": "Saldo Atual",
-    "transactions": "Transações",
+    "transactions": "Transa\u00e7\u00f5es",
     "income": "Receitas",
     "expenses": "Despesas",
     "updated_on": "Atualizado em",
     "main_wallet": "Principal",
-    "this_month": "este mês",
-    "vs_last_month": "vs. último mês",
-    "monthly_income": "Receitas (Mês)",
-    "monthly_expenses": "Despesas (Mês)",
+    "this_month": "este m\u00eas",
+    "vs_last_month": "vs. \u00faltimo m\u00eas",
+    "monthly_income": "Receitas (M\u00eas)",
+    "monthly_expenses": "Despesas (M\u00eas)",
     "page_title": "Minha Carteira",
-    "page_description": "Gerencie suas finanças em um só lugar",
+    "page_description": "Gerencie suas finan\u00e7as em um s\u00f3 lugar",
     "main_wallet_title": "Carteira Principal",
     "wallet_name": "Nome da carteira",
-    "quick_actions": "Ações Rápidas",
+    "quick_actions": "A\u00e7\u00f5es R\u00e1pidas",
     "new_income": "Nova Receita",
     "new_expense": "Nova Despesa",
-    "name_required": "O nome da carteira não pode estar vazio.",
+    "name_required": "O nome da carteira n\u00e3o pode estar vazio.",
     "updated_success": "Carteira atualizada com sucesso.",
-    "update_error": "Não foi possível atualizar a carteira.",
-    "transaction_added": "Transação adicionada",
-    "transaction_success_description": "Nova transação registrada com sucesso."
+    "update_error": "N\u00e3o foi poss\u00edvel atualizar a carteira.",
+    "transaction_added": "Transa\u00e7\u00e3o adicionada",
+    "transaction_success_description": "Nova transa\u00e7\u00e3o registrada com sucesso."
   },
   "admin": {
-    "title": "Administração",
+    "title": "Administra\u00e7\u00e3o",
     "access": {
-      "denied": "Acesso negado. Apenas super administradores podem acessar esta área."
+      "denied": "Acesso negado. Apenas super administradores podem acessar esta \u00e1rea."
     },
     "localization": {
-      "title": "Gerenciamento de Localização",
+      "title": "Gerenciamento de Localiza\u00e7\u00e3o",
       "selector": {
         "label": "Idioma do Sistema",
         "placeholder": "Selecione um idioma",
@@ -399,16 +557,503 @@
       }
     },
     "customize": {
-      "title": "Personalização do Sistema",
-      "settings": "Configurações",
+      "title": "Personaliza\u00e7\u00e3o do Sistema",
+      "settings": "Configura\u00e7\u00f5es",
       "current_language": "Idioma Atual do Sistema",
       "current_language_desc": "Idioma atualmente ativo em todo o sistema",
       "system_languages": "Idiomas do Sistema",
-      "loading_language": "Carregando configurações de idioma...",
-      "error_loading": "Erro ao carregar configurações",
-      "general_settings": "Configurações Gerais",
-      "general_settings_desc": "Configurações adicionais para as mensagens de boas vindas."
+      "loading_language": "Carregando configura\u00e7\u00f5es de idioma...",
+      "error_loading": "Erro ao carregar configura\u00e7\u00f5es",
+      "general_settings": "Configura\u00e7\u00f5es Gerais",
+      "general_settings_desc": "Configura\u00e7\u00f5es adicionais para as mensagens de boas vindas."
+    },
+    "database": {
+      "title": "Gerenciamento do Banco de Dados",
+      "subtitle": "Visualize e gerencie a estrutura do banco de dados",
+      "download": {
+        "error": "Erro ao gerar DDL",
+        "success_title": "DDL baixado com sucesso",
+        "success_description": "O arquivo SQL foi salvo no seu computador.",
+        "toast_error_title": "Erro ao baixar DDL",
+        "toast_error_description": "N\u00e3o foi poss\u00edvel gerar o arquivo SQL.",
+        "generating": "Gerando...",
+        "button": "Baixar DDL",
+        "section_title": "Download do DDL",
+        "description": "O DDL (Data Definition Language) cont\u00e9m todos os comandos SQL necess\u00e1rios para recriar a estrutura completa do banco de dados, incluindo:",
+        "list": {
+          "tables": "Cria\u00e7\u00e3o de todas as tabelas",
+          "columns": "Defini\u00e7\u00e3o de colunas e tipos de dados",
+          "constraints": "Constraints (Primary Keys, Foreign Keys, Unique)",
+          "indexes": "\u00cdndices",
+          "comments": "Coment\u00e1rios sobre a estrutura"
+        },
+        "notice": {
+          "title": "\u26a0\ufe0f Importante:",
+          "description": "Este arquivo cont\u00e9m apenas a estrutura do banco. Para migrar dados, use a funcionalidade de migration dispon\u00edvel no sistema."
+        }
+      },
+      "refresh": {
+        "title": "Atualizando...",
+        "description": "Lista de tabelas atualizada."
+      },
+      "reset": {
+        "success_default": "Globais resetados com sucesso!",
+        "toast_success_title": "Reset conclu\u00eddo",
+        "error_default": "Erro ao resetar globais",
+        "toast_error_title": "Erro ao resetar globais",
+        "tooltip": "Remove e recria as categorias e formas de pagamento globais padr\u00e3o",
+        "loading": "Resetando...",
+        "button": "Resetar Globais"
+      },
+      "stats": {
+        "title": "Estat\u00edsticas do Banco",
+        "total_tables": "Total de Tabelas",
+        "base_tables": "Tabelas Base",
+        "views": "Views"
+      },
+      "table_list": {
+        "title": "Tabelas do Banco de Dados",
+        "loading": "Carregando tabelas...",
+        "columns": {
+          "name": "Nome da Tabela",
+          "type": "Tipo",
+          "status": "Status"
+        },
+        "status": {
+          "active": "Ativa"
+        },
+        "empty": "Nenhuma tabela encontrada"
+      }
+    },
+    "dashboard": {
+      "header": {
+        "title": "Dashboard SaaS - FinanceHub",
+        "subtitle": "Vis\u00e3o geral administrativa da plataforma"
+      },
+      "toast": {
+        "impersonate_start": {
+          "title": "Processando",
+          "description": "Iniciando personifica\u00e7\u00e3o do usu\u00e1rio {{userName}}..."
+        },
+        "impersonate_success": {
+          "title": "Sucesso!",
+          "description": "Personifica\u00e7\u00e3o do usu\u00e1rio {{userName}} realizada com sucesso. Redirecionando..."
+        },
+        "impersonate_error": {
+          "title": "Erro na Personifica\u00e7\u00e3o",
+          "description": "N\u00e3o foi poss\u00edvel personificar o usu\u00e1rio."
+        },
+        "impersonate_unexpected": {
+          "title": "Erro Inesperado",
+          "description": "Ocorreu um erro de conex\u00e3o. Tente novamente."
+        }
+      },
+      "error_modal": {
+        "title": "Erro na Personifica\u00e7\u00e3o",
+        "generic": "Ocorreu um erro ao tentar personificar o usu\u00e1rio.",
+        "unexpected": "Ocorreu um erro inesperado ao tentar personificar o usu\u00e1rio.",
+        "close": "Entendi"
+      },
+      "user_status": {
+        "cancelled": "Cancelado",
+        "inactive": "Inativo",
+        "active": "Ativo"
+      },
+      "last_access": {
+        "never": "Nunca"
+      },
+      "metrics": {
+        "total_users": {
+          "title": "Total de Usu\u00e1rios",
+          "growth_suffix": "crescimento"
+        },
+        "active_users": {
+          "title": "Usu\u00e1rios Ativos",
+          "rate_suffix": "taxa de ativa\u00e7\u00e3o"
+        },
+        "transactions": {
+          "title": "Transa\u00e7\u00f5es",
+          "average_prefix": "M\u00e9dia:",
+          "average_suffix": "por usu\u00e1rio"
+        },
+        "cancelled_users": {
+          "title": "Usu\u00e1rios Cancelados",
+          "base_suffix": "da base"
+        },
+        "inactive_users": {
+          "title": "Usu\u00e1rios Inativos",
+          "base_suffix": "inativos"
+        },
+        "wallets": {
+          "title": "Carteiras",
+          "base_suffix": "com carteiras"
+        }
+      },
+      "charts": {
+        "user_growth": {
+          "title": "Crescimento de Usu\u00e1rios",
+          "description": "Evolu\u00e7\u00e3o mensal da base de usu\u00e1rios",
+          "series": {
+            "total": "Total",
+            "active": "Ativos"
+          }
+        },
+        "transaction_volume": {
+          "title": "Volume de Transa\u00e7\u00f5es",
+          "description": "Evolu\u00e7\u00e3o mensal do volume transacional",
+          "series": {
+            "transactions": "Quantidade"
+          }
+        },
+        "user_distribution": {
+          "title": "Distribui\u00e7\u00e3o de Usu\u00e1rios",
+          "description": "Por status conforme regras de neg\u00f3cio"
+        },
+        "recent_activity": {
+          "title": "Atividade Recente",
+          "description": "\u00daltimos 7 dias de atividade do sistema",
+          "series": {
+            "users": "Usu\u00e1rios Ativos",
+            "transactions": "Transa\u00e7\u00f5es"
+          }
+        }
+      },
+      "recent_users": {
+        "title": "Gerenciamento de Usu\u00e1rios",
+        "description": "\u00daltimos usu\u00e1rios cadastrados e a\u00e7\u00f5es administrativas",
+        "tabs": {
+          "recent": "Usu\u00e1rios Recentes",
+          "wallet_distribution": "Distribui\u00e7\u00e3o de Carteiras"
+        },
+        "table": {
+          "headers": {
+            "name": "Nome",
+            "email": "Email",
+            "status": "Status",
+            "created_at": "Data Cadastro",
+            "actions": "A\u00e7\u00f5es"
+          }
+        },
+        "actions": {
+          "processing": "Processando...",
+          "impersonate": "Impersonificar"
+        }
+      },
+      "wallet_distribution": {
+        "criteria_title": "Crit\u00e9rio de Distribui\u00e7\u00e3o",
+        "criteria_intro": "As carteiras s\u00e3o distribu\u00eddas por faixas de",
+        "criteria_highlight": "saldo atual",
+        "criteria_detail": "calculado em tempo real. O saldo \u00e9 obtido pela soma de todas as receitas menos todas as despesas da carteira, incluindo transa\u00e7\u00f5es pendentes e agendadas.",
+        "update_label": "Atualiza\u00e7\u00e3o:",
+        "update_description": "Os dados s\u00e3o recalculados automaticamente a cada consulta",
+        "labels": {
+          "low": "Carteiras com saldo baixo",
+          "medium": "Carteiras com saldo m\u00e9dio",
+          "high": "Carteiras com saldo alto"
+        },
+        "percentage_suffix": "do total",
+        "footer": "Distribui\u00e7\u00e3o baseada no saldo atual de cada carteira \u2022 Inclui transa\u00e7\u00f5es de todos os status \u2022 \u00daltima atualiza\u00e7\u00e3o: {{timestamp}}"
+      },
+      "stats": {
+        "title": "Estat\u00edsticas Administrativas",
+        "loading": "Carregando estat\u00edsticas...",
+        "total_users": "Total de Usu\u00e1rios",
+        "active_users": "Usu\u00e1rios Ativos",
+        "total_transactions": "Total de Transa\u00e7\u00f5es",
+        "system_status": "Status do Sistema"
+      },
+      "system_health": {
+        "ok": "Opera\u00e7\u00e3o normal",
+        "degraded": "Opera\u00e7\u00e3o degradada",
+        "critical": "Status cr\u00edtico",
+        "unknown": "Indeterminado"
+      }
+    },
+    "users": {
+      "toast": {
+        "create_success": {
+          "title": "Sucesso",
+          "description": "Usu\u00e1rio criado com sucesso"
+        },
+        "create_error": {
+          "fallback": "Erro ao criar usu\u00e1rio"
+        },
+        "update_success": {
+          "title": "Sucesso",
+          "description": "Usu\u00e1rio atualizado com sucesso"
+        },
+        "update_error": {
+          "title": "Erro",
+          "description": "Erro ao atualizar usu\u00e1rio"
+        },
+        "delete_success": {
+          "title": "Sucesso",
+          "description": "Usu\u00e1rio desativado com sucesso"
+        },
+        "delete_error": {
+          "title": "Erro",
+          "description": "Erro ao desativar usu\u00e1rio"
+        },
+        "toggle_success": {
+          "title": "Status Atualizado",
+          "description": "Usu\u00e1rio {{userName}} foi {{status}} com sucesso"
+        },
+        "toggle_error": {
+          "title": "Erro",
+          "description": "Erro ao {{action}} usu\u00e1rio {{userName}}"
+        },
+        "reset_error": {
+          "title": "Erro",
+          "description": "Erro ao resetar dados do usu\u00e1rio"
+        },
+        "impersonate_start": {
+          "title": "Processando",
+          "description": "Iniciando personifica\u00e7\u00e3o do usu\u00e1rio {{userName}}..."
+        },
+        "impersonate_success": {
+          "title": "Sucesso!",
+          "description": "Personifica\u00e7\u00e3o do usu\u00e1rio {{userName}} realizada com sucesso. Redirecionando..."
+        },
+        "impersonate_error": {
+          "title": "Erro na Personifica\u00e7\u00e3o",
+          "description": "N\u00e3o foi poss\u00edvel personificar o usu\u00e1rio."
+        },
+        "impersonate_unexpected": {
+          "title": "Erro Inesperado",
+          "description": "Ocorreu um erro de conex\u00e3o. Tente novamente."
+        },
+        "delete_permanent": {
+          "title": "Usu\u00e1rio exclu\u00eddo permanentemente",
+          "description": "Todos os dados do usu\u00e1rio {{userName}} foram removidos do sistema."
+        }
+      },
+      "validation": {
+        "phone_length": "Telefone deve ter 10 ou 11 d\u00edgitos",
+        "phone_detailed": "Telefone deve ter DDD e n\u00famero v\u00e1lido (10 ou 11 d\u00edgitos)"
+      },
+      "confirm": {
+        "deactivate": "Tem certeza que deseja desativar este usu\u00e1rio?"
+      },
+      "badges": {
+        "super_admin": "Super Admin",
+        "admin": "Admin",
+        "user": "Usu\u00e1rio",
+        "cancelled": "Cancelado",
+        "inactive": "Inativo",
+        "active": "Ativo"
+      },
+      "status": {
+        "active": "ativado",
+        "inactive": "desativado",
+        "activate": "ativar",
+        "deactivate": "desativar"
+      },
+      "header": {
+        "title": "Gerenciar Usu\u00e1rios",
+        "subtitle": "Controle completo sobre os usu\u00e1rios do sistema"
+      },
+      "actions": {
+        "new_user": "Novo Usu\u00e1rio",
+        "deactivate_user": "Desativar usu\u00e1rio",
+        "activate_user": "Ativar usu\u00e1rio",
+        "impersonate_user": "Personificar usu\u00e1rio",
+        "edit_user": "Editar usu\u00e1rio",
+        "reset_user": "Resetar dados do usu\u00e1rio",
+        "delete_user": "Excluir usu\u00e1rio permanentemente"
+      },
+      "create_modal": {
+        "title": "Novo Usu\u00e1rio",
+        "fields": {
+          "full_name": {
+            "label": "Nome Completo",
+            "placeholder": "Digite o nome completo"
+          },
+          "email": {
+            "label": "Email",
+            "placeholder": "usuario@exemplo.com"
+          },
+          "password": {
+            "label": "Senha",
+            "placeholder": "Senha segura (m\u00edn. 8 caracteres)"
+          },
+          "role": {
+            "label": "Tipo de Usu\u00e1rio"
+          },
+          "phone": {
+            "label": "Telefone",
+            "placeholder": "(41) 9 8503-7379"
+          }
+        },
+        "actions": {
+          "creating": "Criando...",
+          "submit": "Criar Usu\u00e1rio"
+        }
+      },
+      "roles": {
+        "user": "Usu\u00e1rio Padr\u00e3o",
+        "admin": "Administrador",
+        "super_admin": "Super Administrador"
+      },
+      "search": {
+        "title": "Buscar Usu\u00e1rios",
+        "placeholder": "Buscar por nome ou email..."
+      },
+      "tabs": {
+        "title": "Lista de Usu\u00e1rios",
+        "description": "Visualize e gerencie usu\u00e1rios por categoria",
+        "active": "Usu\u00e1rios Ativos",
+        "cancelled": "Cancelados",
+        "inactive": "Inativos"
+      },
+      "list": {
+        "transaction_count_suffix": "transa\u00e7\u00f5es",
+        "registered_label": "Cadastro",
+        "last_access_label": "\u00daltimo acesso",
+        "not_available": "N/A",
+        "cancelled_at": "Cancelado em",
+        "cancel_reason": "Motivo"
+      },
+      "empty_states": {
+        "cancelled": "Nenhum usu\u00e1rio cancelado encontrado",
+        "inactive": "Nenhum usu\u00e1rio inativo encontrado"
+      },
+      "edit_modal": {
+        "title": "Editar Usu\u00e1rio",
+        "fields": {
+          "full_name": {
+            "label": "Nome Completo",
+            "placeholder": "Digite o nome completo"
+          },
+          "email": {
+            "label": "Email",
+            "placeholder": "usuario@exemplo.com"
+          },
+          "role": {
+            "label": "Tipo de Usu\u00e1rio"
+          },
+          "active": {
+            "label": "Usu\u00e1rio Ativo"
+          },
+          "password": {
+            "label": "Nova Senha (deixe em branco para n\u00e3o alterar)",
+            "placeholder": "Digite a nova senha"
+          },
+          "subscription_expiration": {
+            "label": "Data de Expira\u00e7\u00e3o da Assinatura",
+            "hint": "Deixe em branco para assinatura ilimitada"
+          },
+          "phone": {
+            "label": "Telefone",
+            "placeholder": "(41) 9 8503-7379"
+          }
+        },
+        "actions": {
+          "saving": "Atualizando...",
+          "submit": "Atualizar Usu\u00e1rio"
+        }
+      },
+      "reset_modal": {
+        "title": "Resetar Dados do Usu\u00e1rio",
+        "warning": {
+          "attention": "Aten\u00e7\u00e3o",
+          "intro": "Esta a\u00e7\u00e3o ir\u00e1 remover permanentemente:",
+          "items": {
+            "transactions": "Todas as transa\u00e7\u00f5es",
+            "reminders": "Todos os lembretes",
+            "categories": "Todas as categorias personalizadas",
+            "tokens": "Tokens de API extras (mant\u00e9m apenas 1)",
+            "wallet": "Reseta o saldo da carteira para R$ 0,00"
+          },
+          "keep_title": "Ser\u00e1 mantido",
+          "keep_description": "Usu\u00e1rio, senha e dados b\u00e1sicos da conta."
+        },
+        "user_label": "Usu\u00e1rio",
+        "email_label": "Email",
+        "transactions_label": "Transa\u00e7\u00f5es atuais",
+        "confirm_question": "Tem certeza que deseja resetar todos os dados deste usu\u00e1rio? Esta a\u00e7\u00e3o n\u00e3o pode ser desfeita.",
+        "actions": {
+          "confirming": "Resetando...",
+          "confirm": "Confirmar Reset"
+        }
+      },
+      "reset_success": {
+        "title": "Reset Conclu\u00eddo com Sucesso!",
+        "description": "Os dados do usu\u00e1rio foram resetados conforme solicitado.",
+        "user": {
+          "name_label": "Nome",
+          "email_label": "Email"
+        },
+        "summary": {
+          "title": "Resumo do Reset:",
+          "transactions": "Transa\u00e7\u00f5es",
+          "reminders": "Lembretes",
+          "categories": "Categorias",
+          "tokens": "Tokens extras",
+          "wallet": "Saldo da carteira",
+          "wallet_reset": "Resetado para R$ 0,00",
+          "removed_count_feminine": "{{count}} removidas",
+          "removed_count_masculine": "{{count}} removidos"
+        },
+        "actions": {
+          "close": "Entendido"
+        }
+      },
+      "error_modal": {
+        "title": "Erro ao criar usu\u00e1rio",
+        "close": "Entendi"
+      },
+      "delete_modal": {
+        "title": "Excluir Usu\u00e1rio Permanentemente",
+        "attention": "Aten\u00e7\u00e3o",
+        "warning": "Esta a\u00e7\u00e3o ir\u00e1 remover definitivamente todos os dados deste usu\u00e1rio do sistema. N\u00e3o ser\u00e1 poss\u00edvel recuperar!",
+        "user_label": "Usu\u00e1rio",
+        "email_label": "Email",
+        "confirm_question": "Tem certeza que deseja excluir este usu\u00e1rio permanentemente?",
+        "confirm_action": "Excluir Permanentemente"
+      }
     }
+  },
+  "language": {
+    "settings": {
+      "title": "Configurações de Idioma",
+      "description": "Administre os idiomas disponíveis no sistema"
+    },
+    "selector": {
+      "title": "Idioma do Sistema",
+      "subtitle": "Idiomas disponíveis",
+      "manage": "Gerenciar Idiomas",
+      "refresh": "Atualizar Idioma"
+    },
+    "form": {
+      "code": "Código do Idioma",
+      "name": "Nome do Idioma",
+      "active": "Idioma Ativo",
+      "default": "Idioma Padrão"
+    },
+    "create": {
+      "title": "Adicionar Novo Idioma",
+      "success": "Idioma criado com sucesso",
+      "error": "Erro ao criar idioma"
+    },
+    "edit": {
+      "title": "Editar Idioma",
+      "success": "Idioma atualizado com sucesso",
+      "error": "Erro ao atualizar idioma"
+    },
+    "delete": {
+      "success": "Idioma removido com sucesso",
+      "error": "Erro ao remover idioma",
+      "confirm": "Tem certeza que deseja remover este idioma?"
+    },
+    "import": {
+      "success": "Strings importadas com sucesso",
+      "error": "Erro ao importar strings"
+    },
+    "add": "Adicionar Idioma",
+    "default": "Padrão",
+    "active": "Ativo",
+    "created": "Criado",
+    "set_default": "Definir como padrão"
   },
   "subscription": {
     "expired": {
@@ -420,81 +1065,229 @@
       "how_to_renew_desc": "Entre em contato com o administrador para renovar sua assinatura e reativar o acesso.",
       "back_to_login": "Voltar ao Login",
       "support": "Para suporte, entre em contato com o administrador do sistema"
+    },
+    "renew": {
+      "title": "Renovar Assinatura",
+      "description": "P\u00e1gina de renova\u00e7\u00e3o em desenvolvimento."
+    },
+    "overlay": {
+      "restricted_access": "Acesso Restrito",
+      "access_blocked": "Sua assinatura expirou e o acesso aos recursos foi bloqueado",
+      "expired_subscription": "Assinatura expirada",
+      "date_label": "Data",
+      "renew_prompt": "Para continuar usando todos os recursos do FinanceHub Premium, renove sua assinatura ou entre em contato com o suporte.",
+      "renew_button": "Renovar Assinatura",
+      "logout_button": "Sair da Conta"
+    },
+    "cancel": {
+      "toast": {
+        "success": {
+          "title": "Solicita\u00e7\u00e3o enviada",
+          "description": "Sua solicita\u00e7\u00e3o de cancelamento foi processada com sucesso."
+        },
+        "error": {
+          "description": "Erro ao processar cancelamento"
+        },
+        "missing_reason": {
+          "title": "Motivo obrigat\u00f3rio",
+          "description": "Por favor, informe o motivo do cancelamento."
+        }
+      },
+      "reasons": {
+        "price_high": "Pre\u00e7o muito alto",
+        "not_using": "N\u00e3o uso mais o servi\u00e7o",
+        "found_alternative": "Encontrei alternativa melhor",
+        "technical_issues": "Problemas t\u00e9cnicos",
+        "bad_support": "Atendimento insatisfat\u00f3rio",
+        "missing_features": "Recursos insuficientes",
+        "other": "Outro"
+      },
+      "title": "Cancelar Assinatura",
+      "subtitle": "Lamentamos que voc\u00ea queira cancelar sua assinatura",
+      "current_plan": {
+        "title": "Sua Assinatura Atual",
+        "description": "Detalhes do seu plano atual",
+        "status_label": "Status",
+        "status_value": "Ativa",
+        "plan_label": "Plano",
+        "plan_value": "FinanceHub Premium",
+        "renewal_label": "Renova\u00e7\u00e3o",
+        "renewal_value": "Mensal",
+        "losses_title": "O que voc\u00ea perder\u00e1:",
+        "losses": {
+          "reports": "Acesso a relat\u00f3rios avan\u00e7ados",
+          "api": "API para integra\u00e7\u00e3o",
+          "reminders": "Lembretes e notifica\u00e7\u00f5es",
+          "support": "Suporte priorit\u00e1rio",
+          "backup": "Backup autom\u00e1tico dos dados"
+        }
+      },
+      "form": {
+        "title": "Motivo do Cancelamento",
+        "description": "Ajude-nos a melhorar nosso servi\u00e7o",
+        "reasons_label": "Principais motivos (opcional):",
+        "details_label": "Detalhes adicionais:",
+        "details_placeholder": "Conte-nos mais sobre o motivo do cancelamento...",
+        "request_button": "Solicitar Cancelamento"
+      },
+      "confirmation": {
+        "title": "Confirma\u00e7\u00e3o Necess\u00e1ria",
+        "message": "Esta a\u00e7\u00e3o cancelar\u00e1 sua assinatura imediatamente. Voc\u00ea perder\u00e1 acesso a todos os recursos premium.",
+        "processing": "Processando...",
+        "confirm_button": "Confirmar Cancelamento"
+      },
+      "alternatives": {
+        "title": "Antes de cancelar...",
+        "description": "Considere estas alternativas",
+        "pause": {
+          "title": "Pausar Assinatura",
+          "description": "Pause por at\u00e9 3 meses sem perder seus dados"
+        },
+        "change_plan": {
+          "title": "Alterar Plano",
+          "description": "Mude para um plano mais adequado"
+        },
+        "contact": {
+          "title": "Falar Conosco",
+          "description": "Nossa equipe pode ajudar com suas d\u00favidas"
+        }
+      }
     }
   },
-  "payment_methods": {
-    "total_accumulated": "Total acumulado",
-    "no_methods": "Nenhuma forma de pagamento encontrada",
-    "create_first": "Crie sua primeira forma de pagamento personalizada"
+  "setup": {
+    "steps": {
+      "database_connection": "Conex\u00e3o com Banco de Dados",
+      "admin_user": "Usu\u00e1rio Administrador",
+      "review": "Confirma\u00e7\u00e3o",
+      "finish": "Conclus\u00e3o"
+    },
+    "errors": {
+      "unknown": "Erro desconhecido",
+      "network": "Erro de rede ou servidor"
+    },
+    "auto": {
+      "success": "Setup conclu\u00eddo com sucesso!"
+    },
+    "title": "Setup Wizard",
+    "database": {
+      "url_label": "URL do Banco de Dados",
+      "url_placeholder": "postgresql://usuario:senha@host:porta/banco",
+      "url_example": "Exemplo: postgresql://usuario:senha@localhost:5432/financeiro",
+      "testing": "Testando conex\u00e3o...",
+      "submit": "Testar e Salvar Conex\u00e3o"
+    },
+    "admin": {
+      "name_label": "Nome do Administrador",
+      "name_placeholder": "Nome completo",
+      "email_label": "Email",
+      "email_placeholder": "admin@exemplo.com",
+      "password_label": "Senha",
+      "password_placeholder": "Senha segura",
+      "saving": "Salvando...",
+      "next": "Pr\u00f3ximo"
+    },
+    "review": {
+      "summary_title": "O setup ir\u00e1:",
+      "items": {
+        "tables": "Criar todas as tabelas necess\u00e1rias",
+        "superadmin": "Criar usu\u00e1rio superadmin",
+        "wallet": "Criar carteira padr\u00e3o",
+        "categories": "Inserir categorias globais (Alimenta\u00e7\u00e3o, Transporte, etc.)",
+        "payment_methods": "Inserir formas de pagamento (PIX, Cart\u00e3o, Dinheiro)",
+        "api_token": "Gerar token API"
+      },
+      "running": "Executando Setup...",
+      "run_button": "Executar Setup"
+    },
+    "complete": {
+      "title": "Setup Conclu\u00eddo!",
+      "success": "Sistema configurado com sucesso!",
+      "login_hint": "Voc\u00ea pode agora fazer login com as credenciais do administrador.",
+      "api_token": "Token API",
+      "go_to_login": "Ir para Login"
+    }
   },
-  "reminders": {
-    "reminder_created": "Lembrete criado com sucesso",
-    "error_create": "Erro ao criar lembrete",
-    "error_create_desc": "Ocorreu um erro ao criar o lembrete.",
-    "reminder_updated": "Lembrete atualizado com sucesso",
-    "error_update": "Erro ao atualizar lembrete",
-    "error_update_desc": "Ocorreu um erro ao atualizar o lembrete.",
-    "reminder_deleted": "Lembrete excluído com sucesso",
-    "error_delete": "Erro ao excluir lembrete",
-    "error_delete_desc": "Ocorreu um erro ao excluir o lembrete.",
-    "pending": "pendentes",
-    "completed": "concluídos",
-    "calendar_title": "Calendário de Lembretes",
-    "loading": "Carregando lembretes...",
-    "error_loading": "Erro ao carregar lembretes. Tente novamente mais tarde.",
-    "new_reminder_desc": "Preencha os detalhes para criar um novo lembrete.",
-    "details_title": "Detalhes do Lembrete",
-    "details_desc": "Visualize e edite os detalhes do lembrete."
+  "api_tokens": {
+    "title": "Tokens de API",
+    "description": "Gerencie seus tokens de acesso à API",
+    "error_loading": "Erro ao carregar tokens",
+    "loading": "Carregando tokens...",
+    "empty_state": "Você ainda não possui tokens de API",
+    "empty_description": "Tokens de API permitem que aplicativos externos acessem seus dados de forma segura.",
+    "create_new": "Criar novo token",
+    "actions": {
+      "created": "Criado",
+      "rotate": "Rotacionar",
+      "edit": "Editar"
+    },
+    "table": {
+      "name": "Nome",
+      "token": "Token", 
+      "created_at": "Criado em",
+      "status": "Status",
+      "actions": "Ações"
+    },
+    "modal": {
+      "created_title": "Token criado com sucesso",
+      "created_description": "Copie o token abaixo. Por segurança, ele não será mostrado novamente.",
+      "complete_token": "Token completo:",
+      "create_title": "Criar novo token de API",
+      "create_description": "Crie um novo token para acessar a API do sistema.",
+      "edit_title": "Editar token",
+      "edit_description": "Atualize as informações do token."
+    },
+    "form": {
+      "name_description": "Um nome descritivo para identificar o token.",
+      "description_help": "Uma descrição opcional para o token.",
+      "name_placeholder": "Nome do token",
+      "description_placeholder": "Descreva a finalidade deste token",
+      "active_description": "Quando desativado, o token não poderá ser usado para acessar a API.",
+      "creating": "Criando...",
+      "create": "Criar token",
+      "saving": "Salvando...",
+      "save_changes": "Salvar alterações",
+      "cancel": "Cancelar",
+      "name": "Nome",
+      "description": "Descrição",
+      "active": "Ativo"
+    },
+    "toast": {
+      "created_success": "Token criado com sucesso",
+      "created_description": "O token foi criado com sucesso. Copie o token completo agora, pois ele não será mostrado novamente.",
+      "create_error": "Erro ao criar token",
+      "create_error_description": "Ocorreu um erro ao criar o token. Por favor, tente novamente.",
+      "updated_success": "Token atualizado",
+      "updated_description": "O token foi atualizado com sucesso.",
+      "update_error": "Erro ao atualizar token",
+      "update_error_description": "Ocorreu um erro ao atualizar o token. Por favor, tente novamente.",
+      "removed_success": "Token removido",
+      "removed_description": "O token foi removido com sucesso.",
+      "remove_error": "Erro ao remover token",
+      "remove_error_description": "Ocorreu um erro ao remover o token. Por favor, tente novamente.",
+      "copied": "Token copiado",
+      "copied_description": "O token foi copiado para a área de transferência."
+    },
+    "master_token_protected_aria": "MasterToken não pode ser removido",
+    "tooltip": {
+      "rotate_master": "Rotacionar MasterToken"
+    }
   },
-  "reports": {
-    "this_month": "Este mês",
-    "last_quarter": "Último trimestre",
-    "this_year": "Este ano",
-    "export_csv": "Exportar CSV",
-    "income_vs_expenses": "Receitas vs Despesas",
-    "cash_flow": "Fluxo de Caixa",
-    "expenses_by_category": "Despesas por Categoria",
-    "no_data": "Sem dados para exibir",
-    "no_data_description": "Você ainda não possui despesas registradas neste período. Comece a registrar suas transações para visualizar este relatório.",
-    "breakdown": "Detalhamento",
-    "financial_summary": "Resumo Financeiro",
-    "total_income": "Total de Receitas",
-    "total_expenses": "Total de Despesas",
-    "current_balance": "Saldo Atual"
-  },
-  "settings": {
-    "loading": "Carregando configurações...",
-    "profile_updated": "Perfil atualizado",
-    "profile_updated_desc": "Suas informações foram atualizadas com sucesso!",
-    "password_changed": "Senha alterada",
-    "password_changed_desc": "Sua senha foi alterada com sucesso!",
-    "password_change_error": "Não foi possível alterar sua senha. Verifique se a senha atual está correta.",
-    "security": "Segurança",
-    "api": "API",
-    "personal_profile": "Perfil Pessoal",
-    "manage_personal_info": "Gerencie suas informações pessoais.",
-    "full_name": "Nome completo",
-    "phone_description": "Digite apenas os números com DDD",
-    "password_change": "Alteração de Senha",
-    "change_password_desc": "Altere sua senha de acesso.",
-    "current_password": "Senha atual",
-    "current_password_placeholder": "Sua senha atual",
-    "new_password": "Nova senha",
-    "new_password_placeholder": "Sua nova senha",
-    "password_min_length": "Deve ter pelo menos 6 caracteres",
-    "confirm_new_password": "Confirmar nova senha",
-    "confirm_password_placeholder": "Confirme sua nova senha",
-    "changing": "Alterando...",
-    "api_tokens": "Tokens de API",
-    "manage_api_tokens": "Gerencie seus tokens para acesso à API.",
-    "subscription_info": "Informações sobre sua assinatura.",
-    "subscription_active": "Assinatura Ativa",
-    "subscription_active_desc": "Sua assinatura está ativa e em dia.",
-    "expires_on": "Expira em",
-    "subscription_cancelled_access_maintained": "Assinatura Cancelada - Acesso Mantido",
-    "subscription_cancelled": "Assinatura Cancelada",
-    "cancelled_on": "Cancelada em",
-    "access_until": "Você ainda tem acesso até",
-    "reason": "Motivo"
+  "theme": {
+    "settings": {
+      "title": "Configura\u00e7\u00f5es de Tema",
+      "description": "Escolha o tema da aplica\u00e7\u00e3o que melhor se adequa \u00e0 sua prefer\u00eancia.",
+      "appearance_label": "Apar\u00eancia",
+      "options": {
+        "light": "Claro",
+        "dark": "Escuro",
+        "system": "Sistema"
+      },
+      "preview_label": "Pr\u00e9via",
+      "preview": {
+        "card_title": "Exemplo de card",
+        "button": "Bot\u00e3o",
+        "description": "Este \u00e9 um exemplo de como o tema selecionado aparecer\u00e1 na aplica\u00e7\u00e3o."
+      }
+    }
   }
 }
