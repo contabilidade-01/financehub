@@ -592,8 +592,172 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Teste específico de endpoints de QR Code
   app.get("/api/admin/waha-test-qr", combinedAuth, requireSuperAdmin, wahaConfigController.testQRCodeEndpoints);
 
-  // Theme routes - require super admin access
-  app.use("/api/themes", combinedAuth, themesRouter);
+  // Theme routes - rotas públicas para temas ativos, demais exigem super admin
+  // Primeiro registrar as rotas públicas específicas
+  app.get("/api/themes/active/light", async (req, res) => {
+    const { default: themesRouter } = await import("./routes/themes");
+    // Pegar o handler específico da rota
+    const router = themesRouter;
+    // Como é complexo extrair handlers específicos, vamos duplicar a lógica aqui
+    try {
+      const result = await (await import("./db")).db.execute(
+        (await import("drizzle-orm")).sql`
+          SELECT 
+            id, 
+            name, 
+            light_config as lightConfig,
+            dark_config as darkConfig,
+            is_default as isDefault,
+            is_active_light as isActiveLight,
+            is_active_dark as isActiveDark,
+            created_at as createdAt,
+            updated_at as updatedAt
+          FROM custom_themes 
+          WHERE is_active_light = true
+          LIMIT 1
+        `
+      );
+
+      if (result.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: 'Nenhum tema ativo para light mode'
+        });
+      }
+
+      res.json({
+        success: true,
+        data: result[0]
+      });
+    } catch (error) {
+      console.error('Erro ao buscar tema ativo para light mode:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Erro interno do servidor'
+      });
+    }
+  });
+
+  app.get("/api/themes/active/dark", async (req, res) => {
+    try {
+      const result = await (await import("./db")).db.execute(
+        (await import("drizzle-orm")).sql`
+          SELECT 
+            id, 
+            name, 
+            light_config as lightConfig,
+            dark_config as darkConfig,
+            is_default as isDefault,
+            is_active_light as isActiveLight,
+            is_active_dark as isActiveDark,
+            created_at as createdAt,
+            updated_at as updatedAt
+          FROM custom_themes 
+          WHERE is_active_dark = true
+          LIMIT 1
+        `
+      );
+
+      if (result.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: 'Nenhum tema ativo para dark mode'
+        });
+      }
+
+      res.json({
+        success: true,
+        data: result[0]
+      });
+    } catch (error) {
+      console.error('Erro ao buscar tema ativo para dark mode:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Erro interno do servidor'
+      });
+    }
+  });
+
+  app.get("/api/themes/active/current", async (req, res) => {
+    try {
+      const result = await (await import("./db")).db.execute(
+        (await import("drizzle-orm")).sql`
+          SELECT 
+            id, 
+            name, 
+            light_config as lightConfig,
+            dark_config as darkConfig,
+            is_default as isDefault,
+            created_at as createdAt,
+            updated_at as updatedAt
+          FROM custom_themes 
+          WHERE is_default = true
+          LIMIT 1
+        `
+      );
+
+      if (result.length === 0) {
+        // Retornar tema padrão hardcoded
+        const defaultTheme = {
+          name: 'Padrão FinanceHub',
+          lightConfig: {
+            background: '0 0% 98%',
+            foreground: '240 10% 3.9%',
+            primary: '255 100% 70%',
+            primaryForeground: '0 0% 98%',
+            secondary: '157 100% 50%',
+            secondaryForeground: '0 0% 9%',
+            muted: '240 4.8% 95.9%',
+            mutedForeground: '240 3.8% 46.1%',
+            accent: '240 4.8% 95.9%',
+            accentForeground: '240 5.9% 10%',
+            border: '240 5.9% 90%',
+            card: '0 0% 100%',
+            cardForeground: '240 10% 3.9%',
+            destructive: '0 84.2% 60.2%',
+            destructiveForeground: '0 0% 98%',
+          },
+          darkConfig: {
+            background: '240 10% 3.9%',
+            foreground: '0 0% 98%',
+            primary: '255 100% 70%',
+            primaryForeground: '0 0% 98%',
+            secondary: '157 100% 50%',
+            secondaryForeground: '0 0% 9%',
+            muted: '240 3.7% 15.9%',
+            mutedForeground: '240 5% 64.9%',
+            accent: '240 3.7% 15.9%',
+            accentForeground: '0 0% 98%',
+            border: '240 3.7% 15.9%',
+            card: '240 10% 3.9%',
+            cardForeground: '0 0% 98%',
+            destructive: '0 62.8% 30.6%',
+            destructiveForeground: '0 0% 98%',
+          },
+          isDefault: true
+        };
+
+        return res.json({
+          success: true,
+          data: defaultTheme
+        });
+      }
+
+      res.json({
+        success: true,
+        data: result[0]
+      });
+    } catch (error) {
+      console.error('Erro ao buscar tema ativo:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Erro interno do servidor'
+      });
+    }
+  });
+
+  // Demais rotas de temas exigem autenticação de super admin
+  app.use("/api/themes", combinedAuth, requireSuperAdmin, themesRouter);
 
   // Changelog endpoint - public access for version info  
   app.get("/api/changelog", (req: Request, res: Response) => {

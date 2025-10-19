@@ -42,7 +42,10 @@
     "status": {
       "active": "Activo",
       "inactive": "Inactivo"
-    }
+    },
+    "deleting": "Eliminando...",
+    "category": "Categoría",
+    "payment_method": "Método de Pago"
   },
   "unsaved_changes": {
     "title": "Cambios no guardados",
@@ -191,7 +194,18 @@
     "description": "Descripción",
     "description_placeholder": "Descripción de la transacción",
     "amount": "Monto",
-    "date": "Fecha"
+    "date": "Fecha",
+    "select_payment_method": "Seleccionar un método de pago",
+    "create_transaction": "Crear transacción",
+    "new_income": "Nuevo Ingreso",
+    "new_expense": "Nuevo Gasto",
+    "fill_details_income": "Complete los detalles para registrar un nuevo ingreso.",
+    "fill_details_expense": "Complete los detalles para registrar un nuevo gasto.",
+    "no_categories": "No hay categorías disponibles",
+    "no_payment_methods": "No hay métodos de pago disponibles",
+    "no_wallet_available": "No hay billetera disponible",
+    "save_error": "No se pudo guardar la transacción.",
+    "edit_description": "Edite los detalles de la transacción a continuación."
   },
   "validation": {
     "name_min_length": "El nombre debe tener al menos 2 caracteres",
@@ -312,7 +326,9 @@
       "Transporte": "Transporte",
       "Vestuário": "Vestuario",
       "Viagem": "Viaje"
-    }
+    },
+    "no_categories_available": "No hay categorías disponibles",
+    "no_categories_found": "No se encontraron categorías"
   },
   "reports": {
     "months": {
@@ -395,7 +411,8 @@
     "form": {
       "name_placeholder": "Nombre del método de pago",
       "description_placeholder": "Descripción (opcional)"
-    }
+    },
+    "no_methods_available": "No hay métodos de pago disponibles"
   },
   "reminders": {
     "title": "Recordatorios",
@@ -563,13 +580,105 @@
     "customize": {
       "title": "Personalización del Sistema",
       "settings": "Configuraciones",
+      "customize_saas": "Personalizar SaaS",
+      "system_logo": "Logo del sistema",
+      "logo_description": "Cambie los logos mostrados en la parte superior de la página de inicio de sesión y en el menú lateral. Tamaño recomendado: 230x60px (PNG o SVG). Puede subir una versión para el modo claro y otra para el modo oscuro.",
+      "select_logo_light": "Seleccionar Logo Light",
+      "select_logo_dark": "Seleccionar Logo Dark",
+      "logo_light": "Logo Light",
+      "logo_dark": "Logo Dark",
+      "saving": "Guardando...",
+      "save": "Guardar",
       "current_language": "Idioma Actual del Sistema",
       "current_language_desc": "Idioma actualmente activo en todo el sistema",
       "system_languages": "Idiomas del Sistema",
       "loading_language": "Cargando configuraciones de idioma...",
       "error_loading": "Error al cargar configuraciones",
       "general_settings": "Configuraciones Generales",
-      "general_settings_desc": "Configuraciones adicionales para los mensajes de bienvenida."
+      "general_settings_desc": "Configuraciones adicionales para los mensajes de bienvenida.",
+      "welcome_messages": "Mensajes de Bienvenida",
+      "welcome_messages_desc": "Configure mensajes personalizados para diferentes tipos de usuarios.",
+      "new_user_welcome": "Bienvenida - Usuario Recién Registrado",
+      "new_user_desc": "Mensaje mostrado cuando el usuario acaba de ser registrado, con orientaciones de bienvenida.",
+      "inactive_user_welcome": "Bienvenida - Usuario No Activo",
+      "inactive_user_desc": "Mensaje mostrado para usuarios que se registraron pero aún no han activado su cuenta a través del pago.",
+      "message_title": "Título del Mensaje",
+      "message_content": "Contenido del Mensaje",
+      "welcome_email": "Email de Bienvenida",
+      "use_name_placeholder": "Use {nome} para incluir el nombre del usuario",
+      "email_after_signup": "Email enviado después del registro exitoso",
+      "use_dynamic_placeholders": "Use {nome} y {link_pagamento} para incluir información dinámica",
+      "save_welcome_message": "Guardar Mensaje de Bienvenida",
+      "save_activation_message": "Guardar Mensaje de Activación",
+      "save_all_messages": "Guardar Todos los Mensajes",
+      "placeholders": {
+        "welcome_title": "¡Bienvenido a FinanceHub!",
+        "activation_title": "¡Activa tu cuenta para comenzar!",
+        "activated_title": "¡Tu cuenta ha sido activada!",
+        "notification_title": "Ingrese el título de la notificación",
+        "notification_message": "Ingrese el mensaje de la notificación",
+        "session_name": "Ej: atencion-1, ventas, soporte",
+        "phone_number": "Ej: 5541999887766",
+        "pairing_code": "Ingrese el código recibido",
+        "auth_password": "Deje vacío si no usa autenticación"
+      },
+      "notifications": {
+        "title_required": "El título y mensaje son obligatorios",
+        "notification_sent": "Notificación enviada con éxito",
+        "notification_error": "Error al enviar notificación",
+        "broadcast_sent": "Broadcast enviado a todos los SuperAdmins",
+        "messages_error": "Error al cargar mensajes",
+        "message_saved": "¡Mensaje guardado con éxito!",
+        "message_save_error": "Error al guardar mensaje",
+        "waha_config_error": "Error al cargar configuración WAHA",
+        "waha_config_saved": "¡Configuración WAHA guardada con éxito!",
+        "waha_config_save_error": "Error al guardar configuración WAHA",
+        "logo_too_large": "El logo debe tener hasta 1MB.",
+        "logo_updated": "¡Logo actualizado con éxito!",
+        "logo_upload_error": "Error al subir logo",
+        "logo_removed": "¡Logo eliminado con éxito!",
+        "logo_remove_error": "Error al eliminar logo",
+        "url_copied": "¡URL copiada!",
+        "url_copy_description": "URL del webhook copiada al portapapeles",
+        "url_copy_error": "No se pudo copiar la URL"
+      },
+      "status": {
+        "connected": "Conectado",
+        "connecting": "Conectando...",
+        "error": "Error de conexión",
+        "disconnected": "Desconectado",
+        "working": "CONECTADO",
+        "stopped": "DETENIDO",
+        "failed": "FALLIDO",
+        "unknown": "DESCONOCIDO",
+        "enabled": "Habilitada",
+        "disabled": "Deshabilitada"
+      },
+      "buttons": {
+        "testing": "Probando...",
+        "test_connection": "Probar Conexión",
+        "save_config": "Guardar Configuración",
+        "updating": "Actualizando...",
+        "update": "Actualizar",
+        "create_session": "Crear Sesión",
+        "save_webhooks": "Guardar Webhooks",
+        "close": "Cerrar",
+        "finish": "Finalizar",
+        "send_code": "Enviar Código",
+        "confirm": "Confirmar",
+        "generate_qr": "Generando QR Code...",
+        "update_qr": "Actualizando QR Code...",
+        "remove_logo": "Eliminar logo"
+      },
+      "labels": {
+        "logo_type": "Logo",
+        "light": "Light",
+        "dark": "Dark",
+        "integration": "Integración",
+        "webhook_hash": "Hash",
+        "generating": "Generando...",
+        "auto_generated": "Se generará automáticamente"
+      }
     },
     "database": {
       "title": "Gestión de la base de datos",
@@ -1030,6 +1139,8 @@
     },
     "form": {
       "code": "Código del Idioma",
+      "code.hint": "Usar formato ISO 639-1 (ej. pt-br, en-us)",
+      "code.readonly": "El código de idioma no se puede cambiar",
       "name": "Nombre del Idioma",
       "active": "Idioma Activo",
       "default": "Idioma Predeterminado"

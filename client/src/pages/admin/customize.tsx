@@ -221,8 +221,8 @@ function NotificationTestingCard() {
   const sendCustomNotification = async () => {
     if (!customNotification.title.trim() || !customNotification.message.trim()) {
       toast({
-        title: 'Erro',
-        description: 'Título e mensagem são obrigatórios',
+        title: t('common.error', 'Erro'),
+        description: t('admin.customize.notifications.title_required', 'Título e mensagem são obrigatórios'),
         variant: 'destructive',
       });
       return;
@@ -240,8 +240,8 @@ function NotificationTestingCard() {
 
       if (response.ok) {
         toast({
-          title: 'Sucesso',
-          description: 'Notificação enviada com sucesso',
+          title: t('common.success', 'Sucesso'),
+          description: t('admin.customize.notifications.notification_sent', 'Notificação enviada com sucesso'),
         });
         // Limpar formulário
         setCustomNotification({
@@ -334,10 +334,10 @@ function NotificationTestingCard() {
                 isConnected ? "bg-green-500 animate-pulse" : "bg-red-500"
               )} />
               <span className={getStatusColor(connectionStatus)}>
-                {connectionStatus === 'connected' && 'Conectado'}
-                {connectionStatus === 'connecting' && 'Conectando...'}
-                {connectionStatus === 'error' && 'Erro de conexão'}
-                {connectionStatus === 'disconnected' && 'Desconectado'}
+                {connectionStatus === 'connected' && t('admin.customize.status.connected', 'Conectado')}
+                {connectionStatus === 'connecting' && t('admin.customize.status.connecting', 'Conectando...')}
+                {connectionStatus === 'error' && t('admin.customize.status.error', 'Erro de conexão')}
+                {connectionStatus === 'disconnected' && t('admin.customize.status.disconnected', 'Desconectado')}
               </span>
             </div>
             <div className="text-sm text-muted-foreground">
@@ -440,7 +440,7 @@ function NotificationTestingCard() {
                 ...prev, 
                 title: e.target.value 
               }))}
-              placeholder="Digite o título da notificação"
+              placeholder={t('admin.customize.placeholders.notification_title', 'Digite o título da notificação')}
               className="w-full p-2 border rounded-md bg-background"
             />
           </div>
@@ -453,7 +453,7 @@ function NotificationTestingCard() {
                 ...prev, 
                 message: e.target.value 
               }))}
-              placeholder="Digite a mensagem da notificação"
+              placeholder={t('admin.customize.placeholders.notification_message', 'Digite a mensagem da notificação')}
               className="w-full p-2 border rounded-md bg-background h-20 resize-none"
             />
           </div>
@@ -665,7 +665,7 @@ export default function CustomizePage() {
       }
     } catch (error) {
       console.error('Erro ao carregar mensagens:', error);
-      toast({ title: 'Erro ao carregar mensagens', variant: 'destructive' });
+      toast({ title: t('admin.customize.notifications.messages_error', 'Erro ao carregar mensagens'), variant: 'destructive' });
     } finally {
       setIsLoadingMessages(false);
     }
@@ -684,14 +684,14 @@ export default function CustomizePage() {
       });
       
       if (response.ok) {
-        toast({ title: 'Mensagem salva com sucesso!' });
+        toast({ title: t('admin.customize.notifications.message_saved', 'Mensagem salva com sucesso!') });
         loadWelcomeMessages(); // Recarregar mensagens
       } else {
         throw new Error('Erro ao salvar mensagem');
       }
     } catch (error) {
       console.error('Erro ao salvar mensagem:', error);
-      toast({ title: 'Erro ao salvar mensagem', variant: 'destructive' });
+      toast({ title: t('admin.customize.notifications.message_save_error', 'Erro ao salvar mensagem'), variant: 'destructive' });
     } finally {
       setIsSavingMessage(false);
     }
@@ -1705,11 +1705,11 @@ export default function CustomizePage() {
       if (fileDark) setLogoDarkUrl('/api/logo?theme=dark&' + Date.now());
       setPreviewLight(null);
       setPreviewDark(null);
-      toast({ title: 'Logo atualizado com sucesso!' });
+      toast({ title: t('admin.customize.notifications.logo_updated', 'Logo atualizado com sucesso!') });
       // Disparar evento para Sidebar recarregar o logo
       window.dispatchEvent(new Event('logo-updated'));
     } catch (err) {
-      toast({ title: 'Erro ao enviar logo', variant: 'destructive' });
+      toast({ title: t('admin.customize.notifications.logo_upload_error', 'Erro ao enviar logo'), variant: 'destructive' });
     } finally {
       setIsUploading(false);
     }
@@ -1763,7 +1763,7 @@ export default function CustomizePage() {
                   )}
                 >
                   <Palette className="h-4 w-4" />
-                  Personalizar SaaS
+                  {t('admin.customize.customize_saas', 'Personalizar SaaS')}
                 </button>
                 <button
                   onClick={() => setActiveTab("mensagens")}
@@ -1773,7 +1773,7 @@ export default function CustomizePage() {
                   )}
                 >
                   <MessageSquare className="h-4 w-4" />
-                  Mensagens de Boas Vindas
+                  {t('admin.customize.welcome_messages', 'Mensagens de Boas Vindas')}
                 </button>
                 <button
                   onClick={() => setActiveTab("temas")}
@@ -1829,16 +1829,18 @@ export default function CustomizePage() {
           {activeTab === "personalizar" && (
             <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
               <CardHeader>
-                <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>Personalizar SaaS</CardTitle>
+                <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>{t('admin.customize.customize_saas', 'Personalizar SaaS')}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="mb-6">
-                  <h2 className="font-semibold mb-2">Logo do sistema</h2>
-                  <p className="text-sm text-muted-foreground mb-4">Altere os logos exibidos no topo da página de login e no menu lateral. Tamanho recomendado: <b>230x60px</b> (PNG ou SVG).<br/>Você pode enviar uma versão para o modo claro e outra para o modo escuro.</p>
+                  <h2 className="font-semibold mb-2">{t('admin.customize.system_logo', 'Logo do sistema')}</h2>
+                  <p className="text-sm text-muted-foreground mb-4" dangerouslySetInnerHTML={{
+                    __html: t('admin.customize.logo_description', 'Altere os logos exibidos no topo da página de login e no menu lateral. Tamanho recomendado: <b>230x60px</b> (PNG ou SVG).<br/>Você pode enviar uma versão para o modo claro e outra para o modo escuro.')
+                  }}></p>
                   <div className="flex flex-col md:flex-row gap-6 items-center justify-center">
                     {/* Light logo */}
                     <div className="flex flex-col items-center gap-2">
-                      <span className="text-xs mb-1">Logo Light</span>
+                      <span className="text-xs mb-1">{t('admin.customize.logo_light', 'Logo Light')}</span>
                       <SpinningBorder className="w-[230px] h-[60px]" borderSize={0} blurOffset={0} borderRadius={6}>
                         <div className="logo-inner bg-white">
                           {previewLight ? (
@@ -1846,7 +1848,7 @@ export default function CustomizePage() {
                           ) : logoLightUrl ? (
                             <>
                               <img src={logoLightUrl} alt="Logo light atual" />
-                              <button className="absolute top-1 right-1 text-red-500 hover:text-red-700" onClick={() => setShowDeleteModal('light')} title="Remover logo">
+                              <button className="absolute top-1 right-1 text-red-500 hover:text-red-700" onClick={() => setShowDeleteModal('light')} title={t('admin.customize.buttons.remove_logo', 'Remover logo')}>
                                 <Trash2 size={18} />
                               </button>
                             </>
@@ -1863,12 +1865,12 @@ export default function CustomizePage() {
                         onChange={e => handleFileChange(e, 'light')}
                       />
                       <Button variant="outline" onClick={() => document.getElementById('logo-light-input')?.click()} disabled={isUploading}>
-                        Selecionar Logo Light
+                        {t('admin.customize.select_logo_light', 'Selecionar Logo Light')}
                       </Button>
                     </div>
                     {/* Dark logo */}
                     <div className="flex flex-col items-center gap-2">
-                      <span className="text-xs mb-1">Logo Dark</span>
+                      <span className="text-xs mb-1">{t('admin.customize.logo_dark', 'Logo Dark')}</span>
                       <SpinningBorder className="w-[230px] h-[60px]" borderSize={0} blurOffset={0} borderRadius={6}>
                         <div className="logo-inner bg-zinc-900">
                           {previewDark ? (
@@ -1876,7 +1878,7 @@ export default function CustomizePage() {
                           ) : logoDarkUrl ? (
                             <>
                               <img src={logoDarkUrl} alt="Logo dark atual" />
-                              <button className="absolute top-1 right-1 text-red-500 hover:text-red-700" onClick={() => setShowDeleteModal('dark')} title="Remover logo">
+                              <button className="absolute top-1 right-1 text-red-500 hover:text-red-700" onClick={() => setShowDeleteModal('dark')} title={t('admin.customize.buttons.remove_logo', 'Remover logo')}>
                                 <Trash2 size={18} />
                               </button>
                             </>
@@ -1893,13 +1895,13 @@ export default function CustomizePage() {
                         onChange={e => handleFileChange(e, 'dark')}
                       />
                       <Button variant="outline" onClick={() => document.getElementById('logo-dark-input')?.click()} disabled={isUploading}>
-                        Selecionar Logo Dark
+                        {t('admin.customize.select_logo_dark', 'Selecionar Logo Dark')}
                       </Button>
                     </div>
                   </div>
                   <div className="flex gap-2 mt-4 justify-center">
                     <Button onClick={handleUpload} disabled={(!previewLight && !previewDark) || isUploading}>
-                      {isUploading ? 'Salvando...' : 'Salvar'}
+                      {isUploading ? t('admin.customize.saving', 'Salvando...') : t('admin.customize.save', 'Salvar')}
                     </Button>
                   </div>
                 </div>
@@ -1910,9 +1912,9 @@ export default function CustomizePage() {
           {activeTab === "mensagens" && (
             <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
               <CardHeader>
-                <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>Mensagens de Boas Vindas</CardTitle>
+                <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>{t('admin.customize.welcome_messages', 'Mensagens de Boas Vindas')}</CardTitle>
                 <CardDescription className={`${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>
-                  Configure mensagens personalizadas para diferentes tipos de usuários.
+                  {t('admin.customize.welcome_messages_desc', 'Configure mensagens personalizadas para diferentes tipos de usuários.')}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -2002,17 +2004,17 @@ export default function CustomizePage() {
                     <div className="p-6 border rounded-lg bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800">
                       <div className="flex items-center gap-2 mb-4">
                         <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                        <h3 className="font-semibold text-green-800 dark:text-green-200">Boas Vindas - Usuário Recém-Cadastrado</h3>
+                        <h3 className="font-semibold text-green-800 dark:text-green-200">{t('admin.customize.new_user_welcome', 'Boas Vindas - Usuário Recém-Cadastrado')}</h3>
                       </div>
                       <p className="text-sm text-green-700 dark:text-green-300 mb-4">
-                        Mensagem exibida quando o usuário acabou de ser cadastrado, com orientações de boas vindas.
+                        {t('admin.customize.new_user_desc', 'Mensagem exibida quando o usuário acabou de ser cadastrado, com orientações de boas vindas.')}
                       </p>
                       <div className="space-y-4">
                         <div>
-                          <label className="block text-sm font-medium mb-2 text-green-800 dark:text-green-200">Título da Mensagem</label>
+                          <label className="block text-sm font-medium mb-2 text-green-800 dark:text-green-200">{t('admin.customize.message_title', 'Título da Mensagem')}</label>
                           <input 
                             type="text" 
-                            placeholder="Bem-vindo ao FinanceHub!" 
+                            placeholder={t('admin.customize.placeholders.welcome_title', 'Bem-vindo ao FinanceHub!')} 
                             className="w-full px-3 py-2 border border-green-300 rounded-md bg-white dark:bg-gray-800"
                             value={welcomeMessages.new_user?.title || ''}
                             onChange={(e) => setWelcomeMessages(prev => ({
@@ -2022,7 +2024,7 @@ export default function CustomizePage() {
                           />
                         </div>
                       <div>
-                        <label className="block text-sm font-medium mb-2 text-green-800 dark:text-green-200">Conteúdo da Mensagem</label>
+                        <label className="block text-sm font-medium mb-2 text-green-800 dark:text-green-200">{t('admin.customize.message_content', 'Conteúdo da Mensagem')}</label>
                         <textarea 
                           placeholder="Olá {nome}! Seja bem-vindo ao FinanceHub. Estamos felizes em tê-lo conosco. Aqui você encontrará todas as ferramentas necessárias para gerenciar suas finanças de forma eficiente e organizada."
                           rows={6}
@@ -2034,11 +2036,11 @@ export default function CustomizePage() {
                           }))}
                         />
                         <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-                          Use {"{nome}"} para incluir o nome do usuário
+                          {t('admin.customize.use_name_placeholder', 'Use {nome} para incluir o nome do usuário')}
                         </p>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium mb-2 text-green-800 dark:text-green-200">Email de Boas Vindas</label>
+                        <label className="block text-sm font-medium mb-2 text-green-800 dark:text-green-200">{t('admin.customize.welcome_email', 'Email de Boas Vindas')}</label>
                         <textarea 
                           placeholder="Olá {nome}, seja bem-vindo ao FinanceHub! Sua conta foi criada com sucesso. Acesse nossa plataforma para começar a gerenciar suas finanças de forma inteligente."
                           rows={4}
@@ -2050,7 +2052,7 @@ export default function CustomizePage() {
                           }))}
                         />
                         <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-                          Email enviado após o cadastro bem-sucedido
+                          {t('admin.customize.email_after_signup', 'Email enviado após o cadastro bem-sucedido')}
                         </p>
                       </div>
                       <Button 
@@ -2065,7 +2067,7 @@ export default function CustomizePage() {
                         })}
                         disabled={isSavingMessage}
                       >
-                        {isSavingMessage ? 'Salvando...' : 'Salvar Mensagem de Boas Vindas'}
+                        {isSavingMessage ? t('admin.customize.saving', 'Salvando...') : t('admin.customize.save_welcome_message', 'Salvar Mensagem de Boas Vindas')}
                       </Button>
                     </div>
                   </div>
@@ -2074,17 +2076,17 @@ export default function CustomizePage() {
                   <div className="p-6 border rounded-lg bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-800">
                     <div className="flex items-center gap-2 mb-4">
                       <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
-                      <h3 className="font-semibold text-orange-800 dark:text-orange-200">Boas Vindas - Usuário Não Ativo</h3>
+                      <h3 className="font-semibold text-orange-800 dark:text-orange-200">{t('admin.customize.inactive_user_welcome', 'Boas Vindas - Usuário Não Ativo')}</h3>
                     </div>
                     <p className="text-sm text-orange-700 dark:text-orange-300 mb-4">
-                      Mensagem exibida para usuários que se cadastraram mas ainda não ativaram a conta através do pagamento.
+                      {t('admin.customize.inactive_user_desc', 'Mensagem exibida para usuários que se cadastraram mas ainda não ativaram a conta através do pagamento.')}
                     </p>
                     <div className="space-y-4">
                       <div>
-                        <label className="block text-sm font-medium mb-2 text-orange-800 dark:text-orange-200">Título da Mensagem</label>
+                        <label className="block text-sm font-medium mb-2 text-orange-800 dark:text-orange-200">{t('admin.customize.message_title', 'Título da Mensagem')}</label>
                         <input 
                           type="text" 
-                          placeholder="Ative sua conta para começar!" 
+                          placeholder={t('admin.customize.placeholders.activation_title', 'Ative sua conta para começar!')} 
                           className="w-full px-3 py-2 border border-orange-300 rounded-md bg-white dark:bg-gray-800"
                           value={welcomeMessages.inactive_user?.title || ''}
                           onChange={(e) => setWelcomeMessages(prev => ({
@@ -2094,7 +2096,7 @@ export default function CustomizePage() {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium mb-2 text-orange-800 dark:text-orange-200">Conteúdo da Mensagem</label>
+                        <label className="block text-sm font-medium mb-2 text-orange-800 dark:text-orange-200">{t('admin.customize.message_content', 'Conteúdo da Mensagem')}</label>
                         <textarea 
                           placeholder="Olá {nome}! Sua conta foi criada com sucesso, mas ainda não está ativa. Para acessar todos os recursos do FinanceHub, você precisa ativar sua assinatura. Clique no botão abaixo para efetuar o pagamento e começar a usar nossa plataforma."
                           rows={6}
@@ -2138,7 +2140,7 @@ export default function CustomizePage() {
                           }))}
                         />
                         <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">
-                          Use {"{nome}"} e {"{link_pagamento}"} para incluir informações dinâmicas
+                          {t('admin.customize.use_dynamic_placeholders', 'Use {nome} e {link_pagamento} para incluir informações dinâmicas')}
                         </p>
                       </div>
                       <Button 
@@ -2154,7 +2156,7 @@ export default function CustomizePage() {
                         })}
                         disabled={isSavingMessage}
                       >
-                        {isSavingMessage ? 'Salvando...' : 'Salvar Mensagem de Ativação'}
+                        {isSavingMessage ? t('admin.customize.saving', 'Salvando...') : t('admin.customize.save_activation_message', 'Salvar Mensagem de Ativação')}
                       </Button>
                     </div>
                   </div>
@@ -2170,10 +2172,10 @@ export default function CustomizePage() {
                     </p>
                     <div className="space-y-4">
                       <div>
-                        <label className="block text-sm font-medium mb-2 text-blue-800 dark:text-blue-200">Título da Mensagem</label>
+                        <label className="block text-sm font-medium mb-2 text-blue-800 dark:text-blue-200">{t('admin.customize.message_title', 'Título da Mensagem')}</label>
                         <input 
                           type="text" 
-                          placeholder="Sua conta foi ativada!" 
+                          placeholder={t('admin.customize.placeholders.activated_title', 'Sua conta foi ativada!')} 
                           className="w-full px-3 py-2 border border-blue-300 rounded-md bg-white dark:bg-gray-800"
                           value={welcomeMessages.activated?.title || ''}
                           onChange={(e) => setWelcomeMessages(prev => ({
@@ -2183,7 +2185,7 @@ export default function CustomizePage() {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium mb-2 text-blue-800 dark:text-blue-200">Conteúdo da Mensagem</label>
+                        <label className="block text-sm font-medium mb-2 text-blue-800 dark:text-blue-200">{t('admin.customize.message_content', 'Conteúdo da Mensagem')}</label>
                         <textarea 
                           placeholder="Olá {nome}! Temos uma ótima notícia: sua conta no FinanceHub foi ativada com sucesso! Agora você tem acesso completo a todos os recursos da plataforma."
                           rows={6}
@@ -2226,7 +2228,7 @@ export default function CustomizePage() {
                         })}
                         disabled={isSavingMessage}
                       >
-                        {isSavingMessage ? 'Salvando...' : 'Salvar Mensagem de Ativação'}
+                        {isSavingMessage ? t('admin.customize.saving', 'Salvando...') : t('admin.customize.save_activation_message', 'Salvar Mensagem de Ativação')}
                       </Button>
                     </div>
                   </div>
@@ -2292,7 +2294,7 @@ export default function CustomizePage() {
                         disabled={isSavingMessage}
                         className="mt-4"
                       >
-                        {isSavingMessage ? 'Salvando...' : 'Salvar Todas as Mensagens'}
+                        {isSavingMessage ? t('admin.customize.saving', 'Salvando...') : t('admin.customize.save_all_messages', 'Salvar Todas as Mensagens')}
                       </Button>
                     </div>
                   </div>
@@ -2360,7 +2362,7 @@ export default function CustomizePage() {
                         <label className="block text-sm font-medium mb-2">API Key</label>
                         <input
                           type="password"
-                          placeholder="Deixe vazio se não usar autenticação"
+                          placeholder={t('admin.customize.placeholders.auth_password', 'Deixe vazio se não usar autenticação')}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white dark:bg-gray-800"
                           value={wahaConfig.api_key || ''}
                           onChange={(e) => setWahaConfig(prev => ({ ...prev, api_key: e.target.value }))}
@@ -2384,14 +2386,14 @@ export default function CustomizePage() {
                         <label className="block text-sm font-medium mb-2">
                           Webhook URL (Gerada Automaticamente)
                           <span className="ml-2 text-xs font-normal text-blue-600 dark:text-blue-400">
-                            Hash: {wahaConfig.webhook_hash || 'Gerando...'}
+                            {t('admin.customize.labels.webhook_hash', 'Hash')}: {wahaConfig.webhook_hash || t('admin.customize.labels.generating', 'Gerando...')}
                           </span>
                         </label>
                         <div className="flex gap-2">
                           <input
                             type="url"
                             className="flex-1 px-3 py-2 border border-gray-300 rounded-md bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-400 cursor-not-allowed"
-                            value={wahaConfig.webhook_url || 'Será gerado automaticamente'}
+                            value={wahaConfig.webhook_url || t('admin.customize.labels.auto_generated', 'Será gerado automaticamente')}
                             readOnly
                           />
                           <button
@@ -2447,7 +2449,7 @@ export default function CustomizePage() {
                         onClick={saveWahaConfig}
                         disabled={isSavingWaha || !wahaConfig.waha_url}
                       >
-                        {isSavingWaha ? 'Salvando...' : 'Salvar Configuração'}
+                        {isSavingWaha ? t('admin.customize.saving', 'Salvando...') : t('admin.customize.buttons.save_config', 'Salvar Configuração')}
                       </Button>
                       
                       <Button 
@@ -2455,7 +2457,7 @@ export default function CustomizePage() {
                         onClick={testWahaConnection}
                         disabled={isTestingWaha || !wahaConfig.waha_url}
                       >
-                        {isTestingWaha ? 'Testando...' : 'Testar Conexão'}
+                        {isTestingWaha ? t('admin.customize.buttons.testing', 'Testando...') : t('admin.customize.buttons.test_connection', 'Testar Conexão')}
                       </Button>
                       
                       <Button 
@@ -2558,7 +2560,7 @@ export default function CustomizePage() {
                               wahaConfig.enabled ? 'bg-green-500' : 'bg-gray-400'
                             )}></div>
                             <span className="text-sm text-gray-600 dark:text-gray-400">
-                              Integração: {wahaConfig.enabled ? 'Habilitada' : 'Desabilitada'}
+                              {t('admin.customize.labels.integration', 'Integração')}: {wahaConfig.enabled ? t('admin.customize.status.enabled', 'Habilitada') : t('admin.customize.status.disabled', 'Desabilitada')}
                             </span>
                           </div>
                           <p className="text-xs text-gray-500 dark:text-gray-500">
@@ -2686,7 +2688,7 @@ export default function CustomizePage() {
                                           ? "bg-green-200 dark:bg-green-800 text-green-800 dark:text-green-200"
                                           : "bg-orange-200 dark:bg-orange-800 text-orange-800 dark:text-orange-200"
                                       )}>
-                                        {session.status === 'WORKING' ? 'CONECTADO' : session.status}
+                                        {session.status === 'WORKING' ? t('admin.customize.status.working', 'CONECTADO') : session.status}
                                       </span>
                                     </div>
                                   </button>
@@ -2922,7 +2924,7 @@ export default function CustomizePage() {
               <label className="block text-sm font-medium mb-2">Nome da Sessão *</label>
               <input
                 type="text"
-                placeholder="Ex: atendimento-1, vendas, suporte"
+                placeholder={t('admin.customize.placeholders.session_name', 'Ex: atendimento-1, vendas, suporte')}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white dark:bg-gray-800"
                 value={newSessionData.sessionName}
                 onChange={(e) => setNewSessionData(prev => ({ ...prev, sessionName: e.target.value }))}
@@ -2963,7 +2965,7 @@ export default function CustomizePage() {
                   Criando...
                 </>
               ) : (
-                'Criar Sessão'
+                t('admin.customize.buttons.create_session', 'Criar Sessão')
               )}
             </Button>
           </DialogFooter>
@@ -3166,7 +3168,7 @@ export default function CustomizePage() {
                       Salvando...
                     </>
                   ) : (
-                    'Salvar Webhooks'
+                    t('admin.customize.buttons.save_webhooks', 'Salvar Webhooks')
                   )}
                 </Button>
               </DialogFooter>
@@ -3273,7 +3275,7 @@ export default function CustomizePage() {
                 <div className="flex flex-col items-center space-y-3">
                   <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
                   <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    {isRefreshingQR ? "Atualizando QR Code..." : "Gerando QR Code..."}
+                    {isRefreshingQR ? t('admin.customize.buttons.update_qr', 'Atualizando QR Code...') : t('admin.customize.buttons.generate_qr', 'Gerando QR Code...')}
                   </span>
                   <p className="text-xs text-gray-500 text-center">
                     {isRefreshingQR ? "Buscando novo código" : "Iniciando sessão e preparando conexão"}
@@ -3388,7 +3390,7 @@ export default function CustomizePage() {
                   setConnectedSessionInfo(null);
                 }}
               >
-                {isSessionConnected ? "Concluir" : "Fechar"}
+                {isSessionConnected ? t('admin.customize.buttons.finish', 'Concluir') : t('admin.customize.buttons.close', 'Fechar')}
               </Button>
             </div>
           </div>
@@ -3419,7 +3421,7 @@ export default function CustomizePage() {
                   <label className="block text-sm font-medium mb-2">Número do WhatsApp</label>
                   <input
                     type="tel"
-                    placeholder="Ex: 5541999887766"
+                    placeholder={t('admin.customize.placeholders.phone_number', 'Ex: 5541999887766')}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white dark:bg-gray-800"
                     value={pairingPhoneNumber}
                     onChange={(e) => setPairingPhoneNumber(e.target.value.replace(/\D/g, ''))}
@@ -3447,7 +3449,7 @@ export default function CustomizePage() {
                   <label className="block text-sm font-medium mb-2">Código de Pareamento</label>
                   <input
                     type="text"
-                    placeholder="Digite o código recebido"
+                    placeholder={t('admin.customize.placeholders.pairing_code', 'Digite o código recebido')}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white dark:bg-gray-800 text-center font-mono text-lg"
                     value={pairingCode}
                     onChange={(e) => setPairingCode(e.target.value.replace(/\s/g, ''))}

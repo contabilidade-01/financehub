@@ -1,0 +1,12 @@
+{
+  "base": "en-us",
+  "baseKeyCount": 942,
+  "missingInEs": {
+    "count": 0,
+    "keys": []
+  },
+  "missingInPt": {
+    "count": 0,
+    "keys": []
+  }
+}

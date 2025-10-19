@@ -42,7 +42,10 @@
     "status": {
       "active": "Ativo",
       "inactive": "Inativo"
-    }
+    },
+    "deleting": "Excluindo...",
+    "category": "Categoria",
+    "payment_method": "Forma de Pagamento"
   },
   "unsaved_changes": {
     "title": "Alterações não salvas",
@@ -191,7 +194,18 @@
     "description": "Descrição",
     "description_placeholder": "Descrição da transação",
     "amount": "Valor",
-    "date": "Data"
+    "date": "Data",
+    "select_payment_method": "Selecione uma forma de pagamento",
+    "create_transaction": "Criar transação",
+    "new_income": "Nova Receita",
+    "new_expense": "Nova Despesa",
+    "fill_details_income": "Preencha os detalhes para registrar uma nova receita.",
+    "fill_details_expense": "Preencha os detalhes para registrar uma nova despesa.",
+    "no_categories": "Nenhuma categoria disponível",
+    "no_payment_methods": "Nenhuma forma de pagamento disponível",
+    "no_wallet_available": "Nenhuma carteira disponível",
+    "save_error": "Não foi possível salvar a transação.",
+    "edit_description": "Edite os detalhes da transação abaixo."
   },
   "validation": {
     "name_min_length": "Nome deve ter pelo menos 2 caracteres",
@@ -207,7 +221,9 @@
     "category_required": "A categoria \u00e9 obrigat\u00f3ria",
     "payment_method_required": "A forma de pagamento \u00e9 obrigat\u00f3ria",
     "type_required": "O tipo \u00e9 obrigat\u00f3rio",
-    "date_required": "A data \u00e9 obrigat\u00f3ria"
+    "date_required": "A data \u00e9 obrigat\u00f3ria",
+    "invalid_category": "Categoria inv\u00e1lida.",
+    "invalid_payment_method": "Forma de pagamento inv\u00e1lida."
   },
   "register": {
     "title": "Criar Conta",
@@ -310,7 +326,9 @@
       "Transporte": "Transporte",
       "Vestuário": "Vestuário",
       "Viagem": "Viagem"
-    }
+    },
+    "no_categories_available": "Nenhuma categoria disponível",
+    "no_categories_found": "Nenhuma categoria encontrada"
   },
   "reports": {
     "months": {
@@ -393,7 +411,8 @@
     "form": {
       "name_placeholder": "Nome da forma de pagamento",
       "description_placeholder": "Descrição (opcional)"
-    }
+    },
+    "no_methods_available": "Nenhuma forma de pagamento disponível"
   },
   "reminders": {
     "title": "Lembretes",
@@ -470,6 +489,8 @@
     }
   },
   "settings": {
+    "title": "Configura\u00e7\u00f5es",
+    "change_password": "Alterar Senha",
     "loading": "Carregando configura\u00e7\u00f5es...",
     "profile_updated": "Perfil atualizado",
     "profile_updated_desc": "Suas informa\u00e7\u00f5es foram atualizadas com sucesso!",
@@ -559,13 +580,105 @@
     "customize": {
       "title": "Personaliza\u00e7\u00e3o do Sistema",
       "settings": "Configura\u00e7\u00f5es",
+      "customize_saas": "Personalizar SaaS",
+      "system_logo": "Logo do sistema",
+      "logo_description": "Altere os logos exibidos no topo da p\u00e1gina de login e no menu lateral. Tamanho recomendado: 230x60px (PNG ou SVG). Voc\u00ea pode enviar uma vers\u00e3o para o modo claro e outra para o modo escuro.",
+      "select_logo_light": "Selecionar Logo Light",
+      "select_logo_dark": "Selecionar Logo Dark",
+      "logo_light": "Logo Light",
+      "logo_dark": "Logo Dark",
+      "saving": "Salvando...",
+      "save": "Salvar",
       "current_language": "Idioma Atual do Sistema",
       "current_language_desc": "Idioma atualmente ativo em todo o sistema",
       "system_languages": "Idiomas do Sistema",
       "loading_language": "Carregando configura\u00e7\u00f5es de idioma...",
       "error_loading": "Erro ao carregar configura\u00e7\u00f5es",
       "general_settings": "Configura\u00e7\u00f5es Gerais",
-      "general_settings_desc": "Configura\u00e7\u00f5es adicionais para as mensagens de boas vindas."
+      "general_settings_desc": "Configura\u00e7\u00f5es adicionais para as mensagens de boas vindas.",
+      "welcome_messages": "Mensagens de Boas Vindas",
+      "welcome_messages_desc": "Configure mensagens personalizadas para diferentes tipos de usu\u00e1rios.",
+      "new_user_welcome": "Boas Vindas - Usu\u00e1rio Rec\u00e9m-Cadastrado",
+      "new_user_desc": "Mensagem exibida quando o usu\u00e1rio acabou de ser cadastrado, com orienta\u00e7\u00f5es de boas vindas.",
+      "inactive_user_welcome": "Boas Vindas - Usu\u00e1rio N\u00e3o Ativo",
+      "inactive_user_desc": "Mensagem exibida para usu\u00e1rios que se cadastraram mas ainda n\u00e3o ativaram a conta atrav\u00e9s do pagamento.",
+      "message_title": "T\u00edtulo da Mensagem",
+      "message_content": "Conte\u00fado da Mensagem",
+      "welcome_email": "Email de Boas Vindas",
+      "use_name_placeholder": "Use {nome} para incluir o nome do usu\u00e1rio",
+      "email_after_signup": "Email enviado ap\u00f3s o cadastro bem-sucedido",
+      "use_dynamic_placeholders": "Use {nome} e {link_pagamento} para incluir informa\u00e7\u00f5es din\u00e2micas",
+      "save_welcome_message": "Salvar Mensagem de Boas Vindas",
+      "save_activation_message": "Salvar Mensagem de Ativa\u00e7\u00e3o",
+      "save_all_messages": "Salvar Todas as Mensagens",
+      "placeholders": {
+        "welcome_title": "Bem-vindo ao FinanceHub!",
+        "activation_title": "Ative sua conta para come\u00e7ar!",
+        "activated_title": "Sua conta foi ativada!",
+        "notification_title": "Digite o t\u00edtulo da notifica\u00e7\u00e3o",
+        "notification_message": "Digite a mensagem da notifica\u00e7\u00e3o",
+        "session_name": "Ex: atendimento-1, vendas, suporte",
+        "phone_number": "Ex: 5541999887766",
+        "pairing_code": "Digite o c\u00f3digo recebido",
+        "auth_password": "Deixe vazio se n\u00e3o usar autentica\u00e7\u00e3o"
+      },
+      "notifications": {
+        "title_required": "T\u00edtulo e mensagem s\u00e3o obrigat\u00f3rios",
+        "notification_sent": "Notifica\u00e7\u00e3o enviada com sucesso",
+        "notification_error": "Erro ao enviar notifica\u00e7\u00e3o",
+        "broadcast_sent": "Broadcast enviado para todos os SuperAdmins",
+        "messages_error": "Erro ao carregar mensagens",
+        "message_saved": "Mensagem salva com sucesso!",
+        "message_save_error": "Erro ao salvar mensagem",
+        "waha_config_error": "Erro ao carregar configura\u00e7\u00e3o WAHA",
+        "waha_config_saved": "Configura\u00e7\u00e3o WAHA salva com sucesso!",
+        "waha_config_save_error": "Erro ao salvar configura\u00e7\u00e3o WAHA",
+        "logo_too_large": "O logo deve ter at\u00e9 1MB.",
+        "logo_updated": "Logo atualizado com sucesso!",
+        "logo_upload_error": "Erro ao enviar logo",
+        "logo_removed": "Logo removido com sucesso!",
+        "logo_remove_error": "Erro ao remover logo",
+        "url_copied": "URL copiada!",
+        "url_copy_description": "URL do webhook foi copiada para a \u00e1rea de transfer\u00eancia",
+        "url_copy_error": "N\u00e3o foi poss\u00edvel copiar a URL"
+      },
+      "status": {
+        "connected": "Conectado",
+        "connecting": "Conectando...",
+        "error": "Erro de conex\u00e3o",
+        "disconnected": "Desconectado",
+        "working": "CONECTADO",
+        "stopped": "PARADO",
+        "failed": "FALHADO",
+        "unknown": "DESCONHECIDO",
+        "enabled": "Habilitada",
+        "disabled": "Desabilitada"
+      },
+      "buttons": {
+        "testing": "Testando...",
+        "test_connection": "Testar Conex\u00e3o",
+        "save_config": "Salvar Configura\u00e7\u00e3o",
+        "updating": "Atualizando...",
+        "update": "Atualizar",
+        "create_session": "Criar Sess\u00e3o",
+        "save_webhooks": "Salvar Webhooks",
+        "close": "Fechar",
+        "finish": "Concluir",
+        "send_code": "Enviar C\u00f3digo",
+        "confirm": "Confirmar",
+        "generate_qr": "Gerando QR Code...",
+        "update_qr": "Atualizando QR Code...",
+        "remove_logo": "Remover logo"
+      },
+      "labels": {
+        "logo_type": "Logo",
+        "light": "Light",
+        "dark": "Dark",
+        "integration": "Integra\u00e7\u00e3o",
+        "webhook_hash": "Hash",
+        "generating": "Gerando...",
+        "auto_generated": "Ser\u00e1 gerado automaticamente"
+      }
     },
     "database": {
       "title": "Gerenciamento do Banco de Dados",
@@ -1026,6 +1139,8 @@
     },
     "form": {
       "code": "Código do Idioma",
+      "code.hint": "Use formato ISO 639-1 (ex. pt-br, en-us)",
+      "code.readonly": "O código do idioma não pode ser alterado",
       "name": "Nome do Idioma",
       "active": "Idioma Ativo",
       "default": "Idioma Padrão"
