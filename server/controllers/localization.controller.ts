@@ -2,7 +2,7 @@
 import { Request, Response } from 'express';
 import { db } from '../db';
 import { systemLocalization, localizationStrings, users, insertLocalizationSchema, updateLocalizationSchema, insertStringSchema, updateStringSchema } from '@shared/schema';
-import { eq, and, desc, asc } from 'drizzle-orm';
+import { eq, and, desc, asc, ne, sql } from 'drizzle-orm';
 import fs from 'fs';
 import path from 'path';
 
@@ -513,6 +513,170 @@ export const getActiveLocales = async (req: Request, res: Response) => {
     res.json(activeLocales);
   } catch (error) {
     console.error('Erro ao buscar idiomas ativos:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+};
+
+/**
+ * @swagger
+ * /api/admin/localization/{localeCode}/toggle:
+ *   put:
+ *     tags: [Localização]
+ *     summary: Ativar/desativar idioma
+ *     security:
+ *       - sessionAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: localeCode
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Código do idioma
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               isActive:
+ *                 type: boolean
+ *                 description: Estado de ativação do idioma
+ *     responses:
+ *       200:
+ *         description: Status do idioma atualizado com sucesso
+ *       404:
+ *         description: Idioma não encontrado
+ *       403:
+ *         description: Acesso negado
+ */
+export const toggleLanguageStatus = async (req: Request, res: Response) => {
+  try {
+    const { localeCode } = req.params;
+    const { isActive } = req.body;
+
+    // Verificar se o idioma existe
+    const existingLocale = await db.select()
+      .from(systemLocalization)
+      .where(eq(systemLocalization.localeCode, localeCode))
+      .limit(1);
+
+    if (existingLocale.length === 0) {
+      return res.status(404).json({ error: 'Idioma não encontrado' });
+    }
+
+    // Não permitir desativar o último idioma ativo
+    if (!isActive) {
+      const activeCount = await db.select({ count: sql`count(*)` })
+        .from(systemLocalization)
+        .where(eq(systemLocalization.isActive, true));
+
+      if (activeCount[0]?.count <= 1) {
+        return res.status(400).json({ error: 'Não é possível desativar o último idioma ativo' });
+      }
+    }
+
+    // Atualizar status
+    await db.update(systemLocalization)
+      .set({ 
+        isActive,
+        updatedAt: new Date()
+      })
+      .where(eq(systemLocalization.localeCode, localeCode));
+
+    // Se estiver desativando e for o padrão, definir outro como padrão
+    if (!isActive && existingLocale[0].isDefault) {
+      const firstActive = await db.select()
+        .from(systemLocalization)
+        .where(and(
+          eq(systemLocalization.isActive, true),
+          ne(systemLocalization.localeCode, localeCode)
+        ))
+        .limit(1);
+
+      if (firstActive.length > 0) {
+        await db.update(systemLocalization)
+          .set({ 
+            isDefault: true,
+            updatedAt: new Date()
+          })
+          .where(eq(systemLocalization.localeCode, firstActive[0].localeCode));
+      }
+    }
+
+    res.json({ 
+      message: isActive ? 'Idioma ativado com sucesso' : 'Idioma desativado com sucesso',
+      localeCode,
+      isActive
+    });
+  } catch (error) {
+    console.error('Erro ao atualizar status do idioma:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+};
+
+/**
+ * @swagger
+ * /api/admin/localization/{localeCode}/set-default:
+ *   put:
+ *     tags: [Localização]
+ *     summary: Definir idioma como padrão
+ *     security:
+ *       - sessionAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: localeCode
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Código do idioma
+ *     responses:
+ *       200:
+ *         description: Idioma padrão definido com sucesso
+ *       404:
+ *         description: Idioma não encontrado
+ *       400:
+ *         description: Idioma deve estar ativo para ser padrão
+ *       403:
+ *         description: Acesso negado
+ */
+export const setDefaultLanguage = async (req: Request, res: Response) => {
+  try {
+    const { localeCode } = req.params;
+
+    // Verificar se o idioma existe e está ativo
+    const existingLocale = await db.select()
+      .from(systemLocalization)
+      .where(eq(systemLocalization.localeCode, localeCode))
+      .limit(1);
+
+    if (existingLocale.length === 0) {
+      return res.status(404).json({ error: 'Idioma não encontrado' });
+    }
+
+    // Remover padrão de todos os outros idiomas
+    await db.update(systemLocalization)
+      .set({ 
+        isDefault: false,
+        updatedAt: new Date()
+      })
+      .where(ne(systemLocalization.localeCode, localeCode));
+
+    // Definir este como padrão e ativá-lo automaticamente
+    await db.update(systemLocalization)
+      .set({ 
+        isDefault: true,
+        isActive: true,
+        updatedAt: new Date()
+      })
+      .where(eq(systemLocalization.localeCode, localeCode));
+
+    res.json({ 
+      message: 'Idioma padrão definido com sucesso',
+      localeCode
+    });
+  } catch (error) {
+    console.error('Erro ao definir idioma padrão:', error);
     res.status(500).json({ error: 'Erro interno do servidor' });
   }
 };

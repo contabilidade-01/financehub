@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Switch } from '@/components/ui/switch';
 import { SpinningBorder } from '@/components/ui/spinning-border';
 import { WhatsAppChatModal } from '@/components/whatsapp-chat-modal';
 import { useAuth } from '@/hooks/use-auth';
@@ -51,6 +53,89 @@ function LanguageManagementSection() {
   const { t, locale, availableLocales, isLoading, error } = useLocalization();
   const { theme } = useTheme();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  // Função para ativar/desativar idioma
+  const handleToggleLanguage = async (localeCode: string, isActive: boolean) => {
+    try {
+      if (isActive) {
+        // Se estiver ativando, define como padrão
+        const response = await fetch(`/api/admin/localization/${localeCode}/set-default`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include'
+        });
+        if (response.ok) {
+          toast({
+            title: t('admin.customize.language_set_default', 'Idioma definido como padrão com sucesso')
+          });
+          // Invalidar queries para atualizar a interface automaticamente
+          queryClient.invalidateQueries({ queryKey: ['availableLocales'] });
+          queryClient.invalidateQueries({ queryKey: ['defaultLocale'] });
+        } else {
+          throw new Error('Erro ao definir idioma como padrão');
+        }
+      } else {
+        // Se estiver desativando, apenas desativa
+        const response = await fetch(`/api/admin/localization/${localeCode}/toggle`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({ isActive })
+        });
+        if (response.ok) {
+          toast({
+            title: t('admin.customize.language_deactivated', 'Idioma desativado com sucesso')
+          });
+          // Invalidar queries para atualizar a interface automaticamente
+          queryClient.invalidateQueries({ queryKey: ['availableLocales'] });
+          queryClient.invalidateQueries({ queryKey: ['defaultLocale'] });
+        } else {
+          throw new Error('Erro ao desativar idioma');
+        }
+      }
+    } catch (error) {
+      toast({
+        title: 'Erro',
+        description: 'Erro ao atualizar idioma',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  // Função para definir como padrão
+  const handleSetDefault = async (localeCode: string) => {
+    try {
+      const response = await fetch(`/api/admin/localization/${localeCode}/set-default`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include'
+      });
+
+      if (response.ok) {
+        toast({
+          title: t('admin.customize.default_language_set', 'Idioma padrão definido com sucesso')
+        });
+        // Invalidar queries para atualizar a interface automaticamente
+        queryClient.invalidateQueries({ queryKey: ['availableLocales'] });
+        queryClient.invalidateQueries({ queryKey: ['defaultLocale'] });
+      } else {
+        throw new Error('Erro ao definir idioma padrão');
+      }
+    } catch (error) {
+      toast({
+        title: 'Erro',
+        description: 'Erro ao definir idioma padrão',
+        variant: 'destructive'
+      });
+    }
+  };
 
   if (isLoading) {
     return (
@@ -117,18 +202,18 @@ function LanguageManagementSection() {
         <CardHeader>
           <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} flex items-center gap-2`}>
             <Settings className="h-5 w-5" />
-            Idiomas Disponíveis
+            {t('admin.customize.language_activation', 'Ativação de Idiomas')}
           </CardTitle>
           <CardDescription className={`${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>
-            Lista de todos os idiomas configurados no sistema
+            {t('admin.customize.language_activation_desc', 'Ative ou desative idiomas disponíveis no sistema')}
           </CardDescription>
         </CardHeader>
         <CardContent>
           {availableLocales.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <Globe className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>Nenhum idioma configurado</p>
-              <p className="text-sm">Configure idiomas através do painel administrativo</p>
+              <p>{t('admin.customize.no_languages_configured', 'Nenhum idioma configurado')}</p>
+              <p className="text-sm">{t('admin.customize.configure_languages_admin', 'Configure idiomas através do painel administrativo')}</p>
             </div>
           ) : (
             <div className="grid gap-4">
@@ -142,22 +227,53 @@ function LanguageManagementSection() {
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="font-medium">{lang.localeName}</h4>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-medium">{lang.localeName}</h4>
+                        <div className="flex gap-1">
+                          {lang.isDefault && (
+                            <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
+                              {t('admin.customize.default_badge', 'Padrão')}
+                            </span>
+                          )}
+                          {lang.localeCode === locale && (
+                            <span className="px-2 py-1 bg-primary text-primary-foreground text-xs rounded-full">
+                              {t('admin.customize.active_badge', 'Ativo')}
+                            </span>
+                          )}
+                        </div>
+                      </div>
                       <p className="text-sm text-muted-foreground">
                         {lang.localeCode}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      {lang.isDefault && (
-                        <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
-                          Padrão
-                        </span>
+                    <div className="flex items-center gap-3">
+                      {/* Switch para ativar/desativar (apenas se não for o idioma atual ativo) */}
+                      {lang.localeCode !== locale ? (
+                        <div className="flex items-center gap-2">
+                          <label className="text-sm">
+                            {lang.isActive ? t('admin.customize.active_badge', 'Ativo') : t('admin.customize.inactive_badge', 'Inativo')}
+                          </label>
+                          <Switch
+                            checked={lang.isActive}
+                            onCheckedChange={(checked) => handleToggleLanguage(lang.localeCode, checked)}
+                          />
+                        </div>
+                      ) : (
+                        <div className="text-sm text-muted-foreground">
+                          {t('admin.customize.current_active_language', 'Idioma ativo no momento')}
+                        </div>
                       )}
-                      {lang.localeCode === locale && (
-                        <span className="px-2 py-1 bg-primary text-primary-foreground text-xs rounded-full">
-                          Ativo
-                        </span>
+                      
+                      {/* Botão para definir como padrão (apenas se ativo e não for padrão) */}
+                      {lang.isActive && !lang.isDefault && lang.localeCode !== locale && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleSetDefault(lang.localeCode)}
+                        >
+                          {t('admin.customize.set_as_default', 'Definir como Padrão')}
+                        </Button>
                       )}
                     </div>
                   </div>
@@ -173,24 +289,23 @@ function LanguageManagementSection() {
         <CardHeader>
           <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} flex items-center gap-2`}>
             <Settings className="h-5 w-5" />
-            Gerenciamento Avançado
+            {t('admin.customize.advanced_management', 'Gerenciamento Avançado')}
           </CardTitle>
           <CardDescription className={`${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>
-            Acesso ao painel completo de configuração de idiomas
+            {t('admin.customize.admin_panel_access', 'Acesso ao painel completo de configuração de idiomas')}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Para configurações avançadas como adicionar novos idiomas, importar traduções 
-              ou modificar configurações do sistema, acesse o painel dedicado.
+              {t('admin.customize.advanced_config_desc', 'Para configurações avançadas como adicionar novos idiomas, importar traduções ou modificar configurações do sistema, acesse o painel dedicado.')}
             </p>
             <Button 
               onClick={() => window.location.href = '/admin/language-settings'}
               className="w-full sm:w-auto"
             >
               <Globe className="h-4 w-4 mr-2" />
-              Abrir Painel de Idiomas
+              {t('admin.customize.open_languages_panel', 'Abrir Painel de Idiomas')}
             </Button>
           </div>
         </CardContent>
@@ -317,10 +432,10 @@ function NotificationTestingCard() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Bell className="h-5 w-5" />
-          Sistema de Notificações em Tempo Real
+          {t('admin.customize.notifications_realtime', 'Sistema de Notificações em Tempo Real')}
         </CardTitle>
         <CardDescription>
-          Teste e gerencie o sistema de notificações WebSocket para SuperAdmins
+          {t('admin.customize.notifications_desc', 'Teste e gerencie o sistema de notificações WebSocket para SuperAdmins')}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -1783,7 +1898,7 @@ export default function CustomizePage() {
                   )}
                 >
                   <Sparkles className="h-4 w-4" />
-                  Personalizar Cores
+                  {t('admin.customize.customize_colors', 'Personalizar Cores')}
                 </button>
                 <button
                   onClick={() => setActiveTab("idiomas")}
@@ -1816,7 +1931,7 @@ export default function CustomizePage() {
                   )}
                 >
                   <Bell className="h-4 w-4" />
-                  Sistema de Notificações
+                  {t('admin.customize.notifications_realtime', 'Sistema de Notificações')}
                 </button>
                 )}
               </div>

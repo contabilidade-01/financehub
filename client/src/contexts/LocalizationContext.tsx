@@ -11,6 +11,7 @@ interface LocalizationContextType {
     localeCode: string;
     localeName: string;
     isDefault: boolean;
+    isActive: boolean;
   }>;
   invalidateCache: () => void;
   refreshTranslations: () => Promise<void>;
@@ -37,7 +38,7 @@ const CACHE_DURATION = 0; // 0 = sem cache
 interface CachedData {
   locale: string;
   translations: Record<string, string>;
-  availableLocales: Array<{ localeCode: string; localeName: string; isDefault: boolean }>;
+  availableLocales: Array<{ localeCode: string; localeName: string; isDefault: boolean; isActive: boolean }>;
   timestamp: number;
 }
 
@@ -50,6 +51,7 @@ export const LocalizationProvider: React.FC<LocalizationProviderProps> = ({ chil
     localeCode: string;
     localeName: string;
     isDefault: boolean;
+    isActive: boolean;
   }>>([]);
 
   // Função para carregar do cache
@@ -112,12 +114,12 @@ export const LocalizationProvider: React.FC<LocalizationProviderProps> = ({ chil
     retry: 1,
   });
 
-  // Buscar idiomas ativos
+  // Buscar todos os idiomas (ativos e inativos)
   const { data: fetchedAvailableLocales = [] } = useQuery({
     queryKey: ['availableLocales'],
     queryFn: async () => {
       try {
-        const response = await fetch('/api/admin/localization/active');
+        const response = await fetch('/api/admin/localization');
         if (!response.ok) {
           return [];
         }

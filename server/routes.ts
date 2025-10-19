@@ -792,6 +792,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Importação de strings via JSON (apenas super admin)
   app.post('/api/admin/localization/:localeCode/import', auth, requireSuperAdmin, localizationController.importStringsFromJson);
+  
+  // Ativar/desativar idioma
+  app.put('/api/admin/localization/:localeCode/toggle', auth, requireSuperAdmin, localizationController.toggleLanguageStatus);
+  
+  // Definir idioma como padrão
+  app.put('/api/admin/localization/:localeCode/set-default', auth, requireSuperAdmin, localizationController.setDefaultLanguage);
 
   const httpServer = createServer(app);
   

@@ -12,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useThemeManager, CustomTheme, ThemeConfig } from '@/utils/theme-manager';
 import { useTheme } from 'next-themes';
 import { cn } from '@/lib/utils';
+import { useTranslation } from '@/contexts/LocalizationContext';
 import { 
   Palette, 
   Save, 
@@ -31,6 +32,7 @@ import {
 } from 'lucide-react';
 
 export function ThemeCustomizer() {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const { theme: currentMode } = useTheme();
   const themeManager = useThemeManager();
@@ -167,8 +169,8 @@ export function ThemeCustomizer() {
     } catch (error) {
       console.error('Erro ao carregar temas:', error);
       toast({
-        title: 'Erro',
-        description: 'Falha ao carregar temas salvos',
+        title: t('admin.customize.toast.error', 'Erro'),
+        description: t('admin.customize.toast.load_themes_error', 'Falha ao carregar temas salvos'),
         variant: 'destructive'
       });
     } finally {
@@ -296,8 +298,8 @@ export function ThemeCustomizer() {
     setDarkTheme(defaultDarkTheme);
     cancelPreview();
     toast({
-      title: 'Tema resetado',
-      description: 'Configurações restauradas para o padrão'
+      title: t('admin.customize.toast.theme_reset', 'Tema resetado'),
+      description: t('admin.customize.toast.theme_reset_desc', 'Configurações restauradas para o padrão')
     });
   };
 
@@ -305,8 +307,8 @@ export function ThemeCustomizer() {
   const saveTheme = async () => {
     if (!themeName.trim()) {
       toast({
-        title: 'Nome obrigatório',
-        description: 'Digite um nome para o tema',
+        title: t('admin.customize.toast.name_required', 'Nome obrigatório'),
+        description: t('admin.customize.toast.name_required_desc', 'Digite um nome para o tema'),
         variant: 'destructive'
       });
       return;
@@ -345,8 +347,8 @@ export function ThemeCustomizer() {
         themeManager.applyTheme(savedTheme, activeMode);
         
         toast({
-          title: 'Tema salvo e aplicado',
-          description: `Tema "${themeName}" salvo e aplicado com sucesso`
+          title: t('admin.customize.toast.theme_saved_applied', 'Tema salvo e aplicado'),
+          description: `${t('admin.customize.theme_name', 'Tema')} "${themeName}" ${t('admin.customize.toast.theme_saved_applied_desc', 'salvo e aplicado com sucesso')}`
         });
         setShowSaveModal(false);
         setThemeName('');
@@ -358,8 +360,8 @@ export function ThemeCustomizer() {
     } catch (error) {
       console.error('Erro ao salvar tema:', error);
       toast({
-        title: 'Erro',
-        description: 'Falha ao salvar tema',
+        title: t('admin.customize.toast.error', 'Erro'),
+        description: t('admin.customize.toast.save_theme_error', 'Falha ao salvar tema'),
         variant: 'destructive'
       });
     } finally {
@@ -377,14 +379,14 @@ export function ThemeCustomizer() {
       setDarkTheme(normalizedTheme.darkConfig);
       themeManager.applyTheme(normalizedTheme, activeMode);
       toast({
-        title: 'Tema aplicado',
-        description: `Tema "${normalizedTheme.name}" aplicado com sucesso`
+        title: t('admin.customize.toast.theme_applied', 'Tema aplicado'),
+        description: `${t('admin.customize.theme_name', 'Tema')} "${normalizedTheme.name}" ${t('admin.customize.toast.theme_applied_desc', 'aplicado com sucesso')}`
       });
     } catch (error) {
       console.error('Erro ao aplicar tema:', error);
       toast({
-        title: 'Erro',
-        description: 'Falha ao aplicar tema',
+        title: t('admin.customize.toast.error', 'Erro'),
+        description: t('admin.customize.toast.apply_theme_error', 'Falha ao aplicar tema'),
         variant: 'destructive'
       });
     }
@@ -398,8 +400,8 @@ export function ThemeCustomizer() {
     setDarkTheme(normalizedTheme.darkConfig);
     setThemeName(normalizedTheme.name);
     toast({
-      title: 'Editando tema',
-      description: `Carregando "${normalizedTheme.name}" para edição`
+      title: t('admin.customize.toast.editing_theme', 'Editando tema'),
+      description: `${t('admin.customize.toast.editing_theme_desc', 'Carregando')} "${normalizedTheme.name}" ${t('admin.customize.toast.editing_theme_desc', 'para edição')}`
     });
   };
 
@@ -407,8 +409,8 @@ export function ThemeCustomizer() {
   const saveEditedTheme = async () => {
     if (!editingTheme || !themeName.trim()) {
       toast({
-        title: 'Erro',
-        description: 'Nome do tema é obrigatório',
+        title: t('admin.customize.toast.error', 'Erro'),
+        description: t('admin.customize.toast.theme_name_required', 'Nome do tema é obrigatório'),
         variant: 'destructive'
       });
       return;
@@ -434,8 +436,8 @@ export function ThemeCustomizer() {
 
       if (response.ok) {
         toast({
-          title: 'Tema atualizado',
-          description: `Tema "${themeName}" atualizado com sucesso`
+          title: t('admin.customize.toast.theme_updated', 'Tema atualizado'),
+          description: `${t('admin.customize.theme_name', 'Tema')} "${themeName}" ${t('admin.customize.toast.theme_updated_desc', 'atualizado com sucesso')}`
         });
         setEditingTheme(null);
         setThemeName('');
@@ -447,8 +449,8 @@ export function ThemeCustomizer() {
     } catch (error) {
       console.error('Erro ao atualizar tema:', error);
       toast({
-        title: 'Erro',
-        description: 'Falha ao atualizar tema',
+        title: t('admin.customize.toast.error', 'Erro'),
+        description: t('admin.customize.toast.update_theme_error', 'Falha ao atualizar tema'),
         variant: 'destructive'
       });
     } finally {
@@ -474,8 +476,8 @@ export function ThemeCustomizer() {
 
       if (response.ok) {
         toast({
-          title: 'Tema ativado',
-          description: `Tema ativado para ${mode === 'light' ? 'modo claro' : 'modo escuro'}`
+          title: t('admin.customize.toast.theme_activated', 'Tema ativado'),
+          description: `${t('admin.customize.toast.theme_activated_desc', 'Tema ativado para')} ${mode === 'light' ? t('admin.customize.toast.light_mode_text', 'modo claro') : t('admin.customize.toast.dark_mode_text', 'modo escuro')}`
         });
         loadSavedThemes(); // Recarregar para atualizar os estados
         loadActiveThemeForCurrentMode(); // Aplicar automaticamente
@@ -486,8 +488,8 @@ export function ThemeCustomizer() {
     } catch (error) {
       console.error('Erro ao ativar tema para modo:', error);
       toast({
-        title: 'Erro',
-        description: 'Falha ao ativar tema para o modo',
+        title: t('admin.customize.toast.error', 'Erro'),
+        description: t('admin.customize.toast.activate_theme_error', 'Falha ao ativar tema para o modo'),
         variant: 'destructive'
       });
     }
@@ -522,16 +524,16 @@ export function ThemeCustomizer() {
         setShowImportModal(false);
         setImportData('');
         toast({
-          title: 'Tema importado',
-          description: `Tema "${theme.name}" importado com sucesso`
+          title: t('admin.customize.toast.theme_imported', 'Tema importado'),
+          description: `${t('admin.customize.theme_name', 'Tema')} "${theme.name}" ${t('admin.customize.toast.theme_imported_desc', 'importado com sucesso')}`
         });
       } else {
-        throw new Error('Formato de tema inválido');
+        throw new Error(t('admin.customize.toast.invalid_theme_format', 'Formato de tema inválido'));
       }
     } catch (error) {
       toast({
-        title: 'Erro',
-        description: 'Arquivo de tema inválido',
+        title: t('admin.customize.toast.error', 'Erro'),
+        description: t('admin.customize.toast.invalid_theme_file', 'Arquivo de tema inválido'),
         variant: 'destructive'
       });
     }
@@ -553,7 +555,7 @@ export function ThemeCustomizer() {
     return (
       <div className="flex items-center justify-center p-8">
         <div className="text-center">
-          <p className="text-muted-foreground">Carregando configuração de temas...</p>
+          <p className="text-muted-foreground">{t('admin.customize.loading_theme_config', 'Carregando configuração de temas...')}</p>
         </div>
       </div>
     );
@@ -566,15 +568,15 @@ export function ThemeCustomizer() {
         <div>
           <h2 className="text-2xl font-bold flex items-center gap-2">
             <Palette className="w-6 h-6 text-primary" />
-            Personalização de Temas
+            {t('admin.customize.theme_customization', 'Personalização de Temas')}
           </h2>
           <p className="text-muted-foreground">
-            Customize as cores do sistema para modo claro e escuro
+            {t('admin.customize.theme_customization_desc', 'Customize as cores do sistema para modo claro e escuro')}
           </p>
           
           {/* Indicador de Temas Ativos */}
           <div className="flex items-center gap-3 mt-3">
-            <span className="text-sm font-medium text-muted-foreground">Temas Ativos:</span>
+            <span className="text-sm font-medium text-muted-foreground">{t('admin.customize.active_themes', 'Temas Ativos')}:</span>
             {(() => {
               const activeLight = savedThemes.find(t => t.isActiveLight);
               const activeDark = savedThemes.find(t => t.isActiveDark);
@@ -584,24 +586,24 @@ export function ThemeCustomizer() {
                   {activeLight ? (
                     <Badge variant="outline" className="bg-yellow-50 border-yellow-200 text-yellow-800 dark:bg-yellow-900/20 dark:border-yellow-700 dark:text-yellow-300">
                       <Sun className="w-3 h-3 mr-1" />
-                      Light: {activeLight.name}
+                      {t('admin.customize.light_colors', 'Light')}: {activeLight.name}
                     </Badge>
                   ) : (
                     <Badge variant="outline" className="text-xs text-muted-foreground">
                       <Sun className="w-3 h-3 mr-1" />
-                      Light: Padrão
+                      {t('admin.customize.light_colors', 'Light')}: {t('admin.customize.default_theme', 'Padrão')}
                     </Badge>
                   )}
                   
                   {activeDark ? (
                     <Badge variant="outline" className="bg-blue-50 border-blue-200 text-blue-800 dark:bg-blue-900/20 dark:border-blue-700 dark:text-blue-300">
                       <Moon className="w-3 h-3 mr-1" />
-                      Dark: {activeDark.name}
+                      {t('admin.customize.dark_colors', 'Dark')}: {activeDark.name}
                     </Badge>
                   ) : (
                     <Badge variant="outline" className="text-xs text-muted-foreground">
                       <Moon className="w-3 h-3 mr-1" />
-                      Dark: Padrão
+                      {t('admin.customize.dark_colors', 'Dark')}: {t('admin.customize.default_theme', 'Padrão')}
                     </Badge>
                   )}
                 </div>
@@ -614,7 +616,7 @@ export function ThemeCustomizer() {
           {isPreviewMode && (
             <Badge variant="secondary" className="flex items-center gap-1">
               <Eye className="w-3 h-3" />
-              Preview Ativo
+              {t('admin.customize.preview_active', 'Preview Ativo')}
             </Badge>
           )}
           <Button
@@ -625,12 +627,12 @@ export function ThemeCustomizer() {
             {isPreviewMode ? (
               <>
                 <EyeOff className="w-4 h-4 mr-2" />
-                Cancelar Preview
+                {t('admin.customize.cancel_preview', 'Cancelar Preview')}
               </>
             ) : (
               <>
                 <Eye className="w-4 h-4 mr-2" />
-                Visualizar
+                {t('admin.customize.preview', 'Visualizar')}
               </>
             )}
           </Button>
@@ -645,7 +647,7 @@ export function ThemeCustomizer() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Sparkles className="w-5 h-5" />
-                Modo de Edição
+                {t('admin.customize.edit_mode', 'Modo de Edição')}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -653,11 +655,11 @@ export function ThemeCustomizer() {
                 <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="light" className="flex items-center gap-2">
                     <Sun className="w-4 h-4" />
-                    Light Mode
+                    {t('admin.customize.light_mode', 'Light Mode')}
                   </TabsTrigger>
                   <TabsTrigger value="dark" className="flex items-center gap-2">
                     <Moon className="w-4 h-4" />
-                    Dark Mode
+                    {t('admin.customize.dark_mode', 'Dark Mode')}
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
@@ -667,26 +669,26 @@ export function ThemeCustomizer() {
           {/* Editor de Cores */}
           <Card>
             <CardHeader>
-              <CardTitle>Cores do Tema ({activeMode === 'light' ? 'Claro' : 'Escuro'})</CardTitle>
+              <CardTitle>{t('admin.customize.theme_colors', 'Cores do Tema')} ({activeMode === 'light' ? t('admin.customize.light_colors', 'Claro') : t('admin.customize.dark_colors', 'Escuro')})</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 gap-4">
                 {/* Cores Principais */}
                 <div>
-                  <h4 className="font-medium mb-3">Cores Principais</h4>
+                  <h4 className="font-medium mb-3">{t('admin.customize.main_colors', 'Cores Principais')}</h4>
                   <div className="space-y-3">
                     <ColorPicker
-                      label="Cor Primária"
+                      label={t('admin.customize.primary_color', 'Cor Primária')}
                       value={currentTheme.primary}
                       onChange={(value) => updateColor('primary', value)}
                     />
                     <ColorPicker
-                      label="Cor Secundária"
+                      label={t('admin.customize.secondary_color', 'Cor Secundária')}
                       value={currentTheme.secondary}
                       onChange={(value) => updateColor('secondary', value)}
                     />
                     <ColorPicker
-                      label="Cor de Destaque"
+                      label={t('admin.customize.accent_color', 'Cor de Destaque')}
                       value={currentTheme.accent}
                       onChange={(value) => updateColor('accent', value)}
                     />
@@ -695,22 +697,22 @@ export function ThemeCustomizer() {
 
                 {/* Background e Textos */}
                 <div>
-                  <h4 className="font-medium mb-3">Background e Textos</h4>
+                  <h4 className="font-medium mb-3">{t('admin.customize.background_texts', 'Background e Textos')}</h4>
                   <div className="space-y-3">
                     <ColorPicker
-                      label="Fundo Principal"
+                      label={t('admin.customize.main_background', 'Fundo Principal')}
                       value={currentTheme.background}
                       onChange={(value) => updateColor('background', value)}
                     />
                     <ColorPicker
-                      label="Texto Principal"
+                      label={t('admin.customize.main_text', 'Texto Principal')}
                       value={currentTheme.foreground}
                       onChange={(value) => updateColor('foreground', value)}
                       showContrast={true}
                       contrastBackground={currentTheme.background}
                     />
                     <ColorPicker
-                      label="Fundo do Card"
+                      label={t('admin.customize.card_background', 'Fundo do Card')}
                       value={currentTheme.card}
                       onChange={(value) => updateColor('card', value)}
                     />
@@ -719,20 +721,20 @@ export function ThemeCustomizer() {
 
                 {/* Cores Auxiliares */}
                 <div>
-                  <h4 className="font-medium mb-3">Cores Auxiliares</h4>
+                  <h4 className="font-medium mb-3">{t('admin.customize.auxiliary_colors', 'Cores Auxiliares')}</h4>
                   <div className="space-y-3">
                     <ColorPicker
-                      label="Cor Silenciada"
+                      label={t('admin.customize.muted_color', 'Cor Silenciada')}
                       value={currentTheme.muted}
                       onChange={(value) => updateColor('muted', value)}
                     />
                     <ColorPicker
-                      label="Bordas"
+                      label={t('admin.customize.border_color', 'Bordas')}
                       value={currentTheme.border}
                       onChange={(value) => updateColor('border', value)}
                     />
                     <ColorPicker
-                      label="Cor Destrutiva"
+                      label={t('admin.customize.destructive_color', 'Cor Destrutiva')}
                       value={currentTheme.destructive}
                       onChange={(value) => updateColor('destructive', value)}
                     />
@@ -745,34 +747,34 @@ export function ThemeCustomizer() {
           {/* Ações */}
           <Card>
             <CardHeader>
-              <CardTitle>Ações</CardTitle>
+              <CardTitle>{t('admin.customize.actions', 'Ações')}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-2">
                 <Button onClick={() => setShowSaveModal(true)} className="flex items-center gap-2">
                   <Save className="w-4 h-4" />
-                  {editingTheme ? 'Salvar Alterações' : 'Salvar Tema'}
+                  {editingTheme ? t('admin.customize.save_changes', 'Salvar Alterações') : t('admin.customize.save_theme', 'Salvar Tema')}
                 </Button>
                 {editingTheme && (
                   <Button variant="outline" onClick={cancelEdit} className="flex items-center gap-2">
                     <RotateCcw className="w-4 h-4" />
-                    Cancelar Edição
+                    {t('admin.customize.cancel_edit', 'Cancelar Edição')}
                   </Button>
                 )}
                 
                 <Button variant="outline" onClick={resetToDefault} className="flex items-center gap-2">
                   <RotateCcw className="w-4 h-4" />
-                  Resetar
+                  {t('admin.customize.reset', 'Resetar')}
                 </Button>
                 
                 <Button variant="outline" onClick={exportTheme} className="flex items-center gap-2">
                   <Download className="w-4 h-4" />
-                  Exportar
+                  {t('admin.customize.export', 'Exportar')}
                 </Button>
                 
                 <Button variant="outline" onClick={() => setShowImportModal(true)} className="flex items-center gap-2">
                   <Upload className="w-4 h-4" />
-                  Importar
+                  {t('admin.customize.import', 'Importar')}
                 </Button>
               </div>
             </CardContent>
@@ -784,19 +786,19 @@ export function ThemeCustomizer() {
           <ThemePreview
             theme={currentTheme}
             mode={activeMode}
-            title={`Preview - ${activeMode === 'light' ? 'Modo Claro' : 'Modo Escuro'}`}
+            title={`${t('admin.customize.preview_mode_title', 'Preview - Modo')} ${activeMode === 'light' ? t('admin.customize.light_mode_preview', 'Claro') : t('admin.customize.dark_mode_preview', 'Escuro')}`}
           />
 
           {/* Temas Salvos */}
           <Card>
             <CardHeader>
-              <CardTitle>Temas Salvos</CardTitle>
+              <CardTitle>{t('admin.customize.saved_themes', 'Temas Salvos')}</CardTitle>
             </CardHeader>
             <CardContent>
               {isLoading ? (
                 <div className="text-center py-4">
                   <div className="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full mx-auto mb-2"></div>
-                  <p className="text-sm text-muted-foreground">Carregando temas...</p>
+                  <p className="text-sm text-muted-foreground">{t('admin.customize.loading_themes', 'Carregando temas...')}</p>
                 </div>
               ) : savedThemes.length > 0 ? (
                 <div className="space-y-2">
@@ -806,24 +808,24 @@ export function ThemeCustomizer() {
                         <div className="flex items-center gap-2 mb-1">
                           <h4 className="font-medium">{theme.name}</h4>
                           {theme.isDefault && (
-                            <Badge variant="secondary" className="text-xs">Padrão</Badge>
+                            <Badge variant="secondary" className="text-xs">{t('admin.customize.default_theme', 'Padrão')}</Badge>
                           )}
                         </div>
                         <div className="flex items-center gap-2">
                           {theme.isActiveLight && (
                             <Badge variant="outline" className="text-xs bg-yellow-50 border-yellow-200 text-yellow-800 dark:bg-yellow-900/20 dark:border-yellow-700 dark:text-yellow-300">
                               <Sun className="w-3 h-3 mr-1" />
-                              Ativo Light
+                              {t('admin.customize.light_active', 'Ativo Light')}
                             </Badge>
                           )}
                           {theme.isActiveDark && (
                             <Badge variant="outline" className="text-xs bg-blue-50 border-blue-200 text-blue-800 dark:bg-blue-900/20 dark:border-blue-700 dark:text-blue-300">
                               <Moon className="w-3 h-3 mr-1" />
-                              Ativo Dark
+                              {t('admin.customize.dark_active', 'Ativo Dark')}
                             </Badge>
                           )}
                           {!theme.isActiveLight && !theme.isActiveDark && (
-                            <span className="text-xs text-muted-foreground">Inativo</span>
+                            <span className="text-xs text-muted-foreground">{t('admin.customize.inactive', 'Inativo')}</span>
                           )}
                         </div>
                       </div>
@@ -834,34 +836,34 @@ export function ThemeCustomizer() {
                           onClick={() => editTheme(theme)}
                         >
                           <Edit className="w-3 h-3 mr-1" />
-                          Editar
+                          {t('admin.customize.edit', 'Editar')}
                         </Button>
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => applyTheme(theme)}
                         >
-                          Aplicar
+                          {t('admin.customize.apply', 'Aplicar')}
                         </Button>
                         <Button
                           variant={theme.isActiveLight ? "default" : "outline"}
                           size="sm"
                           onClick={() => activateThemeForMode(theme.id!, 'light')}
                           className={theme.isActiveLight ? 'bg-yellow-500 hover:bg-yellow-600 text-white border-yellow-500' : 'hover:bg-yellow-50 hover:border-yellow-300'}
-                          title={theme.isActiveLight ? 'Ativo para Light Mode' : 'Ativar para Light Mode'}
+                          title={theme.isActiveLight ? t('admin.customize.active_for_light', 'Ativo para Light Mode') : t('admin.customize.activate_for_light', 'Ativar para Light Mode')}
                         >
                           <Sun className="w-3 h-3 mr-1" />
-                          {theme.isActiveLight ? 'Light Ativo' : 'Ativar Light'}
+                          {theme.isActiveLight ? t('admin.customize.light_active', 'Light Ativo') : t('admin.customize.activate_light', 'Ativar Light')}
                         </Button>
                         <Button
                           variant={theme.isActiveDark ? "default" : "outline"}
                           size="sm"
                           onClick={() => activateThemeForMode(theme.id!, 'dark')}
                           className={theme.isActiveDark ? 'bg-blue-500 hover:bg-blue-600 text-white border-blue-500' : 'hover:bg-blue-50 hover:border-blue-300'}
-                          title={theme.isActiveDark ? 'Ativo para Dark Mode' : 'Ativar para Dark Mode'}
+                          title={theme.isActiveDark ? t('admin.customize.active_for_dark', 'Ativo para Dark Mode') : t('admin.customize.activate_for_dark', 'Ativar para Dark Mode')}
                         >
                           <Moon className="w-3 h-3 mr-1" />
-                          {theme.isActiveDark ? 'Dark Ativo' : 'Ativar Dark'}
+                          {theme.isActiveDark ? t('admin.customize.dark_active', 'Dark Ativo') : t('admin.customize.activate_dark', 'Ativar Dark')}
                         </Button>
                       </div>
                     </div>
@@ -869,7 +871,7 @@ export function ThemeCustomizer() {
                 </div>
               ) : (
                 <p className="text-center text-muted-foreground py-4">
-                  Nenhum tema salvo ainda
+                  {t('admin.customize.no_saved_themes', 'Nenhum tema salvo ainda')}
                 </p>
               )}
             </CardContent>
@@ -889,16 +891,16 @@ export function ThemeCustomizer() {
       }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editingTheme ? 'Editar Tema' : 'Salvar Tema'}</DialogTitle>
+            <DialogTitle>{editingTheme ? t('admin.customize.edit_theme', 'Editar Tema') : t('admin.customize.save_theme', 'Salvar Tema')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="theme-name">Nome do Tema</Label>
+              <Label htmlFor="theme-name">{t('admin.customize.theme_name', 'Nome do Tema')}</Label>
               <Input
                 id="theme-name"
                 value={themeName}
                 onChange={(e) => setThemeName(e.target.value)}
-                placeholder="Ex: Tema Corporativo"
+                placeholder={t('admin.customize.theme_name_placeholder', 'Ex: Tema Corporativo')}
               />
             </div>
           </div>
@@ -909,10 +911,10 @@ export function ThemeCustomizer() {
                 cancelEdit();
               }
             }}>
-              Cancelar
+              {t('admin.customize.cancel', 'Cancelar')}
             </Button>
             <Button onClick={editingTheme ? saveEditedTheme : saveTheme} disabled={isSaving}>
-              {isSaving ? 'Salvando...' : (editingTheme ? 'Atualizar' : 'Salvar')}
+              {isSaving ? t('admin.customize.saving', 'Salvando...') : (editingTheme ? t('admin.customize.update', 'Atualizar') : t('admin.customize.save', 'Salvar'))}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -922,26 +924,26 @@ export function ThemeCustomizer() {
       <Dialog open={showImportModal} onOpenChange={setShowImportModal}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Importar Tema</DialogTitle>
+            <DialogTitle>{t('admin.customize.import_theme', 'Importar Tema')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="import-data">Dados do Tema (JSON)</Label>
+              <Label htmlFor="import-data">{t('admin.customize.theme_data_json', 'Dados do Tema (JSON)')}</Label>
               <textarea
                 id="import-data"
                 className="w-full h-32 p-3 border rounded-md resize-none font-mono text-sm"
                 value={importData}
                 onChange={(e) => setImportData(e.target.value)}
-                placeholder="Cole aqui o código JSON do tema..."
+                placeholder={t('admin.customize.paste_theme_code', 'Cole aqui o código JSON do tema...')}
               />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowImportModal(false)}>
-              Cancelar
+              {t('admin.customize.cancel', 'Cancelar')}
             </Button>
             <Button onClick={importTheme} disabled={!importData.trim()}>
-              Importar
+              {t('admin.customize.import', 'Importar')}
             </Button>
           </DialogFooter>
         </DialogContent>
