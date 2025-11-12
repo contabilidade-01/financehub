@@ -23,8 +23,11 @@ export const users = pgTable("usuarios", {
   ultimo_acesso: timestamp("ultimo_acesso", { withTimezone: true }),
   data_cancelamento: timestamp("data_cancelamento", { withTimezone: true }),
   motivo_cancelamento: text("motivo_cancelamento"),
+  // Campos de assinatura (mantidos para compatibilidade, mas novos dados virão de user_subscriptions)
   data_expiracao_assinatura: timestamp("data_expiracao_assinatura", { withTimezone: true }),
-  status_assinatura: varchar("status_assinatura", { length: 20 }).default("ativa")
+  status_assinatura: varchar("status_assinatura", { length: 20 }).default("ativa"),
+  // Novo campo para otimização de queries (denormalização estratégica)
+  subscriptionActive: boolean("subscription_active").notNull().default(false)
 });
 
 // Wallets table
@@ -404,4 +407,250 @@ export enum LanguageCode {
   FR_FR = 'fr-fr',  // Francês França
   DE_DE = 'de-de',  // Alemão Alemanha
   IT_IT = 'it-it',  // Italiano Itália
+}
+
+// ============================================
+// ASAAS PAYMENT INTEGRATION TABLES
+// ============================================
+
+// Subscription Plans table - Planos de assinatura disponíveis
+export const subscriptionPlans = pgTable("subscription_plans", {
+  id: serial("id").primaryKey(),
+  planCode: varchar("plan_code", { length: 50 }).notNull().unique(),
+  name: varchar("name", { length: 100 }).notNull(),
+  description: text("description"),
+  priceMonthly: decimal("price_monthly", { precision: 10, scale: 2 }).notNull(),
+  features: text("features").notNull(), // JSON string com array de features
+  maxTransactions: integer("max_transactions").default(0), // 0 = ilimitado
+  maxWallets: integer("max_wallets").default(0), // 0 = ilimitado
+  maxCategories: integer("max_categories").default(0), // 0 = ilimitado
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).default(sql`(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')`),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+});
+
+// Asaas Customers table - Cache de clientes no Asaas (mapeia usuarios -> asaas customers)
+export const asaasCustomers = pgTable("asaas_customers", {
+  id: serial("id").primaryKey(),
+  usuarioId: integer("usuario_id").notNull().unique().references(() => users.id, { onDelete: 'cascade' }),
+  asaasCustomerId: varchar("asaas_customer_id", { length: 100 }).notNull().unique(),
+  cpfCnpj: varchar("cpf_cnpj", { length: 18 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).default(sql`(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')`),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+});
+
+// User Subscriptions table - Assinaturas dos usuários
+export const userSubscriptions = pgTable("user_subscriptions", {
+  id: serial("id").primaryKey(),
+  usuarioId: integer("usuario_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  planId: integer("plan_id").notNull().references(() => subscriptionPlans.id),
+  asaasSubscriptionId: varchar("asaas_subscription_id", { length: 100 }).unique(),
+  status: varchar("status", { length: 50 }).notNull().default("active"), // active, past_due, canceled, expired
+  currentPeriodStart: timestamp("current_period_start", { withTimezone: true }),
+  currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+  canceledAt: timestamp("canceled_at", { withTimezone: true }),
+  cancellationReason: text("cancellation_reason"),
+  endedAt: timestamp("ended_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).default(sql`(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')`),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+});
+
+// Payment Transactions table - Histórico de cobranças/pagamentos
+export const paymentTransactions = pgTable("payment_transactions", {
+  id: serial("id").primaryKey(),
+  usuarioId: integer("usuario_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  subscriptionId: integer("subscription_id").references(() => userSubscriptions.id),
+  asaasPaymentId: varchar("asaas_payment_id", { length: 100 }).unique(),
+  asaasInvoiceUrl: text("asaas_invoice_url"),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 3 }).notNull().default("BRL"),
+  status: varchar("status", { length: 50 }).notNull().default("pending"), // pending, confirmed, overdue, refunded, received_in_cash
+  paymentMethod: varchar("payment_method", { length: 50 }).notNull().default("credit_card"), // credit_card, boleto, pix
+  dueDate: date("due_date"),
+  confirmedDate: timestamp("confirmed_date", { withTimezone: true }),
+  description: text("description"),
+  retryCount: integer("retry_count").notNull().default(0), // Contador de tentativas de pagamento
+  metadata: text("metadata"), // JSON string com dados adicionais do Asaas
+  createdAt: timestamp("created_at", { withTimezone: true }).default(sql`(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')`),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+});
+
+// Asaas Webhooks table - Log de eventos recebidos do Asaas
+export const asaasWebhooks = pgTable("asaas_webhooks", {
+  id: serial("id").primaryKey(),
+  eventType: varchar("event_type", { length: 100 }).notNull(), // PAYMENT_CREATED, PAYMENT_CONFIRMED, etc.
+  asaasEventId: varchar("asaas_event_id", { length: 100 }).unique(),
+  payload: text("payload").notNull(), // JSON string com o payload completo
+  processed: boolean("processed").notNull().default(false),
+  processedAt: timestamp("processed_at", { withTimezone: true }),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at", { withTimezone: true }).default(sql`(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')`)
+});
+
+// Payment Settings table - Configurações de gateway de pagamento
+export const paymentSettings = pgTable("payment_settings", {
+  id: serial("id").primaryKey(),
+  provider: varchar("provider", { length: 50 }).notNull().default("asaas"),
+  environment: varchar("environment", { length: 20 }).notNull().default("sandbox"),
+  apiKey: text("api_key").notNull(),
+  webhookSecret: text("webhook_secret"),
+  enabled: boolean("enabled").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).default(sql`(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')`),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+}, (table) => [
+  unique().on(table.provider)
+]);
+
+// ============================================
+// SCHEMAS DE VALIDAÇÃO - ASAAS
+// ============================================
+
+// Subscription Plan schemas
+export const insertSubscriptionPlanSchema = createInsertSchema(subscriptionPlans).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+}).extend({
+  priceMonthly: flexibleNumberSchema,
+  maxTransactions: flexibleNumberSchema.optional(),
+  maxWallets: flexibleNumberSchema.optional(),
+  maxCategories: flexibleNumberSchema.optional()
+});
+
+export const updateSubscriptionPlanSchema = createInsertSchema(subscriptionPlans).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+}).partial().extend({
+  priceMonthly: flexibleNumberSchema.optional(),
+  maxTransactions: flexibleNumberSchema.optional(),
+  maxWallets: flexibleNumberSchema.optional(),
+  maxCategories: flexibleNumberSchema.optional()
+});
+
+// Asaas Customer schemas
+export const insertAsaasCustomerSchema = createInsertSchema(asaasCustomers).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+
+// User Subscription schemas
+export const insertUserSubscriptionSchema = createInsertSchema(userSubscriptions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+
+export const updateUserSubscriptionSchema = createInsertSchema(userSubscriptions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+}).partial();
+
+// Payment Transaction schemas
+export const insertPaymentTransactionSchema = createInsertSchema(paymentTransactions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+}).extend({
+  amount: flexibleNumberSchema,
+  retryCount: flexibleNumberSchema.optional()
+});
+
+export const updatePaymentTransactionSchema = createInsertSchema(paymentTransactions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+}).partial().extend({
+  amount: flexibleNumberSchema.optional(),
+  retryCount: flexibleNumberSchema.optional()
+});
+
+// Asaas Webhook schemas
+export const insertAsaasWebhookSchema = createInsertSchema(asaasWebhooks).omit({
+  id: true,
+  createdAt: true
+});
+
+// Payment Settings schemas
+export const insertPaymentSettingsSchema = createInsertSchema(paymentSettings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+
+export const updatePaymentSettingsSchema = createInsertSchema(paymentSettings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+}).partial();
+
+// ============================================
+// TYPES - ASAAS
+// ============================================
+
+export type SubscriptionPlan = typeof subscriptionPlans.$inferSelect;
+export type InsertSubscriptionPlan = z.infer<typeof insertSubscriptionPlanSchema>;
+export type UpdateSubscriptionPlan = z.infer<typeof updateSubscriptionPlanSchema>;
+
+export type AsaasCustomer = typeof asaasCustomers.$inferSelect;
+export type InsertAsaasCustomer = z.infer<typeof insertAsaasCustomerSchema>;
+
+export type UserSubscription = typeof userSubscriptions.$inferSelect;
+export type InsertUserSubscription = z.infer<typeof insertUserSubscriptionSchema>;
+export type UpdateUserSubscription = z.infer<typeof updateUserSubscriptionSchema>;
+
+export type PaymentTransaction = typeof paymentTransactions.$inferSelect;
+export type InsertPaymentTransaction = z.infer<typeof insertPaymentTransactionSchema>;
+export type UpdatePaymentTransaction = z.infer<typeof updatePaymentTransactionSchema>;
+
+export type AsaasWebhook = typeof asaasWebhooks.$inferSelect;
+export type InsertAsaasWebhook = z.infer<typeof insertAsaasWebhookSchema>;
+
+export type PaymentSettings = typeof paymentSettings.$inferSelect;
+export type InsertPaymentSettings = z.infer<typeof insertPaymentSettingsSchema>;
+export type UpdatePaymentSettings = z.infer<typeof updatePaymentSettingsSchema>;
+
+// ============================================
+// ENUMS - ASAAS
+// ============================================
+
+export enum SubscriptionStatus {
+  ACTIVE = "active",
+  PAST_DUE = "past_due",
+  CANCELED = "canceled",
+  EXPIRED = "expired"
+}
+
+export enum PaymentStatus {
+  PENDING = "pending",
+  CONFIRMED = "confirmed",
+  OVERDUE = "overdue",
+  REFUNDED = "refunded",
+  RECEIVED_IN_CASH = "received_in_cash"
+}
+
+export enum PaymentMethodType {
+  CREDIT_CARD = "credit_card",
+  BOLETO = "boleto",
+  PIX = "pix"
+}
+
+export enum AsaasEventType {
+  PAYMENT_CREATED = "PAYMENT_CREATED",
+  PAYMENT_UPDATED = "PAYMENT_UPDATED",
+  PAYMENT_CONFIRMED = "PAYMENT_CONFIRMED",
+  PAYMENT_RECEIVED = "PAYMENT_RECEIVED",
+  PAYMENT_OVERDUE = "PAYMENT_OVERDUE",
+  PAYMENT_DELETED = "PAYMENT_DELETED",
+  PAYMENT_REFUNDED = "PAYMENT_REFUNDED",
+  PAYMENT_RECEIVED_IN_CASH_UNDONE = "PAYMENT_RECEIVED_IN_CASH_UNDONE",
+  PAYMENT_CHARGEBACK_REQUESTED = "PAYMENT_CHARGEBACK_REQUESTED",
+  PAYMENT_CHARGEBACK_DISPUTE = "PAYMENT_CHARGEBACK_DISPUTE",
+  PAYMENT_AWAITING_CHARGEBACK_REVERSAL = "PAYMENT_AWAITING_CHARGEBACK_REVERSAL",
+  PAYMENT_DUNNING_RECEIVED = "PAYMENT_DUNNING_RECEIVED",
+  PAYMENT_DUNNING_REQUESTED = "PAYMENT_DUNNING_REQUESTED",
+  PAYMENT_BANK_SLIP_VIEWED = "PAYMENT_BANK_SLIP_VIEWED",
+  PAYMENT_CHECKOUT_VIEWED = "PAYMENT_CHECKOUT_VIEWED"
 }

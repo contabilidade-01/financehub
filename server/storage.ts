@@ -10,6 +10,12 @@ import {
   reminders,
   userSessionsAdmin,
   paymentMethods,
+  subscriptionPlans,
+  asaasCustomers,
+  userSubscriptions,
+  paymentTransactions,
+  asaasWebhooks,
+  historicoCancelamentos,
   getSaoPauloTimestamp,
   type User,
   type InsertUser,
@@ -31,7 +37,20 @@ import {
   type TransactionWithDetails,
   type InsertUserSessionAdmin,
   type PaymentMethod,
-  type InsertPaymentMethod
+  type InsertPaymentMethod,
+  type SubscriptionPlan,
+  type InsertSubscriptionPlan,
+  type UpdateSubscriptionPlan,
+  type AsaasCustomer,
+  type InsertAsaasCustomer,
+  type UserSubscription,
+  type InsertUserSubscription,
+  type UpdateUserSubscription,
+  type PaymentTransaction,
+  type InsertPaymentTransaction,
+  type UpdatePaymentTransaction,
+  type AsaasWebhook,
+  type InsertAsaasWebhook
 } from "@shared/schema";
 import { eq, and, desc, gte, lte, isNull, count, sum, sql, ne } from "drizzle-orm";
 
@@ -107,6 +126,49 @@ export interface IStorage {
   getAllUsers(): Promise<User[]>;
   getRecentUsers(limit?: number): Promise<User[]>;
   getAllAdminSessions(): Promise<UserSessionAdmin[]>;
+
+  // Subscription Plan methods
+  getSubscriptionPlanById(id: number): Promise<SubscriptionPlan | undefined>;
+  getSubscriptionPlanByCode(code: string): Promise<SubscriptionPlan | undefined>;
+  getAllSubscriptionPlans(): Promise<SubscriptionPlan[]>;
+  getActiveSubscriptionPlans(): Promise<SubscriptionPlan[]>;
+  createSubscriptionPlan(planData: InsertSubscriptionPlan): Promise<SubscriptionPlan>;
+  updateSubscriptionPlan(id: number, planData: UpdateSubscriptionPlan): Promise<SubscriptionPlan | undefined>;
+  deleteSubscriptionPlan(id: number): Promise<boolean>;
+
+  // Asaas Customer methods
+  getAsaasCustomerByUserId(userId: number): Promise<AsaasCustomer | undefined>;
+  getAsaasCustomerByAsaasId(asaasCustomerId: string): Promise<AsaasCustomer | undefined>;
+  createAsaasCustomer(customerData: InsertAsaasCustomer): Promise<AsaasCustomer>;
+  updateAsaasCustomer(id: number, customerData: Partial<AsaasCustomer>): Promise<AsaasCustomer | undefined>;
+
+  // User Subscription methods
+  getUserSubscriptionById(id: number): Promise<UserSubscription | undefined>;
+  getActiveSubscriptionByUserId(userId: number): Promise<UserSubscription | undefined>;
+  getAllSubscriptionsByUserId(userId: number): Promise<UserSubscription[]>;
+  getSubscriptionByAsaasId(asaasSubscriptionId: string): Promise<UserSubscription | undefined>;
+  createUserSubscription(subscriptionData: InsertUserSubscription): Promise<UserSubscription>;
+  updateUserSubscription(id: number, subscriptionData: UpdateUserSubscription): Promise<UserSubscription | undefined>;
+  getAllActiveSubscriptions(): Promise<UserSubscription[]>;
+
+  // Payment Transaction methods
+  getPaymentTransactionById(id: number): Promise<PaymentTransaction | undefined>;
+  getPaymentTransactionByAsaasId(asaasPaymentId: string): Promise<PaymentTransaction | undefined>;
+  getPaymentTransactionsByUserId(userId: number, limit?: number): Promise<PaymentTransaction[]>;
+  getPaymentTransactionsBySubscriptionId(subscriptionId: number): Promise<PaymentTransaction[]>;
+  getOverduePayments(): Promise<PaymentTransaction[]>;
+  createPaymentTransaction(paymentData: InsertPaymentTransaction): Promise<PaymentTransaction>;
+  updatePaymentTransaction(id: number, paymentData: UpdatePaymentTransaction): Promise<PaymentTransaction | undefined>;
+
+  // Asaas Webhook methods
+  getAsaasWebhookById(id: number): Promise<AsaasWebhook | undefined>;
+  getAsaasWebhookByEventId(eventId: string): Promise<AsaasWebhook | undefined>;
+  getUnprocessedWebhooks(limit?: number): Promise<AsaasWebhook[]>;
+  createAsaasWebhook(webhookData: InsertAsaasWebhook): Promise<AsaasWebhook>;
+  updateAsaasWebhook(id: number, webhookData: Partial<AsaasWebhook>): Promise<AsaasWebhook | undefined>;
+
+  // Cancellation History methods
+  createCancellationHistory(data: any): Promise<any>;
 }
 
 export class DbStorage implements IStorage {
@@ -997,6 +1059,10 @@ export class DbStorage implements IStorage {
       await db.delete(userSessionsAdmin).where(eq(userSessionsAdmin.target_user_id, userId));
       // Remover métodos de pagamento
       await db.delete(paymentMethods).where(eq(paymentMethods.usuario_id, userId));
+      // Remover dados de assinatura
+      await db.delete(paymentTransactions).where(eq(paymentTransactions.usuarioId, userId));
+      await db.delete(userSubscriptions).where(eq(userSubscriptions.usuarioId, userId));
+      await db.delete(asaasCustomers).where(eq(asaasCustomers.usuarioId, userId));
       // Remover usuário
       await db.delete(users).where(eq(users.id, userId));
       return true;
@@ -1004,6 +1070,285 @@ export class DbStorage implements IStorage {
       console.error('Erro ao deletar usuário em cascata:', error);
       return false;
     }
+  }
+
+  // ============================================
+  // SUBSCRIPTION PLAN METHODS
+  // ============================================
+
+  async getSubscriptionPlanById(id: number): Promise<SubscriptionPlan | undefined> {
+    const result = await db.select().from(subscriptionPlans).where(eq(subscriptionPlans.id, id)).limit(1);
+    return result[0];
+  }
+
+  async getSubscriptionPlanByCode(code: string): Promise<SubscriptionPlan | undefined> {
+    const result = await db.select().from(subscriptionPlans).where(eq(subscriptionPlans.planCode, code)).limit(1);
+    return result[0];
+  }
+
+  async getAllSubscriptionPlans(): Promise<SubscriptionPlan[]> {
+    return await db.select().from(subscriptionPlans).orderBy(subscriptionPlans.priceMonthly);
+  }
+
+  async getActiveSubscriptionPlans(): Promise<SubscriptionPlan[]> {
+    return await db.select()
+      .from(subscriptionPlans)
+      .where(eq(subscriptionPlans.active, true))
+      .orderBy(subscriptionPlans.priceMonthly);
+  }
+
+  async createSubscriptionPlan(planData: InsertSubscriptionPlan): Promise<SubscriptionPlan> {
+    const result = await db.insert(subscriptionPlans).values({
+      ...planData,
+      createdAt: new Date()
+    }).returning();
+    return result[0];
+  }
+
+  async updateSubscriptionPlan(id: number, planData: UpdateSubscriptionPlan): Promise<SubscriptionPlan | undefined> {
+    const result = await db.update(subscriptionPlans)
+      .set({
+        ...planData,
+        updatedAt: new Date()
+      })
+      .where(eq(subscriptionPlans.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteSubscriptionPlan(id: number): Promise<boolean> {
+    // Soft delete - apenas desativar
+    const result = await db.update(subscriptionPlans)
+      .set({ active: false, updatedAt: new Date() })
+      .where(eq(subscriptionPlans.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  // ============================================
+  // ASAAS CUSTOMER METHODS
+  // ============================================
+
+  async getAsaasCustomerByUserId(userId: number): Promise<AsaasCustomer | undefined> {
+    const result = await db.select()
+      .from(asaasCustomers)
+      .where(eq(asaasCustomers.usuarioId, userId))
+      .limit(1);
+    return result[0];
+  }
+
+  async getAsaasCustomerByAsaasId(asaasCustomerId: string): Promise<AsaasCustomer | undefined> {
+    const result = await db.select()
+      .from(asaasCustomers)
+      .where(eq(asaasCustomers.asaasCustomerId, asaasCustomerId))
+      .limit(1);
+    return result[0];
+  }
+
+  async createAsaasCustomer(customerData: InsertAsaasCustomer): Promise<AsaasCustomer> {
+    const result = await db.insert(asaasCustomers).values({
+      ...customerData,
+      createdAt: new Date()
+    }).returning();
+    return result[0];
+  }
+
+  async updateAsaasCustomer(id: number, customerData: Partial<AsaasCustomer>): Promise<AsaasCustomer | undefined> {
+    const result = await db.update(asaasCustomers)
+      .set({
+        ...customerData,
+        updatedAt: new Date()
+      })
+      .where(eq(asaasCustomers.id, id))
+      .returning();
+    return result[0];
+  }
+
+  // ============================================
+  // USER SUBSCRIPTION METHODS
+  // ============================================
+
+  async getUserSubscriptionById(id: number): Promise<UserSubscription | undefined> {
+    const result = await db.select()
+      .from(userSubscriptions)
+      .where(eq(userSubscriptions.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async getActiveSubscriptionByUserId(userId: number): Promise<UserSubscription | undefined> {
+    const result = await db.select()
+      .from(userSubscriptions)
+      .where(
+        and(
+          eq(userSubscriptions.usuarioId, userId),
+          eq(userSubscriptions.status, 'active')
+        )
+      )
+      .limit(1);
+    return result[0];
+  }
+
+  async getAllSubscriptionsByUserId(userId: number): Promise<UserSubscription[]> {
+    return await db.select()
+      .from(userSubscriptions)
+      .where(eq(userSubscriptions.usuarioId, userId))
+      .orderBy(desc(userSubscriptions.createdAt));
+  }
+
+  async getSubscriptionByAsaasId(asaasSubscriptionId: string): Promise<UserSubscription | undefined> {
+    const result = await db.select()
+      .from(userSubscriptions)
+      .where(eq(userSubscriptions.asaasSubscriptionId, asaasSubscriptionId))
+      .limit(1);
+    return result[0];
+  }
+
+  async createUserSubscription(subscriptionData: InsertUserSubscription): Promise<UserSubscription> {
+    const result = await db.insert(userSubscriptions).values({
+      ...subscriptionData,
+      createdAt: new Date()
+    }).returning();
+    return result[0];
+  }
+
+  async updateUserSubscription(id: number, subscriptionData: UpdateUserSubscription): Promise<UserSubscription | undefined> {
+    const result = await db.update(userSubscriptions)
+      .set({
+        ...subscriptionData,
+        updatedAt: new Date()
+      })
+      .where(eq(userSubscriptions.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async getAllActiveSubscriptions(): Promise<UserSubscription[]> {
+    return await db.select()
+      .from(userSubscriptions)
+      .where(eq(userSubscriptions.status, 'active'));
+  }
+
+  // ============================================
+  // PAYMENT TRANSACTION METHODS
+  // ============================================
+
+  async getPaymentTransactionById(id: number): Promise<PaymentTransaction | undefined> {
+    const result = await db.select()
+      .from(paymentTransactions)
+      .where(eq(paymentTransactions.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async getPaymentTransactionByAsaasId(asaasPaymentId: string): Promise<PaymentTransaction | undefined> {
+    const result = await db.select()
+      .from(paymentTransactions)
+      .where(eq(paymentTransactions.asaasPaymentId, asaasPaymentId))
+      .limit(1);
+    return result[0];
+  }
+
+  async getPaymentTransactionsByUserId(userId: number, limit: number = 50): Promise<PaymentTransaction[]> {
+    return await db.select()
+      .from(paymentTransactions)
+      .where(eq(paymentTransactions.usuarioId, userId))
+      .orderBy(desc(paymentTransactions.createdAt))
+      .limit(limit);
+  }
+
+  async getPaymentTransactionsBySubscriptionId(subscriptionId: number): Promise<PaymentTransaction[]> {
+    return await db.select()
+      .from(paymentTransactions)
+      .where(eq(paymentTransactions.subscriptionId, subscriptionId))
+      .orderBy(desc(paymentTransactions.createdAt));
+  }
+
+  async getOverduePayments(): Promise<PaymentTransaction[]> {
+    return await db.select()
+      .from(paymentTransactions)
+      .where(
+        and(
+          eq(paymentTransactions.status, 'overdue'),
+          sql`${paymentTransactions.retryCount} < 3`
+        )
+      )
+      .orderBy(paymentTransactions.dueDate);
+  }
+
+  async createPaymentTransaction(paymentData: InsertPaymentTransaction): Promise<PaymentTransaction> {
+    const result = await db.insert(paymentTransactions).values({
+      ...paymentData,
+      createdAt: new Date()
+    }).returning();
+    return result[0];
+  }
+
+  async updatePaymentTransaction(id: number, paymentData: UpdatePaymentTransaction): Promise<PaymentTransaction | undefined> {
+    const result = await db.update(paymentTransactions)
+      .set({
+        ...paymentData,
+        updatedAt: new Date()
+      })
+      .where(eq(paymentTransactions.id, id))
+      .returning();
+    return result[0];
+  }
+
+  // ============================================
+  // ASAAS WEBHOOK METHODS
+  // ============================================
+
+  async getAsaasWebhookById(id: number): Promise<AsaasWebhook | undefined> {
+    const result = await db.select()
+      .from(asaasWebhooks)
+      .where(eq(asaasWebhooks.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async getAsaasWebhookByEventId(eventId: string): Promise<AsaasWebhook | undefined> {
+    const result = await db.select()
+      .from(asaasWebhooks)
+      .where(eq(asaasWebhooks.asaasEventId, eventId))
+      .limit(1);
+    return result[0];
+  }
+
+  async getUnprocessedWebhooks(limit: number = 100): Promise<AsaasWebhook[]> {
+    return await db.select()
+      .from(asaasWebhooks)
+      .where(eq(asaasWebhooks.processed, false))
+      .orderBy(asaasWebhooks.createdAt)
+      .limit(limit);
+  }
+
+  async createAsaasWebhook(webhookData: InsertAsaasWebhook): Promise<AsaasWebhook> {
+    const result = await db.insert(asaasWebhooks).values({
+      ...webhookData,
+      createdAt: new Date()
+    }).returning();
+    return result[0];
+  }
+
+  async updateAsaasWebhook(id: number, webhookData: Partial<AsaasWebhook>): Promise<AsaasWebhook | undefined> {
+    const result = await db.update(asaasWebhooks)
+      .set(webhookData)
+      .where(eq(asaasWebhooks.id, id))
+      .returning();
+    return result[0];
+  }
+
+  // ============================================
+  // CANCELLATION HISTORY METHODS
+  // ============================================
+
+  async createCancellationHistory(data: any): Promise<any> {
+    const result = await db.insert(historicoCancelamentos).values({
+      ...data,
+      data_criacao: new Date()
+    }).returning();
+    return result[0];
   }
 }
 

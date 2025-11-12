@@ -70,8 +70,12 @@
     "sections": {
       "main": "MAIN",
       "settings": "SETTINGS",
-      "admin": "ADMINISTRATION"
-    }
+      "admin": "ADMINISTRATION",
+      "billing": "SUBSCRIPTION"
+    },
+    "billing_settings": "My Subscription",
+    "invoices": "Invoices",
+    "billing": "Billing"
   },
   "login": {
     "title": "Sign In",
@@ -166,7 +170,7 @@
     "no_wallet_available": "No wallet available",
     "save_error": "Could not save the transaction.",
     "edit_description": "Edit the transaction details below.",
-    "fill_details": "Fill in the details to record a new transaction.",
+    "fill_details": "Fill in the transaction details",
     "type": "Type",
     "filters": {
       "search": "Search transactions...",
@@ -204,15 +208,7 @@
     "submit": {
       "update": "Save changes",
       "create": "Create transaction"
-    },
-    "select_category": "Select a category",
-    "category": "Category",
-    "fill_details": "Fill in the transaction details",
-    "type": "Type",
-    "description": "Description",
-    "description_placeholder": "Transaction description",
-    "amount": "Amount",
-    "date": "Date"
+    }
   },
   "validation": {
     "name_min_length": "Name must be at least 2 characters",
@@ -290,22 +286,21 @@
     "no_categories_available": "No categories available",
     "no_categories_found": "No categories found",
     "names": {
-      "Alimenta\u00e7\u00e3o": "Food",
-      "Transporte": "Transportation",
-      "Moradia": "Housing",
-      "Sa\u00fade": "Health",
-      "Educa\u00e7\u00e3o": "Education",
-      "Lazer": "Entertainment",
-      "Vestu\u00e1rio": "Clothing",
-      "Impostos": "Taxes",
-      "Outros": "Other",
-      "Sal\u00e1rio": "Salary",
+      "Alimentação": "Food",
+      "Doações": "Donations",
+      "Educação": "Education",
       "Freelance": "Freelance",
-      "Investimentos": "Investments",
-      "Doa\u00e7\u00f5es": "Donations",
       "Imposto": "Tax",
       "Investimento": "Investment",
+      "Investimentos": "Investments",
+      "Lazer": "Leisure",
+      "Moradia": "Housing",
+      "Outros": "Others",
       "Pets": "Pets",
+      "Salário": "Salary",
+      "Saude": "Health",
+      "Transporte": "Transportation",
+      "Vestuário": "Clothing",
       "Viagem": "Travel"
     },
     "icons": {
@@ -336,24 +331,6 @@
       "turquoise": "Turquoise",
       "dark_blue": "Dark Blue",
       "gray": "Gray"
-    },
-    "names": {
-      "Alimentação": "Food",
-      "Doações": "Donations",
-      "Educação": "Education",
-      "Freelance": "Freelance",
-      "Imposto": "Tax",
-      "Investimento": "Investment",
-      "Investimentos": "Investments",
-      "Lazer": "Leisure",
-      "Moradia": "Housing",
-      "Outros": "Others",
-      "Pets": "Pets",
-      "Salário": "Salary",
-      "Saude": "Health",
-      "Transporte": "Transportation",
-      "Vestuário": "Clothing",
-      "Viagem": "Travel"
     }
   },
   "reports": {
@@ -839,7 +816,7 @@
           "comments": "Structure comments"
         },
         "notice": {
-          "title": "\u26a0\ufe0f Important:",
+          "title": "⚠️ Important:",
           "description": "This file contains only the database structure. To migrate data, use the migration feature available in the system."
         }
       },
@@ -1003,7 +980,7 @@
           "high": "Wallets with high balance"
         },
         "percentage_suffix": "of total",
-        "footer": "Distribution based on each wallet's current balance \u2022 Includes transactions of all statuses \u2022 Last update: {{timestamp}}"
+        "footer": "Distribution based on each wallet's current balance • Includes transactions of all statuses • Last update: {{timestamp}}"
       },
       "stats": {
         "title": "Administrative Statistics",
@@ -1543,6 +1520,88 @@
         "button": "Button",
         "description": "This is an example of how the selected theme will look in the application."
       }
+    }
+  },
+  "billing": {
+    "title": "Billing",
+    "checkout": {
+      "title": "Subscribe to FinanceHub",
+      "subtitle": "Complete your registration and start using",
+      "select_plan": "Choose your plan",
+      "personal_info": "Personal Information",
+      "payment_info": "Payment Information",
+      "card_number": "Card Number",
+      "card_holder": "Cardholder Name",
+      "expiry": "Expiry",
+      "cvv": "CVV",
+      "month": "Month",
+      "year": "Year",
+      "cpf": "Tax ID",
+      "postal_code": "Postal Code",
+      "address_number": "Number",
+      "complement": "Complement",
+      "subscribe_now": "Complete Subscription",
+      "processing": "Processing payment...",
+      "back": "Back",
+      "continue": "Continue",
+      "success": "Subscription activated successfully!",
+      "error": "Error processing payment"
+    },
+    "invoices": {
+      "title": "Invoices",
+      "subtitle": "Payment History",
+      "no_invoices": "No invoices found",
+      "date": "Date",
+      "description": "Description",
+      "amount": "Amount",
+      "status": "Status",
+      "actions": "Actions",
+      "download": "Download",
+      "monthly_subscription": "Monthly Subscription"
+    },
+    "status": {
+      "confirmed": "Paid",
+      "pending": "Pending",
+      "overdue": "Overdue",
+      "refunded": "Refunded",
+      "received_in_cash": "Received"
+    },
+    "settings": {
+      "title": "Payment Settings",
+      "current_subscription": "Current Subscription",
+      "plan": "Plan",
+      "next_payment": "Next charge",
+      "value": "Value",
+      "payment_method": "Payment Method",
+      "update_card": "Update Card",
+      "save": "Save",
+      "cancel_subscription": "Cancel Subscription",
+      "cancel_confirm_title": "Are you sure?",
+      "cancel_confirm_desc": "You will lose access to all premium features",
+      "cancel_reason_placeholder": "Please tell us why you're canceling",
+      "keep_subscription": "Keep Subscription",
+      "confirm_cancel": "Confirm Cancellation",
+      "no_subscription": "No Active Subscription",
+      "no_subscription_desc": "You don't have an active subscription",
+      "subscribe_now": "Subscribe Now",
+      "card_updated": "Card updated successfully!",
+      "subscription_canceled": "Subscription canceled",
+      "reason_required": "Reason required"
+    },
+    "plan": {
+      "monthly": "monthly",
+      "features": "Features",
+      "select": "Select",
+      "selected": "Selected",
+      "per_month": "/month"
+    },
+    "validation": {
+      "invalid_card": "Invalid card number",
+      "invalid_cpf": "Invalid tax ID",
+      "invalid_name": "Invalid name",
+      "invalid_month": "Invalid month",
+      "invalid_year": "Invalid year",
+      "invalid_cvv": "Invalid CVV"
     }
   }
 }

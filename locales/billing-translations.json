@@ -1,0 +1,254 @@
+{
+  "pt-br": {
+    "billing": {
+      "title": "Pagamentos",
+      "checkout": {
+        "title": "Assinar FinanceHub",
+        "subtitle": "Complete seu cadastro e comece a usar",
+        "select_plan": "Escolha seu plano",
+        "personal_info": "Informações Pessoais",
+        "payment_info": "Informações de Pagamento",
+        "card_number": "Número do Cartão",
+        "card_holder": "Nome no Cartão",
+        "expiry": "Validade",
+        "cvv": "CVV",
+        "month": "Mês",
+        "year": "Ano",
+        "cpf": "CPF",
+        "postal_code": "CEP",
+        "address_number": "Número",
+        "complement": "Complemento",
+        "subscribe_now": "Finalizar Assinatura",
+        "processing": "Processando pagamento...",
+        "back": "Voltar",
+        "continue": "Continuar",
+        "success": "Assinatura ativada com sucesso!",
+        "error": "Erro ao processar pagamento"
+      },
+      "invoices": {
+        "title": "Faturas",
+        "subtitle": "Histórico de Pagamentos",
+        "no_invoices": "Nenhuma fatura encontrada",
+        "date": "Data",
+        "description": "Descrição",
+        "amount": "Valor",
+        "status": "Status",
+        "actions": "Ações",
+        "download": "Baixar",
+        "monthly_subscription": "Assinatura Mensal"
+      },
+      "status": {
+        "confirmed": "Pago",
+        "pending": "Pendente",
+        "overdue": "Vencido",
+        "refunded": "Estornado",
+        "received_in_cash": "Recebido"
+      },
+      "settings": {
+        "title": "Configurações de Pagamento",
+        "current_subscription": "Assinatura Atual",
+        "plan": "Plano",
+        "next_payment": "Próxima cobrança",
+        "value": "Valor",
+        "payment_method": "Forma de Pagamento",
+        "update_card": "Atualizar Cartão",
+        "save": "Salvar",
+        "cancel_subscription": "Cancelar Assinatura",
+        "cancel_confirm_title": "Tem certeza?",
+        "cancel_confirm_desc": "Você perderá acesso a todos os recursos premium",
+        "cancel_reason_placeholder": "Por favor, nos diga o motivo do cancelamento",
+        "keep_subscription": "Manter Assinatura",
+        "confirm_cancel": "Confirmar Cancelamento",
+        "no_subscription": "Sem Assinatura Ativa",
+        "no_subscription_desc": "Você não possui uma assinatura ativa",
+        "subscribe_now": "Assinar Agora",
+        "card_updated": "Cartão atualizado com sucesso!",
+        "subscription_canceled": "Assinatura cancelada",
+        "reason_required": "Motivo obrigatório"
+      },
+      "plan": {
+        "monthly": "mensal",
+        "features": "Recursos",
+        "select": "Selecionar",
+        "selected": "Selecionado",
+        "per_month": "/mês"
+      },
+      "validation": {
+        "invalid_card": "Número de cartão inválido",
+        "invalid_cpf": "CPF inválido",
+        "invalid_name": "Nome inválido",
+        "invalid_month": "Mês inválido",
+        "invalid_year": "Ano inválido",
+        "invalid_cvv": "CVV inválido"
+      }
+    }
+  },
+  "en-us": {
+    "billing": {
+      "title": "Billing",
+      "checkout": {
+        "title": "Subscribe to FinanceHub",
+        "subtitle": "Complete your registration and start using",
+        "select_plan": "Choose your plan",
+        "personal_info": "Personal Information",
+        "payment_info": "Payment Information",
+        "card_number": "Card Number",
+        "card_holder": "Cardholder Name",
+        "expiry": "Expiry",
+        "cvv": "CVV",
+        "month": "Month",
+        "year": "Year",
+        "cpf": "Tax ID",
+        "postal_code": "Postal Code",
+        "address_number": "Number",
+        "complement": "Complement",
+        "subscribe_now": "Complete Subscription",
+        "processing": "Processing payment...",
+        "back": "Back",
+        "continue": "Continue",
+        "success": "Subscription activated successfully!",
+        "error": "Error processing payment"
+      },
+      "invoices": {
+        "title": "Invoices",
+        "subtitle": "Payment History",
+        "no_invoices": "No invoices found",
+        "date": "Date",
+        "description": "Description",
+        "amount": "Amount",
+        "status": "Status",
+        "actions": "Actions",
+        "download": "Download",
+        "monthly_subscription": "Monthly Subscription"
+      },
+      "status": {
+        "confirmed": "Paid",
+        "pending": "Pending",
+        "overdue": "Overdue",
+        "refunded": "Refunded",
+        "received_in_cash": "Received"
+      },
+      "settings": {
+        "title": "Payment Settings",
+        "current_subscription": "Current Subscription",
+        "plan": "Plan",
+        "next_payment": "Next charge",
+        "value": "Value",
+        "payment_method": "Payment Method",
+        "update_card": "Update Card",
+        "save": "Save",
+        "cancel_subscription": "Cancel Subscription",
+        "cancel_confirm_title": "Are you sure?",
+        "cancel_confirm_desc": "You will lose access to all premium features",
+        "cancel_reason_placeholder": "Please tell us why you're canceling",
+        "keep_subscription": "Keep Subscription",
+        "confirm_cancel": "Confirm Cancellation",
+        "no_subscription": "No Active Subscription",
+        "no_subscription_desc": "You don't have an active subscription",
+        "subscribe_now": "Subscribe Now",
+        "card_updated": "Card updated successfully!",
+        "subscription_canceled": "Subscription canceled",
+        "reason_required": "Reason required"
+      },
+      "plan": {
+        "monthly": "monthly",
+        "features": "Features",
+        "select": "Select",
+        "selected": "Selected",
+        "per_month": "/month"
+      },
+      "validation": {
+        "invalid_card": "Invalid card number",
+        "invalid_cpf": "Invalid tax ID",
+        "invalid_name": "Invalid name",
+        "invalid_month": "Invalid month",
+        "invalid_year": "Invalid year",
+        "invalid_cvv": "Invalid CVV"
+      }
+    }
+  },
+  "es-es": {
+    "billing": {
+      "title": "Pagos",
+      "checkout": {
+        "title": "Suscribirse a FinanceHub",
+        "subtitle": "Complete su registro y comience a usar",
+        "select_plan": "Elija su plan",
+        "personal_info": "Información Personal",
+        "payment_info": "Información de Pago",
+        "card_number": "Número de Tarjeta",
+        "card_holder": "Nombre en la Tarjeta",
+        "expiry": "Vencimiento",
+        "cvv": "CVV",
+        "month": "Mes",
+        "year": "Año",
+        "cpf": "Documento",
+        "postal_code": "Código Postal",
+        "address_number": "Número",
+        "complement": "Complemento",
+        "subscribe_now": "Finalizar Suscripción",
+        "processing": "Procesando pago...",
+        "back": "Volver",
+        "continue": "Continuar",
+        "success": "¡Suscripción activada con éxito!",
+        "error": "Error al procesar el pago"
+      },
+      "invoices": {
+        "title": "Facturas",
+        "subtitle": "Historial de Pagos",
+        "no_invoices": "No se encontraron facturas",
+        "date": "Fecha",
+        "description": "Descripción",
+        "amount": "Monto",
+        "status": "Estado",
+        "actions": "Acciones",
+        "download": "Descargar",
+        "monthly_subscription": "Suscripción Mensual"
+      },
+      "status": {
+        "confirmed": "Pagado",
+        "pending": "Pendiente",
+        "overdue": "Vencido",
+        "refunded": "Reembolsado",
+        "received_in_cash": "Recibido"
+      },
+      "settings": {
+        "title": "Configuración de Pagos",
+        "current_subscription": "Suscripción Actual",
+        "plan": "Plan",
+        "next_payment": "Próximo cargo",
+        "value": "Valor",
+        "payment_method": "Método de Pago",
+        "update_card": "Actualizar Tarjeta",
+        "save": "Guardar",
+        "cancel_subscription": "Cancelar Suscripción",
+        "cancel_confirm_title": "¿Estás seguro?",
+        "cancel_confirm_desc": "Perderás acceso a todas las funciones premium",
+        "cancel_reason_placeholder": "Por favor, dinos por qué cancelas",
+        "keep_subscription": "Mantener Suscripción",
+        "confirm_cancel": "Confirmar Cancelación",
+        "no_subscription": "Sin Suscripción Activa",
+        "no_subscription_desc": "No tienes una suscripción activa",
+        "subscribe_now": "Suscribirse Ahora",
+        "card_updated": "¡Tarjeta actualizada con éxito!",
+        "subscription_canceled": "Suscripción cancelada",
+        "reason_required": "Motivo requerido"
+      },
+      "plan": {
+        "monthly": "mensual",
+        "features": "Características",
+        "select": "Seleccionar",
+        "selected": "Seleccionado",
+        "per_month": "/mes"
+      },
+      "validation": {
+        "invalid_card": "Número de tarjeta inválido",
+        "invalid_cpf": "Documento inválido",
+        "invalid_name": "Nombre inválido",
+        "invalid_month": "Mes inválido",
+        "invalid_year": "Año inválido",
+        "invalid_cvv": "CVV inválido"
+      }
+    }
+  }
+}

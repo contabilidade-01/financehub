@@ -76,6 +76,7 @@ import * as chartController from "./controllers/chart-svg.controller";
 import * as chartBarController from "./controllers/chart.controller";
 import * as reportController from "./controllers/report-image.controller";
 import * as paymentMethodController from "./controllers/payment-method.controller";
+import * as paymentSettingsController from "./controllers/payment-settings.controller";
 import { AnalyticsController } from "./controllers/analytics.controller";
 import { SubscriptionController } from "./controllers/subscription.controller";
 import * as databaseController from "./controllers/database.controller";
@@ -84,6 +85,11 @@ import * as welcomeMessagesController from "./controllers/welcome-messages.contr
 import * as wahaConfigController from "./controllers/waha-config.controller";
 import * as notificationController from "./controllers/notification.controller";
 import themesRouter from "./routes/themes";
+// Asaas Payment Integration
+import * as subscriptionPlanController from "./controllers/subscription-plan.controller";
+import * as billingController from "./controllers/billing.controller";
+import * as asaasWebhookController from "./controllers/asaas-webhook.controller";
+import { checkActiveSubscription, requireNoSubscription } from "./middleware/checkSubscription.middleware";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Configurar documentação Swagger
@@ -304,7 +310,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     reminderController.deleteReminder,
   );
 
-  // Subscription routes
+  // Subscription routes (legacy - manter para compatibilidade)
   app.post(
     "/api/subscription/cancel",
     combinedAuth,
@@ -317,6 +323,126 @@ export async function registerRoutes(app: Express): Promise<Server> {
     checkImpersonation,
     SubscriptionController.getSubscriptionStatus,
   );
+
+  // ============================================
+  // ASAAS PAYMENT INTEGRATION ROUTES
+  // ============================================
+
+  // Subscription Plans (Public - listar planos ativos)
+  app.get("/api/subscription-plans", subscriptionPlanController.getActivePlans);
+  app.get("/api/subscription-plans/:id", subscriptionPlanController.getPlanById);
+
+  // Subscription Plans (Admin - CRUD completo)
+  app.get(
+    "/api/admin/subscription-plans",
+    combinedAuth,
+    checkImpersonation,
+    requireSuperAdmin,
+    subscriptionPlanController.getAllPlans
+  );
+  app.post(
+    "/api/admin/subscription-plans",
+    combinedAuth,
+    checkImpersonation,
+    requireSuperAdmin,
+    subscriptionPlanController.createPlan
+  );
+  app.put(
+    "/api/admin/subscription-plans/:id",
+    combinedAuth,
+    checkImpersonation,
+    requireSuperAdmin,
+    subscriptionPlanController.updatePlan
+  );
+  app.delete(
+    "/api/admin/subscription-plans/:id",
+    combinedAuth,
+    checkImpersonation,
+    requireSuperAdmin,
+    subscriptionPlanController.deletePlan
+  );
+
+  // Admin Billing Dashboard Routes
+  app.get(
+    "/api/admin/billing/metrics",
+    combinedAuth,
+    checkImpersonation,
+    requireSuperAdmin,
+    billingController.getBillingMetrics
+  );
+  app.get(
+    "/api/admin/subscriptions",
+    combinedAuth,
+    checkImpersonation,
+    requireSuperAdmin,
+    billingController.getAllSubscriptions
+  );
+
+  // Billing & Checkout (User routes)
+  app.post(
+    "/api/billing/checkout",
+    combinedAuth,
+    checkImpersonation,
+    requireNoSubscription,
+    billingController.checkout
+  );
+  app.get(
+    "/api/billing/subscription",
+    combinedAuth,
+    checkImpersonation,
+    billingController.getCurrentSubscription
+  );
+  app.get(
+    "/api/billing/invoices",
+    combinedAuth,
+    checkImpersonation,
+    billingController.getInvoices
+  );
+  app.get(
+    "/api/billing/invoice/:id",
+    combinedAuth,
+    checkImpersonation,
+    billingController.getInvoiceById
+  );
+  app.get(
+    "/api/billing/payment-history",
+    combinedAuth,
+    checkImpersonation,
+    billingController.getPaymentHistory
+  );
+  app.post(
+    "/api/billing/cancel",
+    combinedAuth,
+    checkImpersonation,
+    billingController.cancelSubscription
+  );
+  app.put(
+    "/api/billing/update-card",
+    combinedAuth,
+    checkImpersonation,
+    billingController.updateCreditCard
+  );
+
+  // Asaas Webhooks (Public - sem auth, mas validado internamente)
+  app.post("/api/webhooks/asaas", asaasWebhookController.handleAsaasWebhook);
+
+  // Asaas Webhooks Admin (Gerenciar webhooks recebidos)
+  app.get(
+    "/api/admin/webhooks",
+    combinedAuth,
+    checkImpersonation,
+    requireSuperAdmin,
+    asaasWebhookController.listWebhooks
+  );
+  app.post(
+    "/api/admin/webhooks/:id/retry",
+    combinedAuth,
+    checkImpersonation,
+    requireSuperAdmin,
+    asaasWebhookController.retryWebhook
+  );
+
+  // ============================================
 
   // Notification routes - require super admin access
   app.post(
@@ -567,6 +693,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/admin/welcome-messages/:type", combinedAuth, requireSuperAdmin, welcomeMessagesController.getWelcomeMessageByType);
   app.put("/api/admin/welcome-messages/:type", combinedAuth, requireSuperAdmin, welcomeMessagesController.updateWelcomeMessage);
   app.post("/api/admin/welcome-messages", combinedAuth, requireSuperAdmin, welcomeMessagesController.createWelcomeMessage);
+
+  // Payment Settings endpoints (apenas superadmin)
+  app.get("/api/admin/payment-settings", combinedAuth, requireSuperAdmin, paymentSettingsController.getPaymentSettings);
+  app.put("/api/admin/payment-settings", combinedAuth, requireSuperAdmin, paymentSettingsController.updatePaymentSettings);
+  app.post("/api/admin/payment-settings/test", combinedAuth, requireSuperAdmin, paymentSettingsController.testPaymentConnection);
 
   // WAHA Config endpoints (apenas superadmin)
   app.get("/api/admin/waha-config", combinedAuth, requireSuperAdmin, wahaConfigController.getWahaConfig);

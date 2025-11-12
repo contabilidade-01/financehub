@@ -42,6 +42,12 @@ import CustomizePage from "@/pages/admin/customize";
 import LanguageSettings from "@/pages/admin/LanguageSettings";
 import LoadingScreen from "@/components/shared/LoadingScreen";
 import { useTranslation } from "@/contexts/LocalizationContext";
+import CheckoutPage from "@/pages/billing/checkout";
+import BillingSuccessPage from "@/pages/billing/success";
+import InvoicesPage from "@/pages/billing/invoices";
+import BillingSettingsPage from "@/pages/billing/settings";
+import AdminBillingDashboard from "@/pages/admin/billing-dashboard";
+import PaymentSettingsPage from "@/pages/admin/payment-settings";
 
 function Router() {
   const [location] = useLocation();
@@ -201,6 +207,36 @@ function Router() {
             <Route path="/admin/language-settings">
               <MainLayout>
                 <LanguageSettings />
+              </MainLayout>
+            </Route>
+            <Route path="/admin/payment-settings">
+              <MainLayout>
+                <PaymentSettingsPage />
+              </MainLayout>
+            </Route>
+            <Route path="/admin/billing">
+              <MainLayout>
+                <AdminBillingDashboard />
+              </MainLayout>
+            </Route>
+            <Route path="/billing/checkout">
+              <MainLayout>
+                <CheckoutPage />
+              </MainLayout>
+            </Route>
+            <Route path="/billing/success">
+              <MainLayout>
+                <BillingSuccessPage />
+              </MainLayout>
+            </Route>
+            <Route path="/billing/invoices">
+              <MainLayout>
+                <InvoicesPage />
+              </MainLayout>
+            </Route>
+            <Route path="/billing/settings">
+              <MainLayout>
+                <BillingSettingsPage />
               </MainLayout>
             </Route>
           </>

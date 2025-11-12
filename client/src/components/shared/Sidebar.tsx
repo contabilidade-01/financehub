@@ -2,12 +2,12 @@ import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { 
-  LayoutDashboard, 
-  Wallet, 
-  PlusCircle, 
-  CreditCard, 
-  Tag, 
+import {
+  LayoutDashboard,
+  Wallet,
+  PlusCircle,
+  CreditCard,
+  Tag,
   Menu,
   LogOut,
   User as UserIcon,
@@ -16,7 +16,8 @@ import {
   Settings,
   CalendarDays,
   Key,
-  BarChart3
+  BarChart3,
+  DollarSign
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { VersionDisplay } from "@/components/shared/VersionDisplay";
@@ -98,6 +99,13 @@ function Sidebar() {
       ]
     },
     {
+      label: t('navigation.sections.billing', 'ASSINATURA'),
+      items: [
+        { icon: <DollarSign className="mr-3 h-4 w-4" />, text: t('navigation.billing_settings', 'Minha Assinatura'), path: "/billing/settings" },
+        { icon: <CreditCard className="mr-3 h-4 w-4" />, text: t('navigation.invoices', 'Faturas'), path: "/billing/invoices" },
+      ]
+    },
+    {
       label: t('navigation.sections.settings', 'CONFIGURAÇÕES'),
       items: [
         { icon: <CreditCard className="mr-3 h-4 w-4" />, text: t('navigation.payment_methods', 'Formas de Pagamento'), path: "/payment-methods" },
@@ -115,8 +123,10 @@ function Sidebar() {
       items: [
         { icon: <Shield className="mr-3 h-4 w-4" />, text: t('navigation.admin_dashboard', 'Dashboard Admin'), path: "/admin" },
         { icon: <Users className="mr-3 h-4 w-4" />, text: t('navigation.users', 'Usuários'), path: "/admin/users" },
+        { icon: <DollarSign className="mr-3 h-4 w-4" />, text: t('navigation.billing', 'Pagamentos'), path: "/admin/billing" },
+        { icon: <CreditCard className="mr-3 h-4 w-4" />, text: t('navigation.payment_settings', 'Config. Pagamento'), path: "/admin/payment-settings" },
         { icon: <Settings className="mr-3 h-4 w-4" />, text: t('navigation.customize', 'Personalizar'), path: "/admin/customize" }
-        
+
       ]
     }
   ];
