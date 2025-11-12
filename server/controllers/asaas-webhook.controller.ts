@@ -3,6 +3,7 @@ import { storage } from "../storage";
 import { getAsaasService } from "../services/asaas.service";
 import { getSubscriptionService } from "../services/subscription.service";
 import { getNotificationService } from "../services/notification.service";
+import { broadcastNotification, broadcastToRole } from "../websocket";
 
 /**
  * Asaas Webhook Controller
@@ -46,7 +47,8 @@ export async function handleAsaasWebhook(req: Request, res: Response) {
     const webhookToken = req.headers['asaas-access-token'] as string;
     const asaasService = await getAsaasService();
 
-    if (!asaasService.verifyWebhook(webhookToken)) {
+    const isValidWebhook = await asaasService.verifyWebhook(webhookToken);
+    if (!isValidWebhook) {
       console.warn('[AsaasWebhook] Invalid webhook signature');
       return res.status(401).json({ error: "Webhook inválido" });
     }
@@ -109,6 +111,35 @@ export async function handleAsaasWebhook(req: Request, res: Response) {
 /**
  * Processar evento específico do webhook
  */
+/**
+ * Buscar configurações de notificação de pagamento
+ */
+async function getPaymentNotificationSettings() {
+  try {
+    const { db } = await import('../db');
+    const { paymentSettings } = await import('@shared/schema');
+    const { eq } = await import('drizzle-orm');
+
+    const settings = await db
+      .select()
+      .from(paymentSettings)
+      .where(eq(paymentSettings.provider, 'asaas'))
+      .limit(1);
+
+    if (settings.length > 0) {
+      return {
+        sendEmail: settings[0].sendActivationEmail ?? true,
+        sendWhatsApp: settings[0].sendActivationWhatsapp ?? false
+      };
+    }
+  } catch (error) {
+    console.warn('[AsaasWebhook] Error fetching notification settings:', error);
+  }
+
+  // Default: enviar email, não enviar WhatsApp
+  return { sendEmail: true, sendWhatsApp: false };
+}
+
 async function processWebhookEvent(eventType: string, paymentData: any, webhookId: number) {
   const subscriptionService = getSubscriptionService(storage);
   const notificationService = getNotificationService();
@@ -127,6 +158,10 @@ async function processWebhookEvent(eventType: string, paymentData: any, webhookI
     throw new Error(`User not found: ${payment.usuarioId}`);
   }
 
+  // Buscar configurações de notificação
+  const notificationSettings = await getPaymentNotificationSettings();
+  console.log('[AsaasWebhook] Notification settings:', notificationSettings);
+
   switch (eventType) {
     case 'PAYMENT_CREATED':
       // Pagamento criado - apenas logar
@@ -134,6 +169,26 @@ async function processWebhookEvent(eventType: string, paymentData: any, webhookI
       await storage.updatePaymentTransaction(payment.id, {
         status: 'pending'
       });
+
+      // Broadcast em tempo real
+      broadcastNotification({
+        id: `payment-created-${payment.id}`,
+        type: 'info',
+        title: 'Pagamento Criado',
+        message: `Seu pagamento de R$ ${payment.amount} foi registrado.`,
+        timestamp: new Date().toISOString(),
+        autoClose: 5000
+      }, [user.id.toString()]);
+
+      // Notificar admins
+      broadcastToRole({
+        id: `payment-created-admin-${payment.id}`,
+        type: 'info',
+        title: 'Novo Pagamento',
+        message: `${user.nome} criou um pagamento de R$ ${payment.amount}`,
+        timestamp: new Date().toISOString(),
+        autoClose: 5000
+      }, 'super_admin');
       break;
 
     case 'PAYMENT_UPDATED':
@@ -157,12 +212,38 @@ async function processWebhookEvent(eventType: string, paymentData: any, webhookI
         await subscriptionService.activateUserSubscription(payment.usuarioId, payment.subscriptionId);
       }
 
-      // Enviar notificação
-      await notificationService.sendPaymentConfirmed(
-        user,
-        parseFloat(payment.amount.toString()),
-        payment.asaasInvoiceUrl || undefined
-      );
+      // Enviar notificação (respeitando configurações do super_admin)
+      if (notificationSettings.sendEmail || notificationSettings.sendWhatsApp) {
+        console.log(`[AsaasWebhook] Sending activation notification (Email: ${notificationSettings.sendEmail}, WhatsApp: ${notificationSettings.sendWhatsApp})`);
+        await notificationService.sendPaymentConfirmed(
+          user,
+          parseFloat(payment.amount.toString()),
+          payment.asaasInvoiceUrl || undefined
+        );
+      } else {
+        console.log('[AsaasWebhook] Activation notifications disabled by admin settings');
+      }
+
+      // Broadcast em tempo real para o usuário (sempre enviar, independente das configurações de email/whatsapp)
+      broadcastNotification({
+        id: `payment-confirmed-${payment.id}`,
+        type: 'success',
+        title: 'Pagamento Confirmado!',
+        message: `Seu pagamento de R$ ${payment.amount} foi confirmado com sucesso!`,
+        timestamp: new Date().toISOString(),
+        autoClose: 8000,
+        persistent: true
+      }, [user.id.toString()]);
+
+      // Notificar admins
+      broadcastToRole({
+        id: `payment-confirmed-admin-${payment.id}`,
+        type: 'success',
+        title: 'Pagamento Confirmado',
+        message: `${user.nome} - R$ ${payment.amount} confirmado`,
+        timestamp: new Date().toISOString(),
+        autoClose: 5000
+      }, 'super_admin');
       break;
 
     case 'PAYMENT_OVERDUE':
@@ -179,6 +260,26 @@ async function processWebhookEvent(eventType: string, paymentData: any, webhookI
 
       // Processar falha de pagamento
       await subscriptionService.handlePaymentFailure(paymentData.id, newRetryCount);
+
+      // Broadcast em tempo real
+      broadcastNotification({
+        id: `payment-overdue-${payment.id}`,
+        type: 'warning',
+        title: 'Pagamento Vencido',
+        message: `Seu pagamento de R$ ${payment.amount} está vencido. Por favor, regularize.`,
+        timestamp: new Date().toISOString(),
+        persistent: true
+      }, [user.id.toString()]);
+
+      // Notificar admins
+      broadcastToRole({
+        id: `payment-overdue-admin-${payment.id}`,
+        type: 'warning',
+        title: 'Pagamento Vencido',
+        message: `${user.nome} - R$ ${payment.amount} vencido`,
+        timestamp: new Date().toISOString(),
+        autoClose: 5000
+      }, 'super_admin');
       break;
 
     case 'PAYMENT_REFUNDED':
@@ -198,6 +299,26 @@ async function processWebhookEvent(eventType: string, paymentData: any, webhookI
           'Pagamento estornado'
         );
       }
+
+      // Broadcast em tempo real
+      broadcastNotification({
+        id: `payment-refunded-${payment.id}`,
+        type: 'info',
+        title: 'Pagamento Estornado',
+        message: `Seu pagamento de R$ ${payment.amount} foi estornado.`,
+        timestamp: new Date().toISOString(),
+        autoClose: 8000
+      }, [user.id.toString()]);
+
+      // Notificar admins
+      broadcastToRole({
+        id: `payment-refunded-admin-${payment.id}`,
+        type: 'info',
+        title: 'Pagamento Estornado',
+        message: `${user.nome} - R$ ${payment.amount} estornado`,
+        timestamp: new Date().toISOString(),
+        autoClose: 5000
+      }, 'super_admin');
       break;
 
     case 'PAYMENT_RECEIVED_IN_CASH_UNDONE':
@@ -217,6 +338,26 @@ async function processWebhookEvent(eventType: string, paymentData: any, webhookI
           'Pagamento desfeito pelo gateway'
         );
       }
+
+      // Broadcast em tempo real
+      broadcastNotification({
+        id: `payment-undone-${payment.id}`,
+        type: 'error',
+        title: 'Pagamento Desfeito',
+        message: `Seu pagamento de R$ ${payment.amount} foi desfeito. Entre em contato com o suporte.`,
+        timestamp: new Date().toISOString(),
+        persistent: true
+      }, [user.id.toString()]);
+
+      // Notificar admins
+      broadcastToRole({
+        id: `payment-undone-admin-${payment.id}`,
+        type: 'error',
+        title: 'Pagamento Desfeito',
+        message: `${user.nome} - R$ ${payment.amount} desfeito`,
+        timestamp: new Date().toISOString(),
+        autoClose: 5000
+      }, 'super_admin');
       break;
 
     case 'PAYMENT_DELETED':

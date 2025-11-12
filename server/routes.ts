@@ -378,6 +378,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     billingController.getAllSubscriptions
   );
 
+  // Admin Payment Search & Management Routes
+  app.get(
+    "/api/admin/payments/search",
+    combinedAuth,
+    checkImpersonation,
+    requireSuperAdmin,
+    billingController.searchPayments
+  );
+  app.get(
+    "/api/admin/payments/:id",
+    combinedAuth,
+    checkImpersonation,
+    requireSuperAdmin,
+    billingController.getPaymentDetails
+  );
+  app.post(
+    "/api/admin/payments/:id/retry",
+    combinedAuth,
+    checkImpersonation,
+    requireSuperAdmin,
+    billingController.retryPayment
+  );
+
   // Billing & Checkout (User routes)
   app.post(
     "/api/billing/checkout",

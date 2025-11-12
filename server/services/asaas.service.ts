@@ -432,17 +432,55 @@ export class AsaasService {
 
   /**
    * Verificar se webhook é válido (validação simples por token)
+   * Verifica primeiro no banco de dados, depois no .env como fallback
    * Para produção, implementar validação por assinatura se disponível
    */
-  verifyWebhook(requestToken: string): boolean {
-    const webhookSecret = process.env.ASAAS_WEBHOOK_SECRET;
-
-    if (!webhookSecret) {
-      console.warn('[AsaasService] ASAAS_WEBHOOK_SECRET not configured');
+  async verifyWebhook(requestToken: string): Promise<boolean> {
+    if (!requestToken) {
+      console.warn('[AsaasService] No webhook token provided');
       return false;
     }
 
-    return requestToken === webhookSecret;
+    // Tentar buscar webhook secret do banco de dados primeiro
+    try {
+      const { db } = await import('../db');
+      const { paymentSettings } = await import('@shared/schema');
+      const { eq } = await import('drizzle-orm');
+
+      const settings = await db
+        .select()
+        .from(paymentSettings)
+        .where(eq(paymentSettings.provider, 'asaas'))
+        .limit(1);
+
+      if (settings.length > 0 && settings[0].webhookSecret) {
+        const isValid = requestToken === settings[0].webhookSecret;
+        if (isValid) {
+          console.log('[AsaasService] Webhook validated with database token');
+        } else {
+          console.warn('[AsaasService] Webhook token does not match database token');
+        }
+        return isValid;
+      }
+    } catch (error) {
+      console.warn('[AsaasService] Error fetching webhook secret from database, falling back to env:', error);
+    }
+
+    // Fallback para variável de ambiente
+    const webhookSecret = process.env.ASAAS_WEBHOOK_SECRET;
+
+    if (!webhookSecret) {
+      console.warn('[AsaasService] ASAAS_WEBHOOK_SECRET not configured (neither in database nor in .env)');
+      return false;
+    }
+
+    const isValid = requestToken === webhookSecret;
+    if (isValid) {
+      console.log('[AsaasService] Webhook validated with environment variable');
+    } else {
+      console.warn('[AsaasService] Webhook token does not match environment variable');
+    }
+    return isValid;
   }
 
   // ============================================

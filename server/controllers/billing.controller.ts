@@ -2,6 +2,9 @@ import { Request, Response } from "express";
 import { storage } from "../storage";
 import { getSubscriptionService } from "../services/subscription.service";
 import { z } from "zod";
+import { db } from "../db";
+import { paymentTransactions, users, userSubscriptions, subscriptionPlans } from "@shared/schema";
+import { eq } from "drizzle-orm";
 
 /**
  * Billing Controller
@@ -560,5 +563,281 @@ export async function getAllSubscriptions(req: Request, res: Response) {
   } catch (error) {
     console.error("Error fetching all subscriptions:", error);
     res.status(500).json({ error: "Erro ao buscar assinaturas" });
+  }
+}
+
+/**
+ * @swagger
+ * /api/admin/payments/search:
+ *   get:
+ *     summary: Buscar pagamentos (ADMIN ONLY)
+ *     tags: [Admin Billing]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: q
+ *         schema:
+ *           type: string
+ *         description: Termo de busca (nome, email ou telefone do usuário)
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *         description: Filtrar por status do pagamento
+ *       - in: query
+ *         name: paymentMethod
+ *         schema:
+ *           type: string
+ *         description: Filtrar por método de pagamento
+ *       - in: query
+ *         name: dateFrom
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Data inicial (YYYY-MM-DD)
+ *       - in: query
+ *         name: dateTo
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Data final (YYYY-MM-DD)
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *         description: Limite de resultados
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *         description: Offset para paginação
+ *     responses:
+ *       200:
+ *         description: Lista de pagamentos encontrados
+ *       500:
+ *         description: Erro ao buscar pagamentos
+ */
+export async function searchPayments(req: Request, res: Response) {
+  try {
+    const {
+      q: searchTerm,
+      status,
+      paymentMethod,
+      dateFrom,
+      dateTo,
+      limit = '50',
+      offset = '0'
+    } = req.query;
+
+    const payments = await storage.searchPaymentTransactions(
+      {
+        searchTerm: searchTerm as string,
+        status: status as string,
+        paymentMethod: paymentMethod as string,
+        dateFrom: dateFrom as string,
+        dateTo: dateTo as string
+      },
+      parseInt(limit as string),
+      parseInt(offset as string)
+    );
+
+    res.json(payments);
+
+  } catch (error) {
+    console.error("Error searching payments:", error);
+    res.status(500).json({ error: "Erro ao buscar pagamentos" });
+  }
+}
+
+/**
+ * @swagger
+ * /api/admin/payments/{id}/retry:
+ *   post:
+ *     summary: Reprocessar pagamento manualmente (ADMIN ONLY)
+ *     tags: [Admin Billing]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID do pagamento
+ *     responses:
+ *       200:
+ *         description: Pagamento reprocessado com sucesso
+ *       404:
+ *         description: Pagamento não encontrado
+ *       500:
+ *         description: Erro ao reprocessar pagamento
+ */
+export async function retryPayment(req: Request, res: Response) {
+  try {
+    const paymentId = parseInt(req.params.id);
+
+    // Buscar pagamento no banco
+    const payment = await storage.getPaymentTransactionById(paymentId);
+    if (!payment) {
+      return res.status(404).json({ error: "Pagamento não encontrado" });
+    }
+
+    // Buscar usuário
+    const user = await storage.getUserById(payment.usuarioId);
+    if (!user) {
+      return res.status(404).json({ error: "Usuário não encontrado" });
+    }
+
+    // Buscar status atual no Asaas
+    const asaasService = await import('../services/asaas.service').then(m => m.getAsaasService());
+    const asaasPayment = await asaasService.getPayment(payment.asaasPaymentId);
+
+    console.log(`[Admin] Retrying payment ${payment.id} - Current Asaas status:`, asaasPayment.status);
+
+    // Se o status no Asaas é diferente do nosso banco, sincronizar
+    if (asaasPayment.status === 'RECEIVED' || asaasPayment.status === 'CONFIRMED') {
+      await storage.updatePaymentTransaction(payment.id, {
+        status: 'confirmed',
+        confirmedDate: asaasPayment.confirmedDate ? new Date(asaasPayment.confirmedDate) : new Date(),
+        metadata: JSON.stringify(asaasPayment)
+      });
+
+      return res.json({
+        success: true,
+        message: "Pagamento já confirmado no Asaas, status sincronizado",
+        payment: {
+          id: payment.id,
+          status: 'confirmed',
+          asaasStatus: asaasPayment.status
+        }
+      });
+    }
+
+    // Se ainda está pendente/vencido, incrementar retry count
+    if (payment.status === 'pending' || payment.status === 'overdue') {
+      const newRetryCount = (payment.retryCount || 0) + 1;
+
+      await storage.updatePaymentTransaction(payment.id, {
+        retryCount: newRetryCount,
+        metadata: JSON.stringify({
+          ...JSON.parse(payment.metadata || '{}'),
+          lastRetry: new Date().toISOString(),
+          retryBy: 'admin'
+        })
+      });
+
+      // Enviar notificação ao usuário
+      const { broadcastNotification } = await import('../websocket');
+      broadcastNotification({
+        id: `payment-retry-${payment.id}`,
+        type: 'info',
+        title: 'Pagamento em Processamento',
+        message: `Seu pagamento de R$ ${payment.amount} está sendo reprocessado.`,
+        timestamp: new Date().toISOString(),
+        autoClose: 5000
+      }, [user.id.toString()]);
+
+      return res.json({
+        success: true,
+        message: "Pagamento marcado para reprocessamento",
+        payment: {
+          id: payment.id,
+          status: payment.status,
+          retryCount: newRetryCount,
+          asaasStatus: asaasPayment.status
+        }
+      });
+    }
+
+    // Se já está confirmado ou estornado
+    res.json({
+      success: false,
+      message: `Pagamento não pode ser reprocessado. Status atual: ${payment.status}`,
+      payment: {
+        id: payment.id,
+        status: payment.status,
+        asaasStatus: asaasPayment.status
+      }
+    });
+
+  } catch (error: any) {
+    console.error("Error retrying payment:", error);
+    res.status(500).json({ error: error.message || "Erro ao reprocessar pagamento" });
+  }
+}
+
+/**
+ * @swagger
+ * /api/admin/payments/{id}:
+ *   get:
+ *     summary: Obter detalhes de um pagamento (ADMIN ONLY)
+ *     tags: [Admin Billing]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID do pagamento
+ *     responses:
+ *       200:
+ *         description: Detalhes do pagamento
+ *       404:
+ *         description: Pagamento não encontrado
+ *       500:
+ *         description: Erro ao buscar pagamento
+ */
+export async function getPaymentDetails(req: Request, res: Response) {
+  try {
+    const paymentId = parseInt(req.params.id);
+
+    const payments = await storage.searchPaymentTransactions(
+      { searchTerm: '' },
+      1,
+      0
+    );
+
+    // Encontrar o pagamento específico
+    const paymentResult = await db
+      .select({
+        id: paymentTransactions.id,
+        usuarioId: paymentTransactions.usuarioId,
+        userName: users.nome,
+        userEmail: users.email,
+        userPhone: users.telefone,
+        subscriptionId: paymentTransactions.subscriptionId,
+        asaasPaymentId: paymentTransactions.asaasPaymentId,
+        asaasInvoiceUrl: paymentTransactions.asaasInvoiceUrl,
+        amount: paymentTransactions.amount,
+        currency: paymentTransactions.currency,
+        status: paymentTransactions.status,
+        paymentMethod: paymentTransactions.paymentMethod,
+        dueDate: paymentTransactions.dueDate,
+        confirmedDate: paymentTransactions.confirmedDate,
+        description: paymentTransactions.description,
+        retryCount: paymentTransactions.retryCount,
+        metadata: paymentTransactions.metadata,
+        createdAt: paymentTransactions.createdAt,
+        updatedAt: paymentTransactions.updatedAt
+      })
+      .from(paymentTransactions)
+      .innerJoin(users, eq(paymentTransactions.usuarioId, users.id))
+      .where(eq(paymentTransactions.id, paymentId))
+      .limit(1);
+
+    if (paymentResult.length === 0) {
+      return res.status(404).json({ error: "Pagamento não encontrado" });
+    }
+
+    res.json(paymentResult[0]);
+
+  } catch (error) {
+    console.error("Error fetching payment details:", error);
+    res.status(500).json({ error: "Erro ao buscar detalhes do pagamento" });
   }
 }

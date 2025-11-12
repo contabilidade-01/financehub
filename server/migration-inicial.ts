@@ -358,6 +358,8 @@ export async function runInitialMigration({ dropAll = false }: { dropAll?: boole
       api_key TEXT NOT NULL,
       webhook_secret TEXT,
       enabled BOOLEAN NOT NULL DEFAULT true,
+      send_activation_email BOOLEAN NOT NULL DEFAULT true,
+      send_activation_whatsapp BOOLEAN NOT NULL DEFAULT false,
       created_at TIMESTAMPTZ DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo'),
       updated_at TIMESTAMPTZ,
       CONSTRAINT payment_settings_provider_unique UNIQUE (provider)
@@ -404,6 +406,8 @@ export async function runInitialMigration({ dropAll = false }: { dropAll?: boole
     await client`CREATE INDEX IF NOT EXISTS idx_payment_transactions_status ON payment_transactions(status)`;
     await client`CREATE INDEX IF NOT EXISTS idx_payment_transactions_asaas_payment_id ON payment_transactions(asaas_payment_id)`;
     await client`CREATE INDEX IF NOT EXISTS idx_payment_transactions_overdue ON payment_transactions(status, retry_count) WHERE status = 'overdue' AND retry_count < 3`;
+    await client`CREATE INDEX IF NOT EXISTS idx_payment_transactions_due_date ON payment_transactions(due_date)`;
+    await client`CREATE INDEX IF NOT EXISTS idx_payment_transactions_created_at ON payment_transactions(created_at)`;
     await client`CREATE INDEX IF NOT EXISTS idx_asaas_webhooks_event_type ON asaas_webhooks(event_type)`;
     await client`CREATE INDEX IF NOT EXISTS idx_asaas_webhooks_processed ON asaas_webhooks(processed)`;
     await client`CREATE INDEX IF NOT EXISTS idx_asaas_webhooks_unprocessed ON asaas_webhooks(created_at) WHERE processed = false`;

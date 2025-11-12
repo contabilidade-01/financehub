@@ -157,6 +157,13 @@ export interface IStorage {
   getPaymentTransactionsByUserId(userId: number, limit?: number): Promise<PaymentTransaction[]>;
   getPaymentTransactionsBySubscriptionId(subscriptionId: number): Promise<PaymentTransaction[]>;
   getOverduePayments(): Promise<PaymentTransaction[]>;
+  searchPaymentTransactions(filters: {
+    searchTerm?: string;
+    status?: string;
+    paymentMethod?: string;
+    dateFrom?: string;
+    dateTo?: string;
+  }, limit?: number, offset?: number): Promise<any[]>;
   createPaymentTransaction(paymentData: InsertPaymentTransaction): Promise<PaymentTransaction>;
   updatePaymentTransaction(id: number, paymentData: UpdatePaymentTransaction): Promise<PaymentTransaction | undefined>;
 
@@ -1274,6 +1281,81 @@ export class DbStorage implements IStorage {
         )
       )
       .orderBy(paymentTransactions.dueDate);
+  }
+
+  async searchPaymentTransactions(
+    filters: {
+      searchTerm?: string;
+      status?: string;
+      paymentMethod?: string;
+      dateFrom?: string;
+      dateTo?: string;
+    },
+    limit: number = 50,
+    offset: number = 0
+  ): Promise<any[]> {
+    const conditions: any[] = [];
+
+    // Busca por nome, email ou telefone do usuário
+    if (filters.searchTerm && filters.searchTerm.trim()) {
+      const searchPattern = `%${filters.searchTerm.trim()}%`;
+      conditions.push(
+        sql`(
+          ${users.nome} ILIKE ${searchPattern} OR
+          ${users.email} ILIKE ${searchPattern} OR
+          ${users.telefone} ILIKE ${searchPattern}
+        )`
+      );
+    }
+
+    // Filtro por status
+    if (filters.status) {
+      conditions.push(eq(paymentTransactions.status, filters.status));
+    }
+
+    // Filtro por método de pagamento
+    if (filters.paymentMethod) {
+      conditions.push(eq(paymentTransactions.paymentMethod, filters.paymentMethod));
+    }
+
+    // Filtro por data de vencimento (intervalo)
+    if (filters.dateFrom) {
+      conditions.push(gte(paymentTransactions.dueDate, new Date(filters.dateFrom)));
+    }
+    if (filters.dateTo) {
+      conditions.push(lte(paymentTransactions.dueDate, new Date(filters.dateTo)));
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    return await db
+      .select({
+        id: paymentTransactions.id,
+        usuarioId: paymentTransactions.usuarioId,
+        userName: users.nome,
+        userEmail: users.email,
+        userPhone: users.telefone,
+        subscriptionId: paymentTransactions.subscriptionId,
+        asaasPaymentId: paymentTransactions.asaasPaymentId,
+        asaasInvoiceUrl: paymentTransactions.asaasInvoiceUrl,
+        amount: paymentTransactions.amount,
+        currency: paymentTransactions.currency,
+        status: paymentTransactions.status,
+        paymentMethod: paymentTransactions.paymentMethod,
+        dueDate: paymentTransactions.dueDate,
+        confirmedDate: paymentTransactions.confirmedDate,
+        description: paymentTransactions.description,
+        retryCount: paymentTransactions.retryCount,
+        metadata: paymentTransactions.metadata,
+        createdAt: paymentTransactions.createdAt,
+        updatedAt: paymentTransactions.updatedAt
+      })
+      .from(paymentTransactions)
+      .innerJoin(users, eq(paymentTransactions.usuarioId, users.id))
+      .where(whereClause)
+      .orderBy(desc(paymentTransactions.createdAt))
+      .limit(limit)
+      .offset(offset);
   }
 
   async createPaymentTransaction(paymentData: InsertPaymentTransaction): Promise<PaymentTransaction> {

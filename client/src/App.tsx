@@ -48,6 +48,7 @@ import InvoicesPage from "@/pages/billing/invoices";
 import BillingSettingsPage from "@/pages/billing/settings";
 import AdminBillingDashboard from "@/pages/admin/billing-dashboard";
 import PaymentSettingsPage from "@/pages/admin/payment-settings";
+import AdminPaymentsPage from "@/pages/admin/payments";
 
 function Router() {
   const [location] = useLocation();
@@ -217,6 +218,11 @@ function Router() {
             <Route path="/admin/billing">
               <MainLayout>
                 <AdminBillingDashboard />
+              </MainLayout>
+            </Route>
+            <Route path="/admin/payments">
+              <MainLayout>
+                <AdminPaymentsPage />
               </MainLayout>
             </Route>
             <Route path="/billing/checkout">

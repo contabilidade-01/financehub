@@ -9,6 +9,9 @@
 
 import type { User, SubscriptionPlan } from '@shared/schema';
 
+// Importação condicional do nodemailer (só carrega se EMAIL_ENABLED=true)
+type Transporter = any;
+
 // ============================================
 // INTERFACES
 // ============================================
@@ -18,6 +21,7 @@ export interface EmailConfig {
   to: string;
   subject: string;
   body: string;
+  html?: string;
 }
 
 export interface WhatsAppMessage {
@@ -31,27 +35,170 @@ export interface WhatsAppMessage {
 
 export class NotificationService {
   private wahaEnabled: boolean;
+  private emailEnabled: boolean;
+  private emailTransporter: Transporter | null = null;
+  private emailInitialized: boolean = false;
 
   constructor() {
     this.wahaEnabled = process.env.WAHA_ENABLED === 'true';
+    this.emailEnabled = process.env.EMAIL_ENABLED === 'true';
+
+    // Nota: Inicialização do email será feita de forma lazy quando necessário
+  }
+
+  /**
+   * Garante que o email transporter está inicializado
+   */
+  private async ensureEmailInitialized(): Promise<void> {
+    if (this.emailEnabled && !this.emailInitialized) {
+      await this.initializeEmailTransporter();
+      this.emailInitialized = true;
+    }
   }
 
   // ============================================
-  // EMAIL METHODS (Placeholder para futuro)
+  // EMAIL METHODS
   // ============================================
 
   /**
+   * Inicializar transporter de email (SMTP ou SendGrid)
+   */
+  private async initializeEmailTransporter() {
+    try {
+      // Importação dinâmica do nodemailer (só carrega se realmente necessário)
+      const nodemailer = await import('nodemailer').catch(() => {
+        console.warn('[NotificationService] nodemailer não instalado. Para usar email, instale: npm install nodemailer');
+        return null;
+      });
+
+      if (!nodemailer) {
+        this.emailEnabled = false;
+        return;
+      }
+
+      const emailService = process.env.EMAIL_SERVICE || 'smtp';
+
+      if (emailService === 'sendgrid') {
+        // SendGrid configuration
+        this.emailTransporter = nodemailer.createTransport({
+          host: 'smtp.sendgrid.net',
+          port: 587,
+          secure: false,
+          auth: {
+            user: 'apikey',
+            pass: process.env.SENDGRID_API_KEY
+          }
+        });
+        console.log('[NotificationService] Email transporter initialized: SendGrid');
+      } else {
+        // SMTP configuration (Gmail, Outlook, etc.)
+        this.emailTransporter = nodemailer.createTransport({
+          host: process.env.SMTP_HOST || 'smtp.gmail.com',
+          port: parseInt(process.env.SMTP_PORT || '587'),
+          secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
+          auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASSWORD
+          }
+        });
+        console.log('[NotificationService] Email transporter initialized: SMTP');
+      }
+    } catch (error) {
+      console.error('[NotificationService] Error initializing email transporter:', error);
+      this.emailEnabled = false;
+    }
+  }
+
+  /**
    * Enviar email genérico
-   * TODO: Implementar integração com serviço de email (SendGrid, SMTP, etc.)
    */
   private async sendEmail(config: EmailConfig): Promise<void> {
     try {
-      console.log('[NotificationService] Email sending (not implemented yet):', config.subject);
-      // TODO: Implementar com SendGrid ou SMTP
-      // await emailClient.send(config);
+      await this.ensureEmailInitialized();
+
+      if (!this.emailEnabled || !this.emailTransporter) {
+        console.log('[NotificationService] Email disabled or not configured, skipping:', config.subject);
+        return;
+      }
+
+      // Converter mensagem de texto para HTML básico
+      const htmlBody = config.html || this.textToHtml(config.body);
+
+      const mailOptions = {
+        from: config.from || process.env.EMAIL_FROM || 'noreply@financehub.com',
+        to: config.to,
+        subject: config.subject,
+        text: config.body,
+        html: htmlBody
+      };
+
+      const info = await this.emailTransporter.sendMail(mailOptions);
+      console.log('[NotificationService] Email sent successfully:', info.messageId);
+      console.log('  To:', config.to);
+      console.log('  Subject:', config.subject);
     } catch (error) {
       console.error('[NotificationService] Error sending email:', error);
+      throw error;
     }
+  }
+
+  /**
+   * Converter texto simples para HTML básico
+   */
+  private textToHtml(text: string): string {
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .container {
+      background-color: #f9f9f9;
+      border-radius: 8px;
+      padding: 30px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .logo {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .content {
+      background-color: white;
+      padding: 20px;
+      border-radius: 4px;
+    }
+    .footer {
+      text-align: center;
+      margin-top: 20px;
+      font-size: 12px;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">
+      <h2 style="color: #4CAF50; margin: 0;">FinanceHub</h2>
+    </div>
+    <div class="content">
+      ${text.split('\n').map(line => `<p>${line}</p>`).join('')}
+    </div>
+    <div class="footer">
+      <p>Este é um email automático. Por favor, não responda.</p>
+    </div>
+  </div>
+</body>
+</html>
+    `.trim();
   }
 
   // ============================================

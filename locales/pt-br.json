@@ -75,7 +75,9 @@
     },
     "billing_settings": "Minha Assinatura",
     "invoices": "Faturas",
-    "billing": "Pagamentos"
+    "billing": "Pagamentos",
+    "manage_payments": "Gerenciar Pagamentos",
+    "payment_settings": "Config. Pagamento"
   },
   "login": {
     "title": "Entrar",

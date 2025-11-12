@@ -167,7 +167,7 @@ export function useWebSocket() {
           // Adicionar badge para nova transação
           addTransactionBadge();
           console.log('[WebSocket] 🏷️ Badge adicionada para nova transação');
-          
+
           // Trigger do efeito de shake na transação específica
           if (notification.data?.transaction?.id) {
             triggerTransactionShake(notification.data.transaction.id);
@@ -175,22 +175,22 @@ export function useWebSocket() {
           } else {
             console.log('[WebSocket] ❌ Transaction ID não encontrado na notificação');
           }
-          
+
           // Invalidar queries relacionadas a transações
           console.log('[WebSocket] 🔄 Invalidando queries de transações...');
           console.log('[WebSocket] QueryClient antes da invalidação:', queryClient.getQueryData(['/api/transactions']));
-          
+
           await Promise.all([
             queryClient.invalidateQueries({ queryKey: ['/api/transactions'] }),
             queryClient.invalidateQueries({ queryKey: ['/api/transactions/recent'] }),
             queryClient.invalidateQueries({ queryKey: ['/api/dashboard/summary'] }),
             queryClient.invalidateQueries({ queryKey: ['/api/wallet/current'] })
           ]);
-          
+
           console.log('[WebSocket] QueryClient após invalidação:', queryClient.getQueryData(['/api/transactions']));
           console.log('[WebSocket] ✅ Cache de transações invalidado, badge adicionada e shake ativado');
           break;
-          
+
         case 'transaction.updated':
         case 'transaction.deleted':
           // Invalidar queries relacionadas a transações (sem badge)
@@ -201,6 +201,23 @@ export function useWebSocket() {
           console.log('[WebSocket] Cache de transações invalidado');
           break;
       }
+    }
+
+    // Handle billing/payment events (real-time updates)
+    // These notifications come from webhook processing
+    if (notification.id?.startsWith('payment-')) {
+      console.log('[WebSocket] 💳 Evento de pagamento recebido');
+
+      // Invalidar queries relacionadas a billing/pagamentos
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['payment-transactions'] }),
+        queryClient.invalidateQueries({ queryKey: ['subscription-plans'] }),
+        queryClient.invalidateQueries({ queryKey: ['user-subscription'] }),
+        queryClient.invalidateQueries({ queryKey: ['billing-stats'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin-billing'] })
+      ]);
+
+      console.log('[WebSocket] ✅ Cache de billing invalidado - interface atualizada em tempo real');
     }
   };
 

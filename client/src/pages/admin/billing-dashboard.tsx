@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Loader2, Plus, Edit, Trash2, DollarSign, Users, CreditCard, TrendingUp } from 'lucide-react';
 import { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { useWebSocket } from '@/hooks/useWebSocket';
 import { PaymentStatusBadge } from '@/components/billing/PaymentStatusBadge';
 import { motion } from 'framer-motion';
 
@@ -58,6 +59,7 @@ interface WebhookLog {
 
 export default function AdminBillingDashboard() {
   const { toast } = useToast();
+  const { isConnected } = useWebSocket(); // Enable real-time updates via WebSocket
   const [showCreatePlan, setShowCreatePlan] = useState(false);
   const [showEditPlan, setShowEditPlan] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
@@ -72,7 +74,7 @@ export default function AdminBillingDashboard() {
     active: true
   });
 
-  // Fetch metrics
+  // Fetch metrics (real-time updates via WebSocket, no polling needed)
   const { data: metrics, isLoading: metricsLoading } = useQuery<BillingMetrics>({
     queryKey: ['admin-billing-metrics'],
     queryFn: async () => {
@@ -81,8 +83,7 @@ export default function AdminBillingDashboard() {
       });
       if (!response.ok) throw new Error('Failed to fetch metrics');
       return response.json();
-    },
-    refetchInterval: 30000 // Refresh every 30 seconds
+    }
   });
 
   // Fetch plans
