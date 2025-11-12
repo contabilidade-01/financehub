@@ -3,6 +3,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -10,6 +12,7 @@ import { Loader2, Plus, Edit, Trash2, DollarSign, Users, CreditCard, TrendingUp 
 import { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { PaymentStatusBadge } from '@/components/billing/PaymentStatusBadge';
+import { motion } from 'framer-motion';
 
 interface SubscriptionPlan {
   id: number;
@@ -17,7 +20,7 @@ interface SubscriptionPlan {
   name: string;
   priceMonthly: string;
   features: string;
-  isActive: boolean;
+  active: boolean;
 }
 
 interface UserSubscription {
@@ -58,12 +61,15 @@ export default function AdminBillingDashboard() {
   const [showCreatePlan, setShowCreatePlan] = useState(false);
   const [showEditPlan, setShowEditPlan] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
+  const [togglingPlanId, setTogglingPlanId] = useState<number | null>(null);
+  const [showDeactivateConfirm, setShowDeactivateConfirm] = useState(false);
+  const [planToDeactivate, setPlanToDeactivate] = useState<SubscriptionPlan | null>(null);
   const [planForm, setPlanForm] = useState({
     planCode: '',
     name: '',
     priceMonthly: '',
     features: '',
-    isActive: true
+    active: true
   });
 
   // Fetch metrics
@@ -133,7 +139,7 @@ export default function AdminBillingDashboard() {
 
       toast({ title: 'Plano criado com sucesso!' });
       setShowCreatePlan(false);
-      setPlanForm({ planCode: '', name: '', priceMonthly: '', features: '', isActive: true });
+      setPlanForm({ planCode: '', name: '', priceMonthly: '', features: '', active: true });
       refetchPlans();
     } catch (error: any) {
       toast({
@@ -173,6 +179,53 @@ export default function AdminBillingDashboard() {
     }
   };
 
+  const handleTogglePlan = async (plan: SubscriptionPlan, newActiveState: boolean) => {
+    // Se estiver desativando, mostrar confirmação
+    if (!newActiveState) {
+      setPlanToDeactivate(plan);
+      setShowDeactivateConfirm(true);
+      return;
+    }
+
+    // Se estiver ativando, fazer diretamente
+    await performToggle(plan, newActiveState);
+  };
+
+  const performToggle = async (plan: SubscriptionPlan, newActiveState: boolean) => {
+    setTogglingPlanId(plan.id);
+
+    try {
+      const response = await fetch(`/api/admin/subscription-plans/${plan.id}`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: newActiveState })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to toggle plan');
+      }
+
+      toast({
+        title: newActiveState ? 'Plano ativado com sucesso!' : 'Plano desativado com sucesso!',
+        description: `O plano "${plan.name}" agora está ${newActiveState ? 'ativo' : 'inativo'}.`
+      });
+
+      refetchPlans();
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao alterar status do plano',
+        description: error.message,
+        variant: 'destructive'
+      });
+    } finally {
+      setTogglingPlanId(null);
+      setShowDeactivateConfirm(false);
+      setPlanToDeactivate(null);
+    }
+  };
+
   const handleDeletePlan = async (planId: number) => {
     if (!confirm('Tem certeza que deseja excluir este plano?')) return;
 
@@ -205,7 +258,7 @@ export default function AdminBillingDashboard() {
       name: plan.name,
       priceMonthly: plan.priceMonthly,
       features: plan.features,
-      isActive: plan.isActive
+      active: plan.active
     });
     setShowEditPlan(true);
   };
@@ -405,15 +458,33 @@ export default function AdminBillingDashboard() {
                   <TableCell>{plan.name}</TableCell>
                   <TableCell>R$ {parseFloat(plan.priceMonthly).toFixed(2)}/mês</TableCell>
                   <TableCell>
-                    <span
-                      className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                        plan.isActive
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-gray-100 text-gray-800'
-                      }`}
-                    >
-                      {plan.isActive ? 'Ativo' : 'Inativo'}
-                    </span>
+                    <div className="flex items-center gap-3">
+                      <Switch
+                        checked={plan.active}
+                        onCheckedChange={(checked) => handleTogglePlan(plan, checked)}
+                        disabled={togglingPlanId === plan.id}
+                      />
+                      <motion.span
+                        key={`${plan.id}-${plan.active}`}
+                        initial={{ scale: 0.8, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{ duration: 0.2 }}
+                        className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                          plan.active
+                            ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                            : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+                        }`}
+                      >
+                        {togglingPlanId === plan.id ? (
+                          <span className="flex items-center gap-1">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Alterando...
+                          </span>
+                        ) : (
+                          plan.active ? 'Ativo' : 'Inativo'
+                        )}
+                      </motion.span>
+                    </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-2">
@@ -486,12 +557,12 @@ export default function AdminBillingDashboard() {
             <div className="flex items-center space-x-2">
               <input
                 type="checkbox"
-                id="edit-isActive"
-                checked={planForm.isActive}
-                onChange={(e) => setPlanForm({ ...planForm, isActive: e.target.checked })}
+                id="edit-active"
+                checked={planForm.active}
+                onChange={(e) => setPlanForm({ ...planForm, active: e.target.checked })}
                 className="h-4 w-4"
               />
-              <Label htmlFor="edit-isActive">Plano Ativo</Label>
+              <Label htmlFor="edit-active">Plano Ativo</Label>
             </div>
           </div>
           <DialogFooter>
@@ -600,6 +671,36 @@ export default function AdminBillingDashboard() {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Confirmation Dialog for Deactivation */}
+      <AlertDialog open={showDeactivateConfirm} onOpenChange={setShowDeactivateConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Desativar Plano?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Você está prestes a desativar o plano <strong>"{planToDeactivate?.name}"</strong>.
+              <br /><br />
+              <span className="text-yellow-600 dark:text-yellow-400 font-semibold">⚠️ Atenção:</span> Este plano não ficará mais disponível para novas assinaturas, mas usuários com assinaturas ativas continuarão usando o plano até o final do período.
+              <br /><br />
+              Tem certeza que deseja continuar?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => {
+              setShowDeactivateConfirm(false);
+              setPlanToDeactivate(null);
+            }}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => planToDeactivate && performToggle(planToDeactivate, false)}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Sim, Desativar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

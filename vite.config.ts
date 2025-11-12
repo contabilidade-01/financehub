@@ -36,11 +36,15 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/api': {
-        target: 'http://localhost:5000',
+        target: process.env.NODE_ENV === 'development'
+          ? 'http://localhost:5001'
+          : 'http://localhost:5000',
         changeOrigin: true,
       },
       '/ws': {
-        target: 'ws://localhost:5000',
+        target: process.env.NODE_ENV === 'development'
+          ? 'ws://localhost:5001'
+          : 'ws://localhost:5000',
         ws: true,
         changeOrigin: true,
       },
