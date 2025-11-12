@@ -98,7 +98,8 @@ export async function runInitialMigration({ dropAll = false }: { dropAll?: boole
       data_cancelamento TIMESTAMPTZ,
       motivo_cancelamento TEXT,
       data_expiracao_assinatura TIMESTAMPTZ,
-      status_assinatura VARCHAR(20) DEFAULT 'ativa'
+      status_assinatura VARCHAR(20) DEFAULT 'ativa',
+      subscription_active BOOLEAN NOT NULL DEFAULT false
     )`;
 
     console.log('📋 Criando tabela: carteiras');
