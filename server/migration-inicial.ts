@@ -56,7 +56,15 @@ export async function runInitialMigration({ dropAll = false }: { dropAll?: boole
 
     if (dropAll) {
       console.log('⚠️  Apagando todas as tabelas do banco de dados...');
-      await client`DROP TABLE IF EXISTS 
+      await client`DROP TABLE IF EXISTS
+        payment_transactions,
+        asaas_webhooks,
+        user_subscriptions,
+        asaas_customers,
+        subscription_plans,
+        payment_settings,
+        localization_strings,
+        system_localization,
         welcome_messages,
         waha_session_webhooks,
         waha_config,
@@ -243,6 +251,117 @@ export async function runInitialMigration({ dropAll = false }: { dropAll?: boole
       updated_at TIMESTAMP DEFAULT NOW()
     )`;
 
+    console.log('📋 Criando tabela: system_localization');
+    await client`CREATE TABLE IF NOT EXISTS system_localization (
+      id SERIAL PRIMARY KEY,
+      locale_code VARCHAR(10) NOT NULL UNIQUE,
+      locale_name VARCHAR(100) NOT NULL,
+      is_active BOOLEAN NOT NULL DEFAULT false,
+      is_default BOOLEAN NOT NULL DEFAULT false,
+      created_at TIMESTAMPTZ DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo'),
+      created_by INTEGER,
+      updated_at TIMESTAMPTZ,
+      updated_by INTEGER
+    )`;
+
+    console.log('📋 Criando tabela: localization_strings');
+    await client`CREATE TABLE IF NOT EXISTS localization_strings (
+      id SERIAL PRIMARY KEY,
+      string_key VARCHAR(255) NOT NULL,
+      locale_code VARCHAR(10) NOT NULL,
+      string_value TEXT NOT NULL,
+      string_context VARCHAR(500),
+      created_at TIMESTAMPTZ DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo'),
+      updated_at TIMESTAMPTZ
+    )`;
+
+    console.log('📋 Criando tabela: subscription_plans');
+    await client`CREATE TABLE IF NOT EXISTS subscription_plans (
+      id SERIAL PRIMARY KEY,
+      plan_code VARCHAR(50) NOT NULL UNIQUE,
+      name VARCHAR(100) NOT NULL,
+      description TEXT,
+      price_monthly DECIMAL(10, 2) NOT NULL,
+      features TEXT NOT NULL,
+      max_transactions INTEGER DEFAULT 0,
+      max_wallets INTEGER DEFAULT 0,
+      max_categories INTEGER DEFAULT 0,
+      active BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMPTZ DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo'),
+      updated_at TIMESTAMPTZ
+    )`;
+
+    console.log('📋 Criando tabela: asaas_customers');
+    await client`CREATE TABLE IF NOT EXISTS asaas_customers (
+      id SERIAL PRIMARY KEY,
+      usuario_id INTEGER NOT NULL UNIQUE,
+      asaas_customer_id VARCHAR(100) NOT NULL UNIQUE,
+      cpf_cnpj VARCHAR(18),
+      created_at TIMESTAMPTZ DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo'),
+      updated_at TIMESTAMPTZ
+    )`;
+
+    console.log('📋 Criando tabela: user_subscriptions');
+    await client`CREATE TABLE IF NOT EXISTS user_subscriptions (
+      id SERIAL PRIMARY KEY,
+      usuario_id INTEGER NOT NULL,
+      plan_id INTEGER NOT NULL,
+      asaas_subscription_id VARCHAR(100) UNIQUE,
+      status VARCHAR(50) NOT NULL DEFAULT 'active',
+      current_period_start TIMESTAMPTZ,
+      current_period_end TIMESTAMPTZ,
+      canceled_at TIMESTAMPTZ,
+      cancellation_reason TEXT,
+      ended_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo'),
+      updated_at TIMESTAMPTZ
+    )`;
+
+    console.log('📋 Criando tabela: payment_transactions');
+    await client`CREATE TABLE IF NOT EXISTS payment_transactions (
+      id SERIAL PRIMARY KEY,
+      usuario_id INTEGER NOT NULL,
+      subscription_id INTEGER,
+      asaas_payment_id VARCHAR(100) UNIQUE,
+      asaas_invoice_url TEXT,
+      amount DECIMAL(10, 2) NOT NULL,
+      currency VARCHAR(3) NOT NULL DEFAULT 'BRL',
+      status VARCHAR(50) NOT NULL DEFAULT 'pending',
+      payment_method VARCHAR(50) NOT NULL DEFAULT 'credit_card',
+      due_date DATE,
+      confirmed_date TIMESTAMPTZ,
+      description TEXT,
+      retry_count INTEGER NOT NULL DEFAULT 0,
+      metadata TEXT,
+      created_at TIMESTAMPTZ DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo'),
+      updated_at TIMESTAMPTZ
+    )`;
+
+    console.log('📋 Criando tabela: asaas_webhooks');
+    await client`CREATE TABLE IF NOT EXISTS asaas_webhooks (
+      id SERIAL PRIMARY KEY,
+      event_type VARCHAR(100) NOT NULL,
+      asaas_event_id VARCHAR(100) UNIQUE,
+      payload TEXT NOT NULL,
+      processed BOOLEAN NOT NULL DEFAULT false,
+      processed_at TIMESTAMPTZ,
+      error_message TEXT,
+      created_at TIMESTAMPTZ DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')
+    )`;
+
+    console.log('📋 Criando tabela: payment_settings');
+    await client`CREATE TABLE IF NOT EXISTS payment_settings (
+      id SERIAL PRIMARY KEY,
+      provider VARCHAR(50) NOT NULL DEFAULT 'asaas',
+      environment VARCHAR(20) NOT NULL DEFAULT 'sandbox',
+      api_key TEXT NOT NULL,
+      webhook_secret TEXT,
+      enabled BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMPTZ DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo'),
+      updated_at TIMESTAMPTZ,
+      CONSTRAINT payment_settings_provider_unique UNIQUE (provider)
+    )`;
+
     console.log('📋 Criando constraints e índices...');
     
     // Constraints de chaves únicas
@@ -262,6 +381,31 @@ export async function runInitialMigration({ dropAll = false }: { dropAll?: boole
     await client`CREATE INDEX IF NOT EXISTS idx_custom_themes_is_active_light ON custom_themes(is_active_light)`;
     await client`CREATE INDEX IF NOT EXISTS idx_custom_themes_is_active_dark ON custom_themes(is_active_dark)`;
     await client`CREATE INDEX IF NOT EXISTS idx_custom_themes_created_at ON custom_themes(created_at)`;
+
+    // Índices e constraints para localization_strings
+    await client`CREATE UNIQUE INDEX IF NOT EXISTS localization_strings_key_locale_unique
+                 ON localization_strings(string_key, locale_code)`;
+    await client`CREATE INDEX IF NOT EXISTS idx_localization_strings_locale_code ON localization_strings(locale_code)`;
+    await client`CREATE INDEX IF NOT EXISTS idx_localization_strings_string_key ON localization_strings(string_key)`;
+    await client`CREATE INDEX IF NOT EXISTS idx_system_localization_locale_code ON system_localization(locale_code)`;
+    await client`CREATE INDEX IF NOT EXISTS idx_system_localization_is_active ON system_localization(is_active)`;
+    await client`CREATE INDEX IF NOT EXISTS idx_system_localization_is_default ON system_localization(is_default)`;
+
+    // Índices para billing tables
+    await client`CREATE INDEX IF NOT EXISTS idx_subscription_plans_plan_code ON subscription_plans(plan_code)`;
+    await client`CREATE INDEX IF NOT EXISTS idx_subscription_plans_active ON subscription_plans(active)`;
+    await client`CREATE INDEX IF NOT EXISTS idx_asaas_customers_usuario_id ON asaas_customers(usuario_id)`;
+    await client`CREATE INDEX IF NOT EXISTS idx_asaas_customers_asaas_customer_id ON asaas_customers(asaas_customer_id)`;
+    await client`CREATE INDEX IF NOT EXISTS idx_user_subscriptions_usuario_id ON user_subscriptions(usuario_id)`;
+    await client`CREATE INDEX IF NOT EXISTS idx_user_subscriptions_status ON user_subscriptions(status)`;
+    await client`CREATE INDEX IF NOT EXISTS idx_user_subscriptions_usuario_status ON user_subscriptions(usuario_id, status)`;
+    await client`CREATE INDEX IF NOT EXISTS idx_payment_transactions_usuario_id ON payment_transactions(usuario_id)`;
+    await client`CREATE INDEX IF NOT EXISTS idx_payment_transactions_status ON payment_transactions(status)`;
+    await client`CREATE INDEX IF NOT EXISTS idx_payment_transactions_asaas_payment_id ON payment_transactions(asaas_payment_id)`;
+    await client`CREATE INDEX IF NOT EXISTS idx_payment_transactions_overdue ON payment_transactions(status, retry_count) WHERE status = 'overdue' AND retry_count < 3`;
+    await client`CREATE INDEX IF NOT EXISTS idx_asaas_webhooks_event_type ON asaas_webhooks(event_type)`;
+    await client`CREATE INDEX IF NOT EXISTS idx_asaas_webhooks_processed ON asaas_webhooks(processed)`;
+    await client`CREATE INDEX IF NOT EXISTS idx_asaas_webhooks_unprocessed ON asaas_webhooks(created_at) WHERE processed = false`;
 
     // Foreign keys (usando DO $$ para ignorar se já existir)
     try {
@@ -320,10 +464,50 @@ export async function runInitialMigration({ dropAll = false }: { dropAll?: boole
     } catch (error) { /* Ignora se constraint já existe */ }
     
     try {
-      await client`ALTER TABLE custom_themes ADD CONSTRAINT custom_themes_user_id_usuarios_id_fk 
+      await client`ALTER TABLE custom_themes ADD CONSTRAINT custom_themes_user_id_usuarios_id_fk
                    FOREIGN KEY (user_id) REFERENCES usuarios(id)`;
     } catch (error) { /* Ignora se constraint já existe */ }
-    
+
+    try {
+      await client`ALTER TABLE system_localization ADD CONSTRAINT system_localization_created_by_usuarios_id_fk
+                   FOREIGN KEY (created_by) REFERENCES usuarios(id)`;
+    } catch (error) { /* Ignora se constraint já existe */ }
+
+    try {
+      await client`ALTER TABLE system_localization ADD CONSTRAINT system_localization_updated_by_usuarios_id_fk
+                   FOREIGN KEY (updated_by) REFERENCES usuarios(id)`;
+    } catch (error) { /* Ignora se constraint já existe */ }
+
+    try {
+      await client`ALTER TABLE localization_strings ADD CONSTRAINT localization_strings_locale_code_fk
+                   FOREIGN KEY (locale_code) REFERENCES system_localization(locale_code) ON DELETE CASCADE`;
+    } catch (error) { /* Ignora se constraint já existe */ }
+
+    try {
+      await client`ALTER TABLE asaas_customers ADD CONSTRAINT asaas_customers_usuario_id_fk
+                   FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE`;
+    } catch (error) { /* Ignora se constraint já existe */ }
+
+    try {
+      await client`ALTER TABLE user_subscriptions ADD CONSTRAINT user_subscriptions_usuario_id_fk
+                   FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE`;
+    } catch (error) { /* Ignora se constraint já existe */ }
+
+    try {
+      await client`ALTER TABLE user_subscriptions ADD CONSTRAINT user_subscriptions_plan_id_fk
+                   FOREIGN KEY (plan_id) REFERENCES subscription_plans(id)`;
+    } catch (error) { /* Ignora se constraint já existe */ }
+
+    try {
+      await client`ALTER TABLE payment_transactions ADD CONSTRAINT payment_transactions_usuario_id_fk
+                   FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE`;
+    } catch (error) { /* Ignora se constraint já existe */ }
+
+    try {
+      await client`ALTER TABLE payment_transactions ADD CONSTRAINT payment_transactions_subscription_id_fk
+                   FOREIGN KEY (subscription_id) REFERENCES user_subscriptions(id)`;
+    } catch (error) { /* Ignora se constraint já existe */ }
+
     console.log('✅ Tabelas criadas com sucesso!');
     
     console.log('📊 Inserindo dados padrão...');
@@ -418,6 +602,29 @@ export async function runInitialMigration({ dropAll = false }: { dropAll?: boole
     `;
     
     console.log('✅ Mensagens de boas vindas inseridas!');
+
+    console.log('🌐 Inserindo locales padrão...');
+
+    // Inserir locales suportados
+    await client`
+      INSERT INTO system_localization (locale_code, locale_name, is_active, is_default)
+      VALUES ('pt-br', 'Português (Brasil)', true, true)
+      ON CONFLICT (locale_code) DO NOTHING
+    `;
+
+    await client`
+      INSERT INTO system_localization (locale_code, locale_name, is_active, is_default)
+      VALUES ('en-us', 'English (US)', true, false)
+      ON CONFLICT (locale_code) DO NOTHING
+    `;
+
+    await client`
+      INSERT INTO system_localization (locale_code, locale_name, is_active, is_default)
+      VALUES ('es-es', 'Español (España)', true, false)
+      ON CONFLICT (locale_code) DO NOTHING
+    `;
+
+    console.log('✅ Locales padrão inseridos!');
 
     // Criar trigger para updated_at da tabela custom_themes
     await client`
