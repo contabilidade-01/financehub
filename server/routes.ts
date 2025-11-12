@@ -725,6 +725,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/admin/payment-settings", combinedAuth, requireSuperAdmin, paymentSettingsController.getPaymentSettings);
   app.put("/api/admin/payment-settings", combinedAuth, requireSuperAdmin, paymentSettingsController.updatePaymentSettings);
   app.post("/api/admin/payment-settings/test", combinedAuth, requireSuperAdmin, paymentSettingsController.testPaymentConnection);
+  app.get("/api/admin/payment-settings/reveal", combinedAuth, requireSuperAdmin, paymentSettingsController.revealPaymentSettings);
+  app.post("/api/admin/payment-settings/test-webhook", combinedAuth, requireSuperAdmin, paymentSettingsController.testWebhook);
 
   // WAHA Config endpoints (apenas superadmin)
   app.get("/api/admin/waha-config", combinedAuth, requireSuperAdmin, wahaConfigController.getWahaConfig);

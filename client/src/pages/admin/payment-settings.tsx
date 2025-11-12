@@ -35,6 +35,9 @@ export default function PaymentSettingsPage() {
   const [showApiKey, setShowApiKey] = useState(false);
   const [showWebhookSecret, setShowWebhookSecret] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [testingWebhook, setTestingWebhook] = useState(false);
+  const [realApiKey, setRealApiKey] = useState<string>('');
+  const [realWebhookSecret, setRealWebhookSecret] = useState<string>('');
 
   // Get webhook URL
   const webhookUrl = `${window.location.origin}/api/webhooks/asaas`;
@@ -131,6 +134,92 @@ export default function PaymentSettingsPage() {
     });
   };
 
+  // Buscar valores reais ao clicar em "Mostrar"
+  const handleShowApiKey = async () => {
+    if (!showApiKey && !realApiKey) {
+      try {
+        const response = await fetch('/api/admin/payment-settings/reveal', {
+          credentials: 'include'
+        });
+        const data = await response.json();
+        setRealApiKey(data.apiKey);
+        setRealWebhookSecret(data.webhookSecret);
+        setFormData({
+          ...formData,
+          apiKey: data.apiKey,
+          webhookSecret: data.webhookSecret
+        });
+      } catch (error) {
+        console.error('Error fetching real values:', error);
+        toast({
+          title: 'Erro ao buscar valores',
+          description: 'Não foi possível carregar os valores reais',
+          variant: 'destructive'
+        });
+      }
+    }
+    setShowApiKey(!showApiKey);
+  };
+
+  const handleShowWebhookSecret = async () => {
+    if (!showWebhookSecret && !realWebhookSecret) {
+      try {
+        const response = await fetch('/api/admin/payment-settings/reveal', {
+          credentials: 'include'
+        });
+        const data = await response.json();
+        setRealApiKey(data.apiKey);
+        setRealWebhookSecret(data.webhookSecret);
+        setFormData({
+          ...formData,
+          apiKey: data.apiKey,
+          webhookSecret: data.webhookSecret
+        });
+      } catch (error) {
+        console.error('Error fetching real values:', error);
+        toast({
+          title: 'Erro ao buscar valores',
+          description: 'Não foi possível carregar os valores reais',
+          variant: 'destructive'
+        });
+      }
+    }
+    setShowWebhookSecret(!showWebhookSecret);
+  };
+
+  // Testar webhook
+  const handleTestWebhook = async () => {
+    setTestingWebhook(true);
+    try {
+      const response = await fetch('/api/admin/payment-settings/test-webhook', {
+        method: 'POST',
+        credentials: 'include'
+      });
+      const result = await response.json();
+
+      if (result.success) {
+        toast({
+          title: 'Webhook configurado!',
+          description: result.message
+        });
+      } else {
+        toast({
+          title: 'Erro na configuração',
+          description: result.message || 'Verifique as configurações',
+          variant: 'destructive'
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao testar webhook',
+        description: error.message,
+        variant: 'destructive'
+      });
+    } finally {
+      setTestingWebhook(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -212,7 +301,7 @@ export default function PaymentSettingsPage() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setShowApiKey(!showApiKey)}
+                onClick={handleShowApiKey}
               >
                 {showApiKey ? 'Ocultar' : 'Mostrar'}
               </Button>
@@ -279,7 +368,7 @@ export default function PaymentSettingsPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setShowWebhookSecret(!showWebhookSecret)}
+                  onClick={handleShowWebhookSecret}
                 >
                   {showWebhookSecret ? 'Ocultar' : 'Mostrar'}
                 </Button>
@@ -287,6 +376,28 @@ export default function PaymentSettingsPage() {
               <p className="text-sm text-muted-foreground mt-1">
                 Token de segurança para validar requisições de webhook do Asaas
               </p>
+            </div>
+
+            {/* Test Webhook Button */}
+            <div className="mb-4">
+              <Button
+                variant="outline"
+                onClick={handleTestWebhook}
+                disabled={testingWebhook || !formData.webhookSecret}
+                className="w-full"
+              >
+                {testingWebhook ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Testando webhook...
+                  </>
+                ) : (
+                  <>
+                    <TestTube2 className="mr-2 h-4 w-4" />
+                    Testar Configuração do Webhook
+                  </>
+                )}
+              </Button>
             </div>
 
             {/* Webhook Instructions */}

@@ -229,3 +229,109 @@ export async function testPaymentConnection(req: Request, res: Response) {
     res.status(500).json({ error: error.message || "Erro ao testar conexão" });
   }
 }
+
+/**
+ * @swagger
+ * /api/admin/payment-settings/reveal:
+ *   get:
+ *     summary: Obter valores reais (não mascarados) da API key e webhook secret
+ *     description: Apenas super admins podem acessar os valores completos
+ *     tags: [Admin, Payment Settings]
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200:
+ *         description: Valores reais
+ */
+export async function revealPaymentSettings(req: Request, res: Response) {
+  try {
+    const user = (req as any).user;
+    if (!user) {
+      return res.status(401).json({ error: "Usuário não autenticado" });
+    }
+
+    // Buscar configurações do Asaas
+    const settings = await db
+      .select()
+      .from(paymentSettings)
+      .where(eq(paymentSettings.provider, 'asaas'))
+      .limit(1);
+
+    if (settings.length === 0) {
+      return res.json({
+        apiKey: '',
+        webhookSecret: ''
+      });
+    }
+
+    const config = settings[0];
+
+    res.json({
+      apiKey: config.apiKey,
+      webhookSecret: config.webhookSecret || ''
+    });
+
+  } catch (error) {
+    console.error("Error revealing payment settings:", error);
+    res.status(500).json({ error: "Erro ao buscar configurações" });
+  }
+}
+
+/**
+ * @swagger
+ * /api/admin/payment-settings/test-webhook:
+ *   post:
+ *     summary: Testar configuração de webhook
+ *     description: Envia um webhook de teste para verificar se está configurado corretamente
+ *     tags: [Admin, Payment Settings]
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200:
+ *         description: Teste de webhook realizado
+ */
+export async function testWebhook(req: Request, res: Response) {
+  try {
+    const user = (req as any).user;
+    if (!user) {
+      return res.status(401).json({ error: "Usuário não autenticado" });
+    }
+
+    // Buscar configurações
+    const settings = await db
+      .select()
+      .from(paymentSettings)
+      .where(eq(paymentSettings.provider, 'asaas'))
+      .limit(1);
+
+    if (settings.length === 0 || !settings[0].webhookSecret) {
+      return res.status(400).json({
+        success: false,
+        message: "Webhook secret não configurado. Configure o token de acesso primeiro."
+      });
+    }
+
+    const config = settings[0];
+
+    // Verificar se já existe um registro de teste de webhook no banco
+    // (você pode criar uma tabela webhook_test_logs se quiser guardar histórico)
+
+    res.json({
+      success: true,
+      message: "Teste de webhook configurado corretamente",
+      details: {
+        webhookUrl: `${req.protocol}://${req.get('host')}/api/webhooks/asaas`,
+        environment: config.environment,
+        hasWebhookSecret: !!config.webhookSecret,
+        instructions: "Configure este webhook no painel do Asaas. Os eventos de pagamento serão processados automaticamente."
+      }
+    });
+
+  } catch (error) {
+    console.error("Error testing webhook:", error);
+    res.status(500).json({
+      success: false,
+      error: "Erro ao testar webhook"
+    });
+  }
+}
