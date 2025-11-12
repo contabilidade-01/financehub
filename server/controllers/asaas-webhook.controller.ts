@@ -232,7 +232,12 @@ async function processWebhookEvent(eventType: string, paymentData: any, webhookI
         message: `Seu pagamento de R$ ${payment.amount} foi confirmado com sucesso!`,
         timestamp: new Date().toISOString(),
         autoClose: 8000,
-        persistent: true
+        persistent: true,
+        data: {
+          paymentId: payment.id, // ID interno para correlação com checkout
+          subscriptionId: payment.subscriptionId,
+          status: 'confirmed'
+        }
       }, [user.id.toString()]);
 
       // Notificar admins

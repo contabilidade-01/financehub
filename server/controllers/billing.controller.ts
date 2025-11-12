@@ -90,9 +90,16 @@ export async function checkout(req: Request, res: Response) {
       remoteIp: validatedData.remoteIp || remoteIp
     });
 
+    // Determinar se deve aguardar webhook
+    const isPending = result.payment.status === 'pending';
+
     res.status(201).json({
       success: result.success,
       message: result.message,
+      status: result.payment.status, // 'pending' ou 'confirmed'
+      waitForWebhook: isPending, // true se deve aguardar webhook
+      paymentId: result.payment.id, // ID interno para correlação
+      asaasPaymentId: result.payment.asaasPaymentId, // ID do Asaas (debug)
       subscription: result.subscription,
       payment: {
         id: result.payment.id,

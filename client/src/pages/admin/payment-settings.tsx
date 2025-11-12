@@ -7,7 +7,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, CheckCircle, AlertCircle, Save, TestTube2, Copy, Webhook, ExternalLink } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Loader2, CheckCircle, AlertCircle, Save, TestTube2, Copy, Webhook, ExternalLink, Clock, Server, Terminal } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface PaymentSettings {
@@ -38,6 +40,8 @@ export default function PaymentSettingsPage() {
   const [testingWebhook, setTestingWebhook] = useState(false);
   const [realApiKey, setRealApiKey] = useState<string>('');
   const [realWebhookSecret, setRealWebhookSecret] = useState<string>('');
+  const [webhookTestResults, setWebhookTestResults] = useState<any>(null);
+  const [showWebhookDialog, setShowWebhookDialog] = useState(false);
 
   // Get webhook URL
   const webhookUrl = `${window.location.origin}/api/webhooks/asaas`;
@@ -197,15 +201,18 @@ export default function PaymentSettingsPage() {
       });
       const result = await response.json();
 
+      setWebhookTestResults(result);
+      setShowWebhookDialog(true);
+
       if (result.success) {
         toast({
-          title: 'Webhook configurado!',
-          description: result.message
+          title: 'Webhook testado com sucesso!',
+          description: result.summary
         });
       } else {
         toast({
-          title: 'Erro na configuração',
-          description: result.message || 'Verifique as configurações',
+          title: 'Webhook com erro',
+          description: result.summary || 'Verifique as configurações',
           variant: 'destructive'
         });
       }
@@ -215,6 +222,11 @@ export default function PaymentSettingsPage() {
         description: error.message,
         variant: 'destructive'
       });
+      setWebhookTestResults({
+        success: false,
+        error: { message: error.message }
+      });
+      setShowWebhookDialog(true);
     } finally {
       setTestingWebhook(false);
     }
@@ -480,6 +492,156 @@ export default function PaymentSettingsPage() {
           </Alert>
         </CardContent>
       </Card>
+
+      {/* Webhook Test Results Dialog */}
+      <Dialog open={showWebhookDialog} onOpenChange={setShowWebhookDialog}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Terminal className="h-5 w-5" />
+              Resultado do Teste de Webhook
+            </DialogTitle>
+            <DialogDescription>
+              Logs completos da requisição e resposta do webhook
+            </DialogDescription>
+          </DialogHeader>
+
+          {webhookTestResults && (
+            <div className="space-y-4">
+              {/* Status Summary */}
+              <Alert className={webhookTestResults.success ? 'border-green-500 bg-green-50 dark:bg-green-950' : 'border-red-500 bg-red-50 dark:bg-red-950'}>
+                <div className="flex items-center gap-2">
+                  {webhookTestResults.success ? (
+                    <CheckCircle className="h-4 w-4 text-green-600" />
+                  ) : (
+                    <AlertCircle className="h-4 w-4 text-red-600" />
+                  )}
+                  <AlertDescription className="font-semibold">
+                    {webhookTestResults.summary}
+                  </AlertDescription>
+                </div>
+              </Alert>
+
+              {/* Metadata */}
+              <div className="grid grid-cols-3 gap-4 p-4 bg-muted rounded-lg">
+                <div>
+                  <div className="text-xs text-muted-foreground">Timestamp</div>
+                  <div className="font-mono text-sm">{webhookTestResults.timestamp}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Duração</div>
+                  <div className="font-mono text-sm flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    {webhookTestResults.duration}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Ambiente</div>
+                  <div className="font-mono text-sm">{webhookTestResults.environment}</div>
+                </div>
+              </div>
+
+              {/* Tabs for Request/Response */}
+              <Tabs defaultValue="request" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="request">📤 Request</TabsTrigger>
+                  <TabsTrigger value="response">📥 Response</TabsTrigger>
+                </TabsList>
+
+                {/* Request Tab */}
+                <TabsContent value="request" className="space-y-4">
+                  <div>
+                    <h4 className="font-semibold mb-2 flex items-center gap-2">
+                      <Server className="h-4 w-4" />
+                      URL & Method
+                    </h4>
+                    <div className="p-3 bg-muted rounded font-mono text-sm">
+                      <span className="text-green-600 font-bold">{webhookTestResults.request?.method}</span>{' '}
+                      {webhookTestResults.request?.url}
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="font-semibold mb-2">Request Headers</h4>
+                    <pre className="p-3 bg-slate-950 text-slate-50 rounded text-xs overflow-x-auto">
+                      {JSON.stringify(webhookTestResults.request?.headers, null, 2)}
+                    </pre>
+                  </div>
+
+                  <div>
+                    <h4 className="font-semibold mb-2">Request Body (Payload)</h4>
+                    <pre className="p-3 bg-slate-950 text-slate-50 rounded text-xs overflow-x-auto">
+                      {JSON.stringify(webhookTestResults.request?.body, null, 2)}
+                    </pre>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-2"
+                      onClick={() => {
+                        copyToClipboard(JSON.stringify(webhookTestResults.request?.body, null, 2), 'Payload');
+                      }}
+                    >
+                      <Copy className="h-3 w-3 mr-1" />
+                      Copiar Payload
+                    </Button>
+                  </div>
+                </TabsContent>
+
+                {/* Response Tab */}
+                <TabsContent value="response" className="space-y-4">
+                  {webhookTestResults.response ? (
+                    <>
+                      <div>
+                        <h4 className="font-semibold mb-2">Status Code</h4>
+                        <div className={`p-3 rounded font-mono text-sm ${
+                          webhookTestResults.response.status >= 200 && webhookTestResults.response.status < 300
+                            ? 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-200'
+                            : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200'
+                        }`}>
+                          <span className="font-bold">{webhookTestResults.response.status}</span> - {webhookTestResults.response.statusText}
+                        </div>
+                      </div>
+
+                      <div>
+                        <h4 className="font-semibold mb-2">Response Headers</h4>
+                        <pre className="p-3 bg-slate-950 text-slate-50 rounded text-xs overflow-x-auto">
+                          {JSON.stringify(webhookTestResults.response.headers, null, 2)}
+                        </pre>
+                      </div>
+
+                      <div>
+                        <h4 className="font-semibold mb-2">Response Body</h4>
+                        <pre className="p-3 bg-slate-950 text-slate-50 rounded text-xs overflow-x-auto">
+                          {typeof webhookTestResults.response.body === 'object'
+                            ? JSON.stringify(webhookTestResults.response.body, null, 2)
+                            : webhookTestResults.response.body}
+                        </pre>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Tamanho: {webhookTestResults.response.size}
+                        </div>
+                      </div>
+                    </>
+                  ) : webhookTestResults.error ? (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        <div className="font-semibold mb-2">Erro na Requisição</div>
+                        <pre className="text-xs bg-red-950 p-2 rounded mt-2">
+                          {JSON.stringify(webhookTestResults.error, null, 2)}
+                        </pre>
+                      </AlertDescription>
+                    </Alert>
+                  ) : (
+                    <div className="text-muted-foreground text-center py-8">
+                      Nenhuma resposta recebida
+                    </div>
+                  )}
+                </TabsContent>
+              </Tabs>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

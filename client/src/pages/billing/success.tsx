@@ -8,17 +8,18 @@ import { CheckCircle, Download, Calendar, DollarSign, RefreshCw, FileText, Clock
 import { motion } from 'framer-motion';
 
 interface SuccessState {
+  status?: 'confirmed' | 'pending'; // Status do pagamento
   subscription: {
     id: number;
-    status: string;
-    currentPeriodStart: string;
-    currentPeriodEnd: string;
+    status?: string;
+    currentPeriodStart?: string;
+    currentPeriodEnd?: string;
   };
   payment: {
     id: number;
     status: string;
-    amount: number;
-    dueDate: string;
+    amount?: number;
+    dueDate?: string;
     invoiceUrl?: string;
   };
   plan?: {
@@ -77,11 +78,13 @@ export default function BillingSuccessPage() {
     );
   }
 
-  const { subscription, payment, plan } = state;
+  const { subscription, payment, plan, status } = state;
+  const isConfirmed = status === 'confirmed' || payment.status === 'confirmed';
+  const isPending = status === 'pending' || payment.status === 'pending';
 
-  // Calcular duração da assinatura
-  const startDate = new Date(subscription.currentPeriodStart);
-  const endDate = new Date(subscription.currentPeriodEnd);
+  // Calcular duração da assinatura (se tiver datas)
+  const startDate = subscription.currentPeriodStart ? new Date(subscription.currentPeriodStart) : new Date();
+  const endDate = subscription.currentPeriodEnd ? new Date(subscription.currentPeriodEnd) : new Date();
   const durationDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
 
   // Formatar datas
@@ -110,10 +113,21 @@ export default function BillingSuccessPage() {
           transition={{ delay: 0.2, type: "spring", stiffness: 200, damping: 10 }}
           className="relative inline-block mb-6"
         >
-          <div className="absolute inset-0 bg-green-400 rounded-full blur-2xl opacity-30 animate-pulse"></div>
-          <div className="relative inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-green-400 to-green-600 shadow-2xl">
-            <CheckCircle className="h-16 w-16 text-white" strokeWidth={2.5} />
-          </div>
+          {isConfirmed ? (
+            <>
+              <div className="absolute inset-0 bg-green-400 rounded-full blur-2xl opacity-30 animate-pulse"></div>
+              <div className="relative inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-green-400 to-green-600 shadow-2xl">
+                <CheckCircle className="h-16 w-16 text-white" strokeWidth={2.5} />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="absolute inset-0 bg-yellow-400 rounded-full blur-2xl opacity-30 animate-pulse"></div>
+              <div className="relative inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 shadow-2xl">
+                <Clock className="h-16 w-16 text-white" strokeWidth={2.5} />
+              </div>
+            </>
+          )}
         </motion.div>
 
         <motion.div
@@ -121,45 +135,102 @@ export default function BillingSuccessPage() {
           animate={{ opacity: 1 }}
           transition={{ delay: 0.4 }}
         >
-          <h1 className="text-5xl font-bold mb-3 bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
-            Muito Obrigado!
-          </h1>
-          <p className="text-2xl text-muted-foreground mb-2">
-            Seu pagamento foi processado com sucesso
-          </p>
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
-            <Sparkles className="h-4 w-4" />
-            <span className="font-semibold">Assinatura Ativada</span>
-          </div>
+          {isConfirmed ? (
+            <>
+              <h1 className="text-5xl font-bold mb-3 bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
+                Muito Obrigado!
+              </h1>
+              <p className="text-2xl text-muted-foreground mb-2">
+                Seu pagamento foi confirmado com sucesso
+              </p>
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
+                <Sparkles className="h-4 w-4" />
+                <span className="font-semibold">Assinatura Ativada</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <h1 className="text-5xl font-bold mb-3 bg-gradient-to-r from-yellow-600 to-orange-600 bg-clip-text text-transparent">
+                Pagamento em Processamento
+              </h1>
+              <p className="text-2xl text-muted-foreground mb-2">
+                Aguardando confirmação do pagamento
+              </p>
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300">
+                <Clock className="h-4 w-4" />
+                <span className="font-semibold">Confirmação Pendente</span>
+              </div>
+            </>
+          )}
         </motion.div>
       </motion.div>
 
-      {/* Countdown Alert */}
+      {/* Status Alert */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.6 }}
         className="mb-6"
       >
-        <Alert className="border-blue-200 bg-blue-50 dark:bg-blue-900/20">
-          <Clock className="h-4 w-4 text-blue-600" />
-          <AlertDescription className="text-blue-800 dark:text-blue-200 flex items-center justify-between">
-            <span>
-              Você será redirecionado para a página inicial em <strong>{countdown} segundos</strong>
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleGoHome}
-              disabled={isRedirecting}
-              className="ml-4"
-            >
-              <Home className="mr-2 h-4 w-4" />
-              Ir Agora
-            </Button>
-          </AlertDescription>
-        </Alert>
-        <Progress value={progressPercentage} className="mt-2 h-1" />
+        {isConfirmed ? (
+          <>
+            <Alert className="border-blue-200 bg-blue-50 dark:bg-blue-900/20">
+              <Clock className="h-4 w-4 text-blue-600" />
+              <AlertDescription className="text-blue-800 dark:text-blue-200 flex items-center justify-between">
+                <span>
+                  Você será redirecionado para a página inicial em <strong>{countdown} segundos</strong>
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGoHome}
+                  disabled={isRedirecting}
+                  className="ml-4"
+                >
+                  <Home className="mr-2 h-4 w-4" />
+                  Ir Agora
+                </Button>
+              </AlertDescription>
+            </Alert>
+            <Progress value={progressPercentage} className="mt-2 h-1" />
+          </>
+        ) : (
+          <>
+            <Alert className="border-yellow-200 bg-yellow-50 dark:bg-yellow-900/20">
+              <Clock className="h-4 w-4 text-yellow-600" />
+              <AlertDescription className="text-yellow-800 dark:text-yellow-200">
+                <div className="space-y-2">
+                  <p>
+                    <strong>Seu pagamento está sendo processado</strong>
+                  </p>
+                  <p className="text-sm">
+                    Você receberá uma notificação assim que o pagamento for confirmado pela operadora.
+                    Isso pode levar alguns minutos. Você pode verificar o status na página de pagamentos.
+                  </p>
+                  <div className="flex gap-2 mt-3">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleGoHome}
+                      disabled={isRedirecting}
+                    >
+                      <Home className="mr-2 h-4 w-4" />
+                      Ir para Início
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setLocation('/billing/invoices')}
+                    >
+                      Ver Pagamentos
+                    </Button>
+                  </div>
+                </div>
+              </AlertDescription>
+            </Alert>
+            <Progress value={progressPercentage} className="mt-2 h-1" />
+          </>
+        )}
       </motion.div>
 
       {/* Grid de informações principais */}
@@ -317,53 +388,103 @@ export default function BillingSuccessPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.9 }}
       >
-        <Card className="mb-6 border-2 border-primary/20">
-          <CardHeader className="bg-primary/5">
-            <CardTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-primary" />
-              Comece a usar agora!
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-6">
-            <div className="space-y-4">
-              <div className="flex gap-4">
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">
-                  1
+        {isConfirmed ? (
+          <Card className="mb-6 border-2 border-primary/20">
+            <CardHeader className="bg-primary/5">
+              <CardTitle className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-primary" />
+                Comece a usar agora!
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-6">
+              <div className="space-y-4">
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">
+                    1
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-semibold mb-1">Explore o Dashboard</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Conheça todas as ferramentas disponíveis para gerenciar suas finanças
+                    </p>
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <h4 className="font-semibold mb-1">Explore o Dashboard</h4>
-                  <p className="text-sm text-muted-foreground">
-                    Conheça todas as ferramentas disponíveis para gerenciar suas finanças
-                  </p>
-                </div>
-              </div>
 
-              <div className="flex gap-4">
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">
-                  2
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">
+                    2
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-semibold mb-1">Configure suas Carteiras</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Crie carteiras para organizar suas contas bancárias e investimentos
+                    </p>
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <h4 className="font-semibold mb-1">Configure suas Carteiras</h4>
-                  <p className="text-sm text-muted-foreground">
-                    Crie carteiras para organizar suas contas bancárias e investimentos
-                  </p>
-                </div>
-              </div>
 
-              <div className="flex gap-4">
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">
-                  3
-                </div>
-                <div className="flex-1">
-                  <h4 className="font-semibold mb-1">Registre suas Transações</h4>
-                  <p className="text-sm text-muted-foreground">
-                    Comece a registrar suas receitas e despesas para ter controle total
-                  </p>
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">
+                    3
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-semibold mb-1">Registre suas Transações</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Comece a registrar suas receitas e despesas para ter controle total
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="mb-6 border-2 border-yellow-500/20">
+            <CardHeader className="bg-yellow-500/5">
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="h-5 w-5 text-yellow-600" />
+                O que acontece agora?
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-6">
+              <div className="space-y-4">
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-yellow-500 text-white flex items-center justify-center text-sm font-bold">
+                    1
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-semibold mb-1">Processamento do Pagamento</h4>
+                    <p className="text-sm text-muted-foreground">
+                      A operadora está processando seu pagamento. Isso geralmente leva alguns minutos.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-yellow-500 text-white flex items-center justify-center text-sm font-bold">
+                    2
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-semibold mb-1">Confirmação Automática</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Você receberá uma notificação assim que o pagamento for confirmado
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-yellow-500 text-white flex items-center justify-center text-sm font-bold">
+                    3
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-semibold mb-1">Ativação da Assinatura</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Após a confirmação, sua assinatura será ativada automaticamente e você terá acesso completo
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </motion.div>
 
       {/* Informações de Suporte */}

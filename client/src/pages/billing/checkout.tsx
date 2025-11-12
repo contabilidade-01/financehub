@@ -1,14 +1,16 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { usePlans } from '@/hooks/use-plans';
 import { useCheckout } from '@/hooks/use-billing';
+import { useWebSocket } from '@/hooks/useWebSocket';
 import { PlanCard } from '@/components/billing/PlanCard';
 import { CreditCardForm } from '@/components/billing/CreditCardForm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, ArrowLeft, ArrowRight, Check } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Loader2, ArrowLeft, ArrowRight, Check, Clock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export default function CheckoutPage() {
@@ -16,10 +18,16 @@ export default function CheckoutPage() {
   const { toast } = useToast();
   const { data: plans, isLoading: isLoadingPlans } = usePlans();
   const checkout = useCheckout();
+  const { notifications } = useWebSocket();
 
   const [step, setStep] = useState(1);
   const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
   const [isCardValid, setIsCardValid] = useState(false);
+
+  // Estados para espera de confirmação de pagamento
+  const [waitingConfirmation, setWaitingConfirmation] = useState(false);
+  const [waitingPaymentId, setWaitingPaymentId] = useState<number | null>(null);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const [personalInfo, setPersonalInfo] = useState({
     name: '',
@@ -93,6 +101,52 @@ export default function CheckoutPage() {
   const canGoToStep3 = personalInfo.name && personalInfo.email && validateCPF(personalInfo.cpfCnpj) && personalInfo.phone && personalInfo.postalCode && personalInfo.addressNumber;
   const canSubmit = isCardValid;
 
+  // Escutar notificações WebSocket para confirmação de pagamento
+  useEffect(() => {
+    if (!waitingConfirmation || !waitingPaymentId) return;
+
+    // Procurar notificação de confirmação nas notificações recebidas
+    const confirmationNotification = notifications.find(
+      (notif: any) => notif.id === `payment-confirmed-${waitingPaymentId}`
+    );
+
+    if (confirmationNotification && confirmationNotification.data?.paymentId === waitingPaymentId) {
+      console.log('[Checkout] Pagamento confirmado via WebSocket!', confirmationNotification);
+
+      // Limpar timeout
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+
+      // Buscar informações do plano selecionado
+      const selectedPlan = plans?.find(p => p.id === selectedPlanId);
+
+      // Redirecionar para sucesso com status confirmado
+      setWaitingConfirmation(false);
+      setLocation('/billing/success', {
+        state: {
+          status: 'confirmed',
+          subscription: confirmationNotification.data?.subscriptionId ? { id: confirmationNotification.data.subscriptionId } : null,
+          payment: { status: 'confirmed', id: waitingPaymentId },
+          plan: selectedPlan ? {
+            name: selectedPlan.name,
+            priceMonthly: selectedPlan.priceMonthly
+          } : undefined
+        }
+      });
+    }
+  }, [notifications, waitingConfirmation, waitingPaymentId, plans, selectedPlanId, setLocation]);
+
+  // Cleanup ao desmontar
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+
   const handleSubmit = async () => {
     if (!selectedPlanId) return;
 
@@ -122,17 +176,59 @@ export default function CheckoutPage() {
       // Buscar informações do plano selecionado
       const selectedPlan = plans?.find(p => p.id === selectedPlanId);
 
-      // Redirecionar para página de sucesso com dados da transação
-      setLocation('/billing/success', {
-        state: {
-          subscription: result.subscription,
-          payment: result.payment,
-          plan: selectedPlan ? {
-            name: selectedPlan.name,
-            priceMonthly: selectedPlan.priceMonthly
-          } : undefined
-        }
-      });
+      console.log('[Checkout] Resultado:', result);
+
+      // Verificar se pagamento já está confirmado (resposta imediata)
+      if (result.status === 'confirmed') {
+        console.log('[Checkout] Pagamento confirmado imediatamente!');
+        // Redirecionar para página de sucesso imediatamente
+        setLocation('/billing/success', {
+          state: {
+            status: 'confirmed',
+            subscription: result.subscription,
+            payment: result.payment,
+            plan: selectedPlan ? {
+              name: selectedPlan.name,
+              priceMonthly: selectedPlan.priceMonthly
+            } : undefined
+          }
+        });
+      } else if (result.waitForWebhook) {
+        console.log('[Checkout] Aguardando confirmação via webhook...', result.paymentId);
+        // Pagamento pendente - aguardar webhook por até 30 segundos
+        setWaitingConfirmation(true);
+        setWaitingPaymentId(result.paymentId);
+
+        // Timeout de 30 segundos
+        timeoutRef.current = setTimeout(() => {
+          console.log('[Checkout] Timeout de 30s atingido - redirecionando para pendente');
+          setWaitingConfirmation(false);
+          setLocation('/billing/success', {
+            state: {
+              status: 'pending',
+              subscription: result.subscription,
+              payment: result.payment,
+              plan: selectedPlan ? {
+                name: selectedPlan.name,
+                priceMonthly: selectedPlan.priceMonthly
+              } : undefined
+            }
+          });
+        }, 30000); // 30 segundos
+      } else {
+        // Caso padrão - redirecionar com dados
+        setLocation('/billing/success', {
+          state: {
+            status: result.status || 'pending',
+            subscription: result.subscription,
+            payment: result.payment,
+            plan: selectedPlan ? {
+              name: selectedPlan.name,
+              priceMonthly: selectedPlan.priceMonthly
+            } : undefined
+          }
+        });
+      }
     } catch (error: any) {
       toast({
         title: 'Erro no checkout',
@@ -146,6 +242,41 @@ export default function CheckoutPage() {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
+  // Tela de aguardando confirmação
+  if (waitingConfirmation) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Card className="w-full max-w-md">
+          <CardContent className="pt-6">
+            <div className="flex flex-col items-center text-center space-y-4">
+              <div className="relative">
+                <Loader2 className="h-16 w-16 animate-spin text-primary" />
+                <Clock className="h-8 w-8 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-primary" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold mb-2">Processando Pagamento...</h2>
+                <p className="text-muted-foreground">
+                  Aguardando confirmação do pagamento. Isso pode levar alguns segundos.
+                </p>
+              </div>
+              <Alert className="bg-blue-50 border-blue-200 dark:bg-blue-950 dark:border-blue-800">
+                <Clock className="h-4 w-4 text-blue-600" />
+                <AlertDescription className="text-blue-800 dark:text-blue-200">
+                  <strong>Não feche esta página!</strong><br />
+                  Estamos aguardando a confirmação do seu pagamento com a operadora.
+                  Você será redirecionado automaticamente quando o pagamento for confirmado.
+                </AlertDescription>
+              </Alert>
+              <div className="text-sm text-muted-foreground">
+                ⏱️ Aguardando até 30 segundos pela confirmação...
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }

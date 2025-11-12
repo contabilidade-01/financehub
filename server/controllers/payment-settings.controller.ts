@@ -282,13 +282,13 @@ export async function revealPaymentSettings(req: Request, res: Response) {
  * /api/admin/payment-settings/test-webhook:
  *   post:
  *     summary: Testar configuração de webhook
- *     description: Envia um webhook de teste para verificar se está configurado corretamente
+ *     description: Envia um webhook de teste real para verificar se está configurado corretamente
  *     tags: [Admin, Payment Settings]
  *     security:
  *       - cookieAuth: []
  *     responses:
  *       200:
- *         description: Teste de webhook realizado
+ *         description: Teste de webhook realizado com logs completos
  */
 export async function testWebhook(req: Request, res: Response) {
   try {
@@ -312,26 +312,113 @@ export async function testWebhook(req: Request, res: Response) {
     }
 
     const config = settings[0];
+    const webhookUrl = `${req.protocol}://${req.get('host')}/api/webhooks/asaas`;
 
-    // Verificar se já existe um registro de teste de webhook no banco
-    // (você pode criar uma tabela webhook_test_logs se quiser guardar histórico)
-
-    res.json({
-      success: true,
-      message: "Teste de webhook configurado corretamente",
-      details: {
-        webhookUrl: `${req.protocol}://${req.get('host')}/api/webhooks/asaas`,
-        environment: config.environment,
-        hasWebhookSecret: !!config.webhookSecret,
-        instructions: "Configure este webhook no painel do Asaas. Os eventos de pagamento serão processados automaticamente."
+    // Criar payload de teste simulando um evento do Asaas
+    const testPayload = {
+      event: "PAYMENT_RECEIVED",
+      payment: {
+        id: "pay_test_" + Date.now(),
+        customer: "cus_test_123456",
+        billingType: "CREDIT_CARD",
+        value: 99.90,
+        netValue: 97.90,
+        description: "Teste de Webhook - Assinatura Premium",
+        status: "RECEIVED",
+        confirmedDate: new Date().toISOString(),
+        subscription: "sub_test_789",
+        installment: null,
+        transactionReceiptUrl: "https://sandbox.asaas.com/i/test123",
+        nossoNumero: null,
+        invoiceUrl: "https://sandbox.asaas.com/i/test123",
+        bankSlipUrl: null,
+        invoiceNumber: "00000123",
+        externalReference: null,
+        originalValue: 99.90,
+        interestValue: 0,
+        originalDueDate: new Date().toISOString().split('T')[0],
+        paymentDate: new Date().toISOString().split('T')[0],
+        clientPaymentDate: new Date().toISOString().split('T')[0],
+        creditDate: new Date(Date.now() + 86400000).toISOString().split('T')[0]
       }
-    });
+    };
 
-  } catch (error) {
+    // Preparar headers da requisição
+    const requestHeaders = {
+      'Content-Type': 'application/json',
+      'User-Agent': 'Asaas-Webhook-Test',
+      'X-Asaas-Signature': config.webhookSecret,
+      'asaas-access-token': config.webhookSecret
+    };
+
+    console.log(`[Webhook Test] Enviando requisição para: ${webhookUrl}`);
+    console.log('[Webhook Test] Payload:', JSON.stringify(testPayload, null, 2));
+
+    // Fazer requisição HTTP real para o webhook
+    const axios = await import('axios').then(m => m.default);
+
+    const startTime = Date.now();
+    let webhookResponse;
+    let webhookError = null;
+
+    try {
+      webhookResponse = await axios.post(webhookUrl, testPayload, {
+        headers: requestHeaders,
+        timeout: 10000, // 10 segundos
+        validateStatus: () => true // Aceitar qualquer status code
+      });
+    } catch (error: any) {
+      webhookError = {
+        message: error.message,
+        code: error.code,
+        stack: error.stack
+      };
+    }
+
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+
+    // Montar resposta detalhada
+    const testResults = {
+      success: webhookResponse ? webhookResponse.status >= 200 && webhookResponse.status < 300 : false,
+      timestamp: new Date().toISOString(),
+      duration: `${duration}ms`,
+      webhookUrl,
+      environment: config.environment,
+
+      request: {
+        method: 'POST',
+        url: webhookUrl,
+        headers: requestHeaders,
+        body: testPayload
+      },
+
+      response: webhookResponse ? {
+        status: webhookResponse.status,
+        statusText: webhookResponse.statusText,
+        headers: webhookResponse.headers,
+        body: webhookResponse.data,
+        size: JSON.stringify(webhookResponse.data).length + ' bytes'
+      } : null,
+
+      error: webhookError,
+
+      summary: webhookResponse
+        ? `Webhook respondeu com status ${webhookResponse.status} em ${duration}ms`
+        : `Erro ao chamar webhook: ${webhookError?.message}`
+    };
+
+    console.log('[Webhook Test] Resultado:', testResults.summary);
+
+    res.json(testResults);
+
+  } catch (error: any) {
     console.error("Error testing webhook:", error);
     res.status(500).json({
       success: false,
-      error: "Erro ao testar webhook"
+      error: "Erro ao testar webhook",
+      message: error.message,
+      stack: error.stack
     });
   }
 }
