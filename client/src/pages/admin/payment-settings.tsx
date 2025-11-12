@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, CheckCircle, AlertCircle, Save, TestTube2 } from 'lucide-react';
+import { Loader2, CheckCircle, AlertCircle, Save, TestTube2, Copy, Webhook, ExternalLink } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface PaymentSettings {
@@ -32,7 +32,11 @@ export default function PaymentSettingsPage() {
     configured: false
   });
   const [showApiKey, setShowApiKey] = useState(false);
+  const [showWebhookSecret, setShowWebhookSecret] = useState(false);
   const [testing, setTesting] = useState(false);
+
+  // Get webhook URL
+  const webhookUrl = `${window.location.origin}/api/webhooks/asaas`;
 
   // Fetch current settings
   const { data: settings, isLoading } = useQuery<PaymentSettings>({
@@ -115,6 +119,14 @@ export default function PaymentSettingsPage() {
       apiKey: formData.apiKey,
       webhookSecret: formData.webhookSecret,
       enabled: formData.enabled
+    });
+  };
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    toast({
+      title: 'Copiado!',
+      description: `${label} copiado para a área de transferência`
     });
   };
 
@@ -221,19 +233,90 @@ export default function PaymentSettingsPage() {
             </p>
           </div>
 
-          {/* Webhook Secret */}
-          <div>
-            <Label htmlFor="webhookSecret">Webhook Secret (Opcional)</Label>
-            <Input
-              id="webhookSecret"
-              type="password"
-              value={formData.webhookSecret}
-              onChange={(e) => setFormData({ ...formData, webhookSecret: e.target.value })}
-              placeholder="Deixe em branco para gerar automaticamente"
-            />
-            <p className="text-sm text-muted-foreground mt-1">
-              Secret para validar webhooks recebidos do Asaas
-            </p>
+          {/* Webhook Configuration Section */}
+          <div className="border-t pt-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Webhook className="h-5 w-5 text-primary" />
+              <h3 className="text-lg font-semibold">Configuração de Webhook</h3>
+            </div>
+
+            {/* Webhook URL */}
+            <div className="mb-4">
+              <Label htmlFor="webhookUrl">URL do Webhook</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="webhookUrl"
+                  value={webhookUrl}
+                  readOnly
+                  className="font-mono text-sm bg-muted"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => copyToClipboard(webhookUrl, 'URL do webhook')}
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+              <p className="text-sm text-muted-foreground mt-1">
+                Use esta URL para configurar o webhook no painel do Asaas
+              </p>
+            </div>
+
+            {/* Webhook Token/Secret */}
+            <div className="mb-4">
+              <Label htmlFor="webhookSecret">Token de Acesso do Webhook</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="webhookSecret"
+                  type={showWebhookSecret ? 'text' : 'password'}
+                  value={formData.webhookSecret}
+                  onChange={(e) => setFormData({ ...formData, webhookSecret: e.target.value })}
+                  placeholder="Token para validar webhooks"
+                  className="font-mono text-sm"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowWebhookSecret(!showWebhookSecret)}
+                >
+                  {showWebhookSecret ? 'Ocultar' : 'Mostrar'}
+                </Button>
+              </div>
+              <p className="text-sm text-muted-foreground mt-1">
+                Token de segurança para validar requisições de webhook do Asaas
+              </p>
+            </div>
+
+            {/* Webhook Instructions */}
+            <Alert>
+              <AlertDescription className="text-sm space-y-2">
+                <p className="font-semibold">Como configurar o webhook no Asaas:</p>
+                <ol className="list-decimal list-inside space-y-1 ml-2">
+                  <li>Acesse o painel do Asaas e vá em Configurações → Webhooks</li>
+                  <li>Clique em "Adicionar novo webhook"</li>
+                  <li>Cole a URL do webhook acima no campo "URL de callback"</li>
+                  <li>No campo "Token de acesso", insira o mesmo token configurado acima</li>
+                  <li>Selecione os eventos que deseja receber (recomendado: todos os eventos de pagamento)</li>
+                  <li>Salve a configuração</li>
+                </ol>
+                <div className="mt-3 pt-3 border-t">
+                  <a
+                    href={
+                      formData.environment === 'production'
+                        ? 'https://www.asaas.com/config/webhook'
+                        : 'https://sandbox.asaas.com/config/webhook'
+                    }
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline inline-flex items-center gap-1"
+                  >
+                    Abrir configuração de webhooks no Asaas
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+              </AlertDescription>
+            </Alert>
           </div>
 
           {/* Actions */}
