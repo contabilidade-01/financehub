@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { CreditCard } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { CreditCard, AlertCircle } from 'lucide-react';
 
 interface CreditCardData {
   holderName: string;
@@ -26,9 +27,22 @@ export function CreditCardForm({ onCardChange, onValidChange }: CreditCardFormPr
   });
 
   const [errors, setErrors] = useState<Partial<Record<keyof CreditCardData, string>>>({});
+  const [isSandboxMode, setIsSandboxMode] = useState(false);
 
-  // Modo sandbox - aceitar cartões de teste
-  const isSandboxMode = import.meta.env.DEV || window.location.hostname === 'localhost';
+  // Buscar ambiente do Asaas
+  useEffect(() => {
+    fetch('/api/billing/environment')
+      .then(res => res.json())
+      .then(data => {
+        setIsSandboxMode(data.isSandbox);
+        console.log('[CreditCardForm] Asaas environment:', data.environment);
+      })
+      .catch(err => {
+        console.error('[CreditCardForm] Error fetching environment:', err);
+        // Em caso de erro, assumir sandbox como mais seguro
+        setIsSandboxMode(true);
+      });
+  }, []);
 
   // Cartões de teste válidos (Asaas sandbox)
   const TEST_CARDS = [
@@ -170,15 +184,18 @@ export function CreditCardForm({ onCardChange, onValidChange }: CreditCardFormPr
   return (
     <div className="space-y-4">
       {isSandboxMode && (
-        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 text-sm">
-          <p className="font-semibold text-yellow-600 dark:text-yellow-400 mb-1">🧪 Modo Sandbox/Teste</p>
-          <p className="text-yellow-700 dark:text-yellow-300">
-            Use o cartão: <code className="bg-yellow-500/20 px-2 py-0.5 rounded">5162 3060 2717 6633</code>
-          </p>
-          <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
-            Qualquer data futura e CVV 123 funcionarão
-          </p>
-        </div>
+        <Alert className="bg-yellow-500/10 border-yellow-500/30">
+          <AlertCircle className="h-4 w-4 text-yellow-600" />
+          <AlertDescription>
+            <p className="font-semibold text-yellow-600 dark:text-yellow-400 mb-2">🧪 Modo de Teste (Sandbox Asaas)</p>
+            <p className="text-sm text-yellow-700 dark:text-yellow-300 mb-2">
+              <strong>Cartão de teste:</strong> <code className="bg-yellow-500/20 px-2 py-0.5 rounded font-mono">5162 3060 2717 6633</code>
+            </p>
+            <p className="text-xs text-yellow-600 dark:text-yellow-400">
+              Use qualquer data futura e CVV 123. Nenhum pagamento real será processado.
+            </p>
+          </AlertDescription>
+        </Alert>
       )}
 
       <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-lg p-6 text-white">

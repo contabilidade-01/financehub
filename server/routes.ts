@@ -402,6 +402,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   );
 
   // Billing & Checkout (User routes)
+
+  // Rota pública para obter ambiente do Asaas (sandbox ou production)
+  app.get("/api/billing/environment", billingController.getAsaasEnvironment);
+
   app.post(
     "/api/billing/checkout",
     combinedAuth,

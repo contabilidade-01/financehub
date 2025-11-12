@@ -495,8 +495,6 @@ export const paymentSettings = pgTable("payment_settings", {
   apiKey: text("api_key").notNull(),
   webhookSecret: text("webhook_secret"),
   enabled: boolean("enabled").notNull().default(true),
-  sendActivationEmail: boolean("send_activation_email").notNull().default(true),
-  sendActivationWhatsapp: boolean("send_activation_whatsapp").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).default(sql`(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')`),
   updatedAt: timestamp("updated_at", { withTimezone: true })
 }, (table) => [

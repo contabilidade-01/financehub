@@ -19,8 +19,6 @@ interface PaymentSettings {
   webhookSecret: string;
   enabled: boolean;
   configured: boolean;
-  sendActivationEmail?: boolean;
-  sendActivationWhatsapp?: boolean;
 }
 
 export default function PaymentSettingsPage() {
@@ -32,9 +30,7 @@ export default function PaymentSettingsPage() {
     apiKey: '',
     webhookSecret: '',
     enabled: true,
-    configured: false,
-    sendActivationEmail: true,
-    sendActivationWhatsapp: false
+    configured: false
   });
   const [showApiKey, setShowApiKey] = useState(false);
   const [showWebhookSecret, setShowWebhookSecret] = useState(false);
@@ -123,9 +119,7 @@ export default function PaymentSettingsPage() {
       environment: formData.environment,
       apiKey: formData.apiKey,
       webhookSecret: formData.webhookSecret,
-      enabled: formData.enabled,
-      sendActivationEmail: formData.sendActivationEmail,
-      sendActivationWhatsapp: formData.sendActivationWhatsapp
+      enabled: formData.enabled
     });
   };
 
@@ -326,60 +320,6 @@ export default function PaymentSettingsPage() {
             </Alert>
           </div>
 
-          {/* Notification Settings */}
-          <div className="border-t pt-6">
-            <h3 className="text-lg font-semibold mb-4">Notificações Automáticas</h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              Configure quais notificações enviar automaticamente quando um pagamento for confirmado.
-            </p>
-
-            <div className="space-y-4">
-              {/* Email Toggle */}
-              <div className="flex items-center justify-between p-4 border rounded-lg">
-                <div className="flex-1">
-                  <Label htmlFor="sendActivationEmail" className="text-base font-medium">
-                    Enviar Email de Ativação
-                  </Label>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Envia um email automático para o cliente quando o pagamento for confirmado
-                  </p>
-                </div>
-                <Switch
-                  id="sendActivationEmail"
-                  checked={formData.sendActivationEmail ?? true}
-                  onCheckedChange={(checked) =>
-                    setFormData({ ...formData, sendActivationEmail: checked })
-                  }
-                />
-              </div>
-
-              {/* WhatsApp Toggle */}
-              <div className="flex items-center justify-between p-4 border rounded-lg">
-                <div className="flex-1">
-                  <Label htmlFor="sendActivationWhatsapp" className="text-base font-medium">
-                    Enviar WhatsApp de Ativação
-                  </Label>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Envia uma mensagem via WhatsApp quando o pagamento for confirmado (requer WAHA configurado)
-                  </p>
-                </div>
-                <Switch
-                  id="sendActivationWhatsapp"
-                  checked={formData.sendActivationWhatsapp ?? false}
-                  onCheckedChange={(checked) =>
-                    setFormData({ ...formData, sendActivationWhatsapp: checked })
-                  }
-                />
-              </div>
-            </div>
-
-            <Alert className="mt-4">
-              <AlertDescription className="text-sm">
-                <strong>Nota:</strong> As notificações em tempo real (WebSocket) são sempre enviadas,
-                independente destas configurações. Estas opções controlam apenas emails e WhatsApp.
-              </AlertDescription>
-            </Alert>
-          </div>
 
           {/* Actions */}
           <div className="flex gap-4 pt-4">

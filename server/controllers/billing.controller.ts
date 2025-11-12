@@ -3,7 +3,7 @@ import { storage } from "../storage";
 import { getSubscriptionService } from "../services/subscription.service";
 import { z } from "zod";
 import { db } from "../db";
-import { paymentTransactions, users, userSubscriptions, subscriptionPlans } from "@shared/schema";
+import { paymentTransactions, users, userSubscriptions, subscriptionPlans, paymentSettings } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
 /**
@@ -839,5 +839,59 @@ export async function getPaymentDetails(req: Request, res: Response) {
   } catch (error) {
     console.error("Error fetching payment details:", error);
     res.status(500).json({ error: "Erro ao buscar detalhes do pagamento" });
+  }
+}
+
+/**
+ * @swagger
+ * /api/billing/environment:
+ *   get:
+ *     summary: Obter ambiente do Asaas (sandbox ou production)
+ *     description: Rota pública que retorna se o Asaas está configurado em modo sandbox ou production
+ *     tags: [Billing]
+ *     responses:
+ *       200:
+ *         description: Ambiente do Asaas
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 environment:
+ *                   type: string
+ *                   enum: [sandbox, production]
+ *                 isSandbox:
+ *                   type: boolean
+ */
+export async function getAsaasEnvironment(req: Request, res: Response) {
+  try {
+    // Buscar configuração do banco
+    const settings = await db
+      .select()
+      .from(paymentSettings)
+      .where(eq(paymentSettings.provider, 'asaas'))
+      .limit(1);
+
+    let environment: 'sandbox' | 'production' = 'sandbox';
+
+    if (settings.length > 0 && settings[0].enabled) {
+      environment = settings[0].environment as 'sandbox' | 'production';
+    } else {
+      // Fallback para variável de ambiente
+      environment = (process.env.ASAAS_ENVIRONMENT as 'sandbox' | 'production') || 'sandbox';
+    }
+
+    res.json({
+      environment,
+      isSandbox: environment === 'sandbox'
+    });
+
+  } catch (error) {
+    console.error("Error fetching Asaas environment:", error);
+    // Em caso de erro, retornar sandbox como padrão mais seguro
+    res.json({
+      environment: 'sandbox',
+      isSandbox: true
+    });
   }
 }

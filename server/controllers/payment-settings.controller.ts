@@ -15,9 +15,7 @@ const updateSettingsSchema = z.object({
   environment: z.enum(['sandbox', 'production']).optional(),
   apiKey: z.string().min(10).optional(),
   webhookSecret: z.string().optional(),
-  enabled: z.boolean().optional(),
-  sendActivationEmail: z.boolean().optional(),
-  sendActivationWhatsapp: z.boolean().optional()
+  enabled: z.boolean().optional()
 });
 
 /**
@@ -73,8 +71,6 @@ export async function getPaymentSettings(req: Request, res: Response) {
       webhookSecret: config.webhookSecret ? '***' : '',
       enabled: config.enabled,
       configured: !!config.apiKey,
-      sendActivationEmail: config.sendActivationEmail ?? true,
-      sendActivationWhatsapp: config.sendActivationWhatsapp ?? false,
       createdAt: config.createdAt,
       updatedAt: config.updatedAt
     });
@@ -143,8 +139,6 @@ export async function updatePaymentSettings(req: Request, res: Response) {
           apiKey: validatedData.apiKey || '',
           webhookSecret: validatedData.webhookSecret || '',
           enabled: validatedData.enabled !== undefined ? validatedData.enabled : true,
-          sendActivationEmail: validatedData.sendActivationEmail ?? true,
-          sendActivationWhatsapp: validatedData.sendActivationWhatsapp ?? false,
           createdAt: new Date()
         })
         .returning();
@@ -158,8 +152,6 @@ export async function updatePaymentSettings(req: Request, res: Response) {
       if (validatedData.apiKey) updateData.apiKey = validatedData.apiKey;
       if (validatedData.webhookSecret !== undefined) updateData.webhookSecret = validatedData.webhookSecret;
       if (validatedData.enabled !== undefined) updateData.enabled = validatedData.enabled;
-      if (validatedData.sendActivationEmail !== undefined) updateData.sendActivationEmail = validatedData.sendActivationEmail;
-      if (validatedData.sendActivationWhatsapp !== undefined) updateData.sendActivationWhatsapp = validatedData.sendActivationWhatsapp;
 
       result = await db
         .update(paymentSettings)
