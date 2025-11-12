@@ -166,10 +166,14 @@ app.use((req, res, next) => {
   // Middleware de redirecionamento para setup (após o Vite)
   app.use(setupRedirect);
 
-  // ALWAYS serve the app on port 5000
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = 5000;
-  log(`serving on port ${port}`);
+  // Porta dinâmica baseada no ambiente
+  // Desenvolvimento: 5001 (para não conflitar com outros serviços)
+  // Produção: 5000 (porta padrão)
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  const port = isDevelopment ? 5001 : 5000;
+
+  log(`🚀 Ambiente: ${isDevelopment ? 'DESENVOLVIMENTO' : 'PRODUÇÃO'}`);
+  log(`🔌 Servidor rodando na porta ${port}`);
+
   server.listen(port);
 })();
