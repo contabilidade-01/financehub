@@ -49,6 +49,7 @@ import BillingSettingsPage from "@/pages/billing/settings";
 import AdminBillingDashboard from "@/pages/admin/billing-dashboard";
 import PaymentSettingsPage from "@/pages/admin/payment-settings";
 import AdminPaymentsPage from "@/pages/admin/payments";
+import ExternalCheckout from "@/pages/checkout/ExternalCheckout";
 
 function Router() {
   const [location] = useLocation();
@@ -90,8 +91,8 @@ function Router() {
   }
 
   // Handle unauthenticated users
-  let isPublicRoute = location === "/" || location === "/register" || location === "/subscription-expired";
-  
+  let isPublicRoute = location === "/" || location === "/register" || location === "/subscription-expired" || location.startsWith("/checkout/plans");
+
   // Adicionar /setup apenas se estiver em modo setup
   if (isSetupMode) {
     isPublicRoute = isPublicRoute || location === "/setup";
@@ -114,6 +115,7 @@ function Router() {
             <Route path="/" component={Login} />
             <Route path="/register" component={Register} />
             <Route path="/subscription-expired" component={SubscriptionExpired} />
+            <Route path="/checkout/plans" component={ExternalCheckout} />
             {isSetupMode && <Route path="/setup" component={SetupWizard} />}
           </>
         ) : (

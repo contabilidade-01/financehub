@@ -220,6 +220,71 @@ async function processWebhookEvent(eventType: string, paymentData: any, webhookI
           parseFloat(payment.amount.toString()),
           payment.asaasInvoiceUrl || undefined
         );
+
+        // Enviar mensagem de ativação personalizada via webhook
+        try {
+          const postgres = (await import('postgres')).default;
+          const client = postgres(process.env.DATABASE_URL || '', { prepare: false });
+
+          const result = await client`
+            SELECT title, message, email_content
+            FROM welcome_messages
+            WHERE type = 'activation'
+          `;
+
+          if (result.length > 0) {
+            const activationMessage = result[0];
+
+            // Processar tags na mensagem usando notification.service
+            const processedTitle = notificationService.processMessageTags(activationMessage.title, user);
+            const processedMessage = notificationService.processMessageTags(activationMessage.message, user);
+            const processedEmailContent = notificationService.processMessageTags(
+              activationMessage.email_content || activationMessage.message,
+              user
+            );
+
+            // Enviar webhook de ativação (similar ao que é feito quando admin ativa manualmente)
+            const webhookData = {
+              evento: "usuario_ativado",
+              timestamp: new Date().toISOString(),
+              dominio: process.env.BASE_URL || 'https://financehub.xpiria.com.br',
+              id: user.id,
+              nome: user.nome,
+              email: user.email,
+              telefone: user.telefone,
+              tipo_usuario: user.tipo_usuario,
+              data_cadastro: user.data_cadastro,
+              mensagem_ativacao: {
+                titulo: processedTitle,
+                mensagem: processedMessage,
+                conteudo_email: processedEmailContent
+              }
+            };
+
+            console.log('[AsaasWebhook] Sending activation webhook with custom message');
+            const webhookResponse = await fetch(
+              process.env.WEBHOOK_ATIVACAO_URL || 'https://prod-wf.pulsofinanceiro.net.br/webhook/ativacao',
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(webhookData)
+              }
+            );
+
+            if (webhookResponse.ok) {
+              console.log('[AsaasWebhook] Activation webhook sent successfully');
+            } else {
+              console.error('[AsaasWebhook] Error sending activation webhook:', webhookResponse.status);
+            }
+          }
+
+          await client.end();
+        } catch (msgError) {
+          console.error('[AsaasWebhook] Error sending activation message:', msgError);
+          // Não falhar a operação principal se a mensagem de ativação falhar
+        }
       } else {
         console.log('[AsaasWebhook] Activation notifications disabled by admin settings');
       }

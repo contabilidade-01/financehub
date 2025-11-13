@@ -8,6 +8,7 @@
  */
 
 import type { User, SubscriptionPlan } from '@shared/schema';
+import { generateCheckoutToken } from '../utils/checkout-token.utils';
 
 // Importação condicional do nodemailer (só carrega se EMAIL_ENABLED=true)
 type Transporter = any;
@@ -505,6 +506,52 @@ FinanceHub Team
   // ============================================
   // UTILITY METHODS
   // ============================================
+
+  /**
+   * Gerar link de pagamento para checkout externo
+   * @param userId - ID do usuário
+   * @param email - Email do usuário
+   * @returns URL completa para checkout externo com token
+   */
+  generatePaymentLink(userId: number, email: string): string {
+    const token = generateCheckoutToken(userId, email);
+    const frontendUrl = process.env.FRONTEND_URL || process.env.BASE_URL || 'http://localhost:5000';
+    return `${frontendUrl}/checkout/plans?tokenaccess=${token}`;
+  }
+
+  /**
+   * Processar tags em mensagens (substituir variáveis)
+   * @param text - Texto com tags a serem substituídas
+   * @param user - Dados do usuário
+   * @param additionalVars - Variáveis adicionais opcionais
+   * @returns Texto com tags substituídas
+   */
+  processMessageTags(text: string, user: User, additionalVars?: Record<string, string>): string {
+    if (!text) return '';
+
+    let processed = text;
+
+    // Tags padrão do usuário
+    processed = processed.replace(/{nome}/g, user.nome || '');
+    processed = processed.replace(/{email}/g, user.email || '');
+    processed = processed.replace(/{telefone}/g, user.telefone?.toString() || '');
+
+    // Tag de link de pagamento
+    if (processed.includes('{link_pagamento}')) {
+      const paymentLink = this.generatePaymentLink(user.id, user.email);
+      processed = processed.replace(/{link_pagamento}/g, paymentLink);
+    }
+
+    // Variáveis adicionais personalizadas
+    if (additionalVars) {
+      Object.keys(additionalVars).forEach(key => {
+        const tag = `{${key}}`;
+        processed = processed.replace(new RegExp(tag, 'g'), additionalVars[key]);
+      });
+    }
+
+    return processed;
+  }
 
   /**
    * Formatar data (DD/MM/YYYY)

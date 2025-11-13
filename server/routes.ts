@@ -406,11 +406,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Rota pública para obter ambiente do Asaas (sandbox ou production)
   app.get("/api/billing/environment", billingController.getAsaasEnvironment);
 
+  // Rota pública para validar token de checkout externo
+  app.get("/api/billing/checkout/validate/:token", billingController.validateExternalCheckoutToken);
+
+  // Checkout com suporte tanto para usuários autenticados quanto para checkout externo (com token)
   app.post(
     "/api/billing/checkout",
-    combinedAuth,
-    checkImpersonation,
-    requireNoSubscription,
+    (req, res, next) => {
+      // Se houver checkoutToken no body, permitir acesso sem autenticação
+      if (req.body.checkoutToken) {
+        return next();
+      }
+      // Caso contrário, exigir autenticação normal
+      combinedAuth(req, res, next);
+    },
+    (req, res, next) => {
+      // Pular middleware de impersonation check se for checkout externo
+      if (req.body.checkoutToken) {
+        return next();
+      }
+      checkImpersonation(req, res, next);
+    },
+    (req, res, next) => {
+      // Pular middleware de subscription check se for checkout externo
+      if (req.body.checkoutToken) {
+        return next();
+      }
+      requireNoSubscription(req, res, next);
+    },
     billingController.checkout
   );
   app.get(

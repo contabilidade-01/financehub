@@ -13,12 +13,37 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, ArrowLeft, ArrowRight, Check, Clock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
-export default function CheckoutPage() {
+interface CheckoutPageProps {
+  externalMode?: boolean;
+  checkoutToken?: string;
+  preloadedPlans?: Array<{
+    id: number;
+    name: string;
+    description: string;
+    priceMonthly: number;
+    features: string;
+  }>;
+  userData?: {
+    id: number;
+    nome: string;
+    email: string;
+  };
+}
+
+export default function CheckoutPage({
+  externalMode = false,
+  checkoutToken,
+  preloadedPlans,
+  userData
+}: CheckoutPageProps = {}) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const { data: plans, isLoading: isLoadingPlans } = usePlans();
+  const { data: plansFromAPI, isLoading: isLoadingPlans } = usePlans();
   const checkout = useCheckout();
   const { notifications } = useWebSocket();
+
+  // Usar preloadedPlans se em modo externo, caso contrário usar planos da API
+  const plans = externalMode && preloadedPlans ? preloadedPlans : plansFromAPI;
 
   const [step, setStep] = useState(1);
   const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
@@ -30,8 +55,8 @@ export default function CheckoutPage() {
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const [personalInfo, setPersonalInfo] = useState({
-    name: '',
-    email: '',
+    name: userData?.nome || '',
+    email: userData?.email || '',
     cpfCnpj: '',
     phone: '',
     postalCode: '',
@@ -170,7 +195,9 @@ export default function CheckoutPage() {
           addressComplement: personalInfo.addressComplement,
           phone: personalInfo.phone.replace(/\D/g, ''),
           mobilePhone: personalInfo.phone.replace(/\D/g, '')
-        }
+        },
+        // Incluir checkoutToken se em modo externo
+        ...(externalMode && checkoutToken ? { checkoutToken } : {})
       });
 
       // Buscar informações do plano selecionado

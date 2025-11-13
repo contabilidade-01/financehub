@@ -5,6 +5,7 @@ import { z } from "zod";
 import { db } from "../db";
 import { paymentTransactions, users, userSubscriptions, subscriptionPlans, paymentSettings } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import { decodeCheckoutToken, validateCheckoutToken } from "../utils/checkout-token.utils";
 
 /**
  * Billing Controller
@@ -37,7 +38,8 @@ const checkoutSchema = z.object({
     phone: z.string(),
     mobilePhone: z.string().optional()
   }),
-  remoteIp: z.string().optional()
+  remoteIp: z.string().optional(),
+  checkoutToken: z.string().optional() // Token para checkout externo
 });
 
 /**
@@ -68,13 +70,52 @@ const checkoutSchema = z.object({
  */
 export async function checkout(req: Request, res: Response) {
   try {
-    const user = (req as any).user;
-    if (!user) {
-      return res.status(401).json({ error: "Usuário não autenticado" });
-    }
-
-    // Validar dados
+    // Validar dados primeiro
     const validatedData = checkoutSchema.parse(req.body);
+
+    let userId: number;
+    let isExternalCheckout = false;
+
+    // Verificar se é checkout externo (com token) ou normal (autenticado)
+    if (validatedData.checkoutToken) {
+      // Checkout externo: validar token
+      isExternalCheckout = true;
+
+      if (!validateCheckoutToken(validatedData.checkoutToken)) {
+        return res.status(400).json({ error: "Token de checkout inválido" });
+      }
+
+      const decoded = decodeCheckoutToken(validatedData.checkoutToken);
+      if (!decoded) {
+        return res.status(400).json({ error: "Token de checkout inválido" });
+      }
+
+      // Buscar usuário pelo token
+      const user = await storage.getUserById(decoded.userId);
+      if (!user) {
+        return res.status(404).json({ error: "Usuário não encontrado" });
+      }
+
+      // Verificar se email corresponde
+      if (user.email !== decoded.email) {
+        return res.status(400).json({ error: "Token de checkout inválido" });
+      }
+
+      // Verificar se usuário já tem assinatura ativa
+      const activeSubscription = await storage.getActiveSubscriptionByUserId(user.id);
+      if (activeSubscription) {
+        return res.status(400).json({ error: "Usuário já possui assinatura ativa" });
+      }
+
+      userId = user.id;
+    } else {
+      // Checkout normal: requer autenticação
+      const user = (req as any).user;
+      if (!user) {
+        return res.status(401).json({ error: "Usuário não autenticado" });
+      }
+      userId = user.id;
+    }
 
     // Obter IP do request
     const remoteIp = req.ip || req.headers['x-forwarded-for'] as string || '127.0.0.1';
@@ -82,7 +123,7 @@ export async function checkout(req: Request, res: Response) {
     // Criar assinatura via SubscriptionService
     const subscriptionService = getSubscriptionService(storage);
     const result = await subscriptionService.createSubscription({
-      userId: user.id,
+      userId: userId,
       planId: validatedData.planId,
       creditCard: validatedData.creditCard,
       creditCardHolderInfo: validatedData.creditCardHolderInfo,
@@ -118,6 +159,95 @@ export async function checkout(req: Request, res: Response) {
     res.status(500).json({
       error: error.message || "Erro ao processar pagamento",
       details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+}
+
+/**
+ * @swagger
+ * /api/billing/checkout/validate/:token:
+ *   get:
+ *     summary: Validar token de checkout externo
+ *     description: Valida um token de checkout externo e retorna dados do usuário e planos disponíveis
+ *     tags: [Billing]
+ *     parameters:
+ *       - in: path
+ *         name: token
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Token de checkout externo (base64)
+ *     responses:
+ *       200:
+ *         description: Token válido, retorna dados do usuário e planos
+ *       400:
+ *         description: Token inválido ou usuário já possui assinatura
+ *       404:
+ *         description: Usuário não encontrado
+ */
+export async function validateExternalCheckoutToken(req: Request, res: Response) {
+  try {
+    const { token } = req.params;
+
+    // Validar formato do token
+    if (!token || !validateCheckoutToken(token)) {
+      return res.status(400).json({ error: "Token inválido" });
+    }
+
+    // Decodificar token
+    const decoded = decodeCheckoutToken(token);
+    if (!decoded) {
+      return res.status(400).json({ error: "Token inválido" });
+    }
+
+    const { userId, email } = decoded;
+
+    // Buscar usuário no banco
+    const user = await storage.getUserById(userId);
+    if (!user) {
+      return res.status(404).json({ error: "Usuário não encontrado" });
+    }
+
+    // Verificar se email corresponde
+    if (user.email !== email) {
+      return res.status(400).json({ error: "Token inválido" });
+    }
+
+    // Verificar se usuário já tem assinatura ativa
+    const activeSubscription = await storage.getActiveSubscriptionByUserId(userId);
+    if (activeSubscription) {
+      return res.status(400).json({
+        error: "Usuário já possui assinatura ativa",
+        hasActiveSubscription: true
+      });
+    }
+
+    // Buscar planos disponíveis
+    const plans = await storage.getAllSubscriptionPlans();
+    const activePlans = plans.filter(p => p.active);
+
+    // Retornar dados do usuário (sem informações sensíveis) e planos
+    res.json({
+      valid: true,
+      user: {
+        id: user.id,
+        nome: user.nome,
+        email: user.email
+      },
+      plans: activePlans.map(plan => ({
+        id: plan.id,
+        name: plan.name,
+        description: plan.description,
+        priceMonthly: plan.priceMonthly,
+        features: plan.features
+      }))
+    });
+
+  } catch (error: any) {
+    console.error("Error validating checkout token:", error);
+    res.status(500).json({
+      error: "Erro ao validar token",
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 }
