@@ -2,9 +2,13 @@ import { useState, useEffect } from 'react';
 import { useLocation, useSearch } from 'wouter';
 import { useQuery } from '@tanstack/react-query';
 import CheckoutPage from '../billing/checkout';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { Loader2, AlertCircle, Sparkles, Shield, Zap, CreditCard, Lock, ArrowRight } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import { motion } from 'framer-motion';
 
 interface TokenValidationResponse {
   valid: boolean;
