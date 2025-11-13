@@ -103,7 +103,7 @@ export default function CheckoutPage() {
 
   // Escutar notificações WebSocket para confirmação de pagamento
   useEffect(() => {
-    if (!waitingConfirmation || !waitingPaymentId) return;
+    if (!waitingConfirmation || !waitingPaymentId || !notifications) return;
 
     // Procurar notificação de confirmação nas notificações recebidas
     const confirmationNotification = notifications.find(
