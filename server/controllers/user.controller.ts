@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { storage } from "../storage";
 import { insertUserSchema, loginUserSchema } from "@shared/schema";
 import { z } from "zod";
+import { getNotificationService } from "../services/notification.service";
 
 // Função utilitária para validar telefone numérico com country code 55
 function validateTelefone(telefone: number): string | null {
@@ -77,10 +78,77 @@ export async function register(req: Request, res: Response) {
     
     // Don't send back password
     const { senha, ...userWithoutPassword } = newUser;
-    
+
     // Set session
     (req.session as any).userId = newUser.id;
-    
+
+    // Enviar webhook de boas-vindas com link de pagamento (async, não bloqueia resposta)
+    (async () => {
+      try {
+        const postgres = (await import('postgres')).default;
+        const client = postgres(process.env.DATABASE_URL || '', { prepare: false });
+
+        const result = await client`
+          SELECT title, message, email_content
+          FROM welcome_messages
+          WHERE type = 'welcome'
+        `;
+
+        if (result.length > 0) {
+          const welcomeMessage = result[0];
+          const notificationService = getNotificationService();
+
+          // Processar tags incluindo {link_pagamento}
+          const processedTitle = notificationService.processMessageTags(welcomeMessage.title, newUser);
+          const processedMessage = notificationService.processMessageTags(welcomeMessage.message, newUser);
+          const processedEmailContent = notificationService.processMessageTags(
+            welcomeMessage.email_content || welcomeMessage.message,
+            newUser
+          );
+
+          // Enviar webhook de boas-vindas
+          const webhookData = {
+            evento: "usuario_registrado",
+            timestamp: new Date().toISOString(),
+            dominio: process.env.BASE_URL || 'https://financehub.xpiria.com.br',
+            id: newUser.id,
+            nome: newUser.nome,
+            email: newUser.email,
+            telefone: newUser.telefone,
+            tipo_usuario: newUser.tipo_usuario,
+            data_cadastro: newUser.data_cadastro,
+            mensagem_boas_vindas: {
+              titulo: processedTitle,
+              mensagem: processedMessage,
+              conteudo_email: processedEmailContent
+            }
+          };
+
+          console.log('[UserRegister] Enviando webhook de boas-vindas...');
+          const webhookResponse = await fetch(
+            process.env.WEBHOOK_BOAS_VINDAS_URL || process.env.WEBHOOK_ATIVACAO_URL || 'https://prod-wf.pulsofinanceiro.net.br/webhook/boasvindas',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(webhookData)
+            }
+          );
+
+          if (webhookResponse.ok) {
+            console.log('[UserRegister] Webhook de boas-vindas enviado com sucesso');
+          } else {
+            console.error('[UserRegister] Erro ao enviar webhook:', webhookResponse.status);
+          }
+        }
+
+        await client.end();
+      } catch (webhookError) {
+        console.error('[UserRegister] Erro ao enviar webhook de boas-vindas:', webhookError);
+      }
+    })();
+
     res.status(201).json({ user: userWithoutPassword });
   } catch (error) {
     if (error instanceof z.ZodError) {

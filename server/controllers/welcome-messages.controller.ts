@@ -43,6 +43,58 @@ export const getWelcomeMessages = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * @swagger
+ * /api/admin/welcome-messages/{type}:
+ *   get:
+ *     summary: Buscar mensagem de boas-vindas por tipo
+ *     description: Retorna uma mensagem de boas-vindas. Se o parâmetro userId for fornecido, processa todas as tags incluindo {link_pagamento}.
+ *     tags: [Welcome Messages]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: type
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [welcome, activation, pre_activation]
+ *         description: Tipo da mensagem
+ *       - in: query
+ *         name: userId
+ *         required: false
+ *         schema:
+ *           type: integer
+ *         description: ID do usuário para processar tags personalizadas
+ *         example: 123
+ *     responses:
+ *       200:
+ *         description: Mensagem encontrada
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: number
+ *                     type:
+ *                       type: string
+ *                     title:
+ *                       type: string
+ *                       description: Título da mensagem (tags processadas se userId fornecido)
+ *                     message:
+ *                       type: string
+ *                       description: Conteúdo da mensagem (tags processadas se userId fornecido)
+ *                     email_content:
+ *                       type: string
+ *       404:
+ *         description: Mensagem não encontrada
+ */
 // Buscar mensagem específica por tipo
 export const getWelcomeMessageByType = async (req: Request, res: Response) => {
   const client = getClient();
@@ -219,6 +271,56 @@ export const createWelcomeMessage = async (req: Request, res: Response) => {
     await client.end();
   }
 };
+/**
+ * @swagger
+ * /api/welcome-messages/{type}/user/{userId}:
+ *   get:
+ *     summary: Buscar mensagem processada para um usuário específico
+ *     description: Retorna uma mensagem de boas-vindas com todas as tags substituídas pelos dados do usuário, incluindo {link_pagamento}. Este endpoint é público.
+ *     tags: [Welcome Messages]
+ *     parameters:
+ *       - in: path
+ *         name: type
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [welcome, activation, pre_activation]
+ *         description: Tipo da mensagem
+ *         example: welcome
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID do usuário
+ *         example: 123
+ *     responses:
+ *       200:
+ *         description: Mensagem processada com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     title:
+ *                       type: string
+ *                       example: "Bem-vindo, João!"
+ *                     message:
+ *                       type: string
+ *                       example: "Olá João! Clique aqui: http://localhost:5000/checkout/plans?tokenaccess=ABC123"
+ *                     email_content:
+ *                       type: string
+ *       404:
+ *         description: Mensagem ou usuário não encontrado
+ *       500:
+ *         description: Erro interno do servidor
+ */
 /**
  * Buscar mensagem de boas-vindas processada para um usuário específico
  * Processa todas as tags incluindo {link_pagamento}

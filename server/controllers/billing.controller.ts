@@ -47,7 +47,7 @@ const checkoutSchema = z.object({
  * /api/billing/checkout:
  *   post:
  *     summary: Criar nova assinatura (checkout)
- *     description: Processa pagamento e cria assinatura recorrente
+ *     description: Processa pagamento e cria assinatura recorrente. Suporta checkout autenticado (com sessão) ou checkout externo (com checkoutToken).
  *     tags: [Billing]
  *     security:
  *       - cookieAuth: []
@@ -62,11 +62,95 @@ const checkoutSchema = z.object({
  *               - cpfCnpj
  *               - creditCard
  *               - creditCardHolderInfo
+ *             properties:
+ *               planId:
+ *                 type: number
+ *                 description: ID do plano de assinatura
+ *                 example: 1
+ *               cpfCnpj:
+ *                 type: string
+ *                 description: CPF ou CNPJ do titular (apenas números)
+ *                 example: "12345678901"
+ *               creditCard:
+ *                 type: object
+ *                 required:
+ *                   - holderName
+ *                   - number
+ *                   - expiryMonth
+ *                   - expiryYear
+ *                   - ccv
+ *                 properties:
+ *                   holderName:
+ *                     type: string
+ *                     example: "João Silva"
+ *                   number:
+ *                     type: string
+ *                     example: "4111111111111111"
+ *                   expiryMonth:
+ *                     type: string
+ *                     example: "12"
+ *                   expiryYear:
+ *                     type: string
+ *                     example: "2025"
+ *                   ccv:
+ *                     type: string
+ *                     example: "123"
+ *               creditCardHolderInfo:
+ *                 type: object
+ *                 required:
+ *                   - name
+ *                   - email
+ *                   - cpfCnpj
+ *                   - postalCode
+ *                   - addressNumber
+ *                   - phone
+ *                 properties:
+ *                   name:
+ *                     type: string
+ *                   email:
+ *                     type: string
+ *                   cpfCnpj:
+ *                     type: string
+ *                   postalCode:
+ *                     type: string
+ *                   addressNumber:
+ *                     type: string
+ *                   addressComplement:
+ *                     type: string
+ *                   phone:
+ *                     type: string
+ *                   mobilePhone:
+ *                     type: string
+ *               checkoutToken:
+ *                 type: string
+ *                 description: Token de checkout externo (base64). Se fornecido, não requer autenticação de sessão.
+ *                 example: "MTIzOnVzZXJAZW1haWwuY29t"
+ *               remoteIp:
+ *                 type: string
+ *                 description: IP do cliente (opcional)
  *     responses:
  *       201:
  *         description: Assinatura criada com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 status:
+ *                   type: string
+ *                   enum: [pending, confirmed]
+ *                 waitForWebhook:
+ *                   type: boolean
+ *                 paymentId:
+ *                   type: number
  *       400:
  *         description: Dados inválidos ou usuário já possui assinatura
+ *       401:
+ *         description: Usuário não autenticado (quando checkoutToken não fornecido)
  */
 export async function checkout(req: Request, res: Response) {
   try {
@@ -165,10 +249,10 @@ export async function checkout(req: Request, res: Response) {
 
 /**
  * @swagger
- * /api/billing/checkout/validate/:token:
+ * /api/billing/checkout/validate/{token}:
  *   get:
  *     summary: Validar token de checkout externo
- *     description: Valida um token de checkout externo e retorna dados do usuário e planos disponíveis
+ *     description: Valida um token de checkout externo e retorna dados do usuário e planos disponíveis. Este endpoint é público e não requer autenticação.
  *     tags: [Billing]
  *     parameters:
  *       - in: path
@@ -176,12 +260,43 @@ export async function checkout(req: Request, res: Response) {
  *         required: true
  *         schema:
  *           type: string
- *         description: Token de checkout externo (base64)
+ *         description: Token de checkout externo (base64 do formato userId:email)
+ *         example: MTIzOnVzZXJAZW1haWwuY29t
  *     responses:
  *       200:
  *         description: Token válido, retorna dados do usuário e planos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 valid:
+ *                   type: boolean
+ *                   example: true
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: number
+ *                     nome:
+ *                       type: string
+ *                     email:
+ *                       type: string
+ *                 plans:
+ *                   type: array
+ *                   items:
+ *                     type: object
  *       400:
  *         description: Token inválido ou usuário já possui assinatura
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                 hasActiveSubscription:
+ *                   type: boolean
  *       404:
  *         description: Usuário não encontrado
  */
