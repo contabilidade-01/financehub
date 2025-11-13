@@ -48,22 +48,42 @@ export const getWelcomeMessageByType = async (req: Request, res: Response) => {
   const client = getClient();
   try {
     const { type } = req.params;
-    
+    const { userId } = req.query; // Parâmetro opcional para processar tags
+
     const result = await client`
-      SELECT * FROM welcome_messages 
+      SELECT * FROM welcome_messages
       WHERE type = ${type}
     `;
-    
+
     if (result.length === 0) {
       return res.status(404).json({
         success: false,
         message: 'Mensagem não encontrada'
       });
     }
-    
+
+    let message = result[0];
+
+    // Se userId foi fornecido, processar tags
+    if (userId) {
+      const user = await storage.getUserById(parseInt(userId as string));
+      if (user) {
+        const notificationService = getNotificationService();
+        message = {
+          ...message,
+          title: notificationService.processMessageTags(message.title, user),
+          message: notificationService.processMessageTags(message.message, user),
+          email_content: notificationService.processMessageTags(
+            message.email_content || message.message,
+            user
+          )
+        };
+      }
+    }
+
     res.json({
       success: true,
-      data: result[0]
+      data: message
     });
   } catch (error) {
     console.error('Erro ao buscar mensagem:', error);
