@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import "../types/session.types";
+import { getNotificationService } from "../services/notification.service";
 
 /**
  * @swagger
@@ -549,10 +550,14 @@ export async function updateUserStatus(req: Request, res: Response) {
           
           if (result.length > 0) {
             activationMessage = result[0];
-            // Substituir variáveis na mensagem
-            activationMessage.title = activationMessage.title.replace('{nome}', updatedUser.nome);
-            activationMessage.message = activationMessage.message.replace('{nome}', updatedUser.nome);
-            activationMessage.email_content = activationMessage.email_content?.replace('{nome}', updatedUser.nome) || activationMessage.message;
+            // Processar tags na mensagem usando notification.service
+            const notificationService = getNotificationService();
+            activationMessage.title = notificationService.processMessageTags(activationMessage.title, updatedUser);
+            activationMessage.message = notificationService.processMessageTags(activationMessage.message, updatedUser);
+            activationMessage.email_content = notificationService.processMessageTags(
+              activationMessage.email_content || activationMessage.message,
+              updatedUser
+            );
           }
           
           await client.end();
@@ -1139,10 +1144,14 @@ export async function updateUser(req: Request, res: Response) {
           
           if (result.length > 0) {
             activationMessage = result[0];
-            // Substituir variáveis na mensagem
-            activationMessage.title = activationMessage.title.replace('{nome}', updatedUser.nome);
-            activationMessage.message = activationMessage.message.replace('{nome}', updatedUser.nome);
-            activationMessage.email_content = activationMessage.email_content?.replace('{nome}', updatedUser.nome) || activationMessage.message;
+            // Processar tags na mensagem usando notification.service
+            const notificationService = getNotificationService();
+            activationMessage.title = notificationService.processMessageTags(activationMessage.title, updatedUser);
+            activationMessage.message = notificationService.processMessageTags(activationMessage.message, updatedUser);
+            activationMessage.email_content = notificationService.processMessageTags(
+              activationMessage.email_content || activationMessage.message,
+              updatedUser
+            );
           }
           
           await client.end();

@@ -744,6 +744,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/admin/welcome-messages/:type", combinedAuth, requireSuperAdmin, welcomeMessagesController.updateWelcomeMessage);
   app.post("/api/admin/welcome-messages", combinedAuth, requireSuperAdmin, welcomeMessagesController.createWelcomeMessage);
 
+  // Endpoint para buscar mensagem processada para um usuário específico (com tags substituídas)
+  app.get("/api/welcome-messages/:type/user/:userId", welcomeMessagesController.getProcessedWelcomeMessage);
+
   // Payment Settings endpoints (apenas superadmin)
   app.get("/api/admin/payment-settings", combinedAuth, requireSuperAdmin, paymentSettingsController.getPaymentSettings);
   app.put("/api/admin/payment-settings", combinedAuth, requireSuperAdmin, paymentSettingsController.updatePaymentSettings);

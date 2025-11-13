@@ -1,5 +1,7 @@
 import { Request, Response } from "express";
 import postgres from "postgres";
+import { storage } from "../storage";
+import { getNotificationService } from "../services/notification.service";
 
 interface WelcomeMessage {
   id?: number;
@@ -188,6 +190,66 @@ export const createWelcomeMessage = async (req: Request, res: Response) => {
       });
     }
     
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error instanceof Error ? error.message : 'Erro desconhecido'
+    });
+  } finally {
+    await client.end();
+  }
+};
+/**
+ * Buscar mensagem de boas-vindas processada para um usuário específico
+ * Processa todas as tags incluindo {link_pagamento}
+ */
+export const getProcessedWelcomeMessage = async (req: Request, res: Response) => {
+  const client = getClient();
+  try {
+    const { type, userId } = req.params;
+
+    // Buscar mensagem do banco
+    const messageResult = await client`
+      SELECT * FROM welcome_messages
+      WHERE type = ${type}
+    `;
+
+    if (messageResult.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Mensagem não encontrada'
+      });
+    }
+
+    // Buscar dados do usuário
+    const user = await storage.getUserById(parseInt(userId));
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Usuário não encontrado'
+      });
+    }
+
+    const message = messageResult[0];
+    const notificationService = getNotificationService();
+
+    // Processar todas as tags na mensagem
+    const processedMessage = {
+      ...message,
+      title: notificationService.processMessageTags(message.title, user),
+      message: notificationService.processMessageTags(message.message, user),
+      email_content: notificationService.processMessageTags(
+        message.email_content || message.message,
+        user
+      )
+    };
+
+    res.json({
+      success: true,
+      data: processedMessage
+    });
+  } catch (error) {
+    console.error('Erro ao buscar mensagem processada:', error);
     res.status(500).json({
       success: false,
       message: 'Erro interno do servidor',
