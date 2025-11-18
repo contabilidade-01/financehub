@@ -85,6 +85,7 @@ import * as welcomeMessagesController from "./controllers/welcome-messages.contr
 import * as wahaConfigController from "./controllers/waha-config.controller";
 import * as notificationController from "./controllers/notification.controller";
 import themesRouter from "./routes/themes";
+import * as systemSettingsController from "./controllers/system-settings.controller";
 // Asaas Payment Integration
 import * as subscriptionPlanController from "./controllers/subscription-plan.controller";
 import * as billingController from "./controllers/billing.controller";
@@ -746,6 +747,111 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Endpoint para buscar mensagem processada para um usuário específico (com tags substituídas)
   app.get("/api/welcome-messages/:type/user/:userId", welcomeMessagesController.getProcessedWelcomeMessage);
+
+  /**
+   * @swagger
+   * /api/system/settings:
+   *   get:
+   *     summary: Buscar todas as configurações do sistema
+   *     description: Retorna todas as configurações personalizáveis do sistema (nome, slogan, email, etc). Rota pública.
+   *     tags: [System Settings]
+   *     responses:
+   *       200:
+   *         description: Configurações recuperadas com sucesso
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 data:
+   *                   type: object
+   *                   properties:
+   *                     system_name:
+   *                       type: object
+   *                       properties:
+   *                         value:
+   *                           type: string
+   *                         metadata:
+   *                           type: object
+   *       500:
+   *         description: Erro ao buscar configurações
+   */
+  app.get("/api/system/settings", systemSettingsController.getSystemSettings);
+
+  /**
+   * @swagger
+   * /api/admin/system/settings:
+   *   put:
+   *     summary: Atualizar configurações do sistema
+   *     description: Permite que o Super Admin atualize configurações globais do sistema
+   *     tags: [System Settings]
+   *     security:
+   *       - cookieAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               system_name:
+   *                 type: string
+   *                 example: "Meu Sistema Financeiro"
+   *               system_name_short:
+   *                 type: string
+   *                 example: "meusistema"
+   *               system_tagline:
+   *                 type: string
+   *                 example: "Gestão financeira simplificada"
+   *               support_email:
+   *                 type: string
+   *                 format: email
+   *                 example: "suporte@meusistema.com"
+   *               system_url:
+   *                 type: string
+   *                 format: uri
+   *                 example: "https://meusistema.com"
+   *     responses:
+   *       200:
+   *         description: Configurações atualizadas com sucesso
+   *       400:
+   *         description: Dados inválidos
+   *       401:
+   *         description: Não autenticado
+   *       403:
+   *         description: Apenas Super Admin pode atualizar
+   *       500:
+   *         description: Erro ao atualizar configurações
+   */
+  app.put("/api/admin/system/settings", combinedAuth, requireSuperAdmin, systemSettingsController.updateSystemSettings);
+
+  /**
+   * @swagger
+   * /api/admin/system/settings/{key}:
+   *   get:
+   *     summary: Buscar uma configuração específica
+   *     description: Retorna uma configuração do sistema por chave
+   *     tags: [System Settings]
+   *     security:
+   *       - cookieAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: key
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Chave da configuração
+   *     responses:
+   *       200:
+   *         description: Configuração encontrada
+   *       404:
+   *         description: Configuração não encontrada
+   *       500:
+   *         description: Erro ao buscar configuração
+   */
+  app.get("/api/admin/system/settings/:key", combinedAuth, requireSuperAdmin, systemSettingsController.getSystemSetting);
 
   // Payment Settings endpoints (apenas superadmin)
   app.get("/api/admin/payment-settings", combinedAuth, requireSuperAdmin, paymentSettingsController.getPaymentSettings);

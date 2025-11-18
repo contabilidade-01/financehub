@@ -196,7 +196,11 @@ export class SubscriptionService {
       });
 
       // Atualizar usuário (denormalização para performance)
+      // IMPORTANTE: Atualizar AMBOS os campos para compatibilidade
+      // - ativo: usado pelo admin switch e verificação de login
+      // - subscriptionActive: usado pelo sistema de assinaturas
       await this.storage.updateUser(userId, {
+        ativo: true,
         subscriptionActive: true,
         status_assinatura: 'ativa'
       });

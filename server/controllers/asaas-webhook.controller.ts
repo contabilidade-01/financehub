@@ -4,6 +4,8 @@ import { getAsaasService } from "../services/asaas.service";
 import { getSubscriptionService } from "../services/subscription.service";
 import { getNotificationService } from "../services/notification.service";
 import { broadcastNotification, broadcastToRole } from "../websocket";
+import { generateRandomPassword } from "../utils/password-generator";
+import bcrypt from "bcryptjs";
 
 /**
  * Asaas Webhook Controller
@@ -226,10 +228,11 @@ async function processWebhookEvent(eventType: string, paymentData: any, webhookI
           const postgres = (await import('postgres')).default;
           const client = postgres(process.env.DATABASE_URL || '', { prepare: false });
 
+          // IMPORTANTE: Mudar de 'activation' para 'activated' para padronizar com ativação manual
           const result = await client`
             SELECT title, message, email_content
             FROM welcome_messages
-            WHERE type = 'activation'
+            WHERE type = 'activated'
           `;
 
           if (result.length > 0) {
@@ -243,7 +246,20 @@ async function processWebhookEvent(eventType: string, paymentData: any, webhookI
               user
             );
 
-            // Enviar webhook de ativação (similar ao que é feito quando admin ativa manualmente)
+            // Buscar token do usuário (mesmo comportamento da ativação manual)
+            const userTokens = await storage.getApiTokensByUserId(user.id);
+            const userToken = userTokens && userTokens.length > 0 ? userTokens[0].token : null;
+
+            // Gerar nova senha aleatória (mesmo comportamento da ativação manual)
+            const newPassword = generateRandomPassword(8);
+
+            // Atualizar a senha do usuário
+            const hashedPassword = await bcrypt.hash(newPassword, 10);
+            await storage.updateUser(user.id, { senha: hashedPassword });
+
+            console.log(`[AsaasWebhook] Nova senha gerada para usuário ${user.nome}: ${newPassword}`);
+
+            // Enviar webhook de ativação com payload COMPLETO (idêntico à ativação manual)
             const webhookData = {
               evento: "usuario_ativado",
               timestamp: new Date().toISOString(),
@@ -254,6 +270,11 @@ async function processWebhookEvent(eventType: string, paymentData: any, webhookI
               telefone: user.telefone,
               tipo_usuario: user.tipo_usuario,
               data_cadastro: user.data_cadastro,
+              token: userToken,
+              acesso_web: {
+                usuario: user.email,
+                senha: newPassword
+              },
               mensagem_ativacao: {
                 titulo: processedTitle,
                 mensagem: processedMessage,
@@ -262,6 +283,8 @@ async function processWebhookEvent(eventType: string, paymentData: any, webhookI
             };
 
             console.log('[AsaasWebhook] Sending activation webhook with custom message');
+            console.log('[AsaasWebhook] Webhook payload:', JSON.stringify(webhookData, null, 2));
+
             const webhookResponse = await fetch(
               process.env.WEBHOOK_ATIVACAO_URL || 'https://prod-wf.pulsofinanceiro.net.br/webhook/ativacao',
               {

@@ -11,6 +11,9 @@ import { AutoThemeProvider } from "@/components/AutoThemeProvider";
 import { User } from "@shared/schema";
 import { ExpiredSubscriptionOverlay } from "@/components/subscription/ExpiredSubscriptionOverlay";
 import { LocalizationProvider } from "@/contexts/LocalizationContext";
+import { SystemConfigProvider, useSystemConfig } from "@/contexts/SystemConfigContext";
+import { updateAllMetadata } from "@/utils/update-metadata";
+import { useEffect } from "react";
 
 interface SetupStatus {
   setupMode: boolean;
@@ -56,6 +59,12 @@ function Router() {
   const { isAuthenticated, isLoading, user } = useAuth();
   const { isSubscriptionExpired, hasActiveAccess, expirationDate } = useSubscriptionStatus();
   const { t } = useTranslation();
+  const { config } = useSystemConfig();
+
+  // Atualizar metadados HTML quando config mudar
+  useEffect(() => {
+    updateAllMetadata(config);
+  }, [config]);
 
   const { data: userData } = useQuery<User>({
     queryKey: ["/api/users/profile"],
@@ -260,13 +269,15 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <LocalizationProvider>
-          <NotificationsProvider>
-            <AutoThemeProvider showLoadingIndicator={true}>
-              <ImpersonationBanner />
-              <Toaster />
-              <Router />
-            </AutoThemeProvider>
-          </NotificationsProvider>
+          <SystemConfigProvider>
+            <NotificationsProvider>
+              <AutoThemeProvider showLoadingIndicator={true}>
+                <ImpersonationBanner />
+                <Toaster />
+                <Router />
+              </AutoThemeProvider>
+            </NotificationsProvider>
+          </SystemConfigProvider>
         </LocalizationProvider>
       </TooltipProvider>
     </QueryClientProvider>

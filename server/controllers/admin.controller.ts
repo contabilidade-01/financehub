@@ -7,6 +7,7 @@ import { z } from "zod";
 import bcrypt from "bcryptjs";
 import "../types/session.types";
 import { getNotificationService } from "../services/notification.service";
+import { generateRandomPassword } from "../utils/password-generator";
 
 /**
  * @swagger
@@ -513,16 +514,7 @@ export async function updateUserStatus(req: Request, res: Response) {
         const userTokens = await storage.getApiTokensByUserId(updatedUser.id);
         const userToken = userTokens && userTokens.length > 0 ? userTokens[0].token : null;
         
-        // Gerar nova senha aleatória (8 caracteres, sem caracteres especiais)
-        const generateRandomPassword = (length: number = 8): string => {
-          const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-          let password = '';
-          for (let i = 0; i < length; i++) {
-            password += charset.charAt(Math.floor(Math.random() * charset.length));
-          }
-          return password;
-        };
-        
+        // Gerar nova senha aleatória usando utilitário compartilhado
         const newPassword = generateRandomPassword(8);
         
         // Atualizar a senha do usuário
@@ -1107,16 +1099,7 @@ export async function updateUser(req: Request, res: Response) {
         const userTokens = await storage.getApiTokensByUserId(updatedUser.id);
         const userToken = userTokens && userTokens.length > 0 ? userTokens[0].token : null;
         
-        // Gerar nova senha aleatória (8 caracteres, sem caracteres especiais)
-        const generateRandomPassword = (length: number = 8): string => {
-          const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-          let password = '';
-          for (let i = 0; i < length; i++) {
-            password += charset.charAt(Math.floor(Math.random() * charset.length));
-          }
-          return password;
-        };
-        
+        // Gerar nova senha aleatória usando utilitário compartilhado
         const newPassword = generateRandomPassword(8);
         
         // Atualizar a senha do usuário

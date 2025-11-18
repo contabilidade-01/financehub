@@ -3,6 +3,10 @@ import { Button } from '@/components/ui/button';
 import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
+import { Separator } from '@/components/ui/separator';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { SpinningBorder } from '@/components/ui/spinning-border';
 import { WhatsAppChatModal } from '@/components/whatsapp-chat-modal';
 import { useAuth } from '@/hooks/use-auth';
@@ -15,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { ThemeCustomizer } from '@/components/theme-customizer';
 import { LanguageSelector } from '@/components/admin/LanguageSelector';
 import { useLocalization, useTranslation } from '@/contexts/LocalizationContext';
+import { useSystemConfig } from '@/contexts/SystemConfigContext';
 
 // Função para formatar número de telefone
 const formatPhoneNumber = (phone: string) => {
@@ -47,6 +52,227 @@ const formatPhoneNumber = (phone: string) => {
   
   return phone;
 };
+
+// Componente para configurações do sistema
+function SystemConfigSection() {
+  const { config, refetch } = useSystemConfig();
+  const { toast } = useToast();
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+
+  const [formData, setFormData] = useState({
+    system_name: config.system_name,
+    system_name_short: config.system_name_short,
+    system_tagline: config.system_tagline,
+    support_email: config.support_email,
+    system_url: config.system_url,
+    system_description: config.system_description
+  });
+
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Atualizar form quando config mudar
+  useEffect(() => {
+    setFormData({
+      system_name: config.system_name,
+      system_name_short: config.system_name_short,
+      system_tagline: config.system_tagline,
+      support_email: config.support_email,
+      system_url: config.system_url,
+      system_description: config.system_description
+    });
+  }, [config]);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+
+    try {
+      const response = await fetch('/api/admin/system/settings', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify(formData)
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Erro ao salvar configurações');
+      }
+
+      // Invalidar cache e refetch
+      queryClient.invalidateQueries({ queryKey: ['system-settings'] });
+      await refetch();
+
+      // Forçar refresh da página para atualizar metadados e todos os componentes
+      // (incluindo index.html)
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+
+      toast({
+        title: t('admin.customize.success', 'Sucesso'),
+        description: t('admin.customize.system_config_saved', 'Configurações do sistema salvas com sucesso! A página será recarregada.'),
+        variant: 'default'
+      });
+    } catch (error: any) {
+      console.error('[SystemConfig] Erro ao salvar:', error);
+      toast({
+        title: t('admin.customize.error', 'Erro'),
+        description: error.message || t('admin.customize.system_config_error', 'Erro ao salvar configurações'),
+        variant: 'destructive'
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleChange = (field: string, value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-semibold mb-2">
+          {t('admin.customize.system_settings', 'Configurações do Sistema')}
+        </h2>
+        <p className="text-sm text-muted-foreground mb-6">
+          {t('admin.customize.system_settings_desc', 'Personalize o nome e informações exibidas em todo o sistema')}
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Nome do Sistema */}
+        <div className="space-y-2">
+          <Label htmlFor="system_name">
+            {t('admin.customize.system_name', 'Nome do Sistema')}
+          </Label>
+          <Input
+            id="system_name"
+            value={formData.system_name}
+            onChange={(e) => handleChange('system_name', e.target.value)}
+            placeholder="FinanceHub"
+            maxLength={100}
+          />
+          <p className="text-xs text-muted-foreground">
+            {t('admin.customize.system_name_help', 'Nome exibido em títulos, headers e interface')}
+          </p>
+        </div>
+
+        {/* Nome Curto */}
+        <div className="space-y-2">
+          <Label htmlFor="system_name_short">
+            {t('admin.customize.system_name_short', 'Nome Curto (lowercase)')}
+          </Label>
+          <Input
+            id="system_name_short"
+            value={formData.system_name_short}
+            onChange={(e) => handleChange('system_name_short', e.target.value.toLowerCase())}
+            placeholder="financehub"
+            maxLength={50}
+            pattern="[a-z0-9_-]+"
+          />
+          <p className="text-xs text-muted-foreground">
+            {t('admin.customize.system_name_short_help', 'Usado em emails e URLs (apenas letras minúsculas, números, - e _)')}
+          </p>
+        </div>
+
+        {/* Email de Suporte */}
+        <div className="space-y-2">
+          <Label htmlFor="support_email">
+            {t('admin.customize.support_email', 'Email de Suporte')}
+          </Label>
+          <Input
+            id="support_email"
+            type="email"
+            value={formData.support_email}
+            onChange={(e) => handleChange('support_email', e.target.value)}
+            placeholder="suporte@financehub.com"
+          />
+          <p className="text-xs text-muted-foreground">
+            {t('admin.customize.support_email_help', 'Email de contato exibido aos usuários')}
+          </p>
+        </div>
+
+        {/* URL do Sistema */}
+        <div className="space-y-2">
+          <Label htmlFor="system_url">
+            {t('admin.customize.system_url', 'URL do Sistema')}
+          </Label>
+          <Input
+            id="system_url"
+            type="url"
+            value={formData.system_url}
+            onChange={(e) => handleChange('system_url', e.target.value)}
+            placeholder="https://financehub.com"
+          />
+          <p className="text-xs text-muted-foreground">
+            {t('admin.customize.system_url_help', 'URL principal do sistema')}
+          </p>
+        </div>
+      </div>
+
+      {/* Slogan */}
+      <div className="space-y-2">
+        <Label htmlFor="system_tagline">
+          {t('admin.customize.system_tagline', 'Slogan/Tagline')}
+        </Label>
+        <Input
+          id="system_tagline"
+          value={formData.system_tagline}
+          onChange={(e) => handleChange('system_tagline', e.target.value)}
+          placeholder="Gestão financeira inteligente e moderna"
+          maxLength={200}
+        />
+        <p className="text-xs text-muted-foreground">
+          {t('admin.customize.system_tagline_help', 'Frase descritiva exibida abaixo do nome')}
+        </p>
+      </div>
+
+      {/* Descrição */}
+      <div className="space-y-2">
+        <Label htmlFor="system_description">
+          {t('admin.customize.system_description', 'Descrição do Sistema (SEO)')}
+        </Label>
+        <Textarea
+          id="system_description"
+          value={formData.system_description}
+          onChange={(e) => handleChange('system_description', e.target.value)}
+          placeholder="Descrição completa para meta tags e SEO..."
+          maxLength={500}
+          rows={3}
+        />
+        <p className="text-xs text-muted-foreground">
+          {t('admin.customize.system_description_help', 'Descrição para buscadores (meta description)')}
+        </p>
+      </div>
+
+      {/* Botão Salvar */}
+      <div className="flex justify-end">
+        <Button
+          onClick={handleSave}
+          disabled={isSaving}
+          size="lg"
+        >
+          {isSaving ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              {t('admin.customize.saving', 'Salvando...')}
+            </>
+          ) : (
+            t('admin.customize.save_settings', 'Salvar Configurações')
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 // Componente para gerenciamento de idiomas
 function LanguageManagementSection() {
@@ -1947,6 +2173,11 @@ export default function CustomizePage() {
                 <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>{t('admin.customize.customize_saas', 'Personalizar SaaS')}</CardTitle>
               </CardHeader>
               <CardContent>
+                {/* Seção de Configurações do Sistema */}
+                <SystemConfigSection />
+
+                <Separator className="my-8" />
+
                 <div className="mb-6">
                   <h2 className="font-semibold mb-2">{t('admin.customize.system_logo', 'Logo do sistema')}</h2>
                   <p className="text-sm text-muted-foreground mb-4" dangerouslySetInnerHTML={{
