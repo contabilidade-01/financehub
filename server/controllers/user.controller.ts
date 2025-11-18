@@ -69,7 +69,9 @@ export async function register(req: Request, res: Response) {
       telefone: telefoneNum ? telefoneNum.toString() : undefined
     };
     const newUser = await storage.createUser(userDataToSave);
-    
+
+    console.log(`[Register] User created - ID: ${newUser.id}, Email: ${newUser.email}`);
+
     // Create default wallet for new user
     await storage.createWallet({
       usuario_id: newUser.id,

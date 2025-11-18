@@ -27,13 +27,16 @@ export function decodeCheckoutToken(token: string): { userId: number; email: str
     // Decodifica base64
     const decoded = Buffer.from(token, 'base64').toString('utf-8');
 
-    // Valida formato userId:email
-    const parts = decoded.split(':');
-    if (parts.length !== 2) {
+    // Encontra o primeiro ':' para separar userId do email
+    // (email pode conter ':' então não podemos usar split simples)
+    const firstColonIndex = decoded.indexOf(':');
+    if (firstColonIndex === -1) {
       return null;
     }
 
-    const [userIdStr, email] = parts;
+    const userIdStr = decoded.substring(0, firstColonIndex);
+    const email = decoded.substring(firstColonIndex + 1);
+
     const userId = parseInt(userIdStr, 10);
 
     // Valida que userId é um número válido

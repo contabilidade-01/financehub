@@ -516,7 +516,9 @@ FinanceHub Team
   generatePaymentLink(userId: number, email: string): string {
     const token = generateCheckoutToken(userId, email);
     const frontendUrl = process.env.FRONTEND_URL || process.env.BASE_URL || 'http://localhost:5000';
-    return `${frontendUrl}/checkout/plans?tokenaccess=${token}`;
+    const link = `${frontendUrl}/checkout/plans?tokenaccess=${token}`;
+    console.log(`[NotificationService] Payment link generated - userId: ${userId}, email: ${email}, token: ${token}`);
+    return link;
   }
 
   /**
