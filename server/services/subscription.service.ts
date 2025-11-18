@@ -21,6 +21,8 @@ import type {
   SubscriptionStatus,
   PaymentStatus
 } from '@shared/schema';
+import { generateRandomPassword } from '../utils/password-generator';
+import bcrypt from 'bcryptjs';
 
 // ============================================
 // INTERFACES
@@ -163,9 +165,12 @@ export class SubscriptionService {
           metadata: JSON.stringify(firstPayment)
         });
 
-        // Se pagamento foi confirmado, ativar usuário
+        // Se pagamento foi confirmado, ativar usuário e enviar webhook
         if (firstPayment.status === 'CONFIRMED' || firstPayment.status === 'RECEIVED') {
           await this.activateUserSubscription(data.userId, subscription.id);
+
+          // Enviar webhook de ativação (mesmo comportamento da ativação manual)
+          await this.sendActivationWebhook(user);
         }
       }
 
@@ -209,6 +214,103 @@ export class SubscriptionService {
     } catch (error) {
       console.error('[SubscriptionService] Error activating subscription:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Enviar webhook de ativação (idêntico à ativação manual do admin)
+   */
+  async sendActivationWebhook(user: User): Promise<void> {
+    try {
+      console.log(`[SubscriptionService] Enviando webhook de ativação para usuário ${user.nome}...`);
+
+      const postgres = (await import('postgres')).default;
+      const client = postgres(process.env.DATABASE_URL || '', { prepare: false });
+
+      // Buscar mensagem de ativação personalizada
+      const result = await client`
+        SELECT title, message, email_content
+        FROM welcome_messages
+        WHERE type = 'activated'
+      `;
+
+      let activationMessage = {
+        title: 'Sua conta foi ativada!',
+        message: 'Olá! Sua conta foi ativada com sucesso. Agora você tem acesso completo a todos os recursos da plataforma.',
+        email_content: 'Sua conta foi ativada com sucesso!'
+      };
+
+      if (result.length > 0) {
+        activationMessage = result[0];
+        // Processar tags na mensagem
+        activationMessage.title = this.notificationService.processMessageTags(activationMessage.title, user);
+        activationMessage.message = this.notificationService.processMessageTags(activationMessage.message, user);
+        activationMessage.email_content = this.notificationService.processMessageTags(
+          activationMessage.email_content || activationMessage.message,
+          user
+        );
+      }
+
+      // Buscar token do usuário
+      const userTokens = await this.storage.getApiTokensByUserId(user.id);
+      const userToken = userTokens && userTokens.length > 0 ? userTokens[0].token : null;
+
+      // Gerar nova senha aleatória (mesmo comportamento da ativação manual)
+      const newPassword = generateRandomPassword(8);
+
+      // Atualizar a senha do usuário
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      await this.storage.updateUser(user.id, { senha: hashedPassword });
+
+      console.log(`[SubscriptionService] Nova senha gerada para usuário ${user.nome}: ${newPassword}`);
+
+      // Enviar webhook de ativação com payload COMPLETO
+      const webhookData = {
+        evento: "usuario_ativado",
+        timestamp: new Date().toISOString(),
+        dominio: process.env.BASE_URL || 'https://financehub.xpiria.com.br',
+        id: user.id,
+        nome: user.nome,
+        email: user.email,
+        telefone: user.telefone,
+        tipo_usuario: user.tipo_usuario,
+        data_cadastro: user.data_cadastro,
+        token: userToken,
+        acesso_web: {
+          usuario: user.email,
+          senha: newPassword
+        },
+        mensagem_ativacao: {
+          titulo: activationMessage.title,
+          mensagem: activationMessage.message,
+          conteudo_email: activationMessage.email_content
+        }
+      };
+
+      console.log('[SubscriptionService] Sending activation webhook');
+      console.log('[SubscriptionService] Webhook payload:', JSON.stringify(webhookData, null, 2));
+
+      const webhookResponse = await fetch(
+        process.env.WEBHOOK_ATIVACAO_URL || 'https://prod-wf.pulsofinanceiro.net.br/webhook/ativacao',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(webhookData)
+        }
+      );
+
+      if (webhookResponse.ok) {
+        console.log('[SubscriptionService] Activation webhook sent successfully');
+      } else {
+        console.error('[SubscriptionService] Error sending activation webhook:', webhookResponse.status);
+      }
+
+      await client.end();
+    } catch (error) {
+      console.error('[SubscriptionService] Error sending activation webhook:', error);
+      // Não falhar a operação principal se o webhook falhar
     }
   }
 

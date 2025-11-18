@@ -317,9 +317,14 @@ export async function validateExternalCheckoutToken(req: Request, res: Response)
 
     const { userId, email } = decoded;
 
+    console.log('[Checkout Validate] Token decoded:', { userId, email });
+
     // Buscar usuário no banco
     const user = await storage.getUserById(userId);
+    console.log('[Checkout Validate] User found:', user ? { id: user.id, email: user.email, ativo: user.ativo } : null);
+
     if (!user) {
+      console.log('[Checkout Validate] ERROR: User not found for ID:', userId);
       return res.status(404).json({ error: "Usuário não encontrado" });
     }
 
