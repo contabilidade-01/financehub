@@ -214,102 +214,110 @@ async function processWebhookEvent(eventType: string, paymentData: any, webhookI
         await subscriptionService.activateUserSubscription(payment.usuarioId, payment.subscriptionId);
       }
 
-      // Enviar notificação (respeitando configurações do super_admin)
+      // Enviar notificação de pagamento confirmado (respeitando configurações do super_admin)
       if (notificationSettings.sendEmail || notificationSettings.sendWhatsApp) {
-        console.log(`[AsaasWebhook] Sending activation notification (Email: ${notificationSettings.sendEmail}, WhatsApp: ${notificationSettings.sendWhatsApp})`);
+        console.log(`[AsaasWebhook] Sending payment notification (Email: ${notificationSettings.sendEmail}, WhatsApp: ${notificationSettings.sendWhatsApp})`);
         await notificationService.sendPaymentConfirmed(
           user,
           parseFloat(payment.amount.toString()),
           payment.asaasInvoiceUrl || undefined
         );
-
-        // Enviar mensagem de ativação personalizada via webhook
-        try {
-          const postgres = (await import('postgres')).default;
-          const client = postgres(process.env.DATABASE_URL || '', { prepare: false });
-
-          // IMPORTANTE: Mudar de 'activation' para 'activated' para padronizar com ativação manual
-          const result = await client`
-            SELECT title, message, email_content
-            FROM welcome_messages
-            WHERE type = 'activated'
-          `;
-
-          if (result.length > 0) {
-            const activationMessage = result[0];
-
-            // Processar tags na mensagem usando notification.service
-            const processedTitle = notificationService.processMessageTags(activationMessage.title, user);
-            const processedMessage = notificationService.processMessageTags(activationMessage.message, user);
-            const processedEmailContent = notificationService.processMessageTags(
-              activationMessage.email_content || activationMessage.message,
-              user
-            );
-
-            // Buscar token do usuário (mesmo comportamento da ativação manual)
-            const userTokens = await storage.getApiTokensByUserId(user.id);
-            const userToken = userTokens && userTokens.length > 0 ? userTokens[0].token : null;
-
-            // Gerar nova senha aleatória (mesmo comportamento da ativação manual)
-            const newPassword = generateRandomPassword(8);
-
-            // Atualizar a senha do usuário
-            const hashedPassword = await bcrypt.hash(newPassword, 10);
-            await storage.updateUser(user.id, { senha: hashedPassword });
-
-            console.log(`[AsaasWebhook] Nova senha gerada para usuário ${user.nome}: ${newPassword}`);
-
-            // Enviar webhook de ativação com payload COMPLETO (idêntico à ativação manual)
-            const webhookData = {
-              evento: "usuario_ativado",
-              timestamp: new Date().toISOString(),
-              dominio: process.env.BASE_URL || 'https://financehub.xpiria.com.br',
-              id: user.id,
-              nome: user.nome,
-              email: user.email,
-              telefone: user.telefone,
-              tipo_usuario: user.tipo_usuario,
-              data_cadastro: user.data_cadastro,
-              token: userToken,
-              acesso_web: {
-                usuario: user.email,
-                senha: newPassword
-              },
-              mensagem_ativacao: {
-                titulo: processedTitle,
-                mensagem: processedMessage,
-                conteudo_email: processedEmailContent
-              }
-            };
-
-            console.log('[AsaasWebhook] Sending activation webhook with custom message');
-            console.log('[AsaasWebhook] Webhook payload:', JSON.stringify(webhookData, null, 2));
-
-            const webhookResponse = await fetch(
-              process.env.WEBHOOK_ATIVACAO_URL || 'https://prod-wf.pulsofinanceiro.net.br/webhook/ativacao',
-              {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(webhookData)
-              }
-            );
-
-            if (webhookResponse.ok) {
-              console.log('[AsaasWebhook] Activation webhook sent successfully');
-            } else {
-              console.error('[AsaasWebhook] Error sending activation webhook:', webhookResponse.status);
-            }
-          }
-
-          await client.end();
-        } catch (msgError) {
-          console.error('[AsaasWebhook] Error sending activation message:', msgError);
-          // Não falhar a operação principal se a mensagem de ativação falhar
-        }
       } else {
-        console.log('[AsaasWebhook] Activation notifications disabled by admin settings');
+        console.log('[AsaasWebhook] Payment notifications disabled by admin settings');
+      }
+
+      // IMPORTANTE: Webhook de ativação é SEMPRE enviado, independente das configurações de email/whatsapp
+      // Este é o trigger que ativa o usuário no sistema externo
+      try {
+        console.log('[AsaasWebhook] Enviando webhook de ativação...');
+
+        const postgres = (await import('postgres')).default;
+        const client = postgres(process.env.DATABASE_URL || '', { prepare: false });
+
+        // Buscar mensagem de ativação personalizada
+        const result = await client`
+          SELECT title, message, email_content
+          FROM welcome_messages
+          WHERE type = 'activated'
+        `;
+
+        let activationMessage = {
+          title: 'Sua conta foi ativada!',
+          message: 'Olá! Sua conta foi ativada com sucesso. Agora você tem acesso completo a todos os recursos da plataforma.',
+          email_content: 'Sua conta foi ativada com sucesso!'
+        };
+
+        if (result.length > 0) {
+          activationMessage = result[0];
+          // Processar tags na mensagem usando notification.service
+          activationMessage.title = notificationService.processMessageTags(activationMessage.title, user);
+          activationMessage.message = notificationService.processMessageTags(activationMessage.message, user);
+          activationMessage.email_content = notificationService.processMessageTags(
+            activationMessage.email_content || activationMessage.message,
+            user
+          );
+        }
+
+        // Buscar token do usuário (mesmo comportamento da ativação manual)
+        const userTokens = await storage.getApiTokensByUserId(user.id);
+        const userToken = userTokens && userTokens.length > 0 ? userTokens[0].token : null;
+
+        // Gerar nova senha aleatória (mesmo comportamento da ativação manual)
+        const newPassword = generateRandomPassword(8);
+
+        // Atualizar a senha do usuário
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        await storage.updateUser(user.id, { senha: hashedPassword });
+
+        console.log(`[AsaasWebhook] Nova senha gerada para usuário ${user.nome}: ${newPassword}`);
+
+        // Enviar webhook de ativação com payload COMPLETO (idêntico à ativação manual)
+        const webhookData = {
+          evento: "usuario_ativado",
+          timestamp: new Date().toISOString(),
+          dominio: process.env.BASE_URL || 'https://financehub.xpiria.com.br',
+          id: user.id,
+          nome: user.nome,
+          email: user.email,
+          telefone: user.telefone,
+          tipo_usuario: user.tipo_usuario,
+          data_cadastro: user.data_cadastro,
+          token: userToken,
+          acesso_web: {
+            usuario: user.email,
+            senha: newPassword
+          },
+          mensagem_ativacao: {
+            titulo: activationMessage.title,
+            mensagem: activationMessage.message,
+            conteudo_email: activationMessage.email_content
+          }
+        };
+
+        console.log('[AsaasWebhook] Sending activation webhook with custom message');
+        console.log('[AsaasWebhook] Webhook payload:', JSON.stringify(webhookData, null, 2));
+
+        const webhookResponse = await fetch(
+          process.env.WEBHOOK_ATIVACAO_URL || 'https://prod-wf.pulsofinanceiro.net.br/webhook/ativacao',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(webhookData)
+          }
+        );
+
+        if (webhookResponse.ok) {
+          console.log('[AsaasWebhook] Activation webhook sent successfully');
+        } else {
+          console.error('[AsaasWebhook] Error sending activation webhook:', webhookResponse.status);
+        }
+
+        await client.end();
+      } catch (msgError) {
+        console.error('[AsaasWebhook] Error sending activation message:', msgError);
+        // Não falhar a operação principal se a mensagem de ativação falhar
       }
 
       // Broadcast em tempo real para o usuário (sempre enviar, independente das configurações de email/whatsapp)
