@@ -151,6 +151,11 @@ export class SubscriptionService {
       if (asaasPayments.data.length > 0) {
         const firstPayment = asaasPayments.data[0];
 
+        console.log(`[SubscriptionService] Primeiro pagamento Asaas:`);
+        console.log(`  - ID: ${firstPayment.id}`);
+        console.log(`  - Status: ${firstPayment.status}`);
+        console.log(`  - Value: ${firstPayment.value}`);
+
         // Criar registro de pagamento
         payment = await this.storage.createPaymentTransaction({
           usuarioId: data.userId,
@@ -167,10 +172,13 @@ export class SubscriptionService {
 
         // Se pagamento foi confirmado, ativar usuário e enviar webhook
         if (firstPayment.status === 'CONFIRMED' || firstPayment.status === 'RECEIVED') {
+          console.log(`[SubscriptionService] Pagamento já confirmado! Ativando usuário e enviando webhook...`);
           await this.activateUserSubscription(data.userId, subscription.id);
 
           // Enviar webhook de ativação (mesmo comportamento da ativação manual)
           await this.sendActivationWebhook(user);
+        } else {
+          console.log(`[SubscriptionService] Pagamento PENDENTE (${firstPayment.status}). Webhook de ativação será enviado quando PAYMENT_CONFIRMED chegar do Asaas.`);
         }
       }
 
