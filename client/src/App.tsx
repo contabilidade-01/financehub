@@ -43,6 +43,7 @@ import ImpersonationBanner from "@/components/admin/ImpersonationBanner";
 import AdminStickyHeader from "@/components/admin/AdminStickyHeader";
 import CustomizePage from "@/pages/admin/customize";
 import LanguageSettings from "@/pages/admin/LanguageSettings";
+import MaintenancePage from "@/pages/admin/maintenance";
 import LoadingScreen from "@/components/shared/LoadingScreen";
 import { useTranslation } from "@/contexts/LocalizationContext";
 import CheckoutPage from "@/pages/billing/checkout";
@@ -219,6 +220,11 @@ function Router() {
             <Route path="/admin/language-settings">
               <MainLayout>
                 <LanguageSettings />
+              </MainLayout>
+            </Route>
+            <Route path="/admin/maintenance">
+              <MainLayout>
+                <MaintenancePage />
               </MainLayout>
             </Route>
             <Route path="/admin/payment-settings">

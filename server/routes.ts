@@ -86,6 +86,7 @@ import * as wahaConfigController from "./controllers/waha-config.controller";
 import * as notificationController from "./controllers/notification.controller";
 import themesRouter from "./routes/themes";
 import * as systemSettingsController from "./controllers/system-settings.controller";
+import { MaintenanceController } from "./controllers/maintenance.controller";
 // Asaas Payment Integration
 import * as subscriptionPlanController from "./controllers/subscription-plan.controller";
 import * as billingController from "./controllers/billing.controller";
@@ -747,6 +748,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Endpoint para buscar mensagem processada para um usuário específico (com tags substituídas)
   app.get("/api/welcome-messages/:type/user/:userId", welcomeMessagesController.getProcessedWelcomeMessage);
+
+  // Maintenance Routes (Super Admin only)
+  app.get("/api/maintenance/categories", combinedAuth, requireSuperAdmin, MaintenanceController.getAllCategories);
+  app.put("/api/maintenance/categories/:id", combinedAuth, requireSuperAdmin, MaintenanceController.updateCategoryColor);
+  app.post("/api/maintenance/fix-category-colors", combinedAuth, requireSuperAdmin, MaintenanceController.fixCategoryColors);
 
   /**
    * @swagger

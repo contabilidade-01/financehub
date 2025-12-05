@@ -517,15 +517,27 @@ export async function runInitialMigration({ dropAll = false }: { dropAll?: boole
     
     console.log('📊 Inserindo dados padrão...');
     // Categorias globais de despesa
+    // Categorias de despesa com cores únicas
     const expenseCategories = [
-      'Alimentação', 'Moradia', 'Doações', 'Educação', 'Imposto', 
-      'Investimento', 'Lazer', 'Pets', 'Saude', 'Transporte', 
-      'Vestuário', 'Viagem', 'Outros'
+      { nome: 'Alimentação', cor: '#FF6B6B', icone: 'utensils' },
+      { nome: 'Moradia', cor: '#4ECDC4', icone: 'home' },
+      { nome: 'Doações', cor: '#95E1D3', icone: 'hand-holding-heart' },
+      { nome: 'Educação', cor: '#FFE66D', icone: 'graduation-cap' },
+      { nome: 'Imposto', cor: '#FF8B94', icone: 'file-invoice-dollar' },
+      { nome: 'Investimento', cor: '#A8E6CF', icone: 'chart-line' },
+      { nome: 'Lazer', cor: '#FFD3B6', icone: 'gamepad' },
+      { nome: 'Pets', cor: '#FFAAA5', icone: 'paw' },
+      { nome: 'Saude', cor: '#FF8C42', icone: 'heartbeat' },
+      { nome: 'Transporte', cor: '#6BCB77', icone: 'car' },
+      { nome: 'Vestuário', cor: '#A569BD', icone: 'tshirt' },
+      { nome: 'Viagem', cor: '#4D96FF', icone: 'plane' },
+      { nome: 'Outros', cor: '#B0B0B0', icone: 'minus-circle' }
     ];
+
     for (const categoria of expenseCategories) {
       await client`
         INSERT INTO categorias (nome, tipo, global, cor, icone)
-        VALUES (${categoria}, 'Despesa', true, '#EF4444', 'minus-circle')
+        VALUES (${categoria.nome}, 'Despesa', true, ${categoria.cor}, ${categoria.icone})
         ON CONFLICT (nome, global) DO NOTHING
       `;
     }

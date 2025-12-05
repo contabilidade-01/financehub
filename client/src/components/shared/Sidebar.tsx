@@ -18,7 +18,8 @@ import {
   Key,
   BarChart3,
   DollarSign,
-  Search
+  Search,
+  Wrench
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { VersionDisplay } from "@/components/shared/VersionDisplay";
@@ -127,7 +128,8 @@ function Sidebar() {
         { icon: <DollarSign className="mr-3 h-4 w-4" />, text: t('navigation.billing', 'Pagamentos'), path: "/admin/billing" },
         { icon: <Search className="mr-3 h-4 w-4" />, text: t('navigation.manage_payments', 'Gerenciar Pagamentos'), path: "/admin/payments" },
         { icon: <CreditCard className="mr-3 h-4 w-4" />, text: t('navigation.payment_settings', 'Config. Pagamento'), path: "/admin/payment-settings" },
-        { icon: <Settings className="mr-3 h-4 w-4" />, text: t('navigation.customize', 'Personalizar'), path: "/admin/customize" }
+        { icon: <Settings className="mr-3 h-4 w-4" />, text: t('navigation.customize', 'Personalizar'), path: "/admin/customize" },
+        { icon: <Wrench className="mr-3 h-4 w-4" />, text: t('navigation.maintenance', 'Manutenção'), path: "/admin/maintenance" }
 
       ]
     }
