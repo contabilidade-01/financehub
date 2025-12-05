@@ -1,28 +1,18 @@
-# Dockerfile simples para rodar a aplicação
-FROM node:20-alpine
+# Dockerfile para rodar a aplicação
+# Usando Debian (slim) ao invés de Alpine para melhor compatibilidade com canvas
+FROM node:20-slim
 
-# Instalar dependências do sistema necessárias para compilar pacotes nativos
-RUN apk add --no-cache \
+# Instalar dependências do sistema necessárias para canvas e chromium
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libcairo2-dev \
+    libpango1.0-dev \
+    libjpeg-dev \
+    libgif-dev \
+    librsvg2-dev \
     python3 \
-    make \
-    g++ \
-    pkgconfig \
-    cairo-dev \
-    jpeg-dev \
-    pango-dev \
-    musl-dev \
-    giflib-dev \
-    pixman-dev \
-    pangomm-dev \
-    libjpeg-turbo-dev \
-    freetype-dev \
     chromium \
-    nss \
-    freetype \
-    freetype-dev \
-    harfbuzz \
-    ca-certificates \
-    ttf-freefont
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -34,8 +24,8 @@ ENV NODE_OPTIONS=--max_old_space_size=4096
 COPY package.json package-lock.json ./
 
 # Instala as dependências
-# Usa --canvas_binary_host_mirror para baixar binários pré-compilados
-RUN npm install --canvas_binary_host_mirror=https://github.com/Automattic/node-canvas/releases/download/
+# Com Debian, o canvas usa binários pré-compilados automaticamente
+RUN npm install
 
 # Instala drizzle-kit globalmente
 RUN npm install -g drizzle-kit
