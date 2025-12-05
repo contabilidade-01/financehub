@@ -26,11 +26,16 @@ RUN apk add --no-cache \
 
 WORKDIR /app
 
+# Variáveis de ambiente para otimizar build
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV NODE_OPTIONS=--max_old_space_size=4096
+
 # Copia os arquivos de dependência
 COPY package.json package-lock.json ./
 
 # Instala as dependências
-RUN npm install
+# Usa --canvas_binary_host_mirror para baixar binários pré-compilados
+RUN npm install --canvas_binary_host_mirror=https://github.com/Automattic/node-canvas/releases/download/
 
 # Instala drizzle-kit globalmente
 RUN npm install -g drizzle-kit
