@@ -19,7 +19,8 @@
     "verify:localization:files": "tsx verify_localization.js --files-only",
     "verify:localization:with-tests": "tsx verify_localization.js --with-tests",
     "import:locale": "tsx import_locales.js",
-    "import:locale:list": "tsx import_locales.js --list"
+    "import:locale:list": "tsx import_locales.js --list",
+    "superadmin:reset-pass": "tsx scripts/reset-superadmin-password.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -60,6 +61,7 @@
     "@types/swagger-ui-express": "^4.1.8",
     "@vitejs/plugin-react": "^4.3.2",
     "axios": "^1.13.2",
+    "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.2",
     "canvas": "^3.1.0",
     "class-variance-authority": "^0.7.1",
