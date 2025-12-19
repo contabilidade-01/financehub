@@ -237,4 +237,4 @@ Para mais informações:
 
 ## Licença
 
-MIT License - XPIRIA © 2025
+MIT License - XPIRIA AI SOLUTIONS © 2025
