@@ -1,0 +1,107 @@
+version: '3.8'
+
+# ============================================================
+# FinanceHub - Docker Compose para Portainer (Build via Git)
+# ============================================================
+# Para usar no Portainer:
+# 1. Crie uma Stack e selecione "Repository"
+# 2. Informe a URL do repositório Git
+# 3. Selecione este arquivo como Compose path
+# 4. Configure as variáveis de ambiente abaixo
+# ============================================================
+
+services:
+  # Aplicação FinanceHub
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: financehub-app
+    ports:
+      - "${APP_PORT:-5000}:5000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=${DATABASE_URL:-postgresql://financehub:financehub_secure_password_2025@postgres:5432/financehub}
+      - PORT=5000
+      - TZ=America/Sao_Paulo
+      - SESSION_SECRET=${SESSION_SECRET:-financehub_session_secret_change_me}
+      - BASE_URL=${BASE_URL:-http://localhost:5000}
+      - SETUP=${SETUP:-false}
+      - DEFAULT_LOCALE=${DEFAULT_LOCALE:-pt-br}
+      # Asaas
+      - ASAAS_ENVIRONMENT=${ASAAS_ENVIRONMENT:-sandbox}
+      - ASAAS_API_KEY=${ASAAS_API_KEY:-}
+      - ASAAS_WEBHOOK_SECRET=${ASAAS_WEBHOOK_SECRET:-}
+      # Webhook
+      - WEBHOOK_ATIVACAO_URL=${WEBHOOK_ATIVACAO_URL:-}
+      # Email
+      - EMAIL_FROM=${EMAIL_FROM:-noreply@financehub.com}
+      # Puppeteer
+      - PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+      - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - financehub_uploads:/app/uploads
+      - financehub_temp:/app/temp
+    networks:
+      - financehub-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "const http = require('http'); const req = http.request({hostname: 'localhost', port: 5000, path: '/api/changelog', timeout: 2000}, (res) => { process.exit(res.statusCode === 200 ? 0 : 1); }); req.on('error', () => process.exit(1)); req.end();"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+
+  # Banco de dados PostgreSQL
+  postgres:
+    image: postgres:16-alpine
+    container_name: financehub-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-financehub}
+      POSTGRES_USER: ${POSTGRES_USER:-financehub}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-financehub_secure_password_2025}
+      PGTZ: America/Sao_Paulo
+      TZ: America/Sao_Paulo
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - financehub_postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    restart: unless-stopped
+    networks:
+      - financehub-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-financehub} -d ${POSTGRES_DB:-financehub}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    command: >
+      postgres
+      -c timezone=America/Sao_Paulo
+      -c log_timezone=America/Sao_Paulo
+      -c shared_preload_libraries=pg_stat_statements
+      -c max_connections=200
+      -c shared_buffers=256MB
+      -c effective_cache_size=1GB
+      -c maintenance_work_mem=64MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+
+volumes:
+  financehub_postgres_data:
+    driver: local
+  financehub_uploads:
+    driver: local
+  financehub_temp:
+    driver: local
+
+networks:
+  financehub-network:
+    driver: bridge
