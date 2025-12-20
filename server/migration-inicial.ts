@@ -78,7 +78,8 @@ export async function runInitialMigration({ dropAll = false }: { dropAll?: boole
         api_tokens,
         usuarios,
         logos_customizados,
-        custom_themes
+        custom_themes,
+        system_settings
         CASCADE`;
       console.log('✅ Todas as tabelas foram removidas!');
     }
@@ -411,6 +412,17 @@ export async function runInitialMigration({ dropAll = false }: { dropAll?: boole
     await client`CREATE INDEX IF NOT EXISTS idx_asaas_webhooks_event_type ON asaas_webhooks(event_type)`;
     await client`CREATE INDEX IF NOT EXISTS idx_asaas_webhooks_processed ON asaas_webhooks(processed)`;
     await client`CREATE INDEX IF NOT EXISTS idx_asaas_webhooks_unprocessed ON asaas_webhooks(created_at) WHERE processed = false`;
+    await client`CREATE INDEX IF NOT EXISTS idx_asaas_webhooks_asaas_event_id ON asaas_webhooks(asaas_event_id)`;
+
+    // Índices adicionais para billing (performance)
+    await client`CREATE INDEX IF NOT EXISTS idx_user_subscriptions_plan_id ON user_subscriptions(plan_id)`;
+    await client`CREATE INDEX IF NOT EXISTS idx_user_subscriptions_asaas_subscription_id ON user_subscriptions(asaas_subscription_id)`;
+    await client`CREATE INDEX IF NOT EXISTS idx_user_subscriptions_period_end ON user_subscriptions(current_period_end)`;
+    await client`CREATE INDEX IF NOT EXISTS idx_payment_transactions_subscription_id ON payment_transactions(subscription_id)`;
+    await client`CREATE INDEX IF NOT EXISTS idx_payment_transactions_usuario_created ON payment_transactions(usuario_id, created_at DESC)`;
+
+    // Índice para usuários com assinatura ativa
+    await client`CREATE INDEX IF NOT EXISTS idx_usuarios_subscription_active ON usuarios(subscription_active) WHERE subscription_active = true`;
 
     // Foreign keys (usando DO $$ para ignorar se já existir)
     try {
@@ -717,6 +729,90 @@ export async function runInitialMigration({ dropAll = false }: { dropAll?: boole
     }
     
     console.log('✅ Tema padrão inserido!');
+
+    // Criar tabela system_settings (migração 0015)
+    console.log('📋 Criando tabela: system_settings');
+    await client`CREATE TABLE IF NOT EXISTS system_settings (
+      id SERIAL PRIMARY KEY,
+      setting_key VARCHAR(100) UNIQUE NOT NULL,
+      setting_value TEXT,
+      setting_metadata JSONB DEFAULT '{}',
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`;
+
+    // Índice para buscas rápidas por chave
+    await client`CREATE INDEX IF NOT EXISTS idx_system_settings_key ON system_settings(setting_key)`;
+
+    // Inserir configurações padrão
+    await client`
+      INSERT INTO system_settings (setting_key, setting_value, setting_metadata) VALUES
+        ('system_name', 'FinanceHub', '{"type": "text", "label": "Nome do Sistema", "description": "Nome exibido em todo o sistema"}'),
+        ('system_name_short', 'financehub', '{"type": "text", "label": "Nome Curto", "description": "Versão curta usada em emails e URLs (lowercase)"}'),
+        ('system_tagline', 'Gestão financeira inteligente e moderna', '{"type": "text", "label": "Slogan/Tagline", "description": "Frase descritiva do sistema"}'),
+        ('support_email', 'suporte@financehub.com', '{"type": "email", "label": "Email de Suporte", "description": "Email de contato do suporte"}'),
+        ('system_url', 'https://financehub.com', '{"type": "url", "label": "URL do Sistema", "description": "URL principal do sistema"}'),
+        ('system_description', 'FinanceHub - Gerencie suas finanças pessoais com uma interface moderna e futurista. Acompanhe receitas, despesas e tenha controle total do seu dinheiro.', '{"type": "textarea", "label": "Descrição do Sistema", "description": "Descrição para SEO e meta tags"}')
+      ON CONFLICT (setting_key) DO NOTHING
+    `;
+
+    // Trigger para atualizar updated_at automaticamente
+    await client`
+      CREATE OR REPLACE FUNCTION update_system_settings_updated_at()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        NEW.updated_at = NOW();
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql
+    `;
+
+    await client`DROP TRIGGER IF EXISTS trigger_update_system_settings_updated_at ON system_settings`;
+
+    await client`
+      CREATE TRIGGER trigger_update_system_settings_updated_at
+        BEFORE UPDATE ON system_settings
+        FOR EACH ROW
+        EXECUTE FUNCTION update_system_settings_updated_at()
+    `;
+
+    console.log('✅ Tabela system_settings criada!');
+
+    // Inserir traduções de billing
+    console.log('🌐 Inserindo traduções de billing...');
+
+    const billingTranslations = [
+      // Português Brasileiro
+      { locale: 'pt-br', key: 'navigation.sections.billing', value: 'ASSINATURA' },
+      { locale: 'pt-br', key: 'navigation.billing_settings', value: 'Minha Assinatura' },
+      { locale: 'pt-br', key: 'navigation.invoices', value: 'Faturas' },
+      { locale: 'pt-br', key: 'navigation.billing', value: 'Pagamentos' },
+      { locale: 'pt-br', key: 'navigation.payment_settings', value: 'Config. Pagamento' },
+
+      // Inglês
+      { locale: 'en-us', key: 'navigation.sections.billing', value: 'BILLING' },
+      { locale: 'en-us', key: 'navigation.billing_settings', value: 'My Subscription' },
+      { locale: 'en-us', key: 'navigation.invoices', value: 'Invoices' },
+      { locale: 'en-us', key: 'navigation.billing', value: 'Billing' },
+      { locale: 'en-us', key: 'navigation.payment_settings', value: 'Payment Settings' },
+
+      // Espanhol
+      { locale: 'es-es', key: 'navigation.sections.billing', value: 'SUSCRIPCIÓN' },
+      { locale: 'es-es', key: 'navigation.billing_settings', value: 'Mi Suscripción' },
+      { locale: 'es-es', key: 'navigation.invoices', value: 'Facturas' },
+      { locale: 'es-es', key: 'navigation.billing', value: 'Pagos' },
+      { locale: 'es-es', key: 'navigation.payment_settings', value: 'Config. de Pago' },
+    ];
+
+    for (const trans of billingTranslations) {
+      await client`
+        INSERT INTO localization_strings (string_key, locale_code, string_value, created_at)
+        VALUES (${trans.key}, ${trans.locale}, ${trans.value}, NOW())
+        ON CONFLICT (string_key, locale_code) DO NOTHING
+      `;
+    }
+
+    console.log('✅ Traduções de billing inseridas!');
   } catch (error) {
     console.error('❌ Erro ao executar migration inicial:', error);
     throw error;
