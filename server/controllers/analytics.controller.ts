@@ -112,6 +112,32 @@ export class AnalyticsController {
       ];
 
       // Distribuição de carteiras por faixa de saldo
+      // Calcular saldo real de cada carteira baseado nas transações
+      const walletBalances = new Map<number, number>();
+
+      // Inicializar todas as carteiras com saldo 0
+      allWallets.forEach(wallet => {
+        walletBalances.set(wallet.id, 0);
+      });
+
+      // Buscar transações por carteira para calcular saldo real
+      const transactionsByWallet = await db.select({
+        carteira_id: transactions.carteira_id,
+        tipo: transactions.tipo,
+        valor: transactions.valor
+      }).from(transactions);
+
+      // Calcular saldo real de cada carteira
+      transactionsByWallet.forEach(t => {
+        const currentBalance = walletBalances.get(t.carteira_id) || 0;
+        const valor = parseFloat(t.valor);
+        if (t.tipo === 'Receita') {
+          walletBalances.set(t.carteira_id, currentBalance + valor);
+        } else if (t.tipo === 'Despesa') {
+          walletBalances.set(t.carteira_id, currentBalance - valor);
+        }
+      });
+
       const walletDistribution = [
         { range: 'R$ 0 - 1.000', count: 0 },
         { range: 'R$ 1.000 - 5.000', count: 0 },
@@ -119,7 +145,7 @@ export class AnalyticsController {
       ];
 
       allWallets.forEach(wallet => {
-        const saldo = parseFloat(wallet.saldo_atual || '0');
+        const saldo = walletBalances.get(wallet.id) || 0;
         if (saldo <= 1000) {
           walletDistribution[0].count++;
         } else if (saldo <= 5000) {
