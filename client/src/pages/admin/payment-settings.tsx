@@ -268,6 +268,17 @@ export default function PaymentSettingsPage() {
         </Alert>
       )}
 
+      {/* Alerta de Ambiente de Producao */}
+      {formData.environment === 'production' && (
+        <Alert className="mb-6 border-orange-500 bg-orange-50 dark:bg-orange-950">
+          <AlertCircle className="h-4 w-4 text-orange-600" />
+          <AlertDescription className="text-orange-800 dark:text-orange-200">
+            <strong>AMBIENTE DE PRODUCAO:</strong> Voce esta configurando o gateway para processar pagamentos REAIS.
+            Todas as cobrancas criadas serao reais e poderao gerar transacoes financeiras.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Asaas - Gateway de Pagamento</CardTitle>
