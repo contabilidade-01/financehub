@@ -8,6 +8,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useLocalization, useTranslation } from "@/contexts/LocalizationContext";
+import { useSystemConfig } from "@/contexts/SystemConfigContext";
 
 interface ExpiredSubscriptionOverlayProps {
   expirationDate?: string;
@@ -16,6 +17,7 @@ interface ExpiredSubscriptionOverlayProps {
 export function ExpiredSubscriptionOverlay({ expirationDate }: ExpiredSubscriptionOverlayProps) {
   const { t } = useTranslation();
   const { locale } = useLocalization();
+  const { config: systemConfig } = useSystemConfig();
 
   const handleLogout = async () => {
     try {
@@ -67,7 +69,7 @@ export function ExpiredSubscriptionOverlay({ expirationDate }: ExpiredSubscripti
           
           <div className="text-center space-y-4">
             <p className="text-sm text-muted-foreground leading-relaxed">
-              {t("subscription.overlay.renew_prompt", "Para continuar usando todos os recursos do FinanceHub Premium, renove sua assinatura ou entre em contato com o suporte.")}
+              {t("subscription.overlay.renew_prompt", `Para continuar usando todos os recursos do ${systemConfig.system_name} Premium, renove sua assinatura ou entre em contato com o suporte.`)}
             </p>
             
             <div className="space-y-3">

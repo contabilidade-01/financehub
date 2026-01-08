@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, ArrowLeft, ArrowRight, Check, Clock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useSystemConfig } from '@/contexts/SystemConfigContext';
 
 interface CheckoutPageProps {
   externalMode?: boolean;
@@ -38,6 +39,7 @@ export default function CheckoutPage({
 }: CheckoutPageProps = {}) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { config: systemConfig } = useSystemConfig();
   const { data: plansFromAPI, isLoading: isLoadingPlans } = usePlans();
   const checkout = useCheckout();
   const { notifications } = useWebSocket();
@@ -311,7 +313,7 @@ export default function CheckoutPage({
   return (
     <div className="container max-w-6xl mx-auto py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold">Assinar FinanceHub</h1>
+        <h1 className="text-3xl font-bold">Assinar {systemConfig.system_name}</h1>
         <p className="text-muted-foreground">Complete seu cadastro e comece a usar</p>
       </div>
 

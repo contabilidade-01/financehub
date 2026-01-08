@@ -9,9 +9,62 @@
 
 import type { User, SubscriptionPlan } from '@shared/schema';
 import { generateCheckoutToken } from '../utils/checkout-token.utils';
+import postgres from 'postgres';
 
 // Importação condicional do nodemailer (só carrega se EMAIL_ENABLED=true)
 type Transporter = any;
+
+// Cache das configurações do sistema para evitar queries repetidas
+interface SystemConfig {
+  system_name: string;
+  support_email: string;
+}
+let cachedSystemConfig: SystemConfig | null = null;
+let cacheTimestamp: number = 0;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+
+/**
+ * Busca as configurações do sistema (nome e email de suporte)
+ */
+async function getSystemConfig(): Promise<SystemConfig> {
+  // Usar cache se ainda válido
+  if (cachedSystemConfig && (Date.now() - cacheTimestamp) < CACHE_TTL) {
+    return cachedSystemConfig;
+  }
+
+  const defaults: SystemConfig = {
+    system_name: 'FinanceHub',
+    support_email: 'suporte@financehub.com'
+  };
+
+  try {
+    const sql = postgres(process.env.DATABASE_URL || '', { prepare: false });
+    const result = await sql`
+      SELECT setting_key, setting_value
+      FROM system_settings
+      WHERE setting_key IN ('system_name', 'support_email')
+    `;
+    await sql.end();
+
+    const config: SystemConfig = { ...defaults };
+    result.forEach((row: any) => {
+      if (row.setting_key === 'system_name' && row.setting_value) {
+        config.system_name = row.setting_value;
+      }
+      if (row.setting_key === 'support_email' && row.setting_value) {
+        config.support_email = row.setting_value;
+      }
+    });
+
+    cachedSystemConfig = config;
+    cacheTimestamp = Date.now();
+    return config;
+  } catch (error) {
+    console.warn('[NotificationService] Erro ao buscar system config, usando padrão:', error);
+  }
+
+  return defaults;
+}
 
 // ============================================
 // INTERFACES
@@ -122,11 +175,17 @@ export class NotificationService {
         return;
       }
 
+      // Buscar configurações do sistema
+      const systemConfig = await getSystemConfig();
+
       // Converter mensagem de texto para HTML básico
-      const htmlBody = config.html || this.textToHtml(config.body);
+      const htmlBody = config.html || this.textToHtml(config.body, systemConfig.system_name);
+
+      // Usar email de suporte configurado ou fallback
+      const defaultFrom = process.env.EMAIL_FROM || `noreply@${systemConfig.support_email.split('@')[1] || 'sistema.com'}`;
 
       const mailOptions = {
-        from: config.from || process.env.EMAIL_FROM || 'noreply@financehub.com',
+        from: config.from || defaultFrom,
         to: config.to,
         subject: config.subject,
         text: config.body,
@@ -146,7 +205,7 @@ export class NotificationService {
   /**
    * Converter texto simples para HTML básico
    */
-  private textToHtml(text: string): string {
+  private textToHtml(text: string, systemName: string = 'FinanceHub'): string {
     return `
 <!DOCTYPE html>
 <html>
@@ -188,7 +247,7 @@ export class NotificationService {
 <body>
   <div class="container">
     <div class="logo">
-      <h2 style="color: #4CAF50; margin: 0;">FinanceHub</h2>
+      <h2 style="color: #4CAF50; margin: 0;">${systemName}</h2>
     </div>
     <div class="content">
       ${text.split('\n').map(line => `<p>${line}</p>`).join('')}
@@ -238,24 +297,24 @@ export class NotificationService {
    */
   async sendSubscriptionActivated(user: User, plan: SubscriptionPlan): Promise<void> {
     try {
+      const systemConfig = await getSystemConfig();
       const subject = '🎉 Assinatura ativada com sucesso!';
       const message = `
 Olá ${user.nome}!
 
 Sua assinatura do plano "${plan.name}" foi ativada com sucesso!
 
-Agora você tem acesso completo a todos os recursos do FinanceHub.
+Agora você tem acesso completo a todos os recursos do ${systemConfig.system_name}.
 
 Próximo pagamento: ${this.formatNextMonthDate()}
 
 Qualquer dúvida, estamos à disposição!
 
-FinanceHub Team
+${systemConfig.system_name} Team
       `.trim();
 
       // Enviar email
       await this.sendEmail({
-        from: process.env.EMAIL_FROM || 'noreply@financehub.com',
         to: user.email,
         subject,
         body: message
@@ -278,6 +337,7 @@ FinanceHub Team
    */
   async sendSubscriptionSuspended(user: User, reason: string): Promise<void> {
     try {
+      const systemConfig = await getSystemConfig();
       const subject = '⚠️ Assinatura suspensa';
       const message = `
 Olá ${user.nome},
@@ -288,11 +348,10 @@ Para reativar seu acesso, por favor atualize sua forma de pagamento.
 
 Acesse: ${process.env.BASE_URL}/billing/settings
 
-FinanceHub Team
+${systemConfig.system_name} Team
       `.trim();
 
       await this.sendEmail({
-        from: process.env.EMAIL_FROM || 'noreply@financehub.com',
         to: user.email,
         subject,
         body: message
@@ -314,6 +373,7 @@ FinanceHub Team
    */
   async sendSubscriptionCanceled(user: User, reason: string): Promise<void> {
     try {
+      const systemConfig = await getSystemConfig();
       const subject = 'Assinatura cancelada';
       const message = `
 Olá ${user.nome},
@@ -326,11 +386,10 @@ Você ainda pode reativar sua assinatura a qualquer momento.
 
 Sentiremos sua falta!
 
-FinanceHub Team
+${systemConfig.system_name} Team
       `.trim();
 
       await this.sendEmail({
-        from: process.env.EMAIL_FROM || 'noreply@financehub.com',
         to: user.email,
         subject,
         body: message
@@ -356,6 +415,7 @@ FinanceHub Team
    */
   async sendPaymentConfirmed(user: User, amount: number, invoiceUrl?: string): Promise<void> {
     try {
+      const systemConfig = await getSystemConfig();
       const subject = '✅ Pagamento confirmado';
       const message = `
 Olá ${user.nome}!
@@ -366,11 +426,10 @@ ${invoiceUrl ? `Fatura: ${invoiceUrl}` : ''}
 
 Obrigado por continuar conosco!
 
-FinanceHub Team
+${systemConfig.system_name} Team
       `.trim();
 
       await this.sendEmail({
-        from: process.env.EMAIL_FROM || 'noreply@financehub.com',
         to: user.email,
         subject,
         body: message
@@ -392,6 +451,7 @@ FinanceHub Team
    */
   async sendPaymentFailed(user: User, retryCount: number): Promise<void> {
     try {
+      const systemConfig = await getSystemConfig();
       const subject = `⚠️ Falha no pagamento - Tentativa ${retryCount}/3`;
       const message = `
 Olá ${user.nome},
@@ -406,11 +466,10 @@ Acesse: ${process.env.BASE_URL}/billing/settings
 
 ${retryCount === 2 ? 'ATENÇÃO: Na próxima falha, seu acesso será bloqueado.' : ''}
 
-FinanceHub Team
+${systemConfig.system_name} Team
       `.trim();
 
       await this.sendEmail({
-        from: process.env.EMAIL_FROM || 'noreply@financehub.com',
         to: user.email,
         subject,
         body: message
@@ -432,22 +491,22 @@ FinanceHub Team
    */
   async sendPaymentFailedFinal(user: User): Promise<void> {
     try {
+      const systemConfig = await getSystemConfig();
       const subject = '🚫 Acesso bloqueado - Pagamento não processado';
       const message = `
 Olá ${user.nome},
 
 Após 3 tentativas, não conseguimos processar seu pagamento.
 
-Seu acesso ao FinanceHub foi temporariamente bloqueado.
+Seu acesso ao ${systemConfig.system_name} foi temporariamente bloqueado.
 
 Para reativar, atualize sua forma de pagamento:
 ${process.env.BASE_URL}/billing/settings
 
-FinanceHub Team
+${systemConfig.system_name} Team
       `.trim();
 
       await this.sendEmail({
-        from: process.env.EMAIL_FROM || 'noreply@financehub.com',
         to: user.email,
         subject,
         body: message
@@ -469,6 +528,7 @@ FinanceHub Team
    */
   async sendPaymentReminder(user: User, dueDate: Date, amount: number): Promise<void> {
     try {
+      const systemConfig = await getSystemConfig();
       const subject = '📅 Lembrete: Próximo pagamento';
       const message = `
 Olá ${user.nome},
@@ -482,11 +542,10 @@ O pagamento será processado automaticamente no cartão cadastrado.
 Caso deseje atualizar a forma de pagamento:
 ${process.env.BASE_URL}/billing/settings
 
-FinanceHub Team
+${systemConfig.system_name} Team
       `.trim();
 
       await this.sendEmail({
-        from: process.env.EMAIL_FROM || 'noreply@financehub.com',
         to: user.email,
         subject,
         body: message

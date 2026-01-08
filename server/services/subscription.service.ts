@@ -23,6 +23,40 @@ import type {
 } from '@shared/schema';
 import { generateRandomPassword } from '../utils/password-generator';
 import bcrypt from 'bcryptjs';
+import postgres from 'postgres';
+
+// Cache do nome do sistema para evitar queries repetidas
+let cachedSystemName: string | null = null;
+let cacheTimestamp: number = 0;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+
+/**
+ * Busca o nome do sistema configurado em system_settings
+ */
+async function getSystemName(): Promise<string> {
+  // Usar cache se ainda válido
+  if (cachedSystemName && (Date.now() - cacheTimestamp) < CACHE_TTL) {
+    return cachedSystemName;
+  }
+
+  try {
+    const sql = postgres(process.env.DATABASE_URL || '', { prepare: false });
+    const result = await sql`
+      SELECT setting_value FROM system_settings WHERE setting_key = 'system_name' LIMIT 1
+    `;
+    await sql.end();
+
+    if (result.length > 0 && result[0].setting_value) {
+      cachedSystemName = result[0].setting_value;
+      cacheTimestamp = Date.now();
+      return cachedSystemName;
+    }
+  } catch (error) {
+    console.warn('[SubscriptionService] Erro ao buscar system_name, usando padrão:', error);
+  }
+
+  return 'FinanceHub'; // Fallback
+}
 
 // ============================================
 // INTERFACES
@@ -121,14 +155,17 @@ export class SubscriptionService {
       // 4. Calcular próxima data de vencimento (próximo mês)
       const nextDueDate = AsaasService.calculateNextDueDate();
 
-      // 5. Criar assinatura no Asaas
+      // 5. Buscar nome do sistema para descrição
+      const systemName = await getSystemName();
+
+      // 6. Criar assinatura no Asaas
       const asaasSubscription = await (await this.getAsaas()).createSubscription({
         customer: asaasCustomer.asaasCustomerId,
         billingType: 'CREDIT_CARD',
         cycle: 'MONTHLY',
         value: parseFloat(plan.priceMonthly.toString()),
         nextDueDate: nextDueDate,
-        description: `Assinatura ${plan.name} - FinanceHub`,
+        description: `Assinatura ${plan.name} - ${systemName}`,
         creditCard: data.creditCard,
         creditCardHolderInfo: data.creditCardHolderInfo,
         remoteIp: data.remoteIp

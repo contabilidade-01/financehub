@@ -3,10 +3,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { AlertTriangle, Clock, Mail, ArrowLeft } from "lucide-react";
 import { useLocation } from "wouter";
 import { useTranslation } from "@/contexts/LocalizationContext";
+import { useSystemConfig } from "@/contexts/SystemConfigContext";
 
 export default function SubscriptionExpired() {
   const [, navigate] = useLocation();
   const { t } = useTranslation();
+  const { config: systemConfig } = useSystemConfig();
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-pattern">
@@ -18,7 +20,7 @@ export default function SubscriptionExpired() {
             </div>
             <CardTitle className="text-red-400">{t('subscription.expired.title', 'Assinatura Expirada')}</CardTitle>
             <CardDescription className="text-gray-300">
-              {t('subscription.expired.description', 'Sua assinatura do FinanceHub expirou e o acesso foi suspenso')}
+              {t('subscription.expired.description', `Sua assinatura do ${systemConfig.system_name} expirou e o acesso foi suspenso`)}
             </CardDescription>
           </CardHeader>
           

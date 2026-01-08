@@ -9,6 +9,7 @@ import { AlertTriangle, CreditCard, Calendar, User, MessageSquare } from "lucide
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useTranslation } from "@/contexts/LocalizationContext";
+import { useSystemConfig } from "@/contexts/SystemConfigContext";
 
 export default function CancelSubscription() {
   const [cancellationReason, setCancellationReason] = useState("");
@@ -16,6 +17,7 @@ export default function CancelSubscription() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { t } = useTranslation();
+  const { config: systemConfig } = useSystemConfig();
 
   const cancelSubscriptionMutation = useMutation({
     mutationFn: async (data: { motivo: string }) => {
@@ -108,7 +110,7 @@ export default function CancelSubscription() {
                   {t("subscription.cancel.current_plan.plan_label", "Plano")}:
                 </span>
                 <span className="text-white font-medium">
-                  {t("subscription.cancel.current_plan.plan_value", "FinanceHub Premium")}
+                  {t("subscription.cancel.current_plan.plan_value", `${systemConfig.system_name} Premium`)}
                 </span>
               </div>
               

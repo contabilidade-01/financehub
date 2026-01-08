@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { motion } from 'framer-motion';
+import { useSystemConfig } from '@/contexts/SystemConfigContext';
 
 interface TokenValidationResponse {
   valid: boolean;
@@ -31,6 +32,7 @@ interface TokenValidationResponse {
 export default function ExternalCheckout() {
   const searchString = useSearch();
   const [, setLocation] = useLocation();
+  const { config: systemConfig } = useSystemConfig();
 
   // Extrair token da URL
   const params = new URLSearchParams(searchString);
@@ -135,10 +137,10 @@ export default function ExternalCheckout() {
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
               <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-[#FF64B3] to-[#00FFAA] bg-clip-text text-transparent">
-                FinanceHub
+                {systemConfig.system_name}
               </h1>
               <p className="text-muted-foreground mt-1">
-                Gestão financeira inteligente e moderna
+                {systemConfig.system_tagline}
               </p>
             </div>
             <Badge variant="secondary" className="flex items-center gap-2 px-4 py-2 text-sm">
@@ -167,7 +169,7 @@ export default function ExternalCheckout() {
                     Olá, <span className="bg-gradient-to-r from-[#FF64B3] to-[#00FFAA] bg-clip-text text-transparent">{data.user?.nome}</span>!
                   </h2>
                   <p className="text-muted-foreground">
-                    Você está a um passo de desbloquear todos os recursos do FinanceHub.
+                    Você está a um passo de desbloquear todos os recursos do {systemConfig.system_name}.
                     Complete o pagamento abaixo para ativar sua conta e começar sua jornada financeira.
                   </p>
                 </div>
