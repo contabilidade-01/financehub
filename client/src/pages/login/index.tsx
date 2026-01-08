@@ -21,6 +21,7 @@ import { VersionDisplay } from "@/components/shared/VersionDisplay";
 import { useTheme } from "next-themes";
 import { useEffect } from "react";
 import { useTranslation } from "@/contexts/LocalizationContext";
+import { useSystemConfig } from "@/contexts/SystemConfigContext";
 
 const createLoginSchema = (t: (key: string, fallback: string) => string) => z.object({
   email: z.string().email(t('login.validation.email_invalid', 'Email inválido')),
@@ -33,6 +34,7 @@ export default function Login() {
   const { toast } = useToast();
   const { theme } = useTheme();
   const { t } = useTranslation();
+  const { config: systemConfig } = useSystemConfig();
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [isLogoChecking, setIsLogoChecking] = useState(false);
   const [logoChecked, setLogoChecked] = useState(false);
@@ -93,7 +95,7 @@ export default function Login() {
       
       toast({
         title: "Login realizado com sucesso",
-        description: "Bem-vindo ao FinanceHub!",
+        description: `Bem-vindo ao ${systemConfig.system_name}!`,
       });
       
       // Redireciona e força recarregamento da página para atualizar o estado de autenticação

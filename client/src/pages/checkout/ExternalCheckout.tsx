@@ -252,10 +252,10 @@ export default function ExternalCheckout() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-6">
             <div>
               <h4 className="font-semibold mb-3 bg-gradient-to-r from-[#FF64B3] to-[#00FFAA] bg-clip-text text-transparent">
-                FinanceHub
+                {systemConfig.system_name}
               </h4>
               <p className="text-sm text-muted-foreground">
-                Sua plataforma completa para gestão financeira inteligente e moderna.
+                {systemConfig.system_description || systemConfig.system_tagline}
               </p>
             </div>
 
@@ -288,7 +288,7 @@ export default function ExternalCheckout() {
           </div>
 
           <div className="text-center text-sm text-muted-foreground pt-6 border-t">
-            © {new Date().getFullYear()} FinanceHub. Todos os direitos reservados.
+            © {new Date().getFullYear()} {systemConfig.system_name}. Todos os direitos reservados.
           </div>
         </motion.footer>
       </div>

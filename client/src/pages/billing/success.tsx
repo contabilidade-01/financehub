@@ -6,6 +6,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import { CheckCircle, Download, Calendar, DollarSign, RefreshCw, FileText, Clock, Home, Sparkles, CreditCard } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useSystemConfig } from '@/contexts/SystemConfigContext';
 
 interface SuccessState {
   status?: 'confirmed' | 'pending'; // Status do pagamento
@@ -30,6 +31,7 @@ interface SuccessState {
 
 export default function BillingSuccessPage() {
   const [, setLocation] = useLocation();
+  const { config: systemConfig } = useSystemConfig();
   const state = (window.history.state as { state?: SuccessState })?.state;
   const [countdown, setCountdown] = useState(15);
   const [isRedirecting, setIsRedirecting] = useState(false);
@@ -496,7 +498,7 @@ export default function BillingSuccessPage() {
       >
         <p className="text-sm text-muted-foreground">
           Dúvidas ou precisa de ajuda? Entre em contato com nosso{' '}
-          <a href="mailto:suporte@financehub.com" className="text-primary hover:underline font-semibold">
+          <a href={`mailto:${systemConfig.support_email}`} className="text-primary hover:underline font-semibold">
             suporte
           </a>
           {' '}ou acesse nosso{' '}
