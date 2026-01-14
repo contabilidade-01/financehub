@@ -124,9 +124,8 @@ export function CreditCardForm({ onCardChange, onValidChange }: CreditCardFormPr
     return groups ? groups.join(' ') : cleaned;
   };
 
-  const handleChange = (field: keyof CreditCardData, value: string, cardNumber?: string) => {
+  const handleChange = (field: keyof CreditCardData, value: string) => {
     let formattedValue = value;
-    const currentCardNumber = cardNumber || card.number;
 
     if (field === 'number') {
       formattedValue = formatCardNumber(value.replace(/\D/g, '').slice(0, 16));
@@ -136,7 +135,7 @@ export function CreditCardForm({ onCardChange, onValidChange }: CreditCardFormPr
       formattedValue = value.replace(/\D/g, '').slice(0, 4);
     } else if (field === 'ccv') {
       // Limitar baseado na bandeira do cartão
-      const cvvConfig = getCvvConfig(currentCardNumber);
+      const cvvConfig = getCvvConfig(card.number);
       formattedValue = value.replace(/\D/g, '').slice(0, cvvConfig.maxLength);
     }
 
@@ -144,71 +143,51 @@ export function CreditCardForm({ onCardChange, onValidChange }: CreditCardFormPr
     setCard(newCard);
     onCardChange(newCard);
 
-    // Validar
-    validateField(field, formattedValue, field === 'number' ? formattedValue : currentCardNumber);
+    // Validar usando os novos valores
+    validateForm(newCard);
   };
 
-  const validateField = (field: keyof CreditCardData, value: string, cardNumber?: string) => {
-    const newErrors = { ...errors };
-    const currentCardNumber = cardNumber || card.number;
-    const cvvConfig = getCvvConfig(currentCardNumber);
+  const validateForm = (cardData: CreditCardData) => {
+    const newErrors: Partial<Record<keyof CreditCardData, string>> = {};
+    const cvvConfig = getCvvConfig(cardData.number);
 
-    switch (field) {
-      case 'holderName':
-        if (!value || value.length < 3) {
-          newErrors.holderName = 'Nome inválido';
-        } else {
-          delete newErrors.holderName;
-        }
-        break;
+    // Validar nome
+    if (!cardData.holderName || cardData.holderName.length < 3) {
+      newErrors.holderName = 'Nome inválido';
+    }
 
-      case 'number':
-        if (!validateCardNumber(value)) {
-          newErrors.number = 'Número de cartão inválido';
-        } else {
-          delete newErrors.number;
-        }
-        break;
+    // Validar número do cartão
+    if (!validateCardNumber(cardData.number)) {
+      newErrors.number = 'Número de cartão inválido';
+    }
 
-      case 'expiryMonth':
-        const month = parseInt(value);
-        if (!month || month < 1 || month > 12) {
-          newErrors.expiryMonth = 'Mês inválido';
-        } else {
-          delete newErrors.expiryMonth;
-        }
-        break;
+    // Validar mês
+    const month = parseInt(cardData.expiryMonth);
+    if (!month || month < 1 || month > 12) {
+      newErrors.expiryMonth = 'Mês inválido';
+    }
 
-      case 'expiryYear':
-        const year = parseInt(value);
-        const currentYear = new Date().getFullYear();
-        if (!year || year < currentYear) {
-          newErrors.expiryYear = 'Ano inválido';
-        } else {
-          delete newErrors.expiryYear;
-        }
-        break;
+    // Validar ano
+    const year = parseInt(cardData.expiryYear);
+    const currentYear = new Date().getFullYear();
+    if (!year || year < currentYear) {
+      newErrors.expiryYear = 'Ano inválido';
+    }
 
-      case 'ccv':
-        // Validação dinâmica baseada na bandeira
-        if (!value || value.length < cvvConfig.minLength) {
-          newErrors.ccv = `${cvvConfig.label} deve ter ${cvvConfig.minLength} dígitos`;
-        } else {
-          delete newErrors.ccv;
-        }
-        break;
+    // Validar CVV/CID dinâmico
+    if (!cardData.ccv || cardData.ccv.length < cvvConfig.minLength) {
+      newErrors.ccv = `${cvvConfig.label} deve ter ${cvvConfig.minLength} dígitos`;
     }
 
     setErrors(newErrors);
 
-    // Verificar se todos os campos são válidos (CVV com tamanho dinâmico)
-    const currentCvvConfig = getCvvConfig(card.number);
+    // Verificar se todos os campos são válidos
     const isValid = Object.keys(newErrors).length === 0 &&
-                    card.holderName.length >= 3 &&
-                    validateCardNumber(card.number) &&
-                    card.expiryMonth.length === 2 &&
-                    card.expiryYear.length === 4 &&
-                    card.ccv.length >= currentCvvConfig.minLength;
+                    cardData.holderName.length >= 3 &&
+                    validateCardNumber(cardData.number) &&
+                    cardData.expiryMonth.length === 2 &&
+                    cardData.expiryYear.length === 4 &&
+                    cardData.ccv.length >= cvvConfig.minLength;
 
     onValidChange(isValid);
   };
