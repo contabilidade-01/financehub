@@ -2,7 +2,13 @@ import { useState, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CreditCard, AlertCircle } from 'lucide-react';
+import { CreditCard, AlertCircle, HelpCircle } from 'lucide-react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 interface CreditCardData {
   holderName: string;
@@ -90,6 +96,27 @@ export function CreditCardForm({ onCardChange, onValidChange }: CreditCardFormPr
     return '';
   };
 
+  // Verificar se é American Express (CVV de 4 dígitos)
+  const isAmex = (number: string): boolean => {
+    const cleaned = number.replace(/\s/g, '');
+    return /^3[47]/.test(cleaned);
+  };
+
+  // Obter configurações do CVV baseado na bandeira
+  const getCvvConfig = (cardNumber: string) => {
+    const amex = isAmex(cardNumber);
+    return {
+      maxLength: amex ? 4 : 3,
+      minLength: amex ? 4 : 3,
+      placeholder: amex ? '1234' : '123',
+      label: amex ? 'CID' : 'CVV',
+      helpText: amex ? '4 dígitos na frente do cartão' : '3 dígitos no verso do cartão',
+      tooltipText: amex
+        ? 'O código CID do American Express possui 4 dígitos e fica localizado na frente do cartão, acima do número.'
+        : 'O código CVV possui 3 dígitos e fica localizado no verso do cartão, geralmente ao lado da assinatura.'
+    };
+  };
+
   // Formatar número do cartão
   const formatCardNumber = (value: string): string => {
     const cleaned = value.replace(/\s/g, '');
@@ -97,8 +124,9 @@ export function CreditCardForm({ onCardChange, onValidChange }: CreditCardFormPr
     return groups ? groups.join(' ') : cleaned;
   };
 
-  const handleChange = (field: keyof CreditCardData, value: string) => {
+  const handleChange = (field: keyof CreditCardData, value: string, cardNumber?: string) => {
     let formattedValue = value;
+    const currentCardNumber = cardNumber || card.number;
 
     if (field === 'number') {
       formattedValue = formatCardNumber(value.replace(/\D/g, '').slice(0, 16));
@@ -107,7 +135,9 @@ export function CreditCardForm({ onCardChange, onValidChange }: CreditCardFormPr
     } else if (field === 'expiryYear') {
       formattedValue = value.replace(/\D/g, '').slice(0, 4);
     } else if (field === 'ccv') {
-      formattedValue = value.replace(/\D/g, '').slice(0, 4);
+      // Limitar baseado na bandeira do cartão
+      const cvvConfig = getCvvConfig(currentCardNumber);
+      formattedValue = value.replace(/\D/g, '').slice(0, cvvConfig.maxLength);
     }
 
     const newCard = { ...card, [field]: formattedValue };
@@ -115,11 +145,13 @@ export function CreditCardForm({ onCardChange, onValidChange }: CreditCardFormPr
     onCardChange(newCard);
 
     // Validar
-    validateField(field, formattedValue);
+    validateField(field, formattedValue, field === 'number' ? formattedValue : currentCardNumber);
   };
 
-  const validateField = (field: keyof CreditCardData, value: string) => {
+  const validateField = (field: keyof CreditCardData, value: string, cardNumber?: string) => {
     const newErrors = { ...errors };
+    const currentCardNumber = cardNumber || card.number;
+    const cvvConfig = getCvvConfig(currentCardNumber);
 
     switch (field) {
       case 'holderName':
@@ -158,8 +190,9 @@ export function CreditCardForm({ onCardChange, onValidChange }: CreditCardFormPr
         break;
 
       case 'ccv':
-        if (!value || value.length < 3) {
-          newErrors.ccv = 'CVV inválido';
+        // Validação dinâmica baseada na bandeira
+        if (!value || value.length < cvvConfig.minLength) {
+          newErrors.ccv = `${cvvConfig.label} deve ter ${cvvConfig.minLength} dígitos`;
         } else {
           delete newErrors.ccv;
         }
@@ -168,13 +201,14 @@ export function CreditCardForm({ onCardChange, onValidChange }: CreditCardFormPr
 
     setErrors(newErrors);
 
-    // Verificar se todos os campos são válidos
+    // Verificar se todos os campos são válidos (CVV com tamanho dinâmico)
+    const currentCvvConfig = getCvvConfig(card.number);
     const isValid = Object.keys(newErrors).length === 0 &&
                     card.holderName.length >= 3 &&
                     validateCardNumber(card.number) &&
                     card.expiryMonth.length === 2 &&
                     card.expiryYear.length === 4 &&
-                    card.ccv.length >= 3;
+                    card.ccv.length >= currentCvvConfig.minLength;
 
     onValidChange(isValid);
   };
@@ -276,17 +310,36 @@ export function CreditCardForm({ onCardChange, onValidChange }: CreditCardFormPr
           </div>
 
           <div>
-            <Label htmlFor="ccv">CVV</Label>
+            <div className="flex items-center gap-1.5 mb-1">
+              <Label htmlFor="ccv" className="mb-0">{getCvvConfig(card.number).label}</Label>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button type="button" className="text-muted-foreground hover:text-foreground transition-colors">
+                      <HelpCircle className="h-3.5 w-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[250px] text-center">
+                    <p className="text-xs">{getCvvConfig(card.number).tooltipText}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
             <Input
               id="ccv"
-              placeholder="123"
+              placeholder={getCvvConfig(card.number).placeholder}
               type="text"
               value={card.ccv}
               onChange={(e) => handleChange('ccv', e.target.value)}
+              maxLength={getCvvConfig(card.number).maxLength}
               className={errors.ccv ? 'border-red-500' : ''}
               autoComplete="off"
               inputMode="numeric"
             />
+            <p className="text-xs text-muted-foreground mt-1">
+              {getCvvConfig(card.number).helpText}
+            </p>
+            {errors.ccv && <p className="text-sm text-red-500 mt-1">{errors.ccv}</p>}
           </div>
         </div>
       </div>
