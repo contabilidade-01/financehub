@@ -504,6 +504,14 @@ export class AsaasService {
   }
 
   /**
+   * Obter data atual formatada para o Asaas (YYYY-MM-DD)
+   * Usado para cobrar imediatamente na criação da assinatura
+   */
+  static getTodayForAsaas(): string {
+    return this.formatDateForAsaas(new Date());
+  }
+
+  /**
    * Validar CPF/CNPJ (validação básica de formato)
    */
   static validateCpfCnpj(cpfCnpj: string): boolean {

@@ -152,8 +152,9 @@ export class SubscriptionService {
         });
       }
 
-      // 4. Calcular próxima data de vencimento (próximo mês)
-      const nextDueDate = AsaasService.calculateNextDueDate();
+      // 4. Usar data atual para cobrar imediatamente (primeira cobrança)
+      // Conforme doc Asaas: "informe o nextDueDate como a data atual" para cobrar na criação
+      const nextDueDate = AsaasService.getTodayForAsaas();
 
       // 5. Buscar nome do sistema para descrição
       const systemName = await getSystemName();
@@ -178,7 +179,8 @@ export class SubscriptionService {
         asaasSubscriptionId: asaasSubscription.id,
         status: 'active',
         currentPeriodStart: new Date(),
-        currentPeriodEnd: new Date(nextDueDate)
+        // O período atual vai de hoje até o próximo mês
+        currentPeriodEnd: new Date(AsaasService.calculateNextDueDate())
       });
 
       // 7. Buscar primeiro pagamento gerado pelo Asaas
