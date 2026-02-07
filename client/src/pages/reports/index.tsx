@@ -115,12 +115,13 @@ export default function ReportsPage() {
   });
 
   // Buscar dados com filtro de período
+  // Fetch dashboard data with period filter
   const { data: summaryData, isLoading: isLoadingSummary } = useQuery<SummaryData>({
     queryKey: ["/api/dashboard/summary", period],
     queryFn: async () => {
-      // Por enquanto, usar a rota padrão e filtrar no frontend
-      // Quando a API suportar filtros, podemos adicionar os parâmetros aqui
-      return apiRequest<SummaryData>("/api/dashboard/summary");
+      // Send period parameter to backend
+      const url = `/api/dashboard/summary?period=${period}`;
+      return apiRequest<SummaryData>(url);
     },
   });
 
@@ -205,6 +206,7 @@ export default function ReportsPage() {
   };
 
   const getCategoryData = useCallback((): CategoryData[] => {
+    // Backend now returns category data already filtered by the selected period
     const baseCategories = summaryData?.expensesByCategory ?? [];
     return baseCategories.map((category) => ({
       ...category,

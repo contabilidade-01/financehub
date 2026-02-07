@@ -54,6 +54,49 @@ import {
 } from "@shared/schema";
 import { eq, and, desc, gte, lte, isNull, count, sum, sql, ne } from "drizzle-orm";
 
+/**
+ * Calculate date range based on period type
+ * @param period - "month" | "quarter" | "year" | undefined (defaults to month)
+ * @returns { startDate: Date, endDate: Date }
+ */
+function calculateDateRange(period?: string): { startDate: Date; endDate: Date } {
+  const now = new Date();
+  let startDate = new Date();
+  let endDate = new Date();
+
+  switch (period) {
+    case "quarter":
+      // Last 3 months (current month - 2 months to current month)
+      startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+      startDate.setHours(0, 0, 0, 0);
+
+      endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      endDate.setHours(23, 59, 59, 999);
+      break;
+
+    case "year":
+      // Current year (January 1 to December 31)
+      startDate = new Date(now.getFullYear(), 0, 1);
+      startDate.setHours(0, 0, 0, 0);
+
+      endDate = new Date(now.getFullYear(), 11, 31);
+      endDate.setHours(23, 59, 59, 999);
+      break;
+
+    case "month":
+    default:
+      // Current month (first day to last day)
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      startDate.setHours(0, 0, 0, 0);
+
+      endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      endDate.setHours(23, 59, 59, 999);
+      break;
+  }
+
+  return { startDate, endDate };
+}
+
 export interface IStorage {
   // User methods
   getUserById(id: number): Promise<User | undefined>;
@@ -96,10 +139,10 @@ export interface IStorage {
   deleteTransaction(id: number): Promise<boolean>;
   
   // Dashboard methods
-  getMonthlyTransactionSummary(walletId: number): Promise<any>;
-  getExpensesByCategory(walletId: number): Promise<any>;
-  getIncomeExpenseTotals(walletId: number): Promise<{ totalIncome: number; totalExpenses: number }>;
-  
+  getMonthlyTransactionSummary(walletId: number, period?: string): Promise<any>;
+  getExpensesByCategory(walletId: number, period?: string): Promise<any>;
+  getIncomeExpenseTotals(walletId: number, period?: string): Promise<{ totalIncome: number; totalExpenses: number }>;
+
   // Bulk operations for performance
   getWalletStatsForAllUsers(): Promise<{ walletId: number; userId: number; balance: number; transactionCount: number }[]>;
   
@@ -649,28 +692,27 @@ export class DbStorage implements IStorage {
   }
   
   // Dashboard methods
-  async getMonthlyTransactionSummary(walletId: number): Promise<any> {
-    // Get the current date and the date 12 months ago para garantir que todos os dados sejam visualizados
-    const now = new Date();
-    const lastYear = new Date();
-    lastYear.setFullYear(now.getFullYear() - 1); // Últimos 12 meses de dados
-    
+  async getMonthlyTransactionSummary(walletId: number, period?: string): Promise<any> {
     try {
-      // Extract months as strings (e.g., "Jan", "Feb") and calculate totals
+      // Calculate date range based on period parameter
+      const { startDate, endDate } = calculateDateRange(period);
+
       const monthlyData = await db.execute(sql`
-        SELECT 
+        SELECT
           TO_CHAR(data_transacao, 'Mon') as month,
           EXTRACT(MONTH FROM data_transacao) as month_num,
           EXTRACT(YEAR FROM data_transacao) as year,
           SUM(CASE WHEN tipo = 'Receita' THEN valor ELSE 0 END) as income,
           SUM(CASE WHEN tipo = 'Despesa' THEN valor ELSE 0 END) as expense
         FROM transacoes
-        WHERE 
+        WHERE
           carteira_id = ${walletId}
+          AND data_transacao >= ${startDate.toISOString()}
+          AND data_transacao <= ${endDate.toISOString()}
         GROUP BY month, month_num, year
         ORDER BY year, month_num
       `);
-      
+
       return monthlyData;
     } catch (error) {
       console.error("Error in getMonthlyTransactionSummary:", error);
@@ -678,20 +720,13 @@ export class DbStorage implements IStorage {
     }
   }
   
-  async getExpensesByCategory(walletId: number): Promise<any> {
-    // Get current month's expense data grouped by category
-    const startOfMonth = new Date();
-    startOfMonth.setDate(1);
-    startOfMonth.setHours(0, 0, 0, 0);
-    
-    const endOfMonth = new Date();
-    endOfMonth.setMonth(endOfMonth.getMonth() + 1);
-    endOfMonth.setDate(0);
-    endOfMonth.setHours(23, 59, 59, 999);
-    
+  async getExpensesByCategory(walletId: number, period?: string): Promise<any> {
+    // Calculate date range based on period parameter
+    const { startDate, endDate } = calculateDateRange(period);
+
     try {
       const result = await db.execute(sql`
-        SELECT 
+        SELECT
           c.id as category_id,
           c.nome as name,
           c.cor as color,
@@ -699,15 +734,15 @@ export class DbStorage implements IStorage {
           SUM(t.valor) as total
         FROM transacoes t
         JOIN categorias c ON t.categoria_id = c.id
-        WHERE 
+        WHERE
           t.carteira_id = ${walletId}
           AND t.tipo = 'Despesa'
-          AND t.data_transacao >= ${startOfMonth.toISOString()}
-          AND t.data_transacao <= ${endOfMonth.toISOString()}
+          AND t.data_transacao >= ${startDate.toISOString()}
+          AND t.data_transacao <= ${endDate.toISOString()}
         GROUP BY c.id, c.nome, c.cor, c.icone
         ORDER BY total DESC
       `);
-      
+
       return result;
     } catch (error) {
       console.error("Error in getExpensesByCategory:", error);
@@ -715,25 +750,29 @@ export class DbStorage implements IStorage {
     }
   }
   
-  async getIncomeExpenseTotals(walletId: number): Promise<{ totalIncome: number; totalExpenses: number }> {
+  async getIncomeExpenseTotals(walletId: number, period?: string): Promise<{ totalIncome: number; totalExpenses: number }> {
     try {
-      // Remover restrições de data para mostrar todos os totais
+      // Calculate date range based on period parameter
+      const { startDate, endDate } = calculateDateRange(period);
+
       const result = await db.execute(sql`
-        SELECT 
+        SELECT
           SUM(CASE WHEN tipo = 'Receita' THEN valor ELSE 0 END) as total_income,
           SUM(CASE WHEN tipo = 'Despesa' THEN valor ELSE 0 END) as total_expenses
         FROM transacoes
-        WHERE 
+        WHERE
           carteira_id = ${walletId}
+          AND data_transacao >= ${startDate.toISOString()}
+          AND data_transacao <= ${endDate.toISOString()}
       `);
-      
+
       if (result && result[0]) {
         return {
           totalIncome: Number(result[0].total_income) || 0,
           totalExpenses: Number(result[0].total_expenses) || 0,
         };
       }
-      
+
       return { totalIncome: 0, totalExpenses: 0 };
     } catch (error) {
       console.error("Error in getIncomeExpenseTotals:", error);
