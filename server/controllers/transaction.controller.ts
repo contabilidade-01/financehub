@@ -534,27 +534,41 @@ export async function getDashboardSummary(req: Request, res: Response) {
     if (!req.user) {
       return res.status(401).json({ error: "Não autenticado" });
     }
-    
+
     const userId = req.user.id;
-    
+
     // Get user's wallet
     const wallet = await storage.getWalletByUserId(userId);
     if (!wallet) {
       return res.status(404).json({ message: "Carteira não encontrada" });
     }
-    
-    // Get monthly transaction summary
-    const monthlyData = await storage.getMonthlyTransactionSummary(wallet.id);
-    
-    // Get expenses by category
-    const expensesData = await storage.getExpensesByCategory(wallet.id);
-    
+
+    // Extract period parameter from query string (optional)
+    // Valid values: "month", "quarter", "year"
+    // Defaults to "month" if not provided
+    const period = req.query.period as string | undefined;
+
+    // Validate period parameter
+    const validPeriods = ["month", "quarter", "year"];
+    if (period && !validPeriods.includes(period)) {
+      return res.status(400).json({
+        error: "Parâmetro de período inválido",
+        message: `O período deve ser um dos seguintes: ${validPeriods.join(", ")}`
+      });
+    }
+
+    // Get monthly transaction summary (filtered by period)
+    const monthlyData = await storage.getMonthlyTransactionSummary(wallet.id, period);
+
+    // Get expenses by category (filtered by period)
+    const expensesData = await storage.getExpensesByCategory(wallet.id, period);
+
     // Calculate total expenses for percentage calculation
     const totalExpensesAmount = expensesData.reduce(
-      (total: number, item: any) => total + Number(item.total), 
+      (total: number, item: any) => total + Number(item.total),
       0
     );
-    
+
     // Add percentage to each category
     const expensesByCategory = expensesData.map((item: any) => ({
       categoryId: Number(item.category_id),
@@ -562,17 +576,14 @@ export async function getDashboardSummary(req: Request, res: Response) {
       total: Number(item.total),
       color: item.color,
       icon: item.icon,
-      percentage: totalExpensesAmount > 0 
-        ? Math.round((Number(item.total) / totalExpensesAmount) * 100) 
+      percentage: totalExpensesAmount > 0
+        ? Math.round((Number(item.total) / totalExpensesAmount) * 100)
         : 0
     }));
-    
-    // Get income and expense totals
-    const { totalIncome, totalExpenses } = await storage.getIncomeExpenseTotals(wallet.id);
-    
-    // Adicionar log para depuração dos valores de receita e despesa
-    console.log("Dashboard totals:", { totalIncome, totalExpenses });
-    
+
+    // Get income and expense totals (filtered by period)
+    const { totalIncome, totalExpenses } = await storage.getIncomeExpenseTotals(wallet.id, period);
+
     res.status(200).json({
       monthlyData,
       expensesByCategory,
