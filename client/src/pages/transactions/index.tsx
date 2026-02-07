@@ -917,8 +917,8 @@ export default function Transactions() {
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium text-white truncate">{transaction.descricao}</div>
-                        <div className="text-sm text-gray-400">{getPaymentMethodDisplay(transaction)}</div>
+                        <div className={`font-medium truncate ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>{transaction.descricao}</div>
+                        <div className={`text-sm ${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>{getPaymentMethodDisplay(transaction)}</div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 ml-2">
@@ -929,30 +929,30 @@ export default function Transactions() {
                       />
                     </div>
                   </div>
-                  
+
                   <div className="space-y-2">
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-400">{t('transactions.table.value', 'Valor')}:</span>
-                      <span className={`${transaction.tipo === TransactionType.INCOME ? 'text-green-400' : 'text-red-400'} font-orbitron font-medium`}>
+                      <span className={`text-sm font-medium ${theme === 'light' ? 'text-gray-700' : 'text-gray-400'}`}>{t('transactions.table.value', 'Valor')}:</span>
+                      <span className={`${transaction.tipo === TransactionType.INCOME ? 'text-green-500' : 'text-red-500'} font-orbitron font-medium`}>
                         {transaction.tipo === TransactionType.INCOME ? '+ ' : '- '}
                         {formatCurrency(Number(transaction.valor))}
                       </span>
                     </div>
-                    
+
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-400">{t('transactions.table.category', 'Categoria')}:</span>
+                      <span className={`text-sm font-medium ${theme === 'light' ? 'text-gray-700' : 'text-gray-400'}`}>{t('transactions.table.category', 'Categoria')}:</span>
                       <span className="px-2 py-1 rounded-lg bg-primary/10 text-primary text-xs">
                         {getCategoryName(transaction.categoria_id ?? null)}
                       </span>
                     </div>
-                    
+
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-400">{t('transactions.table.date', 'Data')}:</span>
-                      <span className="text-sm text-gray-300">{formatDate(transaction.data_transacao)}</span>
+                      <span className={`text-sm font-medium ${theme === 'light' ? 'text-gray-700' : 'text-gray-400'}`}>{t('transactions.table.date', 'Data')}:</span>
+                      <span className={`text-sm ${theme === 'light' ? 'text-gray-600' : 'text-gray-300'}`}>{formatDate(transaction.data_transacao)}</span>
                     </div>
-                    
+
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-400">{t('transactions.table.status', 'Status')}:</span>
+                      <span className={`text-sm font-medium ${theme === 'light' ? 'text-gray-700' : 'text-gray-400'}`}>{t('transactions.table.status', 'Status')}:</span>
                       <span className={`px-2 py-1 rounded-lg text-xs
                         ${theme === 'light' && transaction.status === TransactionStatus.COMPLETED ? 'bg-emerald-400 text-white' : ''}
                         ${theme === 'light' && transaction.status === TransactionStatus.PENDING ? 'bg-yellow-400 text-gray-900' : ''}
