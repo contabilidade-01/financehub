@@ -98,6 +98,15 @@ function Sidebar() {
         { icon: <LayoutDashboard className="mr-3 h-4 w-4" />, text: t('navigation.dashboard', 'Dashboard'), path: "/" },
         { icon: <PlusCircle className="mr-3 h-4 w-4" />, text: t('navigation.transactions', 'Transações'), path: "/transactions" },
         { icon: <BarChart3 className="mr-3 h-4 w-4" />, text: t('navigation.reports', 'Relatórios'), path: "/reports" },
+        { icon: <CreditCard className="mr-3 h-4 w-4" />, text: t('navigation.payment_methods', 'Formas de Pagamento'), path: "/payment-methods" },
+        { icon: <CalendarDays className="mr-3 h-4 w-4" />, text: t('navigation.reminders', 'Lembretes'), path: "/reminders" },
+      ]
+    },
+    {
+      label: t('navigation.sections.settings', 'CONFIGURAÇÕES'),
+      items: [
+        { icon: <Tag className="mr-3 h-4 w-4" />, text: t('navigation.categories', 'Categorias'), path: "/categories" },
+        { icon: <Settings className="mr-3 h-4 w-4" />, text: t('navigation.settings', 'Configurações'), path: "/settings" },
       ]
     },
     {
@@ -105,15 +114,6 @@ function Sidebar() {
       items: [
         { icon: <DollarSign className="mr-3 h-4 w-4" />, text: t('navigation.billing_settings', 'Minha Assinatura'), path: "/billing/settings" },
         { icon: <CreditCard className="mr-3 h-4 w-4" />, text: t('navigation.invoices', 'Faturas'), path: "/billing/invoices" },
-      ]
-    },
-    {
-      label: t('navigation.sections.settings', 'CONFIGURAÇÕES'),
-      items: [
-        { icon: <CreditCard className="mr-3 h-4 w-4" />, text: t('navigation.payment_methods', 'Formas de Pagamento'), path: "/payment-methods" },
-        { icon: <Tag className="mr-3 h-4 w-4" />, text: t('navigation.categories', 'Categorias'), path: "/categories" },
-        { icon: <CalendarDays className="mr-3 h-4 w-4" />, text: t('navigation.reminders', 'Lembretes'), path: "/reminders" },
-        { icon: <Settings className="mr-3 h-4 w-4" />, text: t('navigation.settings', 'Configurações'), path: "/settings" },
       ]
     }
   ];
