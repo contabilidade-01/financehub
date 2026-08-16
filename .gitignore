@@ -1,6 +1,82 @@
-node_modules
-dist
+# =============================================
+# FinanceHub — .gitignore
+# =============================================
+
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Production builds
+dist/
+build/
+
+# Environment files (NUNCA commitar credenciais)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+logs/
+*.log
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage
+coverage/
+*.lcov
+.nyc_output/
+
+# Editor artifacts
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sw?
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
 .DS_Store
-server/public
-vite.config.ts.*
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/
+cookies.txt
+
+# OS generated
+.cache/
+.parcel-cache/
+
+# Replit specific
+.replit
+replit.nix
+.replit.nix
+
+# Server public (generated at runtime)
+server/public/
+
+# Test output
+**/*.test.js
+**/*.test.ts
+**/*.spec.js
+**/*.spec.ts
+
+# Output of npm pack
+*.tgz
 *.tar.gz
+
+# Legacy folder (keep in repo for history, but don't accidentally add new files)
+# legacy/ is tracked — leave it alone
+
+# Generated images at runtime
+public/charts/
+public/reports/
