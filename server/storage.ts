@@ -248,7 +248,9 @@ export class DbStorage implements IStorage {
   }
 
   async getUserByPhone(telefone: string): Promise<User | undefined> {
-    const result = await db.select().from(users).where(eq(users.telefone, telefone)).limit(1);
+    // Considera apenas usuários ATIVOS: ao desativar (soft delete) um usuário,
+    // o telefone dele fica livre para ser reutilizado em um novo cadastro.
+    const result = await db.select().from(users).where(and(eq(users.telefone, telefone), eq(users.ativo, true))).limit(1);
     return result[0];
   }
   
