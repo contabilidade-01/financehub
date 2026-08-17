@@ -1132,6 +1132,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/empresas/:id/dashboard/resumo", combinedAuth, empresaTransacaoCtrl.getEmpresaResumo);
   app.get("/api/empresas/:id/relatorios/dre", combinedAuth, empresaTransacaoCtrl.getEmpresaDRE);
 
+  // ==========================================
+  // WEBHOOK UAZAPI — Pipeline IA internalizado (substitui N8N)
+  // Recebe mensagens do WhatsApp via UazAPI, processa com IA, insere transação, responde.
+  // Sem auth Express — validado por token no body do UazAPI.
+  // ==========================================
+  const uazapiWebhookCtrl = await import("./controllers/uazapi-webhook.controller");
+  app.post("/api/webhook/uazapi", uazapiWebhookCtrl.handleUazapiWebhook);
+
   const httpServer = createServer(app);
 
   // Inicializar WebSocket server para notificações em tempo real

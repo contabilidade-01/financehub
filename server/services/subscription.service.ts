@@ -337,22 +337,24 @@ export class SubscriptionService {
       console.log('[SubscriptionService] Sending activation webhook');
       console.log('[SubscriptionService] Webhook payload:', JSON.stringify(webhookData, null, 2));
 
-      const webhookResponse = await fetch(
-        process.env.WEBHOOK_ATIVACAO_URL || 'https://prod-wf.pulsofinanceiro.net.br/webhook/ativacao',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(webhookData)
-        }
-      );
-
-      if (webhookResponse.ok) {
-        console.log('[SubscriptionService] Activation webhook sent successfully');
-      } else {
-        console.error('[SubscriptionService] Error sending activation webhook:', webhookResponse.status);
-      }
+      // === N8N DESATIVADO — pipeline agora roda via app (POST /api/webhook/uazapi) ===
+      // const webhookResponse = await fetch(
+      //   process.env.WEBHOOK_ATIVACAO_URL || 'https://prod-wf.pulsofinanceiro.net.br/webhook/ativacao',
+      //   {
+      //     method: 'POST',
+      //     headers: {
+      //       'Content-Type': 'application/json',
+      //     },
+      //     body: JSON.stringify(webhookData)
+      //   }
+      // );
+      //
+      // if (webhookResponse.ok) {
+      //   console.log('[SubscriptionService] Activation webhook sent successfully');
+      // } else {
+      //   console.error('[SubscriptionService] Error sending activation webhook:', webhookResponse.status);
+      // }
+      console.log('[SubscriptionService] ✅ Webhook N8N desativado — ativação via pipeline interno.');
 
       await client.end();
     } catch (error) {

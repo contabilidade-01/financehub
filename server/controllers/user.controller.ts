@@ -127,22 +127,24 @@ export async function register(req: Request, res: Response) {
           };
 
           console.log('[UserRegister] Enviando webhook de boas-vindas...');
-          const webhookResponse = await fetch(
-            process.env.WEBHOOK_BOAS_VINDAS_URL || process.env.WEBHOOK_ATIVACAO_URL || 'https://prod-wf.pulsofinanceiro.net.br/webhook/boasvindas',
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify(webhookData)
-            }
-          );
-
-          if (webhookResponse.ok) {
-            console.log('[UserRegister] Webhook de boas-vindas enviado com sucesso');
-          } else {
-            console.error('[UserRegister] Erro ao enviar webhook:', webhookResponse.status);
-          }
+          // === N8N DESATIVADO — pipeline agora roda via app (POST /api/webhook/uazapi) ===
+          // const webhookResponse = await fetch(
+          //   process.env.WEBHOOK_BOAS_VINDAS_URL || process.env.WEBHOOK_ATIVACAO_URL || 'https://prod-wf.pulsofinanceiro.net.br/webhook/boasvindas',
+          //   {
+          //     method: 'POST',
+          //     headers: {
+          //       'Content-Type': 'application/json',
+          //     },
+          //     body: JSON.stringify(webhookData)
+          //   }
+          // );
+          //
+          // if (webhookResponse.ok) {
+          //   console.log('[UserRegister] Webhook de boas-vindas enviado com sucesso');
+          // } else {
+          //   console.error('[UserRegister] Erro ao enviar webhook:', webhookResponse.status);
+          // }
+          console.log('[UserRegister] Webhook N8N desativado — boas-vindas agora via pipeline interno (UazAPI).');
         }
 
         await client.end();

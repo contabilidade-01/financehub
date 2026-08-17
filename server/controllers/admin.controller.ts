@@ -583,23 +583,25 @@ export async function updateUserStatus(req: Request, res: Response) {
         console.log(JSON.stringify(webhookData, null, 2));
         console.log("====================");
 
-        const webhookResponse = await fetch(process.env.WEBHOOK_ATIVACAO_URL || 'https://prod-wf.pulsofinanceiro.net.br/webhook/ativacao', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(webhookData)
-        });
-
-        console.log(`Webhook Response Status: ${webhookResponse.status}`);
-        const responseText = await webhookResponse.text();
-        console.log(`Webhook Response Body: ${responseText}`);
-
-        if (webhookResponse.ok) {
-          console.log("✅ Webhook de ativação enviado com sucesso");
-        } else {
-          console.error("❌ Erro ao enviar webhook:", webhookResponse.status, responseText);
-        }
+        // === N8N DESATIVADO — pipeline agora roda via app (POST /api/webhook/uazapi) ===
+        // const webhookResponse = await fetch(process.env.WEBHOOK_ATIVACAO_URL || 'https://prod-wf.pulsofinanceiro.net.br/webhook/ativacao', {
+        //   method: 'POST',
+        //   headers: {
+        //     'Content-Type': 'application/json',
+        //   },
+        //   body: JSON.stringify(webhookData)
+        // });
+        //
+        // console.log(`Webhook Response Status: ${webhookResponse.status}`);
+        // const responseText = await webhookResponse.text();
+        // console.log(`Webhook Response Body: ${responseText}`);
+        //
+        // if (webhookResponse.ok) {
+        //   console.log("✅ Webhook de ativação enviado com sucesso");
+        // } else {
+        //   console.error("❌ Erro ao enviar webhook:", webhookResponse.status, responseText);
+        // }
+        console.log("✅ Webhook N8N desativado — ativação agora via pipeline interno.");
         console.log("==============================================");
       } catch (webhookError) {
         console.error("Erro ao enviar webhook de ativação:", webhookError);
@@ -1168,23 +1170,25 @@ export async function updateUser(req: Request, res: Response) {
         console.log(JSON.stringify(webhookData, null, 2));
         console.log("====================");
 
-        const webhookResponse = await fetch(process.env.WEBHOOK_ATIVACAO_URL || 'https://prod-wf.pulsofinanceiro.net.br/webhook/ativacao', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(webhookData)
-        });
-
-        console.log(`Webhook Response Status: ${webhookResponse.status}`);
-        const responseText = await webhookResponse.text();
-        console.log(`Webhook Response Body: ${responseText}`);
-
-        if (webhookResponse.ok) {
-          console.log("✅ Webhook de ativação enviado com sucesso");
-        } else {
-          console.error("❌ Erro ao enviar webhook:", webhookResponse.status, responseText);
-        }
+        // === N8N DESATIVADO — pipeline agora roda via app (POST /api/webhook/uazapi) ===
+        // const webhookResponse = await fetch(process.env.WEBHOOK_ATIVACAO_URL || 'https://prod-wf.pulsofinanceiro.net.br/webhook/ativacao', {
+        //   method: 'POST',
+        //   headers: {
+        //     'Content-Type': 'application/json',
+        //   },
+        //   body: JSON.stringify(webhookData)
+        // });
+        //
+        // console.log(`Webhook Response Status: ${webhookResponse.status}`);
+        // const responseText = await webhookResponse.text();
+        // console.log(`Webhook Response Body: ${responseText}`);
+        //
+        // if (webhookResponse.ok) {
+        //   console.log("✅ Webhook de ativação enviado com sucesso");
+        // } else {
+        //   console.error("❌ Erro ao enviar webhook:", webhookResponse.status, responseText);
+        // }
+        console.log("✅ Webhook N8N desativado — ativação agora via pipeline interno.");
         console.log("=====================================");
       } catch (webhookError) {
         console.error("Erro ao enviar webhook de ativação:", webhookError);

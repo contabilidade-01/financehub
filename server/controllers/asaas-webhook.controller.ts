@@ -297,22 +297,24 @@ async function processWebhookEvent(eventType: string, paymentData: any, webhookI
         console.log('[AsaasWebhook] Sending activation webhook with custom message');
         console.log('[AsaasWebhook] Webhook payload:', JSON.stringify(webhookData, null, 2));
 
-        const webhookResponse = await fetch(
-          process.env.WEBHOOK_ATIVACAO_URL || 'https://prod-wf.pulsofinanceiro.net.br/webhook/ativacao',
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(webhookData)
-          }
-        );
-
-        if (webhookResponse.ok) {
-          console.log('[AsaasWebhook] Activation webhook sent successfully');
-        } else {
-          console.error('[AsaasWebhook] Error sending activation webhook:', webhookResponse.status);
-        }
+        // === N8N DESATIVADO — pipeline agora roda via app (POST /api/webhook/uazapi) ===
+        // const webhookResponse = await fetch(
+        //   process.env.WEBHOOK_ATIVACAO_URL || 'https://prod-wf.pulsofinanceiro.net.br/webhook/ativacao',
+        //   {
+        //     method: 'POST',
+        //     headers: {
+        //       'Content-Type': 'application/json',
+        //     },
+        //     body: JSON.stringify(webhookData)
+        //   }
+        // );
+        //
+        // if (webhookResponse.ok) {
+        //   console.log('[AsaasWebhook] Activation webhook sent successfully');
+        // } else {
+        //   console.error('[AsaasWebhook] Error sending activation webhook:', webhookResponse.status);
+        // }
+        console.log('[AsaasWebhook] ✅ Webhook N8N desativado — ativação via pipeline interno.');
 
         await client.end();
       } catch (msgError) {
