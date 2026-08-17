@@ -1857,4 +1857,114 @@ function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
+// ============================================
+// QUERIES INTELIGENTES — usadas pelo agente IA
+// Resumos por dia, semana, período customizado,
+// breakdown por categoria, comparação entre períodos.
+// ============================================
+
+export async function getDailySummary(walletId: number, date: string): Promise<{ totalReceita: number; totalDespesa: number; saldo: number; transacoes: number }> {
+  const rows = await db.execute(sql`
+    SELECT
+      COALESCE(SUM(CASE WHEN tipo = 'Receita' THEN valor::numeric ELSE 0 END), 0) AS receita,
+      COALESCE(SUM(CASE WHEN tipo = 'Despesa' THEN valor::numeric ELSE 0 END), 0) AS despesa,
+      COUNT(*) AS qtd
+    FROM transacoes
+    WHERE carteira_id = ${walletId}
+      AND data_transacao = ${date}
+  `);
+  const row = (rows as any[])[0] || { receita: 0, despesa: 0, qtd: 0 };
+  const receita = parseFloat(row.receita) || 0;
+  const despesa = parseFloat(row.despesa) || 0;
+  return { totalReceita: round2(receita), totalDespesa: round2(despesa), saldo: round2(receita - despesa), transacoes: parseInt(row.qtd) || 0 };
+}
+
+export async function getPeriodSummary(walletId: number, de: string, ate: string): Promise<{ totalReceita: number; totalDespesa: number; saldo: number; transacoes: number }> {
+  const rows = await db.execute(sql`
+    SELECT
+      COALESCE(SUM(CASE WHEN tipo = 'Receita' THEN valor::numeric ELSE 0 END), 0) AS receita,
+      COALESCE(SUM(CASE WHEN tipo = 'Despesa' THEN valor::numeric ELSE 0 END), 0) AS despesa,
+      COUNT(*) AS qtd
+    FROM transacoes
+    WHERE carteira_id = ${walletId}
+      AND data_transacao >= ${de}
+      AND data_transacao <= ${ate}
+  `);
+  const row = (rows as any[])[0] || { receita: 0, despesa: 0, qtd: 0 };
+  const receita = parseFloat(row.receita) || 0;
+  const despesa = parseFloat(row.despesa) || 0;
+  return { totalReceita: round2(receita), totalDespesa: round2(despesa), saldo: round2(receita - despesa), transacoes: parseInt(row.qtd) || 0 };
+}
+
+export async function getWeeklySummary(walletId: number, weekOffset: number = 0): Promise<{ de: string; ate: string; totalReceita: number; totalDespesa: number; saldo: number; transacoes: number }> {
+  // Calcula seg-dom da semana com offset (0=atual, -1=passada)
+  const now = new Date();
+  const dayOfWeek = now.getDay() || 7; // domingo=7
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - dayOfWeek + 1 + (weekOffset * 7));
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+
+  const de = monday.toISOString().slice(0, 10);
+  const ate = sunday.toISOString().slice(0, 10);
+
+  const result = await getPeriodSummary(walletId, de, ate);
+  return { de, ate, ...result };
+}
+
+export async function getCategoryBreakdown(walletId: number, de: string, ate: string): Promise<{ categoria: string; total: number; tipo: string; percentual: number }[]> {
+  const rows = await db.execute(sql`
+    SELECT
+      c.nome AS categoria,
+      t.tipo,
+      COALESCE(SUM(t.valor::numeric), 0) AS total
+    FROM transacoes t
+    JOIN categorias c ON t.categoria_id = c.id
+    WHERE t.carteira_id = ${walletId}
+      AND t.data_transacao >= ${de}
+      AND t.data_transacao <= ${ate}
+    GROUP BY c.nome, t.tipo
+    ORDER BY total DESC
+  `);
+
+  // Calcular percentuais separados por tipo
+  const despesaTotal = (rows as any[]).filter(r => r.tipo === 'Despesa').reduce((s, r) => s + (parseFloat(r.total) || 0), 0);
+  const receitaTotal = (rows as any[]).filter(r => r.tipo === 'Receita').reduce((s, r) => s + (parseFloat(r.total) || 0), 0);
+
+  return (rows as any[]).map(r => {
+    const total = parseFloat(r.total) || 0;
+    const base = r.tipo === 'Despesa' ? despesaTotal : receitaTotal;
+    return {
+      categoria: r.categoria,
+      tipo: r.tipo,
+      total: round2(total),
+      percentual: base > 0 ? round2((total / base) * 100) : 0
+    };
+  });
+}
+
+export async function comparePeriods(walletId: number, p1Start: string, p1End: string, p2Start: string, p2End: string): Promise<{
+  periodo1: { de: string; ate: string; receita: number; despesa: number; saldo: number };
+  periodo2: { de: string; ate: string; receita: number; despesa: number; saldo: number };
+  variacao: { receita_pct: number | null; despesa_pct: number | null; saldo_diff: number };
+}> {
+  const p1 = await getPeriodSummary(walletId, p1Start, p1End);
+  const p2 = await getPeriodSummary(walletId, p2Start, p2End);
+
+  const varPct = (atual: number, anterior: number): number | null => {
+    if (anterior === 0) return null;
+    return round2(((atual - anterior) / anterior) * 100);
+  };
+
+  return {
+    periodo1: { de: p1Start, ate: p1End, receita: p1.totalReceita, despesa: p1.totalDespesa, saldo: p1.saldo },
+    periodo2: { de: p2Start, ate: p2End, receita: p2.totalReceita, despesa: p2.totalDespesa, saldo: p2.saldo },
+    variacao: {
+      receita_pct: varPct(p2.totalReceita, p1.totalReceita),
+      despesa_pct: varPct(p2.totalDespesa, p1.totalDespesa),
+      saldo_diff: round2(p2.saldo - p1.saldo)
+    }
+  };
+}
+
 export const storage = new DbStorage();

@@ -1,5 +1,5 @@
 import axios from "axios";
-import { storage } from "../storage";
+import { storage, getDailySummary, getPeriodSummary, getWeeklySummary, getCategoryBreakdown, comparePeriods } from "../storage";
 import { FINANCIAL_AGENT_SYSTEM_PROMPT, buildDynamicContext } from "../prompts/financial-agent";
 import { insertTransactionSchema } from "@shared/schema";
 
@@ -222,6 +222,92 @@ function buildTools() {
         },
       },
     },
+    {
+      type: "function" as const,
+      function: {
+        name: "resumo_dia",
+        description: "Retorna o TOTAL de receitas e despesas de um dia específico (default: hoje). Use quando perguntarem 'quanto gastei hoje', 'valor do dia', etc.",
+        parameters: {
+          type: "object",
+          properties: {
+            data: { type: "string", description: "Data no formato YYYY-MM-DD. Se omitido, usa hoje." },
+          },
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "resumo_semana",
+        description: "Retorna o total de receitas e despesas da semana (segunda a domingo). Use quando perguntarem 'essa semana', 'semana passada', etc.",
+        parameters: {
+          type: "object",
+          properties: {
+            semana_offset: { type: "number", description: "0 = semana atual, -1 = semana passada, -2 = retrasada. Default: 0." },
+          },
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "resumo_customizado",
+        description: "Retorna totais de receitas/despesas para um período customizado (de/até). Use para consultas como 'de 01/08 até 15/08', 'últimos 3 meses', etc.",
+        parameters: {
+          type: "object",
+          properties: {
+            data_inicio: { type: "string", description: "Data início YYYY-MM-DD" },
+            data_fim: { type: "string", description: "Data fim YYYY-MM-DD" },
+          },
+          required: ["data_inicio", "data_fim"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "comparar_periodos",
+        description: "Compara dois períodos lado a lado (ex: este mês vs mês passado). Mostra variação percentual de receita, despesa e saldo.",
+        parameters: {
+          type: "object",
+          properties: {
+            periodo1_inicio: { type: "string", description: "Início do 1º período (YYYY-MM-DD) — período de referência/anterior" },
+            periodo1_fim: { type: "string", description: "Fim do 1º período (YYYY-MM-DD)" },
+            periodo2_inicio: { type: "string", description: "Início do 2º período (YYYY-MM-DD) — período atual/recente" },
+            periodo2_fim: { type: "string", description: "Fim do 2º período (YYYY-MM-DD)" },
+          },
+          required: ["periodo1_inicio", "periodo1_fim", "periodo2_inicio", "periodo2_fim"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "gastos_por_categoria",
+        description: "Retorna breakdown de gastos por categoria com percentuais. Use quando perguntarem 'onde estou gastando mais', 'categorias', 'distribuição de gastos'.",
+        parameters: {
+          type: "object",
+          properties: {
+            data_inicio: { type: "string", description: "Data início YYYY-MM-DD. Se omitido, usa 1º dia do mês atual." },
+            data_fim: { type: "string", description: "Data fim YYYY-MM-DD. Se omitido, usa hoje." },
+          },
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "gerar_grafico",
+        description: "Gera um gráfico (imagem) dos gastos. Retorna URL da imagem para enviar ao usuário. Use quando pedirem gráfico, visualização, ou quando o resumo tem muitas categorias.",
+        parameters: {
+          type: "object",
+          properties: {
+            tipo: { type: "string", enum: ["bar", "pizza"], description: "'bar' = barra últimos 7 dias, 'pizza' = por categoria" },
+            data: { type: "string", description: "Data referência YYYY-MM-DD (default: hoje)" },
+          },
+        },
+      },
+    },
   ];
 }
 
@@ -305,10 +391,56 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       case "resumo_periodo": {
         const mes = args.mes || new Date().getMonth() + 1;
         const ano = new Date().getFullYear();
-        const period = mes <= new Date().getMonth() + 1 ? "month" : "month";
-        const totals = await storage.getIncomeExpenseTotals(ctx.walletId, period);
-        const byCategory = await storage.getExpensesByCategory(ctx.walletId, period);
-        return JSON.stringify({ period: `${mes}/${ano}`, ...totals, expensesByCategory: byCategory });
+        const de = `${ano}-${String(mes).padStart(2, '0')}-01`;
+        const lastDay = new Date(ano, mes, 0).getDate();
+        const ate = `${ano}-${String(mes).padStart(2, '0')}-${lastDay}`;
+        const summary = await getPeriodSummary(ctx.walletId, de, ate);
+        const cats = await getCategoryBreakdown(ctx.walletId, de, ate);
+        return JSON.stringify({ period: `${mes}/${ano}`, de, ate, ...summary, categorias: cats });
+      }
+
+      case "resumo_dia": {
+        const data = args.data || new Date().toISOString().slice(0, 10);
+        const summary = await getDailySummary(ctx.walletId, data);
+        return JSON.stringify({ data, ...summary });
+      }
+
+      case "resumo_semana": {
+        const offset = args.semana_offset ?? 0;
+        const summary = await getWeeklySummary(ctx.walletId, offset);
+        return JSON.stringify(summary);
+      }
+
+      case "resumo_customizado": {
+        const summary = await getPeriodSummary(ctx.walletId, args.data_inicio, args.data_fim);
+        const cats = await getCategoryBreakdown(ctx.walletId, args.data_inicio, args.data_fim);
+        return JSON.stringify({ de: args.data_inicio, ate: args.data_fim, ...summary, categorias: cats });
+      }
+
+      case "comparar_periodos": {
+        const result = await comparePeriods(
+          ctx.walletId,
+          args.periodo1_inicio, args.periodo1_fim,
+          args.periodo2_inicio, args.periodo2_fim
+        );
+        return JSON.stringify(result);
+      }
+
+      case "gastos_por_categoria": {
+        const now = new Date();
+        const de = args.data_inicio || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+        const ate = args.data_fim || now.toISOString().slice(0, 10);
+        const cats = await getCategoryBreakdown(ctx.walletId, de, ate);
+        return JSON.stringify({ de, ate, categorias: cats });
+      }
+
+      case "gerar_grafico": {
+        const tipo = args.tipo || "bar";
+        const data = args.data || new Date().toISOString().slice(0, 10);
+        const baseUrl = process.env.BASE_URL || "http://localhost:5000";
+        // Gera URL do endpoint de chart existente (requer auth — usar API key interna)
+        const chartUrl = `${baseUrl}/api/charts/${tipo === "pizza" ? "pizza" : "bar"}?date=${data}`;
+        return JSON.stringify({ chart_url: chartUrl, tipo, data, instrucao: "Envie esta URL como imagem para o usuário." });
       }
 
       default:
