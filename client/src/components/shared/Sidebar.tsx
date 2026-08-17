@@ -19,7 +19,9 @@ import {
   BarChart3,
   DollarSign,
   Search,
-  Wrench
+  Wrench,
+  Building2,
+  TrendingUp
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { VersionDisplay } from "@/components/shared/VersionDisplay";
@@ -84,11 +86,14 @@ function Sidebar() {
   }, [theme]);
 
   const shouldShowAdminItems = userData?.tipo_usuario === 'super_admin' || userData?.tipo_usuario === 'admin';
-  
+
   // Verificar se deve aplicar offset do header admin (super admin direto OU impersonação ativa)
   const isDirectAdmin = userData?.tipo_usuario === 'super_admin';
   const isImpersonating = userData && 'isImpersonating' in userData && userData.isImpersonating;
   const shouldApplyAdminOffset = isDirectAdmin || isImpersonating;
+
+  // Verificar se usuário tem empresa PJ
+  const temEmpresa = userData?.tipo_pessoa === 'juridica';
 
   // Menu items do usuário
   const userMenuItems: MenuGroup[] = [
@@ -102,6 +107,16 @@ function Sidebar() {
         { icon: <CalendarDays className="mr-3 h-4 w-4" />, text: t('navigation.reminders', 'Lembretes'), path: "/reminders" },
       ]
     },
+    ...(temEmpresa ? [{
+      label: 'PJ / EMPRESARIAL',
+      items: [
+        { icon: <Building2 className="mr-3 h-4 w-4" />, text: 'Dashboard PJ', path: "/p/dashboard" },
+        { icon: <PlusCircle className="mr-3 h-4 w-4" />, text: 'Transações PJ', path: "/p/transacoes" },
+        { icon: <TrendingUp className="mr-3 h-4 w-4" />, text: 'Relatórios', path: "/p/relatorios" },
+        { icon: <Tag className="mr-3 h-4 w-4" />, text: 'Plano de Contas', path: "/p/categorias" },
+        { icon: <Building2 className="mr-3 h-4 w-4" />, text: 'Minhas Empresas', path: "/p/empresas" },
+      ]
+    }] : []),
     {
       label: t('navigation.sections.settings', 'CONFIGURAÇÕES'),
       items: [

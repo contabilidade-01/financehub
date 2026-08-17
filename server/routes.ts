@@ -1097,10 +1097,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Definir idioma como padrão
   app.put('/api/admin/localization/:localeCode/set-default', auth, requireSuperAdmin, localizationController.setDefaultLanguage);
 
+  // ==========================================
+  // PJ — ROTAS EMPRESAS / PLANO DE CONTAS / TRANSAÇÕES
+  // Convivem ao lado das rotas PF sem alterá-las.
+  // Auth: combinedAuth (cookie ou apikey) — mesmo padrão do PF.
+  // N8N usa POST /api/empresas/:id/transacoes com a mesma apikey do usuário.
+  // ==========================================
+
+  const empresaCtrl = await import("./controllers/empresa.controller");
+  const empresaContaCtrl = await import("./controllers/empresaConta.controller");
+  const empresaTransacaoCtrl = await import("./controllers/empresaTransacao.controller");
+
+  // CRUD de empresas
+  app.get("/api/empresas", combinedAuth, empresaCtrl.listEmpresas);
+  app.post("/api/empresas", combinedAuth, empresaCtrl.createEmpresa);
+  app.get("/api/empresas/:id", combinedAuth, empresaCtrl.getEmpresa);
+  app.put("/api/empresas/:id", combinedAuth, empresaCtrl.updateEmpresa);
+  app.delete("/api/empresas/:id", combinedAuth, empresaCtrl.deleteEmpresa);
+
+  // Plano de contas PJ
+  app.get("/api/empresas/:id/contas", combinedAuth, empresaContaCtrl.listEmpresasContas);
+  app.post("/api/empresas/:id/contas", combinedAuth, empresaContaCtrl.createEmpresaConta);
+  app.put("/api/empresas/:id/contas/:contaId", combinedAuth, empresaContaCtrl.updateEmpresaConta);
+  app.delete("/api/empresas/:id/contas/:contaId", combinedAuth, empresaContaCtrl.deleteEmpresaConta);
+
+  // Transações PJ (endpoint principal para o N8N)
+  app.post("/api/empresas/:id/transacoes", combinedAuth, empresaTransacaoCtrl.createEmpresaTransacao);
+  app.get("/api/empresas/:id/transacoes", combinedAuth, empresaTransacaoCtrl.listEmpresaTransacoes);
+  app.get("/api/empresas/:id/transacoes/:transacaoId", combinedAuth, empresaTransacaoCtrl.getEmpresaTransacao);
+  app.put("/api/empresas/:id/transacoes/:transacaoId", combinedAuth, empresaTransacaoCtrl.updateEmpresaTransacao);
+  app.delete("/api/empresas/:id/transacoes/:transacaoId", combinedAuth, empresaTransacaoCtrl.deleteEmpresaTransacao);
+
+  // Dashboard e relatórios PJ
+  app.get("/api/empresas/:id/dashboard/resumo", combinedAuth, empresaTransacaoCtrl.getEmpresaResumo);
+  app.get("/api/empresas/:id/relatorios/dre", combinedAuth, empresaTransacaoCtrl.getEmpresaDRE);
+
   const httpServer = createServer(app);
-  
+
   // Inicializar WebSocket server para notificações em tempo real
   initializeWebSocketServer(httpServer);
-  
+
   return httpServer;
 }

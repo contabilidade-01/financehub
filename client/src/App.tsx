@@ -54,6 +54,7 @@ import AdminBillingDashboard from "@/pages/admin/billing-dashboard";
 import PaymentSettingsPage from "@/pages/admin/payment-settings";
 import AdminPaymentsPage from "@/pages/admin/payments";
 import ExternalCheckout from "@/pages/checkout/ExternalCheckout";
+import PjRouter from "@/pages/pj/PjRouter";
 
 function Router() {
   const [location] = useLocation();
@@ -260,6 +261,13 @@ function Router() {
             <Route path="/billing/settings">
               <MainLayout>
                 <BillingSettingsPage />
+              </MainLayout>
+            </Route>
+
+            {/* PJ — Rotas empresariais */}
+            <Route path="/p/:rest*">
+              <MainLayout>
+                <PjRouter />
               </MainLayout>
             </Route>
           </>

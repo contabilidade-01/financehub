@@ -16,6 +16,9 @@ import {
   paymentTransactions,
   asaasWebhooks,
   historicoCancelamentos,
+  empresas,
+  empresasContas,
+  empresasTransacoes,
   getSaoPauloTimestamp,
   type User,
   type InsertUser,
@@ -50,7 +53,19 @@ import {
   type InsertPaymentTransaction,
   type UpdatePaymentTransaction,
   type AsaasWebhook,
-  type InsertAsaasWebhook
+  type InsertAsaasWebhook,
+  type Empresa,
+  type InsertEmpresa,
+  type UpdateEmpresa,
+  type EmpresaConta,
+  type InsertEmpresaConta,
+  type UpdateEmpresaConta,
+  type EmpresaTransacao,
+  type InsertEmpresaTransacao,
+  type UpdateEmpresaTransacao,
+  type EmpresaTransacaoWithDetails,
+  type EmpresaResumo,
+  type EmpresaDRE
 } from "@shared/schema";
 import { eq, and, desc, gte, lte, isNull, count, sum, sql, ne } from "drizzle-orm";
 
@@ -219,6 +234,34 @@ export interface IStorage {
 
   // Cancellation History methods
   createCancellationHistory(data: any): Promise<any>;
+
+  // ============================================
+  // PJ — EMPRESAS METHODS
+  // ============================================
+  // Convive com o PF. Nenhuma função acima é alterada.
+
+  // Empresa
+  createEmpresa(empresaData: InsertEmpresa): Promise<Empresa>;
+  getEmpresasByUsuarioId(usuarioId: number): Promise<Empresa[]>;
+  getEmpresaById(id: number): Promise<Empresa | undefined>;
+  updateEmpresa(id: number, empresaData: UpdateEmpresa): Promise<Empresa | undefined>;
+  deleteEmpresa(id: number): Promise<boolean>;
+  // EmpresaConta (plano de contas PJ)
+  seedEmpresasContas(empresaId: number): Promise<EmpresaConta[]>;
+  getEmpresasContasByEmpresaId(empresaId: number): Promise<EmpresaConta[]>;
+  getEmpresaContaById(id: number): Promise<EmpresaConta | undefined>;
+  createEmpresaConta(contaData: InsertEmpresaConta): Promise<EmpresaConta>;
+  updateEmpresaConta(id: number, contaData: UpdateEmpresaConta): Promise<EmpresaConta | undefined>;
+  deleteEmpresaConta(id: number): Promise<boolean>;
+  // EmpresaTransacao
+  createEmpresaTransacao(transacaoData: InsertEmpresaTransacao): Promise<EmpresaTransacaoWithDetails>;
+  getEmpresaTransacoesByEmpresaId(empresaId: number, opts?: { de?: string; ate?: string; limit?: number }): Promise<EmpresaTransacaoWithDetails[]>;
+  getEmpresaTransacaoById(id: number): Promise<EmpresaTransacaoWithDetails | undefined>;
+  updateEmpresaTransacao(id: number, transacaoData: UpdateEmpresaTransacao): Promise<EmpresaTransacaoWithDetails | undefined>;
+  deleteEmpresaTransacao(id: number): Promise<boolean>;
+  // Resumo / DRE
+  getEmpresaResumo(empresaId: number, opts?: { de?: string; ate?: string }): Promise<EmpresaResumo>;
+  getEmpresaDRE(empresaId: number, opts?: { de?: string; ate?: string }): Promise<EmpresaDRE>;
 }
 
 export class DbStorage implements IStorage {
@@ -1473,6 +1516,345 @@ export class DbStorage implements IStorage {
     }).returning();
     return result[0];
   }
+
+  // ============================================
+  // PJ — EMPRESAS METHODS (convive com PF; nada acima é alterado)
+  // ============================================
+
+  async createEmpresa(empresaData: InsertEmpresa): Promise<Empresa> {
+    const result = await db.insert(empresas).values({
+      ...empresaData,
+      created_at: new Date()
+    }).returning();
+    return result[0];
+  }
+
+  async getEmpresasByUsuarioId(usuarioId: number): Promise<Empresa[]> {
+    return db.select()
+      .from(empresas)
+      .where(eq(empresas.usuario_id, usuarioId))
+      .orderBy(desc(empresas.created_at));
+  }
+
+  async getEmpresaById(id: number): Promise<Empresa | undefined> {
+    const result = await db.select().from(empresas).where(eq(empresas.id, id)).limit(1);
+    return result[0];
+  }
+
+  async updateEmpresa(id: number, empresaData: UpdateEmpresa): Promise<Empresa | undefined> {
+    const result = await db.update(empresas)
+      .set({
+        ...empresaData,
+        updated_at: new Date()
+      })
+      .where(eq(empresas.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteEmpresa(id: number): Promise<boolean> {
+    const result = await db.delete(empresas).where(eq(empresas.id, id)).returning({ id: empresas.id });
+    return result.length > 0;
+  }
+
+  // Plano de contas padrão (Yampa-like), criado quando a empresa é cadastrada.
+  async seedEmpresasContas(empresaId: number): Promise<EmpresaConta[]> {
+    const seed: InsertEmpresaConta[] = [
+      // Receitas
+      { empresa_id: empresaId, codigo: '1.01', nome: 'Receita de Vendas',            tipo: 'Receita', classificacao: 'OUTRA',     icone: 'shopping-bag', cor: '#10B981', descricao: 'Vendas de mercadorias/produtos.' },
+      { empresa_id: empresaId, codigo: '1.02', nome: 'Receita de Serviços',          tipo: 'Receita', classificacao: 'OUTRA',     icone: 'briefcase',    cor: '#10B981', descricao: 'Prestação de serviços.' },
+      { empresa_id: empresaId, codigo: '1.03', nome: 'Outras Receitas Operacionais', tipo: 'Receita', classificacao: 'OUTRA',     icone: 'plus-circle',  cor: '#10B981', descricao: 'Receitas operacionais diversas.' },
+      { empresa_id: empresaId, codigo: '1.04', nome: 'Receitas Financeiras',        tipo: 'Receita', classificacao: 'OUTRA',     icone: 'trending-up',  cor: '#10B981', descricao: 'Rendimentos de aplicações, juros recebidos.' },
+
+      // Despesas Fixas
+      { empresa_id: empresaId, codigo: '2.01', nome: 'Folha de Pagamento',           tipo: 'Despesa', classificacao: 'FIXA',      icone: 'users',        cor: '#EF4444', descricao: 'Salários, encargos e benefícios.' },
+      { empresa_id: empresaId, codigo: '2.02', nome: 'Aluguel',                      tipo: 'Despesa', classificacao: 'FIXA',      icone: 'home',         cor: '#EF4444', descricao: 'Aluguel do imóvel comercial.' },
+      { empresa_id: empresaId, codigo: '2.03', nome: 'Energia / Água / Internet',    tipo: 'Despesa', classificacao: 'FIXA',      icone: 'zap',          cor: '#EF4444', descricao: 'Contas de consumo fixo.' },
+      { empresa_id: empresaId, codigo: '2.04', nome: 'Contabilidade',                tipo: 'Despesa', classificacao: 'FIXA',      icone: 'file-text',    cor: '#EF4444', descricao: 'Honorários contábeis.' },
+      { empresa_id: empresaId, codigo: '2.05', nome: 'Impostos e Taxas',             tipo: 'Despesa', classificacao: 'FIXA',      icone: 'percent',      cor: '#EF4444', descricao: 'Impostos fixos, taxas municipais.' },
+      { empresa_id: empresaId, codigo: '2.06', nome: 'Pró-labore / Retiradas',       tipo: 'Despesa', classificacao: 'FIXA',      icone: 'user-check',   cor: '#EF4444', descricao: 'Retirada dos sócios.' },
+
+      // Despesas Variáveis
+      { empresa_id: empresaId, codigo: '3.01', nome: 'Compras de Mercadoria (CMV)',  tipo: 'Despesa', classificacao: 'VARIAVEL',  icone: 'package',      cor: '#F59E0B', descricao: 'CMV — Custo da Mercadoria Vendida.' },
+      { empresa_id: empresaId, codigo: '3.02', nome: 'Matéria-prima / Insumos',      tipo: 'Despesa', classificacao: 'VARIAVEL',  icone: 'tool',         cor: '#F59E0B', descricao: 'Insumos para produção/serviço.' },
+      { empresa_id: empresaId, codigo: '3.03', nome: 'Comissão de Vendedores',       tipo: 'Despesa', classificacao: 'VARIAVEL',  icone: 'percent',      cor: '#F59E0B', descricao: 'Comissões variáveis sobre vendas.' },
+      { empresa_id: empresaId, codigo: '3.04', nome: 'Frete',                        tipo: 'Despesa', classificacao: 'VARIAVEL',  icone: 'truck',        cor: '#F59E0B', descricao: 'Fretes e logística variável.' },
+      { empresa_id: empresaId, codigo: '3.05', nome: 'Marketing / Anúncios',         tipo: 'Despesa', classificacao: 'VARIAVEL',  icone: 'megaphone',    cor: '#F59E0B', descricao: 'Mídia, tráfego pago, anúncios.' },
+      { empresa_id: empresaId, codigo: '3.06', nome: 'Despesas Financeiras',         tipo: 'Despesa', classificacao: 'VARIAVEL',  icone: 'credit-card',  cor: '#F59E0B', descricao: 'Juros, taxas bancárias, IOF.' },
+
+      // Outras
+      { empresa_id: empresaId, codigo: '4.01', nome: 'Outras Despesas Operacionais', tipo: 'Despesa', classificacao: 'OUTRA',     icone: 'more-horizontal', cor: '#6366F1', descricao: 'Demais despesas operacionais.' }
+    ];
+
+    if (seed.length === 0) return [];
+    const result = await db.insert(empresasContas).values(seed).returning();
+    return result;
+  }
+
+  async getEmpresasContasByEmpresaId(empresaId: number): Promise<EmpresaConta[]> {
+    return db.select()
+      .from(empresasContas)
+      .where(
+        and(
+          eq(empresasContas.empresa_id, empresaId),
+          eq(empresasContas.ativo, true)
+        )
+      )
+      .orderBy(empresasContas.codigo);
+  }
+
+  async getEmpresaContaById(id: number): Promise<EmpresaConta | undefined> {
+    const result = await db.select().from(empresasContas).where(eq(empresasContas.id, id)).limit(1);
+    return result[0];
+  }
+
+  async createEmpresaConta(contaData: InsertEmpresaConta): Promise<EmpresaConta> {
+    const result = await db.insert(empresasContas).values({
+      ...contaData,
+      created_at: new Date()
+    }).returning();
+    return result[0];
+  }
+
+  async updateEmpresaConta(id: number, contaData: UpdateEmpresaConta): Promise<EmpresaConta | undefined> {
+    const result = await db.update(empresasContas).set(contaData).where(eq(empresasContas.id, id)).returning();
+    return result[0];
+  }
+
+  async deleteEmpresaConta(id: number): Promise<boolean> {
+    // Bloqueia exclusão se houver transação vinculada
+    const used = await db.select({ count: count() }).from(empresasTransacoes).where(eq(empresasTransacoes.categoria_id, id));
+    if ((used[0]?.count ?? 0) > 0) return false;
+    const result = await db.delete(empresasContas).where(eq(empresasContas.id, id)).returning({ id: empresasContas.id });
+    return result.length > 0;
+  }
+
+  async createEmpresaTransacao(transacaoData: InsertEmpresaTransacao): Promise<EmpresaTransacaoWithDetails> {
+    const insertValues: any = {
+      ...transacaoData,
+      valor: typeof transacaoData.valor === 'number' ? transacaoData.valor.toString() : transacaoData.valor,
+      data_registro: new Date()
+    };
+
+    const result = await db.insert(empresasTransacoes).values(insertValues).returning();
+    const created = result[0];
+    const withDetails = await this.getEmpresaTransacaoById(created.id);
+    return withDetails || (created as EmpresaTransacaoWithDetails);
+  }
+
+  async getEmpresaTransacoesByEmpresaId(
+    empresaId: number,
+    opts: { de?: string; ate?: string; limit?: number } = {}
+  ): Promise<EmpresaTransacaoWithDetails[]> {
+    const conditions: any[] = [eq(empresasTransacoes.empresa_id, empresaId)];
+    if (opts.de) conditions.push(gte(empresasTransacoes.data_transacao, opts.de));
+    if (opts.ate) conditions.push(lte(empresasTransacoes.data_transacao, opts.ate));
+
+    let q = db.select({
+      id: empresasTransacoes.id,
+      empresa_id: empresasTransacoes.empresa_id,
+      carteira_id: empresasTransacoes.carteira_id,
+      categoria_id: empresasTransacoes.categoria_id,
+      forma_pagamento_id: empresasTransacoes.forma_pagamento_id,
+      descricao: empresasTransacoes.descricao,
+      valor: empresasTransacoes.valor,
+      tipo: empresasTransacoes.tipo,
+      data_transacao: empresasTransacoes.data_transacao,
+      data_registro: empresasTransacoes.data_registro,
+      status: empresasTransacoes.status,
+      metodo_pagamento: empresasTransacoes.metodo_pagamento,
+      origem: empresasTransacoes.origem,
+      categoria_nome: empresasContas.nome,
+      categoria_classificacao: empresasContas.classificacao,
+      categoria_codigo: empresasContas.codigo,
+      metodo_pagamento_nome: paymentMethods.nome
+    })
+      .from(empresasTransacoes)
+      .leftJoin(empresasContas, eq(empresasTransacoes.categoria_id, empresasContas.id))
+      .leftJoin(paymentMethods, eq(empresasTransacoes.forma_pagamento_id, paymentMethods.id))
+      .where(and(...conditions))
+      .orderBy(desc(empresasTransacoes.data_transacao), desc(empresasTransacoes.data_registro));
+
+    if (opts.limit) q = q.limit(opts.limit) as any;
+
+    const rows = await q;
+    return rows.map((r: any) => ({
+      ...r,
+      metodo_pagamento: r.metodo_pagamento_nome ?? r.metodo_pagamento ?? null
+    })) as EmpresaTransacaoWithDetails[];
+  }
+
+  async getEmpresaTransacaoById(id: number): Promise<EmpresaTransacaoWithDetails | undefined> {
+    const result = await db.select({
+      id: empresasTransacoes.id,
+      empresa_id: empresasTransacoes.empresa_id,
+      carteira_id: empresasTransacoes.carteira_id,
+      categoria_id: empresasTransacoes.categoria_id,
+      forma_pagamento_id: empresasTransacoes.forma_pagamento_id,
+      descricao: empresasTransacoes.descricao,
+      valor: empresasTransacoes.valor,
+      tipo: empresasTransacoes.tipo,
+      data_transacao: empresasTransacoes.data_transacao,
+      data_registro: empresasTransacoes.data_registro,
+      status: empresasTransacoes.status,
+      metodo_pagamento: empresasTransacoes.metodo_pagamento,
+      origem: empresasTransacoes.origem,
+      categoria_nome: empresasContas.nome,
+      categoria_classificacao: empresasContas.classificacao,
+      categoria_codigo: empresasContas.codigo,
+      metodo_pagamento_nome: paymentMethods.nome
+    })
+      .from(empresasTransacoes)
+      .leftJoin(empresasContas, eq(empresasTransacoes.categoria_id, empresasContas.id))
+      .leftJoin(paymentMethods, eq(empresasTransacoes.forma_pagamento_id, paymentMethods.id))
+      .where(eq(empresasTransacoes.id, id))
+      .limit(1);
+
+    const row = result[0];
+    if (!row) return undefined;
+    return {
+      ...row,
+      metodo_pagamento: (row as any).metodo_pagamento_nome ?? row.metodo_pagamento ?? null
+    } as EmpresaTransacaoWithDetails;
+  }
+
+  async updateEmpresaTransacao(id: number, transacaoData: UpdateEmpresaTransacao): Promise<EmpresaTransacaoWithDetails | undefined> {
+    const updateValues: any = { ...transacaoData };
+    if (typeof updateValues.valor === 'number') {
+      updateValues.valor = updateValues.valor.toString();
+    }
+    await db.update(empresasTransacoes).set(updateValues).where(eq(empresasTransacoes.id, id)).returning();
+    return this.getEmpresaTransacaoById(id);
+  }
+
+  async deleteEmpresaTransacao(id: number): Promise<boolean> {
+    const result = await db.delete(empresasTransacoes).where(eq(empresasTransacoes.id, id)).returning({ id: empresasTransacoes.id });
+    return result.length > 0;
+  }
+
+  async getEmpresaResumo(empresaId: number, opts: { de?: string; ate?: string } = {}): Promise<EmpresaResumo> {
+    const now = new Date();
+    const de = opts.de ?? new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+    const ate = opts.ate ?? new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+
+    const rows = await db.execute(sql`
+      SELECT
+        t.tipo,
+        c.classificacao,
+        COALESCE(SUM(t.valor::numeric), 0) AS total,
+        COUNT(t.id) AS qtd
+      FROM empresas_transacoes t
+      JOIN empresas_contas c ON t.categoria_id = c.id
+      WHERE t.empresa_id = ${empresaId}
+        AND t.data_transacao >= ${de}
+        AND t.data_transacao <= ${ate}
+      GROUP BY t.tipo, c.classificacao
+    `);
+
+    let entradas = 0;
+    let saidasFixas = 0;
+    let saidasVariaveis = 0;
+    let saidasOutras = 0;
+    let totalTransacoes = 0;
+
+    for (const row of rows as any[]) {
+      const total = parseFloat(row.total) || 0;
+      const qtd = parseInt(row.qtd) || 0;
+      totalTransacoes += qtd;
+      if (row.tipo === 'Receita') {
+        entradas += total;
+      } else if (row.tipo === 'Despesa') {
+        if (row.classificacao === 'FIXA') saidasFixas += total;
+        else if (row.classificacao === 'VARIAVEL') saidasVariaveis += total;
+        else saidasOutras += total;
+      }
+    }
+
+    const totalSaidas = saidasFixas + saidasVariaveis + saidasOutras;
+    const margemContribuicao = entradas - saidasVariaveis;
+    const lucroPrejuizo = entradas - totalSaidas;
+
+    const pct = (n: number, d: number): number | null => (d > 0 ? (n / d) * 100 : null);
+
+    return {
+      empresa_id: empresaId,
+      periodo: { de, ate },
+      entradas: round2(entradas),
+      saidas_fixas: round2(saidasFixas),
+      saidas_variaveis: round2(saidasVariaveis),
+      saidas_outras: round2(saidasOutras),
+      total_saidas: round2(totalSaidas),
+      margem_contribuicao: round2(margemContribuicao),
+      margem_contribuicao_pct: pct(margemContribuicao, entradas),
+      lucro_prejuizo: round2(lucroPrejuizo),
+      lucro_prejuizo_pct: pct(lucroPrejuizo, entradas),
+      total_transacoes: totalTransacoes
+    };
+  }
+
+  async getEmpresaDRE(empresaId: number, opts: { de?: string; ate?: string } = {}): Promise<EmpresaDRE> {
+    const now = new Date();
+    const de = opts.de ?? new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+    const ate = opts.ate ?? new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+
+    const rows = await db.execute(sql`
+      SELECT
+        c.classificacao,
+        COALESCE(SUM(t.valor::numeric), 0) AS total
+      FROM empresas_transacoes t
+      JOIN empresas_contas c ON t.categoria_id = c.id
+      WHERE t.empresa_id = ${empresaId}
+        AND t.tipo = 'Despesa'
+        AND t.data_transacao >= ${de}
+        AND t.data_transacao <= ${ate}
+      GROUP BY c.classificacao
+    `);
+
+    let receita = 0;
+    let variaveis = 0;
+    let fixas = 0;
+    let outras = 0;
+
+    // receita
+    const recRows = await db.execute(sql`
+      SELECT COALESCE(SUM(valor::numeric), 0) AS total
+      FROM empresas_transacoes
+      WHERE empresa_id = ${empresaId}
+        AND tipo = 'Receita'
+        AND data_transacao >= ${de}
+        AND data_transacao <= ${ate}
+    `);
+    receita = parseFloat((recRows as any[])[0]?.total) || 0;
+
+    for (const row of rows as any[]) {
+      const total = parseFloat(row.total) || 0;
+      if (row.classificacao === 'FIXA') fixas += total;
+      else if (row.classificacao === 'VARIAVEL') variaveis += total;
+      else outras += total;
+    }
+
+    const margem = receita - variaveis;
+    const lucro = receita - variaveis - fixas - outras;
+
+    const pct = (n: number, d: number): number | null => (d > 0 ? (n / d) * 100 : null);
+
+    return {
+      empresa_id: empresaId,
+      periodo: { de, ate },
+      receita_bruta: round2(receita),
+      despesas_variaveis: round2(variaveis),
+      margem_contribuicao: round2(margem),
+      margem_contribuicao_pct: pct(margem, receita),
+      despesas_fixas: round2(fixas),
+      outras_despesas: round2(outras),
+      lucro_prejuizo: round2(lucro),
+      lucro_prejuizo_pct: pct(lucro, receita)
+    };
+  }
+}
+
+function round2(n: number): number {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
 export const storage = new DbStorage();

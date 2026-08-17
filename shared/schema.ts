@@ -654,3 +654,187 @@ export enum AsaasEventType {
   PAYMENT_BANK_SLIP_VIEWED = "PAYMENT_BANK_SLIP_VIEWED",
   PAYMENT_CHECKOUT_VIEWED = "PAYMENT_CHECKOUT_VIEWED"
 }
+
+// ============================================
+// PJ (PESSOA JURÍDICA) — gestão financeira empresarial
+// ============================================
+// Convive ao lado das tabelas PF sem alterá-las. Modelo Yampa-like:
+// Entradas (Receitas) − Saídas Variáveis = Margem de Contribuição;
+// Entradas − Total Saídas = Lucro/Prejuízo.
+
+// Adiciona a coluna tipo_pessoa em usuarios (default 'fisica', não quebra nada existente).
+// Mantido em Drizzle para alinhamento; a migration correspondente fica em server/migrations/create_empresas_tables.ts.
+// Observação: a definição original da tabela `users` está acima e não é modificada — usamos uma extensão separada
+// somente para o PJ, evitando qualquer alteração no schema PF.
+
+// Tabela: empresas — pessoa jurídica administrada por um usuário do sistema.
+export const empresas = pgTable("empresas", {
+  id: serial("id").primaryKey(),
+  usuario_id: integer("usuario_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  razao_social: varchar("razao_social", { length: 255 }).notNull(),
+  nome_fantasia: varchar("nome_fantasia", { length: 255 }),
+  cnpj: varchar("cnpj", { length: 20 }).unique(),
+  regime_tributario: varchar("regime_tributario", { length: 50 }), // Simples | Presumido | Real
+  segmento: varchar("segmento", { length: 50 }),                   // servicos | comercio | misto
+  ativo: boolean("ativo").notNull().default(true),
+  created_at: timestamp("created_at", { withTimezone: true }).default(sql`(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')`),
+  updated_at: timestamp("updated_at", { withTimezone: true })
+});
+
+// Tabela: empresas_contas — plano de contas PJ por empresa (modelo Yampa-like).
+// 'classificacao' (FIXA | VARIAVEL | OUTRA) é o que viabiliza Margem de Contribuição.
+export const empresasContas = pgTable("empresas_contas", {
+  id: serial("id").primaryKey(),
+  empresa_id: integer("empresa_id").notNull().references(() => empresas.id, { onDelete: 'cascade' }),
+  codigo: varchar("codigo", { length: 20 }).notNull(),
+  nome: varchar("nome", { length: 255 }).notNull(),
+  tipo: varchar("tipo", { length: 10 }).notNull(),        // 'Receita' | 'Despesa'
+  classificacao: varchar("classificacao", { length: 30 }).notNull(), // 'FIXA' | 'VARIAVEL' | 'OUTRA'
+  parent_id: integer("parent_id"),
+  icone: varchar("icone", { length: 100 }),
+  cor: varchar("cor", { length: 50 }),
+  descricao: text("descricao"),
+  ativo: boolean("ativo").notNull().default(true),
+  created_at: timestamp("created_at", { withTimezone: true }).default(sql`(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')`)
+}, (table) => [
+  unique().on(table.empresa_id, table.codigo)
+]);
+
+// Tabela: empresas_transacoes — espelho de transacoes (PF), isolado por empresa.
+export const empresasTransacoes = pgTable("empresas_transacoes", {
+  id: serial("id").primaryKey(),
+  empresa_id: integer("empresa_id").notNull().references(() => empresas.id, { onDelete: 'cascade' }),
+  carteira_id: integer("carteira_id").references(() => wallets.id),
+  categoria_id: integer("categoria_id").notNull().references(() => empresasContas.id),
+  forma_pagamento_id: integer("forma_pagamento_id").references(() => paymentMethods.id),
+  descricao: varchar("descricao", { length: 255 }).notNull(),
+  valor: decimal("valor", { precision: 12, scale: 2 }).notNull(),
+  tipo: varchar("tipo", { length: 10 }).notNull(),
+  data_transacao: date("data_transacao").notNull(),
+  data_registro: timestamp("data_registro", { withTimezone: true }).default(sql`(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')`),
+  status: varchar("status", { length: 20 }).notNull().default('Efetivada'),
+  metodo_pagamento: varchar("metodo_pagamento", { length: 100 }),
+  origem: varchar("origem", { length: 20 }).notNull().default('manual') // 'manual' | 'whatsapp'
+});
+
+// ----- Schemas Zod PJ -----
+
+const empresaContaTipoSchema = z.string().refine(
+  (v) => v === 'Receita' || v === 'Despesa',
+  { message: "tipo deve ser 'Receita' ou 'Despesa'" }
+);
+
+const empresaContaClassificacaoSchema = z.string().refine(
+  (v) => v === 'FIXA' || v === 'VARIAVEL' || v === 'OUTRA',
+  { message: "classificacao deve ser 'FIXA', 'VARIAVEL' ou 'OUTRA'" }
+);
+
+export const insertEmpresaSchema = z.object({
+  usuario_id: z.number().int().optional(),
+  razao_social: z.string().min(1, { message: 'Razão social é obrigatória' }),
+  nome_fantasia: z.string().optional().nullable(),
+  cnpj: z.string().optional().nullable(),
+  regime_tributario: z.string().optional().nullable(),
+  segmento: z.string().optional().nullable(),
+  ativo: z.boolean().optional().default(true)
+});
+
+export const updateEmpresaSchema = insertEmpresaSchema.partial();
+
+export const insertEmpresaContaSchema = z.object({
+  empresa_id: z.number().int().optional(),
+  codigo: z.string().min(1, { message: 'Código é obrigatório' }),
+  nome: z.string().min(1, { message: 'Nome é obrigatório' }),
+  tipo: empresaContaTipoSchema,
+  classificacao: empresaContaClassificacaoSchema,
+  parent_id: z.number().int().optional().nullable(),
+  icone: z.string().optional().nullable(),
+  cor: z.string().optional().nullable(),
+  descricao: z.string().optional().nullable(),
+  ativo: z.boolean().optional().default(true)
+});
+
+export const updateEmpresaContaSchema = insertEmpresaContaSchema.partial();
+
+export const insertEmpresaTransacaoSchema = z.object({
+  empresa_id: z.number().int().optional(),
+  carteira_id: flexibleNumberSchema.optional(),
+  categoria_id: flexibleNumberSchema,
+  forma_pagamento_id: flexibleNumberSchema.optional(),
+  descricao: z.string().min(1, { message: 'Descrição é obrigatória' }),
+  valor: flexibleNumberSchema,
+  tipo: z.string().transform(normalizeTransactionType),
+  data_transacao: z.string().transform(normalizeDateFormat),
+  status: z.string().optional(),
+  metodo_pagamento: z.string().optional().nullable(),
+  origem: z.string().optional().default('manual')
+});
+
+export const updateEmpresaTransacaoSchema = z.object({
+  categoria_id: flexibleNumberSchema.optional(),
+  forma_pagamento_id: flexibleNumberSchema.optional(),
+  descricao: z.string().min(1).optional(),
+  valor: flexibleNumberSchema.optional(),
+  tipo: z.string().transform(normalizeTransactionType).optional(),
+  data_transacao: z.string().transform(normalizeDateFormat).optional(),
+  status: z.string().optional(),
+  metodo_pagamento: z.string().optional().nullable(),
+  origem: z.string().optional()
+});
+
+// ----- Types PJ -----
+
+export type Empresa = typeof empresas.$inferSelect;
+export type InsertEmpresa = z.infer<typeof insertEmpresaSchema>;
+export type UpdateEmpresa = z.infer<typeof updateEmpresaSchema>;
+
+export type EmpresaConta = typeof empresasContas.$inferSelect;
+export type InsertEmpresaConta = z.infer<typeof insertEmpresaContaSchema>;
+export type UpdateEmpresaConta = z.infer<typeof updateEmpresaContaSchema>;
+
+export type EmpresaTransacao = typeof empresasTransacoes.$inferSelect;
+export type InsertEmpresaTransacao = z.infer<typeof insertEmpresaTransacaoSchema>;
+export type UpdateEmpresaTransacao = z.infer<typeof updateEmpresaTransacaoSchema>;
+
+export type EmpresaTransacaoWithDetails = EmpresaTransacao & {
+  categoria_nome?: string;
+  categoria_classificacao?: string;
+  categoria_codigo?: string;
+  metodo_pagamento?: string;
+};
+
+// Enum para classificação das contas PJ (usado no frontend)
+export enum EmpresaContaClassificacao {
+  FIXA = 'FIXA',
+  VARIAVEL = 'VARIAVEL',
+  OUTRA = 'OUTRA'
+}
+
+// Resumo (dashboard) — entradas, saídas por classificação, margens e DRE
+export interface EmpresaResumo {
+  empresa_id: number;
+  periodo: { de: string; ate: string };
+  entradas: number;
+  saidas_fixas: number;
+  saidas_variaveis: number;
+  saidas_outras: number;
+  total_saidas: number;
+  margem_contribuicao: number;
+  margem_contribuicao_pct: number | null;
+  lucro_prejuizo: number;
+  lucro_prejuizo_pct: number | null;
+  total_transacoes: number;
+}
+
+export interface EmpresaDRE {
+  empresa_id: number;
+  periodo: { de: string; ate: string };
+  receita_bruta: number;
+  despesas_variaveis: number;
+  margem_contribuicao: number;
+  margem_contribuicao_pct: number | null;
+  despesas_fixas: number;
+  outras_despesas: number;
+  lucro_prejuizo: number;
+  lucro_prejuizo_pct: number | null;
+}
