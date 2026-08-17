@@ -838,3 +838,49 @@ export interface EmpresaDRE {
   lucro_prejuizo: number;
   lucro_prejuizo_pct: number | null;
 }
+
+// ============================================
+// METAS FINANCEIRAS — caixinhas, sonhos, orçamentos
+// ============================================
+
+export const metasFinanceiras = pgTable("metas_financeiras", {
+  id: serial("id").primaryKey(),
+  usuario_id: integer("usuario_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  titulo: varchar("titulo", { length: 255 }).notNull(),
+  tipo: varchar("tipo", { length: 30 }).notNull(), // 'caixinha' | 'sonho' | 'reserva' | 'limite_categoria'
+  valor_alvo: decimal("valor_alvo", { precision: 12, scale: 2 }).notNull(),
+  valor_atual: decimal("valor_atual", { precision: 12, scale: 2 }).notNull().default("0.00"),
+  prazo: date("prazo"),
+  categoria_id: integer("categoria_id").references(() => categories.id),
+  recorrencia: varchar("recorrencia", { length: 20 }), // 'diario' | 'semanal' | 'mensal' | null
+  valor_recorrencia: decimal("valor_recorrencia", { precision: 12, scale: 2 }),
+  ativo: boolean("ativo").notNull().default(true),
+  created_at: timestamp("created_at", { withTimezone: true }).default(sql`(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')`)
+});
+
+// Schemas Zod
+export const insertMetaSchema = z.object({
+  usuario_id: z.number().int().optional(),
+  titulo: z.string().min(1),
+  tipo: z.enum(["caixinha", "sonho", "reserva", "limite_categoria"]),
+  valor_alvo: z.number().positive(),
+  valor_atual: z.number().optional().default(0),
+  prazo: z.string().optional().nullable(),
+  categoria_id: z.number().int().optional().nullable(),
+  recorrencia: z.enum(["diario", "semanal", "mensal"]).optional().nullable(),
+  valor_recorrencia: z.number().optional().nullable(),
+  ativo: z.boolean().optional().default(true)
+});
+
+export const updateMetaSchema = insertMetaSchema.partial();
+
+// Types
+export type MetaFinanceira = typeof metasFinanceiras.$inferSelect;
+export type InsertMeta = z.infer<typeof insertMetaSchema>;
+export type UpdateMeta = z.infer<typeof updateMetaSchema>;
+
+export interface MetaComProgresso extends MetaFinanceira {
+  progresso_pct: number;
+  falta: number;
+  meses_restantes: number | null;
+}

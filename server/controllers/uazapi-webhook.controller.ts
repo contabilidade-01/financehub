@@ -62,6 +62,17 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
       return; // Ignorar mensagens enviadas por nós ou inválidas
     }
 
+    // Ignorar mensagens de GRUPO (chatid termina em @g.us)
+    if (body.message.chatid.endsWith("@g.us")) {
+      return; // Bot só responde em conversas privadas
+    }
+
+    // Ignorar tipos de mensagem não processáveis
+    const supportedTypes = ["Conversation", "ExtendedTextMessage", "AudioMessage", "ImageMessage", "DocumentMessage"];
+    if (!supportedTypes.includes(body.message.messageType)) {
+      return; // ReactionMessage, StickerMessage, etc — ignorar silenciosamente
+    }
+
     const { BaseUrl, token, message } = body;
     const { chatid, messageType, text, messageid, senderName } = message;
 

@@ -1,5 +1,5 @@
 import axios from "axios";
-import { storage, getDailySummary, getPeriodSummary, getWeeklySummary, getCategoryBreakdown, comparePeriods } from "../storage";
+import { storage, getDailySummary, getPeriodSummary, getWeeklySummary, getCategoryBreakdown, comparePeriods, createMeta, getMetasByUsuarioId, depositarMeta, verificarOrcamentos } from "../storage";
 import { FINANCIAL_AGENT_SYSTEM_PROMPT, buildDynamicContext } from "../prompts/financial-agent";
 import { insertTransactionSchema } from "@shared/schema";
 
@@ -308,6 +308,57 @@ function buildTools() {
         },
       },
     },
+    {
+      type: "function" as const,
+      function: {
+        name: "criar_meta",
+        description: "Cria uma meta financeira (caixinha para guardar dinheiro, sonho, reserva de emergência, ou limite de gastos por categoria). Exemplos: 'quero guardar R$1000/mês pra viajar', 'limite R$500 em alimentação'.",
+        parameters: {
+          type: "object",
+          properties: {
+            titulo: { type: "string", description: "Nome da meta (ex: 'Viagem Europa', 'Reserva Emergência', 'Limite Alimentação')" },
+            tipo: { type: "string", enum: ["caixinha", "sonho", "reserva", "limite_categoria"], description: "Tipo: caixinha (guardar dinheiro), sonho (objetivo de longo prazo), reserva (emergência), limite_categoria (orçamento por categoria)" },
+            valor_alvo: { type: "number", description: "Valor total da meta em R$ (ex: 10000 para R$10.000)" },
+            prazo: { type: "string", description: "Data limite YYYY-MM-DD (opcional)" },
+            categoria: { type: "string", description: "Nome da categoria (obrigatório se tipo=limite_categoria, ex: 'Alimentação')" },
+            recorrencia: { type: "string", enum: ["diario", "semanal", "mensal"], description: "Frequência para guardar (opcional)" },
+            valor_recorrencia: { type: "number", description: "Quanto guardar por período (ex: 500 = R$500/mês)" },
+          },
+          required: ["titulo", "tipo", "valor_alvo"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "depositar_meta",
+        description: "Adiciona/deposita um valor em uma meta/caixinha existente. Use quando o usuário disser 'deposita X na caixinha', 'guardei X no sonho', etc.",
+        parameters: {
+          type: "object",
+          properties: {
+            meta_id: { type: "number", description: "ID da meta (pergunte qual se houver mais de uma)" },
+            valor: { type: "number", description: "Valor a depositar em R$" },
+          },
+          required: ["meta_id", "valor"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "listar_metas",
+        description: "Lista todas as metas/caixinhas/sonhos/limites do usuário com progresso atual. Use quando perguntarem 'como estão minhas metas', 'quanto falta', 'meus objetivos'.",
+        parameters: { type: "object", properties: {} },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "verificar_orcamento",
+        description: "Verifica se o usuário está dentro dos limites de orçamento definidos por categoria. Mostra quanto gastou vs limite. Use quando perguntarem 'tô no limite?', 'estourei o orçamento?', 'como estão meus limites'.",
+        parameters: { type: "object", properties: {} },
+      },
+    },
   ];
 }
 
@@ -374,11 +425,13 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       }
 
       case "insere_lembrete": {
+        // Converter string para Date (Drizzle precisa de objeto Date para timestamp)
+        const dataLembrete = new Date(args.data_lembrete || new Date().toISOString());
         const reminder = await storage.createReminder({
           usuario_id: ctx.userId,
           titulo: args.titulo || "Lembrete",
           descricao: args.descricao || "",
-          data_lembrete: args.data_lembrete || new Date().toISOString(),
+          data_lembrete: dataLembrete,
         } as any);
         return JSON.stringify({ success: true, id: reminder.id, ...args });
       }
@@ -441,6 +494,58 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         // Gera URL do endpoint de chart existente (requer auth — usar API key interna)
         const chartUrl = `${baseUrl}/api/charts/${tipo === "pizza" ? "pizza" : "bar"}?date=${data}`;
         return JSON.stringify({ chart_url: chartUrl, tipo, data, instrucao: "Envie esta URL como imagem para o usuário." });
+      }
+
+      case "criar_meta": {
+        // Resolver categoria_id se tipo = limite_categoria
+        let categoriaId: number | null = null;
+        if (args.tipo === "limite_categoria" && args.categoria) {
+          const cat = ctx.categories.find(c => c.nome.toLowerCase() === args.categoria.toLowerCase());
+          categoriaId = cat?.id || null;
+        }
+
+        const meta = await createMeta(ctx.userId, {
+          titulo: args.titulo,
+          tipo: args.tipo,
+          valor_alvo: args.valor_alvo,
+          prazo: args.prazo || null,
+          categoria_id: categoriaId,
+          recorrencia: args.recorrencia || null,
+          valor_recorrencia: args.valor_recorrencia || null,
+        });
+        return JSON.stringify({ success: true, id: meta.id, titulo: meta.titulo, tipo: meta.tipo, valor_alvo: args.valor_alvo });
+      }
+
+      case "depositar_meta": {
+        const meta = await depositarMeta(args.meta_id, args.valor);
+        if (!meta) return JSON.stringify({ error: "Meta não encontrada" });
+        const alvo = parseFloat(meta.valor_alvo as string) || 0;
+        const atual = parseFloat(meta.valor_atual as string) || 0;
+        const pct = alvo > 0 ? Math.round((atual / alvo) * 100) : 0;
+        return JSON.stringify({ success: true, id: meta.id, titulo: meta.titulo, valor_depositado: args.valor, valor_atual: atual, valor_alvo: alvo, progresso_pct: pct });
+      }
+
+      case "listar_metas": {
+        const metas = await getMetasByUsuarioId(ctx.userId);
+        if (metas.length === 0) return JSON.stringify({ metas: [], mensagem: "Nenhuma meta cadastrada." });
+        return JSON.stringify({ metas: metas.map(m => ({
+          id: m.id,
+          titulo: m.titulo,
+          tipo: m.tipo,
+          valor_alvo: parseFloat(m.valor_alvo as string),
+          valor_atual: parseFloat(m.valor_atual as string),
+          progresso_pct: m.progresso_pct,
+          falta: m.falta,
+          meses_restantes: m.meses_restantes,
+          prazo: m.prazo,
+          recorrencia: m.recorrencia
+        }))});
+      }
+
+      case "verificar_orcamento": {
+        const orcamentos = await verificarOrcamentos(ctx.userId, ctx.walletId);
+        if (orcamentos.length === 0) return JSON.stringify({ mensagem: "Nenhum limite de orçamento definido. Use 'criar_meta' com tipo 'limite_categoria' para definir." });
+        return JSON.stringify({ orcamentos });
       }
 
       default:

@@ -65,7 +65,12 @@ import {
   type UpdateEmpresaTransacao,
   type EmpresaTransacaoWithDetails,
   type EmpresaResumo,
-  type EmpresaDRE
+  type EmpresaDRE,
+  metasFinanceiras,
+  type MetaFinanceira,
+  type InsertMeta,
+  type UpdateMeta,
+  type MetaComProgresso
 } from "@shared/schema";
 import { eq, and, desc, gte, lte, isNull, count, sum, sql, ne } from "drizzle-orm";
 
@@ -1851,6 +1856,142 @@ export class DbStorage implements IStorage {
       lucro_prejuizo_pct: pct(lucro, receita)
     };
   }
+}
+
+// ============================================
+// METAS FINANCEIRAS — caixinhas, sonhos, orçamentos
+// ============================================
+
+export async function createMeta(userId: number, metaData: InsertMeta): Promise<MetaFinanceira> {
+  const result = await db.insert(metasFinanceiras).values({
+    ...metaData,
+    usuario_id: userId,
+    valor_alvo: metaData.valor_alvo.toString(),
+    valor_atual: (metaData.valor_atual || 0).toString(),
+    valor_recorrencia: metaData.valor_recorrencia ? metaData.valor_recorrencia.toString() : null,
+    created_at: new Date()
+  } as any).returning();
+  return result[0];
+}
+
+export async function getMetasByUsuarioId(userId: number): Promise<MetaComProgresso[]> {
+  const metas = await db.select()
+    .from(metasFinanceiras)
+    .where(and(eq(metasFinanceiras.usuario_id, userId), eq(metasFinanceiras.ativo, true)))
+    .orderBy(desc(metasFinanceiras.created_at));
+
+  return metas.map(m => {
+    const alvo = parseFloat(m.valor_alvo as string) || 0;
+    const atual = parseFloat(m.valor_atual as string) || 0;
+    const falta = Math.max(0, alvo - atual);
+    const progresso = alvo > 0 ? Math.min(100, (atual / alvo) * 100) : 0;
+
+    // Calcular meses restantes baseado na recorrência
+    let mesesRestantes: number | null = null;
+    const valorRec = parseFloat(m.valor_recorrencia as string) || 0;
+    if (valorRec > 0 && falta > 0) {
+      mesesRestantes = Math.ceil(falta / valorRec);
+    }
+
+    return {
+      ...m,
+      progresso_pct: Math.round(progresso * 10) / 10,
+      falta: Math.round(falta * 100) / 100,
+      meses_restantes: mesesRestantes
+    };
+  });
+}
+
+export async function getMetaById(id: number): Promise<MetaFinanceira | undefined> {
+  const result = await db.select().from(metasFinanceiras).where(eq(metasFinanceiras.id, id)).limit(1);
+  return result[0];
+}
+
+export async function depositarMeta(id: number, valor: number): Promise<MetaFinanceira | undefined> {
+  const meta = await getMetaById(id);
+  if (!meta) return undefined;
+  const novoValor = (parseFloat(meta.valor_atual as string) || 0) + valor;
+  const result = await db.update(metasFinanceiras)
+    .set({ valor_atual: novoValor.toString() } as any)
+    .where(eq(metasFinanceiras.id, id))
+    .returning();
+  return result[0];
+}
+
+export async function updateMeta(id: number, data: UpdateMeta): Promise<MetaFinanceira | undefined> {
+  const updateValues: any = { ...data };
+  if (data.valor_alvo) updateValues.valor_alvo = data.valor_alvo.toString();
+  if (data.valor_atual !== undefined) updateValues.valor_atual = data.valor_atual.toString();
+  if (data.valor_recorrencia) updateValues.valor_recorrencia = data.valor_recorrencia.toString();
+  const result = await db.update(metasFinanceiras).set(updateValues).where(eq(metasFinanceiras.id, id)).returning();
+  return result[0];
+}
+
+export async function deleteMeta(id: number): Promise<boolean> {
+  const result = await db.update(metasFinanceiras)
+    .set({ ativo: false })
+    .where(eq(metasFinanceiras.id, id))
+    .returning();
+  return result.length > 0;
+}
+
+// Verifica orçamento: compara gastos do mês atual por categoria vs metas tipo 'limite_categoria'
+export async function verificarOrcamentos(userId: number, walletId: number): Promise<{ categoria: string; limite: number; gasto: number; percentual: number; status: string }[]> {
+  // Buscar metas tipo limite_categoria ativas
+  const limites = await db.select()
+    .from(metasFinanceiras)
+    .where(and(
+      eq(metasFinanceiras.usuario_id, userId),
+      eq(metasFinanceiras.tipo, 'limite_categoria'),
+      eq(metasFinanceiras.ativo, true)
+    ));
+
+  if (limites.length === 0) return [];
+
+  // Período: mês atual
+  const now = new Date();
+  const de = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  const ate = now.toISOString().slice(0, 10);
+
+  const results: { categoria: string; limite: number; gasto: number; percentual: number; status: string }[] = [];
+
+  for (const limite of limites) {
+    if (!limite.categoria_id) continue;
+
+    // Buscar gasto na categoria no mês
+    const rows = await db.execute(sql`
+      SELECT COALESCE(SUM(valor::numeric), 0) AS total
+      FROM transacoes
+      WHERE carteira_id = ${walletId}
+        AND categoria_id = ${limite.categoria_id}
+        AND tipo = 'Despesa'
+        AND data_transacao >= ${de}
+        AND data_transacao <= ${ate}
+    `);
+
+    const gasto = parseFloat((rows as any[])[0]?.total) || 0;
+    const limiteVal = parseFloat(limite.valor_alvo as string) || 0;
+    const pct = limiteVal > 0 ? (gasto / limiteVal) * 100 : 0;
+
+    // Buscar nome da categoria
+    const cat = await db.select().from(categories).where(eq(categories.id, limite.categoria_id)).limit(1);
+    const catNome = cat[0]?.nome || 'Desconhecida';
+
+    let status = '✅ OK';
+    if (pct >= 100) status = '🚨 ESTOURADO';
+    else if (pct >= 80) status = '⚠️ ATENÇÃO';
+    else if (pct >= 60) status = '📊 Moderado';
+
+    results.push({
+      categoria: catNome,
+      limite: Math.round(limiteVal * 100) / 100,
+      gasto: Math.round(gasto * 100) / 100,
+      percentual: Math.round(pct * 10) / 10,
+      status
+    });
+  }
+
+  return results;
 }
 
 function round2(n: number): number {
