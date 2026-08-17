@@ -15,6 +15,23 @@ import bcrypt from "bcryptjs";
  * 5. Resposta via UazAPI
  */
 
+// Debounce: evita processar a mesma mensagem 2x (UazAPI pode enviar duplicados)
+const processedMessages = new Map<string, number>();
+const DEBOUNCE_TTL = 30000; // 30 segundos
+
+function isDuplicate(messageId: string): boolean {
+  const now = Date.now();
+  // Limpar entradas antigas a cada 100 mensagens
+  if (processedMessages.size > 100) {
+    for (const [key, ts] of processedMessages) {
+      if (now - ts > DEBOUNCE_TTL) processedMessages.delete(key);
+    }
+  }
+  if (processedMessages.has(messageId)) return true;
+  processedMessages.set(messageId, now);
+  return false;
+}
+
 interface UazapiWebhookBody {
   BaseUrl: string;
   token: string;
@@ -47,6 +64,12 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
 
     const { BaseUrl, token, message } = body;
     const { chatid, messageType, text, messageid, senderName } = message;
+
+    // Debounce: ignorar mensagem duplicada
+    if (isDuplicate(messageid)) {
+      console.log(`[UazAPI Webhook] Mensagem duplicada ignorada: ${messageid}`);
+      return;
+    }
 
     console.log(`[UazAPI Webhook] ${messageType} de ${senderName} (${chatid}): "${text?.slice(0, 50)}..."`);
 
@@ -107,7 +130,7 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
       case "AudioMessage": {
         console.log(`[UazAPI Webhook] Transcrevendo áudio...`);
         const audioData = await uazapiService.downloadMedia(BaseUrl, token, messageid);
-        resolvedText = await transcribeAudio(audioData.base64Data);
+        resolvedText = await transcribeAudio(audioData.base64Data, audioData.mimetype);
         console.log(`[UazAPI Webhook] Transcrição: "${resolvedText.slice(0, 80)}..."`);
         break;
       }

@@ -20,9 +20,23 @@ import { insertTransactionSchema } from "@shared/schema";
 /**
  * Transcreve áudio usando OpenAI Whisper (gpt-4o-transcribe)
  */
-export async function transcribeAudio(base64Data: string): Promise<string> {
+export async function transcribeAudio(base64Data: string, mimetype?: string): Promise<string> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY não configurada");
+
+  // Determinar extensão pelo mimetype
+  const mimeToExt: Record<string, string> = {
+    "audio/ogg": "ogg",
+    "audio/mpeg": "mp3",
+    "audio/mp4": "m4a",
+    "audio/opus": "ogg",
+    "audio/wav": "wav",
+    "audio/webm": "webm",
+    "audio/x-m4a": "m4a",
+    "video/mp4": "mp4",
+  };
+  const ext = mimeToExt[mimetype || ""] || "ogg";
+  const contentType = mimetype || "audio/ogg";
 
   // Converte base64 para Buffer
   const buffer = Buffer.from(base64Data, "base64");
@@ -30,7 +44,7 @@ export async function transcribeAudio(base64Data: string): Promise<string> {
   // Cria FormData com o arquivo
   const FormData = (await import("form-data")).default;
   const form = new FormData();
-  form.append("file", buffer, { filename: "audio.ogg", contentType: "audio/ogg" });
+  form.append("file", buffer, { filename: `audio.${ext}`, contentType });
   form.append("model", "gpt-4o-transcribe");
 
   const response = await axios.post(
