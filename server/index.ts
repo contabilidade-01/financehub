@@ -176,4 +176,11 @@ app.use((req, res, next) => {
   log(`🔌 Servidor rodando na porta ${port}`);
 
   server.listen(port);
+
+  // Inicializar alertas proativos (WhatsApp) — roda a cada 1h
+  import("./jobs/proactive-alerts.job").then(({ initializeAlerts }) => {
+    initializeAlerts();
+  }).catch(err => {
+    console.error("[Alerts] Falha ao carregar módulo de alertas:", err.message);
+  });
 })();
