@@ -23,7 +23,12 @@ const createFormSchema = (t: (key: string, fallback: string) => string) => inser
   nome: z.string().min(1, t('validation.name_required', 'Name is required')),
   descricao: z.string().optional(),
   icone: z.string().optional(),
-  cor: z.string().optional()
+  cor: z.string().optional(),
+  limite: z.string().optional(),
+  dia_fechamento: z.string().optional(),
+  dia_vencimento: z.string().optional(),
+  bandeira: z.string().optional(),
+  ultimos_digitos: z.string().optional(),
 });
 
 type FormData = z.infer<ReturnType<typeof createFormSchema>>;
@@ -341,7 +346,7 @@ export default function PaymentMethodsPage() {
                       </FormItem>
                     )}
                   />
-                  
+
                   <FormField
                     control={form.control}
                     name="cor"
@@ -350,6 +355,78 @@ export default function PaymentMethodsPage() {
                         <FormLabel>{t('common.color', 'Cor')}</FormLabel>
                         <FormControl>
                           <Input type="color" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {/* Campos de Cartão de Crédito */}
+                <div className="border-t pt-4 mt-4">
+                  <p className="text-sm font-medium text-muted-foreground mb-3">💳 Dados do Cartão (opcional)</p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="limite"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Limite (R$)</FormLabel>
+                          <FormControl>
+                            <Input type="number" step="0.01" placeholder="5000.00" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="bandeira"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Bandeira</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Visa, Mastercard, Elo" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="dia_fechamento"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Dia Fechamento</FormLabel>
+                          <FormControl>
+                            <Input type="number" min="1" max="31" placeholder="3" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="dia_vencimento"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Dia Vencimento</FormLabel>
+                          <FormControl>
+                            <Input type="number" min="1" max="31" placeholder="10" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  <FormField
+                    control={form.control}
+                    name="ultimos_digitos"
+                    render={({ field }) => (
+                      <FormItem className="mt-3">
+                        <FormLabel>Últimos 4 dígitos</FormLabel>
+                        <FormControl>
+                          <Input maxLength={4} placeholder="1234" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>

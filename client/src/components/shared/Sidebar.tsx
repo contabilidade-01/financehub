@@ -102,8 +102,10 @@ function Sidebar() {
       items: [
         { icon: <LayoutDashboard className="mr-3 h-4 w-4" />, text: t('navigation.dashboard', 'Dashboard'), path: "/" },
         { icon: <PlusCircle className="mr-3 h-4 w-4" />, text: t('navigation.transactions', 'Transações'), path: "/transactions" },
+        { icon: <TrendingUp className="mr-3 h-4 w-4" />, text: 'Contas a Pagar', path: "/contas-pagar" },
+        { icon: <Building2 className="mr-3 h-4 w-4" />, text: 'Metas e Sonhos', path: "/metas" },
         { icon: <BarChart3 className="mr-3 h-4 w-4" />, text: t('navigation.reports', 'Relatórios'), path: "/reports" },
-        { icon: <CreditCard className="mr-3 h-4 w-4" />, text: t('navigation.payment_methods', 'Formas de Pagamento'), path: "/payment-methods" },
+        { icon: <CreditCard className="mr-3 h-4 w-4" />, text: t('navigation.payment_methods', 'Cartões e Pagamentos'), path: "/payment-methods" },
         { icon: <CalendarDays className="mr-3 h-4 w-4" />, text: t('navigation.reminders', 'Lembretes'), path: "/reminders" },
       ]
     },

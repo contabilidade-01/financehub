@@ -55,6 +55,8 @@ import PaymentSettingsPage from "@/pages/admin/payment-settings";
 import AdminPaymentsPage from "@/pages/admin/payments";
 import ExternalCheckout from "@/pages/checkout/ExternalCheckout";
 import PjRouter from "@/pages/pj/PjRouter";
+import MetasPage from "@/pages/metas";
+import ContasPagarPage from "@/pages/contas-pagar";
 
 function Router() {
   const [location] = useLocation();
@@ -176,6 +178,16 @@ function Router() {
             <Route path="/payment-methods">
               <MainLayout>
                 <PaymentMethods />
+              </MainLayout>
+            </Route>
+            <Route path="/metas">
+              <MainLayout>
+                <MetasPage />
+              </MainLayout>
+            </Route>
+            <Route path="/contas-pagar">
+              <MainLayout>
+                <ContasPagarPage />
               </MainLayout>
             </Route>
             <Route path="/subscription/cancel">

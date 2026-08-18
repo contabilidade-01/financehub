@@ -1098,6 +1098,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put('/api/admin/localization/:localeCode/set-default', auth, requireSuperAdmin, localizationController.setDefaultLanguage);
 
   // ==========================================
+  // METAS FINANCEIRAS + CONTAS A PAGAR
+  // ==========================================
+
+  // Metas (caixinhas, sonhos, reservas, limites)
+  app.get("/api/metas", combinedAuth, async (req: Request, res: Response) => {
+    try {
+      const { getMetasByUsuarioId } = await import("./storage");
+      const metas = await getMetasByUsuarioId(req.user!.id);
+      res.json(metas);
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.post("/api/metas", combinedAuth, async (req: Request, res: Response) => {
+    try {
+      const { createMeta } = await import("./storage");
+      const meta = await createMeta(req.user!.id, req.body);
+      res.status(201).json(meta);
+    } catch (err: any) { res.status(400).json({ error: err.message }); }
+  });
+
+  app.post("/api/metas/:id/depositar", combinedAuth, async (req: Request, res: Response) => {
+    try {
+      const { depositarMeta } = await import("./storage");
+      const result = await depositarMeta(parseInt(req.params.id), req.body.valor);
+      if (!result) return res.status(404).json({ error: "Meta não encontrada" });
+      res.json(result);
+    } catch (err: any) { res.status(400).json({ error: err.message }); }
+  });
+
+  app.delete("/api/metas/:id", combinedAuth, async (req: Request, res: Response) => {
+    try {
+      const { deleteMeta } = await import("./storage");
+      await deleteMeta(parseInt(req.params.id));
+      res.status(204).send();
+    } catch (err: any) { res.status(400).json({ error: err.message }); }
+  });
+
+  // Contas a pagar (lista transações pendentes com data_vencimento)
+  app.get("/api/contas-pagar", combinedAuth, async (req: Request, res: Response) => {
+    try {
+      const { getContasAPagar } = await import("./storage");
+      const wallet = await storage.getWalletByUserId(req.user!.id);
+      if (!wallet) return res.status(404).json({ error: "Carteira não encontrada" });
+      const status = (req.query.status as string) || undefined;
+      const contas = await getContasAPagar(wallet.id, status as any);
+      res.json(contas);
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  // Marcar transação como paga
+  app.put("/api/transactions/:id/pagar", combinedAuth, async (req: Request, res: Response) => {
+    try {
+      const { marcarComoPaga } = await import("./storage");
+      const result = await marcarComoPaga(parseInt(req.params.id));
+      if (!result) return res.status(404).json({ error: "Transação não encontrada" });
+      res.json(result);
+    } catch (err: any) { res.status(400).json({ error: err.message }); }
+  });
+
+  // Marcar como recorrente
+  app.put("/api/transactions/:id/recorrente", combinedAuth, async (req: Request, res: Response) => {
+    try {
+      const { marcarRecorrente } = await import("./storage");
+      const result = await marcarRecorrente(parseInt(req.params.id), req.body.recorrente ?? true);
+      if (!result) return res.status(404).json({ error: "Transação não encontrada" });
+      res.json(result);
+    } catch (err: any) { res.status(400).json({ error: err.message }); }
+  });
+
+  // Fluxo de caixa resumo
+  app.get("/api/fluxo-caixa/resumo", combinedAuth, async (req: Request, res: Response) => {
+    try {
+      const { getFluxoCaixaResumo } = await import("./storage");
+      const wallet = await storage.getWalletByUserId(req.user!.id);
+      if (!wallet) return res.status(404).json({ error: "Carteira não encontrada" });
+      const mes = req.query.mes ? parseInt(req.query.mes as string) : undefined;
+      const ano = req.query.ano ? parseInt(req.query.ano as string) : undefined;
+      const resumo = await getFluxoCaixaResumo(wallet.id, mes, ano);
+      res.json(resumo);
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  // ==========================================
   // PJ — ROTAS EMPRESAS / PLANO DE CONTAS / TRANSAÇÕES
   // Convivem ao lado das rotas PF sem alterá-las.
   // Auth: combinedAuth (cookie ou apikey) — mesmo padrão do PF.
