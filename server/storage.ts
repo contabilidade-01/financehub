@@ -1998,6 +1998,26 @@ export async function verificarOrcamentos(userId: number, walletId: number): Pro
 // CONTAS A PAGAR + FLUXO DE CAIXA
 // ============================================
 
+/**
+ * Cria o plano de contas pessoal para um novo usuário (cópia do template base).
+ * Cada usuário recebe seu próprio plano — pode editar/excluir sem afetar outros.
+ */
+export async function seedPlanoContasPessoal(userId: number): Promise<void> {
+  const { PLANO_CONTAS_BASE } = await import("./data/plano-contas-base");
+
+  for (const cat of PLANO_CONTAS_BASE) {
+    await db.insert(categories).values({
+      nome: cat.nome,
+      tipo: cat.tipo,
+      cor: cat.cor,
+      icone: cat.icone,
+      descricao: cat.descricao,
+      usuario_id: userId,
+      global: false,
+    }).onConflictDoNothing();
+  }
+}
+
 export async function getContasAPagar(walletId: number, status?: 'pendente' | 'atrasada' | 'proximas'): Promise<any[]> {
   const today = new Date().toISOString().slice(0, 10);
   let condition = '';

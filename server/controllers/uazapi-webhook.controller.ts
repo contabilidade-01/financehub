@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { storage } from "../storage";
+import { seedPlanoContasPessoal } from "../storage";
 import { uazapiService } from "../services/uazapi.service";
 import { transcribeAudio, analyzeWithGemini, runAgent } from "../services/ai-agent.service";
 import bcrypt from "bcryptjs";
@@ -110,6 +111,10 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
         nome: "Principal",
         descricao: "Carteira principal criada automaticamente",
       });
+
+      // Criar plano de contas pessoal (cópia do template base — editável pelo usuário)
+      await seedPlanoContasPessoal(user.id);
+      console.log(`[UazAPI Webhook] Plano de contas pessoal criado para user ${user.id}`);
 
       // Enviar mensagem de boas-vindas
       // Buscar mensagem customizada se existir (welcome_messages table)
