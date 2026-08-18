@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, CheckCircle2, AlertTriangle, Clock, Calendar } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -27,11 +26,9 @@ export default function ContasPagarPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [showForm, setShowForm] = useState(false);
-  const [tab, setTab] = useState("todas");
 
-  const { data: contas = [], isLoading } = useQuery<ContaPagar[]>({
-    queryKey: ["/api/contas-pagar", tab],
-    queryFn: () => fetch(`/api/contas-pagar?status=${tab}`).then(r => r.json()),
+  const { data: contas = [], isLoading, error } = useQuery<ContaPagar[]>({
+    queryKey: ["/api/contas-pagar"],
   });
 
   const createMut = useMutation({
@@ -156,6 +153,13 @@ export default function ContasPagarPage() {
       {/* Lista de contas */}
       {isLoading ? (
         <p className="text-muted-foreground">Carregando...</p>
+      ) : error ? (
+        <Card>
+          <CardContent className="flex flex-col items-center gap-4 py-12">
+            <AlertTriangle className="h-12 w-12 text-amber-500" />
+            <p className="text-muted-foreground">Erro ao carregar contas. Tente recarregar a página.</p>
+          </CardContent>
+        </Card>
       ) : contas.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-4 py-12">

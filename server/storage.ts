@@ -2161,36 +2161,43 @@ export async function seedPlanoContasPessoal(userId: number): Promise<void> {
 
 export async function getContasAPagar(walletId: number, status?: 'pendente' | 'atrasada' | 'proximas'): Promise<any[]> {
   const today = new Date().toISOString().slice(0, 10);
-  let condition = '';
+  const tresDias = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10);
 
-  if (status === 'atrasada') {
-    condition = `AND t.data_vencimento < '${today}'`;
-  } else if (status === 'proximas') {
-    const tresDias = new Date();
-    tresDias.setDate(tresDias.getDate() + 3);
-    condition = `AND t.data_vencimento >= '${today}' AND t.data_vencimento <= '${tresDias.toISOString().slice(0, 10)}'`;
-  } else {
-    condition = `AND t.data_vencimento >= '${today}'`;
+  try {
+    // Query simples — busca todas as pendentes com vencimento, depois filtra em JS
+    const rows = await db.execute(sql`
+      SELECT t.id, t.descricao, t.valor, t.data_vencimento, t.data_transacao,
+             t.recorrente, t.classificacao_despesa, t.status,
+             c.nome AS categoria
+      FROM transacoes t
+      LEFT JOIN categorias c ON t.categoria_id = c.id
+      WHERE t.carteira_id = ${walletId}
+        AND t.status = 'Pendente'
+        AND t.data_vencimento IS NOT NULL
+      ORDER BY t.data_vencimento ASC
+    `);
+
+    // Classificar urgência e filtrar em JS (evita sql.raw)
+    const result = (rows as any[]).map(r => {
+      const venc = r.data_vencimento;
+      let urgencia = 'futura';
+      if (venc < today) urgencia = 'atrasada';
+      else if (venc <= tresDias) urgencia = 'proxima';
+      return { ...r, urgencia };
+    });
+
+    // Filtrar por status se informado
+    if (status === 'atrasada') return result.filter(r => r.urgencia === 'atrasada');
+    if (status === 'proximas') return result.filter(r => r.urgencia === 'proxima');
+    return result;
+  } catch (err: any) {
+    // Se coluna data_vencimento não existe ainda (migration não rodou), retorna vazio
+    if (err.message?.includes('data_vencimento') || err.message?.includes('column')) {
+      console.warn('[getContasAPagar] Coluna data_vencimento não existe ainda. Rode a migration.');
+      return [];
+    }
+    throw err;
   }
-
-  const rows = await db.execute(sql.raw(`
-    SELECT t.id, t.descricao, t.valor, t.data_vencimento, t.data_transacao,
-           t.recorrente, t.classificacao_despesa, t.status,
-           c.nome AS categoria,
-           CASE
-             WHEN t.data_vencimento < '${today}' THEN 'atrasada'
-             WHEN t.data_vencimento <= '${new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10)}' THEN 'proxima'
-             ELSE 'futura'
-           END AS urgencia
-    FROM transacoes t
-    LEFT JOIN categorias c ON t.categoria_id = c.id
-    WHERE t.carteira_id = ${walletId}
-      AND t.status = 'Pendente'
-      AND t.data_vencimento IS NOT NULL
-      ${condition}
-    ORDER BY t.data_vencimento ASC
-  `));
-  return rows as any[];
 }
 
 export async function marcarComoPaga(transacaoId: number): Promise<any> {
