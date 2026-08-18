@@ -1994,6 +1994,160 @@ export async function verificarOrcamentos(userId: number, walletId: number): Pro
   return results;
 }
 
+// ============================================
+// CONTAS A PAGAR + FLUXO DE CAIXA
+// ============================================
+
+export async function getContasAPagar(walletId: number, status?: 'pendente' | 'atrasada' | 'proximas'): Promise<any[]> {
+  const today = new Date().toISOString().slice(0, 10);
+  let condition = '';
+
+  if (status === 'atrasada') {
+    condition = `AND t.data_vencimento < '${today}'`;
+  } else if (status === 'proximas') {
+    const tresDias = new Date();
+    tresDias.setDate(tresDias.getDate() + 3);
+    condition = `AND t.data_vencimento >= '${today}' AND t.data_vencimento <= '${tresDias.toISOString().slice(0, 10)}'`;
+  } else {
+    condition = `AND t.data_vencimento >= '${today}'`;
+  }
+
+  const rows = await db.execute(sql.raw(`
+    SELECT t.id, t.descricao, t.valor, t.data_vencimento, t.data_transacao,
+           t.recorrente, t.classificacao_despesa, t.status,
+           c.nome AS categoria,
+           CASE
+             WHEN t.data_vencimento < '${today}' THEN 'atrasada'
+             WHEN t.data_vencimento <= '${new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10)}' THEN 'proxima'
+             ELSE 'futura'
+           END AS urgencia
+    FROM transacoes t
+    LEFT JOIN categorias c ON t.categoria_id = c.id
+    WHERE t.carteira_id = ${walletId}
+      AND t.status = 'Pendente'
+      AND t.data_vencimento IS NOT NULL
+      ${condition}
+    ORDER BY t.data_vencimento ASC
+  `));
+  return rows as any[];
+}
+
+export async function marcarComoPaga(transacaoId: number): Promise<any> {
+  const today = new Date().toISOString().slice(0, 10);
+  const result = await db.execute(sql`
+    UPDATE transacoes
+    SET status = 'Efetivada', data_pagamento = ${today}
+    WHERE id = ${transacaoId}
+    RETURNING *
+  `);
+  return (result as any[])[0];
+}
+
+export async function marcarRecorrente(transacaoId: number, recorrente: boolean): Promise<any> {
+  const classificacao = recorrente ? 'fixa' : 'variavel';
+  const result = await db.execute(sql`
+    UPDATE transacoes
+    SET recorrente = ${recorrente}, classificacao_despesa = ${classificacao}
+    WHERE id = ${transacaoId}
+    RETURNING *
+  `);
+  return (result as any[])[0];
+}
+
+export async function getFluxoCaixaResumo(walletId: number, mes?: number, ano?: number): Promise<{
+  renda: number;
+  dizimos: number;
+  sonhos_depositos: number;
+  despesas_fixas: number;
+  despesas_variaveis: number;
+  sobra: number;
+  contas_pendentes: number;
+  contas_atrasadas: number;
+}> {
+  const now = new Date();
+  const m = mes || (now.getMonth() + 1);
+  const a = ano || now.getFullYear();
+  const de = `${a}-${String(m).padStart(2, '0')}-01`;
+  const lastDay = new Date(a, m, 0).getDate();
+  const ate = `${a}-${String(m).padStart(2, '0')}-${lastDay}`;
+  const today = now.toISOString().slice(0, 10);
+
+  // Renda (receitas do mês)
+  const rendaRows = await db.execute(sql`
+    SELECT COALESCE(SUM(valor::numeric), 0) AS total
+    FROM transacoes WHERE carteira_id = ${walletId} AND tipo = 'Receita'
+      AND data_transacao >= ${de} AND data_transacao <= ${ate}
+  `);
+  const renda = parseFloat((rendaRows as any[])[0]?.total) || 0;
+
+  // Dízimos e Ofertas (categoria específica)
+  const dizimosRows = await db.execute(sql`
+    SELECT COALESCE(SUM(t.valor::numeric), 0) AS total
+    FROM transacoes t
+    JOIN categorias c ON t.categoria_id = c.id
+    WHERE t.carteira_id = ${walletId} AND t.tipo = 'Despesa'
+      AND (c.nome ILIKE '%dízimo%' OR c.nome ILIKE '%dizimo%' OR c.nome ILIKE '%oferta%')
+      AND t.data_transacao >= ${de} AND t.data_transacao <= ${ate}
+  `);
+  const dizimos = parseFloat((dizimosRows as any[])[0]?.total) || 0;
+
+  // Sonhos (depósitos em metas no mês — calculado pela diferença de valor_atual)
+  // Simplificado: soma de metas.valor_recorrencia * 1 (se mensal) para o mês
+  const sonhosRows = await db.execute(sql`
+    SELECT COALESCE(SUM(valor_recorrencia::numeric), 0) AS total
+    FROM metas_financeiras
+    WHERE usuario_id = (SELECT usuario_id FROM carteiras WHERE id = ${walletId})
+      AND ativo = true AND tipo IN ('caixinha', 'sonho', 'reserva')
+      AND recorrencia = 'mensal'
+  `);
+  const sonhos = parseFloat((sonhosRows as any[])[0]?.total) || 0;
+
+  // Despesas fixas (recorrente=true OU classificacao_despesa='fixa')
+  const fixasRows = await db.execute(sql`
+    SELECT COALESCE(SUM(valor::numeric), 0) AS total
+    FROM transacoes WHERE carteira_id = ${walletId} AND tipo = 'Despesa'
+      AND (recorrente = true OR classificacao_despesa = 'fixa')
+      AND data_transacao >= ${de} AND data_transacao <= ${ate}
+  `);
+  const fixas = parseFloat((fixasRows as any[])[0]?.total) || 0;
+
+  // Despesas variáveis (não fixa, não dízimo)
+  const variaveisRows = await db.execute(sql`
+    SELECT COALESCE(SUM(t.valor::numeric), 0) AS total
+    FROM transacoes t
+    LEFT JOIN categorias c ON t.categoria_id = c.id
+    WHERE t.carteira_id = ${walletId} AND t.tipo = 'Despesa'
+      AND (t.recorrente = false OR t.recorrente IS NULL)
+      AND (t.classificacao_despesa IS NULL OR t.classificacao_despesa = 'variavel')
+      AND NOT (c.nome ILIKE '%dízimo%' OR c.nome ILIKE '%dizimo%' OR c.nome ILIKE '%oferta%')
+      AND t.data_transacao >= ${de} AND t.data_transacao <= ${ate}
+  `);
+  const variaveis = parseFloat((variaveisRows as any[])[0]?.total) || 0;
+
+  // Contas pendentes e atrasadas
+  const pendentesRows = await db.execute(sql`
+    SELECT
+      COUNT(*) FILTER (WHERE data_vencimento IS NOT NULL AND status = 'Pendente') AS pendentes,
+      COUNT(*) FILTER (WHERE data_vencimento < ${today} AND status = 'Pendente') AS atrasadas
+    FROM transacoes WHERE carteira_id = ${walletId}
+  `);
+  const pendentes = parseInt((pendentesRows as any[])[0]?.pendentes) || 0;
+  const atrasadas = parseInt((pendentesRows as any[])[0]?.atrasadas) || 0;
+
+  const sobra = renda - dizimos - sonhos - fixas - variaveis;
+
+  return {
+    renda: Math.round(renda * 100) / 100,
+    dizimos: Math.round(dizimos * 100) / 100,
+    sonhos_depositos: Math.round(sonhos * 100) / 100,
+    despesas_fixas: Math.round(fixas * 100) / 100,
+    despesas_variaveis: Math.round(variaveis * 100) / 100,
+    sobra: Math.round(sobra * 100) / 100,
+    contas_pendentes: pendentes,
+    contas_atrasadas: atrasadas
+  };
+}
+
 function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }

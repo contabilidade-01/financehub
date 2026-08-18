@@ -1,5 +1,5 @@
 import axios from "axios";
-import { storage, getDailySummary, getPeriodSummary, getWeeklySummary, getCategoryBreakdown, comparePeriods, createMeta, getMetasByUsuarioId, depositarMeta, verificarOrcamentos } from "../storage";
+import { storage, getDailySummary, getPeriodSummary, getWeeklySummary, getCategoryBreakdown, comparePeriods, createMeta, getMetasByUsuarioId, depositarMeta, verificarOrcamentos, getContasAPagar, marcarComoPaga, marcarRecorrente, getFluxoCaixaResumo } from "../storage";
 import { FINANCIAL_AGENT_SYSTEM_PROMPT, buildDynamicContext } from "../prompts/financial-agent";
 import { insertTransactionSchema } from "@shared/schema";
 
@@ -359,6 +359,80 @@ function buildTools() {
         parameters: { type: "object", properties: {} },
       },
     },
+    {
+      type: "function" as const,
+      function: {
+        name: "criar_conta_pagar",
+        description: "Cria uma conta a pagar (despesa futura com data de vencimento). Use quando disserem 'tenho uma conta de X pra pagar dia Y', 'vence dia Z'. A transação fica com status Pendente até ser paga.",
+        parameters: {
+          type: "object",
+          properties: {
+            descricao: { type: "string", description: "Descrição da conta (ex: 'Aluguel', 'Internet', 'Cartão')" },
+            valor: { type: "number", description: "Valor da conta" },
+            data_vencimento: { type: "string", description: "Data de vencimento YYYY-MM-DD" },
+            categoria: { type: "string", description: "Categoria da despesa" },
+            recorrente: { type: "boolean", description: "Se é uma conta fixa mensal (true) ou pontual (false)" },
+          },
+          required: ["descricao", "valor", "data_vencimento"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "listar_contas_pagar",
+        description: "Lista contas a pagar pendentes, organizadas por urgência (atrasadas, próximas, futuras). Use quando perguntarem 'quais minhas contas', 'o que tenho pra pagar', 'contas do mês'.",
+        parameters: {
+          type: "object",
+          properties: {
+            filtro: { type: "string", enum: ["todas", "atrasadas", "proximas"], description: "Filtro: 'atrasadas' (vencidas), 'proximas' (3 dias), 'todas' (default)" },
+          },
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "pagar_conta",
+        description: "Marca uma conta como paga (status Efetivada + data_pagamento = hoje). Use quando disserem 'paguei a conta de X', 'quitei o aluguel'.",
+        parameters: {
+          type: "object",
+          properties: {
+            id_transacao: { type: "number", description: "ID da conta/transação a marcar como paga" },
+          },
+          required: ["id_transacao"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "marcar_recorrente",
+        description: "Marca uma despesa como fixa/recorrente (acontece todo mês). Use quando disserem 'o aluguel é fixo', 'internet é mensal', etc.",
+        parameters: {
+          type: "object",
+          properties: {
+            id_transacao: { type: "number", description: "ID da transação" },
+            recorrente: { type: "boolean", description: "true = fixa mensal, false = variável/pontual" },
+          },
+          required: ["id_transacao", "recorrente"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "fluxo_caixa",
+        description: "Mostra o fluxo de caixa do mês: Renda → Dízimos → Sonhos → Fixas → Variáveis → Sobra. Use quando perguntarem 'como está meu fluxo', 'sobra quanto', 'distribuição do mês'.",
+        parameters: {
+          type: "object",
+          properties: {
+            mes: { type: "number", description: "Mês (1-12). Default: mês atual." },
+            ano: { type: "number", description: "Ano. Default: ano atual." },
+          },
+        },
+      },
+    },
   ];
 }
 
@@ -546,6 +620,63 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         const orcamentos = await verificarOrcamentos(ctx.userId, ctx.walletId);
         if (orcamentos.length === 0) return JSON.stringify({ mensagem: "Nenhum limite de orçamento definido. Use 'criar_meta' com tipo 'limite_categoria' para definir." });
         return JSON.stringify({ orcamentos });
+      }
+
+      case "criar_conta_pagar": {
+        const cat = ctx.categories.find(c => c.nome.toLowerCase() === (args.categoria || "").toLowerCase() && c.tipo === 'Despesa')
+          || ctx.categories.find(c => c.nome === "Outros" && c.tipo === "Despesa");
+        const categoriaId = cat?.id || ctx.categories[0]?.id;
+
+        const txData = {
+          carteira_id: ctx.walletId,
+          categoria_id: categoriaId,
+          descricao: args.descricao,
+          valor: args.valor,
+          tipo: "Despesa",
+          data_transacao: args.data_vencimento,
+          data_vencimento: args.data_vencimento,
+          status: "Pendente",
+          recorrente: args.recorrente || false,
+          classificacao_despesa: args.recorrente ? "fixa" : "variavel",
+        };
+
+        const result = await storage.createTransaction(txData as any);
+        return JSON.stringify({ success: true, id: result.id, ...txData, categoria: cat?.nome, msg: "Conta a pagar criada!" });
+      }
+
+      case "listar_contas_pagar": {
+        const filtro = args.filtro || "todas";
+        let contas;
+        if (filtro === "atrasadas") {
+          contas = await getContasAPagar(ctx.walletId, "atrasada");
+        } else if (filtro === "proximas") {
+          contas = await getContasAPagar(ctx.walletId, "proximas");
+        } else {
+          // Todas: busca atrasadas + próximas + futuras
+          const atrasadas = await getContasAPagar(ctx.walletId, "atrasada");
+          const proximas = await getContasAPagar(ctx.walletId, "proximas");
+          const futuras = await getContasAPagar(ctx.walletId, "pendente");
+          contas = [...atrasadas.map(c => ({...c, urgencia: 'atrasada'})), ...proximas.map(c => ({...c, urgencia: 'proxima'})), ...futuras];
+        }
+        if (!contas || contas.length === 0) return JSON.stringify({ mensagem: "Nenhuma conta pendente! 🎉" });
+        return JSON.stringify({ contas, total: contas.length });
+      }
+
+      case "pagar_conta": {
+        const result = await marcarComoPaga(args.id_transacao);
+        if (!result) return JSON.stringify({ error: "Transação não encontrada" });
+        return JSON.stringify({ success: true, id: args.id_transacao, msg: "Conta marcada como paga! ✅" });
+      }
+
+      case "marcar_recorrente": {
+        const result = await marcarRecorrente(args.id_transacao, args.recorrente);
+        if (!result) return JSON.stringify({ error: "Transação não encontrada" });
+        return JSON.stringify({ success: true, id: args.id_transacao, recorrente: args.recorrente, msg: args.recorrente ? "Marcada como despesa fixa 🔒" : "Marcada como despesa variável 🔄" });
+      }
+
+      case "fluxo_caixa": {
+        const resumo = await getFluxoCaixaResumo(ctx.walletId, args.mes, args.ano);
+        return JSON.stringify(resumo);
       }
 
       default:

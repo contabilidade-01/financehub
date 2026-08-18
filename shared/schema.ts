@@ -81,7 +81,12 @@ export const transactions = pgTable("transacoes", {
   data_registro: timestamp("data_registro", { withTimezone: true }).default(sql`(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')`),
   descricao: varchar("descricao", { length: 255 }).notNull(),
   metodo_pagamento: varchar("metodo_pagamento", { length: 100 }),
-  status: varchar("status", { length: 20 }).notNull().default("Pendente")
+  status: varchar("status", { length: 20 }).notNull().default("Pendente"),
+  // Contas a pagar / Fluxo de caixa
+  data_vencimento: date("data_vencimento"),                                    // quando a conta vence
+  data_pagamento: date("data_pagamento"),                                      // quando foi efetivamente paga
+  recorrente: boolean("recorrente").notNull().default(false),                  // despesa fixa mensal
+  classificacao_despesa: varchar("classificacao_despesa", { length: 20 })      // 'fixa' | 'variavel' | null
 });
 
 // API Tokens table
