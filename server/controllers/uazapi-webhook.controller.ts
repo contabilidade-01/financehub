@@ -145,27 +145,47 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
 
       case "AudioMessage": {
         console.log(`[UazAPI Webhook] Transcrevendo áudio...`);
-        const audioData = await uazapiService.downloadMedia(BaseUrl, token, messageid);
-        resolvedText = await transcribeAudio(audioData.base64Data, audioData.mimetype);
-        console.log(`[UazAPI Webhook] Transcrição: "${resolvedText.slice(0, 80)}..."`);
+        try {
+          const audioData = await uazapiService.downloadMedia(BaseUrl, token, messageid);
+          resolvedText = await transcribeAudio(audioData.base64Data, audioData.mimetype);
+          console.log(`[UazAPI Webhook] Transcrição: "${resolvedText.slice(0, 80)}..."`);
+        } catch (audioErr: any) {
+          console.error(`[UazAPI Webhook] ❌ Erro ao transcrever áudio:`, audioErr.message);
+          await uazapiService.sendText(BaseUrl, token, chatid,
+            "🎙️ Não consegui entender esse áudio. Pode tentar enviar novamente?\n\n_Dicas:_\n• Fale mais perto do microfone\n• Evite locais com muito ruído\n• Ou digite a mensagem por texto");
+          return;
+        }
         break;
       }
 
       case "ImageMessage": {
         console.log(`[UazAPI Webhook] Analisando imagem...`);
-        const imgData = await uazapiService.downloadMedia(BaseUrl, token, messageid);
-        const imgText = await analyzeWithGemini(imgData.base64Data, imgData.mimetype, "image");
-        // Se tem legenda (text), concatenar
-        resolvedText = text ? `${imgText}, ${text}` : imgText;
-        console.log(`[UazAPI Webhook] Análise imagem: "${resolvedText.slice(0, 80)}..."`);
+        try {
+          const imgData = await uazapiService.downloadMedia(BaseUrl, token, messageid);
+          const imgText = await analyzeWithGemini(imgData.base64Data, imgData.mimetype, "image");
+          resolvedText = text ? `${imgText}, ${text}` : imgText;
+          console.log(`[UazAPI Webhook] Análise imagem: "${resolvedText.slice(0, 80)}..."`);
+        } catch (imgErr: any) {
+          console.error(`[UazAPI Webhook] ❌ Erro ao analisar imagem:`, imgErr.message);
+          await uazapiService.sendText(BaseUrl, token, chatid,
+            "📷 Não consegui ler essa imagem. Pode tentar enviar novamente?\n\n_Dicas:_\n• Tire a foto com boa iluminação\n• Certifique-se que o texto/valores estejam legíveis\n• Ou digite os valores manualmente");
+          return;
+        }
         break;
       }
 
       case "DocumentMessage": {
         console.log(`[UazAPI Webhook] Analisando documento...`);
-        const docData = await uazapiService.downloadMedia(BaseUrl, token, messageid);
-        resolvedText = await analyzeWithGemini(docData.base64Data, docData.mimetype, "document");
-        console.log(`[UazAPI Webhook] Análise doc: "${resolvedText.slice(0, 80)}..."`);
+        try {
+          const docData = await uazapiService.downloadMedia(BaseUrl, token, messageid);
+          resolvedText = await analyzeWithGemini(docData.base64Data, docData.mimetype, "document");
+          console.log(`[UazAPI Webhook] Análise doc: "${resolvedText.slice(0, 80)}..."`);
+        } catch (docErr: any) {
+          console.error(`[UazAPI Webhook] ❌ Erro ao analisar documento:`, docErr.message);
+          await uazapiService.sendText(BaseUrl, token, chatid,
+            "📄 Não consegui ler esse documento. Pode tentar enviar novamente?\n\n_Dicas:_\n• Formatos aceitos: PDF, imagens de notas fiscais\n• Se for um documento muito longo, tente enviar só a parte relevante\n• Ou digite os valores manualmente");
+          return;
+        }
         break;
       }
 
@@ -176,6 +196,8 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
 
     if (!resolvedText.trim()) {
       console.log(`[UazAPI Webhook] Mensagem vazia após resolução`);
+      await uazapiService.sendText(BaseUrl, token, chatid,
+        "🤔 Recebi sua mensagem mas não consegui identificar nenhum conteúdo. Pode repetir?\n\nVocê pode:\n• Enviar texto (ex: _gastei 50 no mercado_)\n• Enviar áudio descrevendo o gasto\n• Enviar foto de nota fiscal/cupom");
       return;
     }
 
@@ -185,6 +207,8 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
     const wallet = await storage.getWalletByUserId(user.id);
     if (!wallet) {
       console.error(`[UazAPI Webhook] Wallet não encontrada para user ${user.id}`);
+      await uazapiService.sendText(BaseUrl, token, chatid,
+        "⚠️ Houve um problema com sua conta. Entre em contato com o suporte.");
       return;
     }
 
@@ -199,31 +223,44 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
     // ============================================
     // 4. CHAMAR AGENTE IA
     // ============================================
-    console.log(`[UazAPI Webhook] Chamando agente IA para user ${user.id}...`);
-    const agentResponse = await runAgent(resolvedText, agentContext);
-    console.log(`[UazAPI Webhook] Resposta agente: "${agentResponse.slice(0, 100)}..."`);
+    let agentResponse: string;
+    try {
+      console.log(`[UazAPI Webhook] Chamando agente IA para user ${user.id}...`);
+      agentResponse = await runAgent(resolvedText, agentContext);
+      console.log(`[UazAPI Webhook] Resposta agente: "${agentResponse.slice(0, 100)}..."`);
+    } catch (aiErr: any) {
+      console.error(`[UazAPI Webhook] ❌ Erro no agente IA:`, aiErr.message);
+      await uazapiService.sendText(BaseUrl, token, chatid,
+        "🤖 Estou com dificuldade para processar sua solicitação agora. Tente novamente em instantes!\n\n_Se o problema persistir, tente simplificar sua mensagem._");
+      return;
+    }
 
     // ============================================
     // 5. ENVIAR RESPOSTA VIA UAZAPI
     // ============================================
-    // Verificar se resposta contém URL de imagem (gráfico)
-    const imageUrlMatch = agentResponse.match(/https?:\/\/[^\s"']+\.(?:png|jpg|jpeg|gif|svg|webp)/gi);
+    try {
+      // Verificar se resposta contém URL de imagem (gráfico)
+      const imageUrlMatch = agentResponse.match(/https?:\/\/[^\s"']+\.(?:png|jpg|jpeg|gif|svg|webp)/gi);
 
-    if (imageUrlMatch && imageUrlMatch.length > 0) {
-      // Resposta com imagem: extrair URL e enviar como media
-      const imageUrl = imageUrlMatch[0];
-      const caption = agentResponse.replace(imageUrl, "").trim();
-      await uazapiService.sendMedia(BaseUrl, token, chatid, imageUrl, caption);
-    } else {
-      // Resposta apenas texto: limpar HTML tags se houver
-      const cleanResponse = agentResponse.replace(/<\/?[^>]+>/g, "");
-      await uazapiService.sendText(BaseUrl, token, chatid, cleanResponse);
+      if (imageUrlMatch && imageUrlMatch.length > 0) {
+        const imageUrl = imageUrlMatch[0];
+        const caption = agentResponse.replace(imageUrl, "").trim();
+        await uazapiService.sendMedia(BaseUrl, token, chatid, imageUrl, caption);
+      } else {
+        const cleanResponse = agentResponse.replace(/<\/?[^>]+>/g, "");
+        await uazapiService.sendText(BaseUrl, token, chatid, cleanResponse);
+      }
+
+      console.log(`[UazAPI Webhook] ✅ Resposta enviada para ${chatid}`);
+    } catch (sendErr: any) {
+      console.error(`[UazAPI Webhook] ❌ Erro ao enviar resposta:`, sendErr.message);
+      // Última tentativa — mensagem mais simples
+      try {
+        await uazapiService.sendText(BaseUrl, token, chatid, agentResponse.slice(0, 500));
+      } catch (_) { /* silent */ }
     }
-
-    console.log(`[UazAPI Webhook] ✅ Resposta enviada para ${chatid}`);
   } catch (error: any) {
-    console.error(`[UazAPI Webhook] ❌ Erro no pipeline:`, error.message);
-    // Tentar enviar mensagem de erro ao usuário
+    console.error(`[UazAPI Webhook] ❌ Erro crítico no pipeline:`, error.message);
     try {
       const { BaseUrl, token, message } = req.body;
       if (BaseUrl && token && message?.chatid) {
@@ -231,7 +268,7 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
           BaseUrl,
           token,
           message.chatid,
-          "Desculpe, tive um probleminha técnico. Tente novamente em alguns segundos! 🔄"
+          "😓 Desculpe, aconteceu um erro inesperado. Tente novamente em alguns segundos.\n\nSe persistir, envie sua mensagem como texto simples."
         );
       }
     } catch (sendErr) {
