@@ -64,7 +64,13 @@ export const paymentMethods = pgTable("formas_pagamento", {
   usuario_id: integer("usuario_id").references(() => users.id, { onDelete: 'cascade' }),
   global: boolean("global").notNull().default(false),
   ativo: boolean("ativo").notNull().default(true),
-  data_criacao: timestamp("data_criacao", { withTimezone: true }).default(sql`(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')`)
+  data_criacao: timestamp("data_criacao", { withTimezone: true }).default(sql`(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')`),
+  // Controle de cartões de crédito
+  limite: decimal("limite", { precision: 12, scale: 2 }),           // limite do cartão (ex: 5000.00)
+  dia_fechamento: integer("dia_fechamento"),                         // dia do mês que fecha a fatura (1-31)
+  dia_vencimento: integer("dia_vencimento"),                         // dia de pagamento da fatura (1-31)
+  bandeira: varchar("bandeira", { length: 50 }),                     // Visa, Mastercard, Elo, etc
+  ultimos_digitos: varchar("ultimos_digitos", { length: 4 }),        // últimos 4 dígitos
 }, (table) => [
   unique().on(table.nome, table.global)
 ]);

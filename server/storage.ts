@@ -1995,6 +1995,147 @@ export async function verificarOrcamentos(userId: number, walletId: number): Pro
 }
 
 // ============================================
+// CONTROLE DE CARTÕES DE CRÉDITO
+// ============================================
+
+/**
+ * Calcula saldo usado de um cartão no período de fatura atual.
+ * Período = dia_fechamento do mês anterior até dia_fechamento deste mês.
+ */
+export async function getSaldoCartao(cartaoId: number, walletId: number): Promise<{
+  cartao_nome: string;
+  limite: number;
+  usado: number;
+  disponivel: number;
+  percentual: number;
+  dia_fechamento: number | null;
+  dia_vencimento: number | null;
+}> {
+  // Buscar dados do cartão
+  const cartaoRows = await db.select().from(paymentMethods).where(eq(paymentMethods.id, cartaoId)).limit(1);
+  const cartao = cartaoRows[0];
+  if (!cartao) throw new Error("Cartão não encontrado");
+
+  const limite = parseFloat(cartao.limite as string) || 0;
+  const diaFech = cartao.dia_fechamento || 1;
+
+  // Calcular período da fatura atual
+  const now = new Date();
+  let inicioFatura: string;
+  let fimFatura: string;
+
+  if (now.getDate() >= diaFech) {
+    // Já passou o fechamento — fatura atual vai de diaFech deste mês até diaFech próximo mês
+    inicioFatura = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(diaFech).padStart(2, '0')}`;
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, diaFech);
+    fimFatura = nextMonth.toISOString().slice(0, 10);
+  } else {
+    // Antes do fechamento — fatura vai de diaFech mês passado até diaFech deste mês
+    const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, diaFech);
+    inicioFatura = prevMonth.toISOString().slice(0, 10);
+    fimFatura = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(diaFech).padStart(2, '0')}`;
+  }
+
+  // Somar gastos no cartão no período
+  const rows = await db.execute(sql`
+    SELECT COALESCE(SUM(valor::numeric), 0) AS total
+    FROM transacoes
+    WHERE carteira_id = ${walletId}
+      AND forma_pagamento_id = ${cartaoId}
+      AND tipo = 'Despesa'
+      AND data_transacao >= ${inicioFatura}
+      AND data_transacao < ${fimFatura}
+  `);
+
+  const usado = parseFloat((rows as any[])[0]?.total) || 0;
+  const disponivel = Math.max(0, limite - usado);
+  const percentual = limite > 0 ? (usado / limite) * 100 : 0;
+
+  return {
+    cartao_nome: cartao.nome,
+    limite: Math.round(limite * 100) / 100,
+    usado: Math.round(usado * 100) / 100,
+    disponivel: Math.round(disponivel * 100) / 100,
+    percentual: Math.round(percentual * 10) / 10,
+    dia_fechamento: cartao.dia_fechamento,
+    dia_vencimento: cartao.dia_vencimento
+  };
+}
+
+/**
+ * Lista todos os cartões do usuário com saldo atual.
+ */
+export async function getCartoesComSaldo(userId: number, walletId: number): Promise<any[]> {
+  const cartoes = await db.select()
+    .from(paymentMethods)
+    .where(
+      and(
+        eq(paymentMethods.usuario_id, userId),
+        eq(paymentMethods.ativo, true),
+        sql`${paymentMethods.limite} IS NOT NULL AND ${paymentMethods.limite} > 0`
+      )
+    );
+
+  const result = [];
+  for (const cartao of cartoes) {
+    try {
+      const saldo = await getSaldoCartao(cartao.id, walletId);
+      result.push(saldo);
+    } catch (_) { /* skip */ }
+  }
+  return result;
+}
+
+/**
+ * Lista transações de um cartão específico no período da fatura atual (para conciliação).
+ */
+export async function getFaturaCartao(cartaoId: number, walletId: number): Promise<{
+  cartao: string; periodo_de: string; periodo_ate: string; total: number; transacoes: any[]
+}> {
+  const cartaoRows = await db.select().from(paymentMethods).where(eq(paymentMethods.id, cartaoId)).limit(1);
+  const cartao = cartaoRows[0];
+  if (!cartao) throw new Error("Cartão não encontrado");
+
+  const diaFech = cartao.dia_fechamento || 1;
+  const now = new Date();
+
+  let inicioFatura: string;
+  let fimFatura: string;
+
+  if (now.getDate() >= diaFech) {
+    inicioFatura = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(diaFech).padStart(2, '0')}`;
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, diaFech);
+    fimFatura = nextMonth.toISOString().slice(0, 10);
+  } else {
+    const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, diaFech);
+    inicioFatura = prevMonth.toISOString().slice(0, 10);
+    fimFatura = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(diaFech).padStart(2, '0')}`;
+  }
+
+  const rows = await db.execute(sql`
+    SELECT t.id, t.descricao, t.valor, t.data_transacao, c.nome AS categoria
+    FROM transacoes t
+    LEFT JOIN categorias c ON t.categoria_id = c.id
+    WHERE t.carteira_id = ${walletId}
+      AND t.forma_pagamento_id = ${cartaoId}
+      AND t.tipo = 'Despesa'
+      AND t.data_transacao >= ${inicioFatura}
+      AND t.data_transacao < ${fimFatura}
+    ORDER BY t.data_transacao DESC
+  `);
+
+  const total = (rows as any[]).reduce((s, r) => s + (parseFloat(r.valor) || 0), 0);
+
+  return {
+    cartao: cartao.nome,
+    periodo_de: inicioFatura,
+    periodo_ate: fimFatura,
+    total: Math.round(total * 100) / 100,
+    transacoes: rows as any[]
+  };
+}
+
+// ============================================
 // CONTAS A PAGAR + FLUXO DE CAIXA
 // ============================================
 

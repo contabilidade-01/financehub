@@ -1,5 +1,5 @@
 import axios from "axios";
-import { storage, getDailySummary, getPeriodSummary, getWeeklySummary, getCategoryBreakdown, comparePeriods, createMeta, getMetasByUsuarioId, depositarMeta, verificarOrcamentos, getContasAPagar, marcarComoPaga, marcarRecorrente, getFluxoCaixaResumo } from "../storage";
+import { storage, getDailySummary, getPeriodSummary, getWeeklySummary, getCategoryBreakdown, comparePeriods, createMeta, getMetasByUsuarioId, depositarMeta, verificarOrcamentos, getContasAPagar, marcarComoPaga, marcarRecorrente, getFluxoCaixaResumo, getSaldoCartao, getCartoesComSaldo, getFaturaCartao } from "../storage";
 import { FINANCIAL_AGENT_SYSTEM_PROMPT, buildDynamicContext } from "../prompts/financial-agent";
 import { insertTransactionSchema } from "@shared/schema";
 
@@ -433,6 +433,63 @@ function buildTools() {
         },
       },
     },
+    {
+      type: "function" as const,
+      function: {
+        name: "cadastrar_cartao",
+        description: "Cadastra um cartão de crédito para o usuário (com nome, limite, dia de fechamento e vencimento). Use quando disserem 'cadastra meu Nubank', 'tenho um cartão Inter limite 3000'.",
+        parameters: {
+          type: "object",
+          properties: {
+            nome: { type: "string", description: "Nome do cartão (ex: 'Nubank', 'Inter', 'C6 Bank', 'Itaú Platinum')" },
+            limite: { type: "number", description: "Limite do cartão em R$" },
+            dia_fechamento: { type: "number", description: "Dia do mês que fecha a fatura (1-31)" },
+            dia_vencimento: { type: "number", description: "Dia do mês para pagar a fatura (1-31)" },
+            bandeira: { type: "string", description: "Bandeira: Visa, Mastercard, Elo, etc (opcional)" },
+            ultimos_digitos: { type: "string", description: "Últimos 4 dígitos do cartão (opcional)" },
+          },
+          required: ["nome", "limite", "dia_fechamento", "dia_vencimento"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "saldo_cartao",
+        description: "Mostra o saldo disponível de um cartão de crédito (limite - gastos do período). Use quando perguntarem 'quanto tenho no Nubank', 'meu cartão tá no limite?', 'disponível do Inter'.",
+        parameters: {
+          type: "object",
+          properties: {
+            nome_cartao: { type: "string", description: "Nome do cartão (ex: 'Nubank', 'Inter'). Se omitido, mostra todos." },
+          },
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "fatura_cartao",
+        description: "Lista todas as transações da fatura atual de um cartão (conciliação). Use quando pedirem 'fatura do Nubank', 'o que gastei no Inter', 'detalhes do cartão'.",
+        parameters: {
+          type: "object",
+          properties: {
+            nome_cartao: { type: "string", description: "Nome do cartão" },
+          },
+          required: ["nome_cartao"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "quanto_posso_gastar",
+        description: "Calcula quanto o usuário ainda pode gastar hoje/no mês baseado na renda, despesas fixas projetadas e gastos já feitos. Use quando perguntarem 'quanto posso gastar', 'sobra pra hoje', 'tenho folga?'.",
+        parameters: {
+          type: "object",
+          properties: {},
+        },
+      },
+    },
   ];
 }
 
@@ -677,6 +734,70 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       case "fluxo_caixa": {
         const resumo = await getFluxoCaixaResumo(ctx.walletId, args.mes, args.ano);
         return JSON.stringify(resumo);
+      }
+
+      case "cadastrar_cartao": {
+        const cartao = await storage.createPaymentMethod({
+          nome: args.nome,
+          descricao: `Cartão ${args.bandeira || ''} final ${args.ultimos_digitos || '****'}`.trim(),
+          icone: '💳',
+          cor: '#FF6B35',
+          usuario_id: ctx.userId,
+          global: false,
+          ativo: true,
+          limite: args.limite,
+          dia_fechamento: args.dia_fechamento,
+          dia_vencimento: args.dia_vencimento,
+          bandeira: args.bandeira || null,
+          ultimos_digitos: args.ultimos_digitos || null,
+        } as any);
+        return JSON.stringify({ success: true, id: cartao.id, nome: cartao.nome, limite: args.limite, msg: `Cartão ${args.nome} cadastrado! Limite: R$${args.limite}. Fecha dia ${args.dia_fechamento}, vence dia ${args.dia_vencimento}.` });
+      }
+
+      case "saldo_cartao": {
+        if (args.nome_cartao) {
+          // Buscar cartão específico pelo nome
+          const cartoes = await storage.getPaymentMethodsByUserId(ctx.userId);
+          const globalPMs = await storage.getGlobalPaymentMethods();
+          const todos = [...cartoes, ...globalPMs];
+          const cartao = todos.find(c => c.nome.toLowerCase().includes(args.nome_cartao.toLowerCase()));
+          if (!cartao) return JSON.stringify({ error: `Cartão '${args.nome_cartao}' não encontrado. Cadastre com: cadastrar_cartao.` });
+          const saldo = await getSaldoCartao(cartao.id, ctx.walletId);
+          return JSON.stringify(saldo);
+        } else {
+          // Mostrar todos
+          const todos = await getCartoesComSaldo(ctx.userId, ctx.walletId);
+          if (todos.length === 0) return JSON.stringify({ mensagem: "Nenhum cartão com limite cadastrado. Use 'cadastrar_cartao' para cadastrar." });
+          return JSON.stringify({ cartoes: todos });
+        }
+      }
+
+      case "fatura_cartao": {
+        const cartoes = await storage.getPaymentMethodsByUserId(ctx.userId);
+        const globalPMs = await storage.getGlobalPaymentMethods();
+        const todos = [...cartoes, ...globalPMs];
+        const cartao = todos.find(c => c.nome.toLowerCase().includes(args.nome_cartao.toLowerCase()));
+        if (!cartao) return JSON.stringify({ error: `Cartão '${args.nome_cartao}' não encontrado.` });
+        const fatura = await getFaturaCartao(cartao.id, ctx.walletId);
+        return JSON.stringify(fatura);
+      }
+
+      case "quanto_posso_gastar": {
+        const resumo = await getFluxoCaixaResumo(ctx.walletId);
+        const now = new Date();
+        const diasRestantes = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() - now.getDate() + 1;
+        const sobraMes = resumo.sobra;
+        const porDia = diasRestantes > 0 ? sobraMes / diasRestantes : 0;
+        return JSON.stringify({
+          sobra_mes: Math.round(sobraMes * 100) / 100,
+          dias_restantes: diasRestantes,
+          por_dia: Math.round(porDia * 100) / 100,
+          contas_pendentes: resumo.contas_pendentes,
+          contas_atrasadas: resumo.contas_atrasadas,
+          msg: sobraMes > 0
+            ? `Você pode gastar ~R$${porDia.toFixed(2)} por dia (${diasRestantes} dias restantes)`
+            : `⚠️ Sem folga! Despesas já ultrapassaram a renda em R$${Math.abs(sobraMes).toFixed(2)}`
+        });
       }
 
       default:
