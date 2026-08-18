@@ -20,6 +20,8 @@ const categorias = [
   { nome: 'Vestuário', tipo: 'Despesa', cor: '#F8BBD9', icone: '👕', descricao: 'Gastos com roupas e acessórios', global: true },
   { nome: 'Serviços', tipo: 'Despesa', cor: '#FFB74D', icone: '🔧', descricao: 'Gastos com serviços diversos', global: true },
   { nome: 'Impostos', tipo: 'Despesa', cor: '#A1887F', icone: '💰', descricao: 'Pagamento de impostos e taxas', global: true },
+  { nome: 'Dízimos e Ofertas', tipo: 'Despesa', cor: '#7E57C2', icone: '⛪', descricao: 'Dízimos, ofertas e contribuições religiosas', global: true },
+  { nome: 'Doações', tipo: 'Despesa', cor: '#EC407A', icone: '🤝', descricao: 'Doações para instituições, ONGs e causas sociais', global: true },
   { nome: 'Outros', tipo: 'Despesa', cor: '#90A4AE', icone: '📦', descricao: 'Outros gastos diversos', global: true },
   // Receitas
   { nome: 'Salário', tipo: 'Receita', cor: '#4CAF50', icone: '💼', descricao: 'Receita de salário e trabalho', global: true },
