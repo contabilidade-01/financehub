@@ -1,5 +1,5 @@
 import axios from "axios";
-import { storage, getDailySummary, getPeriodSummary, getWeeklySummary, getCategoryBreakdown, comparePeriods, createMeta, getMetasByUsuarioId, depositarMeta, verificarOrcamentos, getContasAPagar, marcarComoPaga, marcarRecorrente, getFluxoCaixaResumo, getSaldoCartao, getCartoesComSaldo, getFaturaCartao } from "../storage";
+import { storage, getDailySummary, getPeriodSummary, getWeeklySummary, getCategoryBreakdown, comparePeriods, createMeta, getMetasByUsuarioId, depositarMeta, verificarOrcamentos, getContasAPagar, marcarComoPaga, marcarRecorrente, getFluxoCaixaResumo, getSaldoCartao, getCartoesComSaldo, getFaturaCartao, resolveMemoriaCategoria, aprenderMemoriaCategoria } from "../storage";
 import { FINANCIAL_AGENT_SYSTEM_PROMPT, buildDynamicContext } from "../prompts/financial-agent";
 import { insertTransactionSchema } from "@shared/schema";
 import { withRetry } from "../utils/ai-errors";
@@ -515,7 +515,18 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           (c) => c.nome.toLowerCase() === (args.categoria || "").toLowerCase()
         );
 
-        const categoriaId = cat?.id || ctx.categories.find(c => c.nome === "Outros" && c.tipo === args.tipo)?.id || ctx.categories[0]?.id;
+        // F4.2 — Memória: se o modelo não casou categoria, tenta o que o
+        // usuário já ensinou (comerciante/descrição → categoria).
+        let categoriaId = cat?.id;
+        let categoriaNome = cat?.nome;
+        if (!categoriaId && args.descricao) {
+          const mem = await resolveMemoriaCategoria(ctx.userId, args.descricao);
+          if (mem) {
+            categoriaId = mem.categoria_id;
+            categoriaNome = mem.categoria_nome;
+          }
+        }
+        categoriaId = categoriaId || ctx.categories.find(c => c.nome === "Outros" && c.tipo === args.tipo)?.id || ctx.categories[0]?.id;
 
         const today = new Date().toISOString().slice(0, 10);
         const txData = {
@@ -529,7 +540,13 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         };
 
         const result = await storage.createTransaction(txData as any);
-        return JSON.stringify({ success: true, id: result.id, ...txData, categoria: cat?.nome || "Outros" });
+
+        // F4.2 — Aprender: se o modelo deu uma categoria real (não fallback)
+        // e há descrição, memoriza para acertar da próxima vez.
+        if (cat && args.descricao) {
+          await aprenderMemoriaCategoria(ctx.userId, args.descricao, cat.id, cat.nome);
+        }
+        return JSON.stringify({ success: true, id: result.id, ...txData, categoria: categoriaNome || "Outros" });
       }
 
       case "atualiza_transacao": {
@@ -820,7 +837,11 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
 // AGENT LOOP — function calling até resposta
 // ============================================
 
-export async function runAgent(userMessage: string, ctx: ToolContext): Promise<string> {
+export async function runAgent(
+  userMessage: string,
+  ctx: ToolContext,
+  history: { role: string; content: string }[] = [],
+): Promise<string> {
   const apiKey = process.env.OPENAI_API_KEY;
   const model = process.env.AI_MODEL || "gpt-4o-mini";
   if (!apiKey) throw new Error("OPENAI_API_KEY não configurada");
@@ -830,8 +851,15 @@ export async function runAgent(userMessage: string, ctx: ToolContext): Promise<s
 ## Categorias Disponíveis
 ${ctx.categories.map(c => `- ${c.nome} (${c.tipo})`).join("\n")}`;
 
+  // Histórico curto da conversa (memória entre mensagens) entra entre o
+  // system prompt e a mensagem atual, para o agente manter contexto.
+  const historico = (history || [])
+    .filter((m) => (m.role === "user" || m.role === "assistant") && m.content)
+    .map((m) => ({ role: m.role, content: m.content }));
+
   const messages: any[] = [
     { role: "system", content: systemPrompt },
+    ...historico,
     { role: "user", content: userMessage },
   ];
 

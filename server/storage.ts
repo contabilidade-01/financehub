@@ -2477,3 +2477,106 @@ export async function listIngestionEvents(opts: {
         ORDER BY data_criacao DESC LIMIT ${limit} OFFSET ${offset}`);
   return result as any[];
 }
+
+// ============================================
+// FASE 4 — Memória de conversa (contexto entre mensagens)
+// ============================================
+export async function getConversaRecente(
+  userId: number,
+  limit = 6,
+): Promise<{ role: string; content: string }[]> {
+  try {
+    const rows = await db.execute(sql`
+      SELECT role, content FROM conversa_historico
+      WHERE usuario_id = ${userId}
+      ORDER BY id DESC LIMIT ${limit}
+    `);
+    return (rows as any[]).reverse().map((r) => ({ role: r.role, content: r.content }));
+  } catch (err: any) {
+    console.error("[Conversa] falha ao ler histórico:", err?.message);
+    return [];
+  }
+}
+
+export async function appendConversa(
+  userId: number,
+  role: "user" | "assistant",
+  content: string,
+): Promise<void> {
+  try {
+    const trimmed = (content || "").slice(0, 4000);
+    await db.execute(sql`
+      INSERT INTO conversa_historico (usuario_id, role, content)
+      VALUES (${userId}, ${role}, ${trimmed})
+    `);
+    // Poda: mantém só as últimas 20 mensagens por usuário.
+    await db.execute(sql`
+      DELETE FROM conversa_historico
+      WHERE usuario_id = ${userId}
+        AND id NOT IN (
+          SELECT id FROM conversa_historico
+          WHERE usuario_id = ${userId}
+          ORDER BY id DESC LIMIT 20
+        )
+    `);
+  } catch (err: any) {
+    console.error("[Conversa] falha ao gravar histórico:", err?.message);
+  }
+}
+
+// ============================================
+// FASE 4 — Memória por usuário (comerciante → categoria)
+// ============================================
+function normalizeChaveMem(s: string): string {
+  return (s || "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+
+export async function resolveMemoriaCategoria(
+  userId: number,
+  texto: string,
+): Promise<{ categoria_id: number; categoria_nome: string } | undefined> {
+  const alvo = normalizeChaveMem(texto);
+  if (!alvo) return undefined;
+  try {
+    const rows = await db.execute(sql`
+      SELECT chave, valor FROM memoria_usuario
+      WHERE usuario_id = ${userId} AND tipo = 'merchant_categoria'
+    `);
+    let melhor: any;
+    for (const r of rows as any[]) {
+      const k = normalizeChaveMem(r.chave);
+      if (k && (alvo.includes(k) || k.includes(alvo))) {
+        if (!melhor || k.length > normalizeChaveMem(melhor.chave).length) melhor = r;
+      }
+    }
+    if (!melhor) return undefined;
+    const v = typeof melhor.valor === "string" ? JSON.parse(melhor.valor) : melhor.valor;
+    if (!v?.categoria_id) return undefined;
+    return { categoria_id: Number(v.categoria_id), categoria_nome: v.categoria_nome };
+  } catch (err: any) {
+    console.error("[Memória] falha ao resolver:", err?.message);
+    return undefined;
+  }
+}
+
+export async function aprenderMemoriaCategoria(
+  userId: number,
+  chave: string,
+  categoriaId: number,
+  categoriaNome: string,
+): Promise<void> {
+  const chaveNorm = normalizeChaveMem(chave);
+  if (!chaveNorm) return;
+  try {
+    const valor = JSON.stringify({ categoria_id: categoriaId, categoria_nome: categoriaNome });
+    await db.execute(sql`
+      INSERT INTO memoria_usuario (usuario_id, tipo, chave, valor)
+      VALUES (${userId}, 'merchant_categoria', ${chaveNorm}, ${valor}::jsonb)
+      ON CONFLICT (usuario_id, tipo, chave)
+      DO UPDATE SET valor = ${valor}::jsonb, hits = memoria_usuario.hits + 1,
+                    updated_at = (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')
+    `);
+  } catch (err: any) {
+    console.error("[Memória] falha ao aprender:", err?.message);
+  }
+}

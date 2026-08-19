@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { storage } from "../storage";
-import { seedPlanoContasPessoal, createIngestionEvent } from "../storage";
+import { seedPlanoContasPessoal, createIngestionEvent, getConversaRecente, appendConversa } from "../storage";
 import { uazapiService } from "../services/uazapi.service";
 import { transcribeAudio, analyzeWithGemini, runAgent } from "../services/ai-agent.service";
 import { classifyAiError } from "../utils/ai-errors";
@@ -258,8 +258,13 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
     let agentResponse: string;
     try {
       console.log(`[UazAPI Webhook] Chamando agente IA para user ${user.id}...`);
-      agentResponse = await runAgent(resolvedText, agentContext);
+      // F4.1 — histórico curto da conversa, para o agente ter contexto.
+      const historico = await getConversaRecente(user.id, 6);
+      agentResponse = await runAgent(resolvedText, agentContext, historico);
       console.log(`[UazAPI Webhook] Resposta agente: "${agentResponse.slice(0, 100)}..."`);
+      // Persistir o turno (usuário + assistente) para a próxima mensagem.
+      await appendConversa(user.id, "user", resolvedText);
+      await appendConversa(user.id, "assistant", agentResponse);
     } catch (aiErr: any) {
       const c = classifyAiError(aiErr, "openai-chat");
       console.error(`[UazAPI Webhook] ❌ Erro no agente IA (${c.kind}):`, c.detail);
