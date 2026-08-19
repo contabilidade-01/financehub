@@ -32,6 +32,7 @@ import { setupVite, serveStatic, log } from "./vite";
 import { validateAndInitializeDatabase, waitForDatabase } from "./startup";
 import { setupRedirect } from "./middleware/setup.middleware";
 import { securityHeaders } from "./middleware/security.middleware";
+import { runAutoMigrations } from "./migrations/auto-migrate";
 
 // Configurar timezone global da aplicação para São Paulo
 process.env.TZ = 'America/Sao_Paulo';
@@ -176,6 +177,9 @@ app.use((req, res, next) => {
     console.log('🚀 Inicializando aplicação...');
     await waitForDatabase();
     await validateAndInitializeDatabase();
+    // Garante que o schema tenha as colunas/tabelas que o código espera
+    // (evita erros como 'column data_vencimento does not exist' em produção).
+    await runAutoMigrations();
     console.log('✅ Aplicação inicializada com sucesso!');
   } catch (error) {
     console.error('❌ Falha na inicialização do banco:', error);
