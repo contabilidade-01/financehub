@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import { randomBytes } from "crypto";
+import { randomBytes, randomUUID } from "crypto";
 import { db } from "./db";
 import {
   users,
@@ -2579,4 +2579,137 @@ export async function aprenderMemoriaCategoria(
   } catch (err: any) {
     console.error("[Memória] falha ao aprender:", err?.message);
   }
+}
+
+// ============================================
+// Compra parcelada (agrupamento) e edição de compra
+// ============================================
+
+// Resolve uma forma de pagamento pelo nome (usuário + globais); cria se não achar.
+export async function resolveOuCriaFormaPagamento(
+  userId: number,
+  nome: string,
+): Promise<{ id: number; nome: string }> {
+  const alvo = (nome || "").trim().toLowerCase();
+  const rows = await db.execute(sql`
+    SELECT id, nome FROM formas_pagamento
+    WHERE (usuario_id = ${userId} OR global = true) AND ativo = true
+  `);
+  const lista = rows as any[];
+  let match =
+    lista.find((r) => r.nome.toLowerCase() === alvo) ||
+    lista.find((r) => r.nome.toLowerCase().includes(alvo) || alvo.includes(r.nome.toLowerCase()));
+  if (match) return { id: match.id, nome: match.nome };
+  try {
+    const ins = await db.execute(sql`
+      INSERT INTO formas_pagamento (nome, usuario_id, global, ativo)
+      VALUES (${nome.trim()}, ${userId}, false, true)
+      RETURNING id, nome
+    `);
+    const created = (ins as any[])[0];
+    return { id: created.id, nome: created.nome };
+  } catch {
+    // Conflito de nome único — reusa o que já existe com esse nome.
+    const again = await db.execute(sql`SELECT id, nome FROM formas_pagamento WHERE lower(nome) = ${alvo} LIMIT 1`);
+    const row = (again as any[])[0];
+    return row ? { id: row.id, nome: row.nome } : { id: 0, nome };
+  }
+}
+
+// Cria N parcelas de uma compra, agrupadas por compra_grupo (mesma compra).
+export async function criarCompraParcelada(params: {
+  walletId: number;
+  categoriaId: number;
+  descricao: string;
+  valorParcela: number;
+  parcelas: number;
+  formaPagamentoId?: number | null;
+  dataInicio: string; // AAAA-MM-DD
+}): Promise<{ compra_grupo: string; ids: number[]; parcelas: number; valor_parcela: number }> {
+  const { walletId, categoriaId, descricao, valorParcela, parcelas, formaPagamentoId, dataInicio } = params;
+  const grupo = randomUUID();
+  const [y, m, d] = dataInicio.split("-").map(Number);
+  const ids: number[] = [];
+  for (let i = 0; i < parcelas; i++) {
+    // avança i meses, ajustando ao último dia do mês quando necessário
+    const mesTotal = (m - 1) + i;
+    const ano = y + Math.floor(mesTotal / 12);
+    const mes = (mesTotal % 12) + 1;
+    const ultimoDia = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+    const dia = Math.min(d, ultimoDia);
+    const dataISO = `${ano}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+    const descParcela = parcelas > 1 ? `${descricao} (${i + 1}/${parcelas})` : descricao;
+    const res = await db.execute(sql`
+      INSERT INTO transacoes
+        (carteira_id, categoria_id, forma_pagamento_id, tipo, valor, data_transacao, descricao, status, compra_grupo, parcela_num, parcela_total)
+      VALUES
+        (${walletId}, ${categoriaId}, ${formaPagamentoId ?? null}, 'Despesa', ${valorParcela.toFixed(2)},
+         ${dataISO}, ${descParcela}, 'Efetivada', ${grupo}, ${i + 1}, ${parcelas})
+      RETURNING id
+    `);
+    ids.push((res as any[])[0].id);
+  }
+  return { compra_grupo: grupo, ids, parcelas, valor_parcela: valorParcela };
+}
+
+// Identifica a "última compra" da carteira: pega a transação mais recente e
+// agrupa por compra_grupo (se houver) ou pela mesma descrição-base + data de
+// registro (cobre compras antigas sem grupo).
+export async function getUltimaCompra(
+  walletId: number,
+): Promise<{ compra_grupo: string | null; descricao_base: string; ids: number[]; total: number } | null> {
+  const ult = await db.execute(sql`
+    SELECT id, descricao, compra_grupo, data_registro
+    FROM transacoes WHERE carteira_id = ${walletId}
+    ORDER BY id DESC LIMIT 1
+  `);
+  const u = (ult as any[])[0];
+  if (!u) return null;
+  let rows: any[];
+  if (u.compra_grupo) {
+    rows = (await db.execute(sql`
+      SELECT id, valor FROM transacoes WHERE carteira_id = ${walletId} AND compra_grupo = ${u.compra_grupo}
+    `)) as any[];
+  } else {
+    // remove sufixo "(i/N)" para casar todas as parcelas da mesma compra
+    const base = (u.descricao || "").replace(/\s*\(\d+\/\d+\)\s*$/, "").trim();
+    rows = (await db.execute(sql`
+      SELECT id, valor FROM transacoes
+      WHERE carteira_id = ${walletId}
+        AND regexp_replace(descricao, '\\s*\\(\\d+/\\d+\\)\\s*$', '') = ${base}
+        AND data_registro::date = ${new Date(u.data_registro).toISOString().slice(0, 10)}
+    `)) as any[];
+    u.descricao = base;
+  }
+  const total = rows.reduce((s, r) => s + parseFloat(r.valor), 0);
+  return {
+    compra_grupo: u.compra_grupo || null,
+    descricao_base: (u.descricao || "").replace(/\s*\(\d+\/\d+\)\s*$/, "").trim(),
+    ids: rows.map((r) => r.id),
+    total: Math.round(total * 100) / 100,
+  };
+}
+
+// Aplica alterações em todas as parcelas de uma compra (por lista de ids).
+export async function editarTransacoesPorIds(
+  ids: number[],
+  patch: { forma_pagamento_id?: number; categoria_id?: number; descricao_base?: string },
+): Promise<number> {
+  if (!ids.length) return 0;
+  let n = 0;
+  for (const id of ids) {
+    const sets: any[] = [];
+    if (patch.forma_pagamento_id != null) sets.push(sql`forma_pagamento_id = ${patch.forma_pagamento_id}`);
+    if (patch.categoria_id != null) sets.push(sql`categoria_id = ${patch.categoria_id}`);
+    if (patch.descricao_base != null) {
+      // preserva o sufixo (i/N) se existir
+      sets.push(sql`descricao = ${patch.descricao_base} || COALESCE(substring(descricao from '\\s*\\(\\d+/\\d+\\)\\s*$'), '')`);
+    }
+    if (!sets.length) continue;
+    let setClause = sets[0];
+    for (let i = 1; i < sets.length; i++) setClause = sql`${setClause}, ${sets[i]}`;
+    await db.execute(sql`UPDATE transacoes SET ${setClause} WHERE id = ${id}`);
+    n++;
+  }
+  return n;
 }

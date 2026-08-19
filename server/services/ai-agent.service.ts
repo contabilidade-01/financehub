@@ -1,5 +1,5 @@
 import axios from "axios";
-import { storage, getDailySummary, getPeriodSummary, getWeeklySummary, getCategoryBreakdown, comparePeriods, createMeta, getMetasByUsuarioId, depositarMeta, verificarOrcamentos, getContasAPagar, marcarComoPaga, marcarRecorrente, getFluxoCaixaResumo, getSaldoCartao, getCartoesComSaldo, getFaturaCartao, resolveMemoriaCategoria, aprenderMemoriaCategoria } from "../storage";
+import { storage, getDailySummary, getPeriodSummary, getWeeklySummary, getCategoryBreakdown, comparePeriods, createMeta, getMetasByUsuarioId, depositarMeta, verificarOrcamentos, getContasAPagar, marcarComoPaga, marcarRecorrente, getFluxoCaixaResumo, getSaldoCartao, getCartoesComSaldo, getFaturaCartao, resolveMemoriaCategoria, aprenderMemoriaCategoria, resolveOuCriaFormaPagamento, criarCompraParcelada, getUltimaCompra, editarTransacoesPorIds } from "../storage";
 import { FINANCIAL_AGENT_SYSTEM_PROMPT, buildDynamicContext } from "../prompts/financial-agent";
 import { insertTransactionSchema } from "@shared/schema";
 import { withRetry } from "../utils/ai-errors";
@@ -497,6 +497,41 @@ function buildTools() {
         },
       },
     },
+    {
+      type: "function" as const,
+      function: {
+        name: "parcelar_compra",
+        description: "Registra uma compra PARCELADA em várias vezes, agrupadas como UMA compra. Use quando disserem 'parcelado em Nx', 'em N vezes', 'dividido em N'. Cria uma parcela por mês.",
+        parameters: {
+          type: "object",
+          properties: {
+            descricao: { type: "string", description: "O que foi comprado (ex.: 'cadeira')" },
+            valor_total: { type: "number", description: "Valor TOTAL da compra (será dividido pelas parcelas)" },
+            valor_parcela: { type: "number", description: "Valor de CADA parcela (use este OU valor_total)" },
+            parcelas: { type: "number", description: "Número de parcelas (ex.: 10)" },
+            forma_pagamento: { type: "string", description: "Ex.: 'Cartão de Crédito', 'Nubank', 'Magazine Luiza'" },
+            categoria: { type: "string" },
+            data_inicio: { type: "string", description: "AAAA-MM-DD (default hoje)" },
+          },
+          required: ["descricao", "parcelas"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "editar_ultima_compra",
+        description: "Edita a ÚLTIMA compra registrada (todas as parcelas dela juntas). Use para 'muda o último pedido', 'a última compra foi no cartão X', 'troca a forma de pagamento da última compra', 'corrige a categoria da compra anterior'.",
+        parameters: {
+          type: "object",
+          properties: {
+            forma_pagamento: { type: "string", description: "Nova forma de pagamento (ex.: 'Cartão Magazine Luiza')" },
+            categoria: { type: "string", description: "Nova categoria" },
+            descricao: { type: "string", description: "Nova descrição (mantém o (i/N) das parcelas)" },
+          },
+        },
+      },
+    },
     // ---- Ferramentas de EMPRESA / PJ ----
     {
       type: "function" as const,
@@ -916,6 +951,70 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           msg: sobraMes > 0
             ? `Você pode gastar ~R$${porDia.toFixed(2)} por dia (${diasRestantes} dias restantes)`
             : `⚠️ Sem folga! Despesas já ultrapassaram a renda em R$${Math.abs(sobraMes).toFixed(2)}`
+        });
+      }
+
+      case "parcelar_compra": {
+        const parcelas = Math.max(1, Math.min(60, Number(args.parcelas) || 1));
+        let valorParcela = Number(args.valor_parcela) || 0;
+        if (!valorParcela && args.valor_total) valorParcela = Math.round((Number(args.valor_total) / parcelas) * 100) / 100;
+        if (!valorParcela) return JSON.stringify({ error: "Informe valor_total ou valor_parcela." });
+
+        // Categoria (por nome, com fallback Outros).
+        const catP = ctx.categories.find(c => c.nome.toLowerCase() === (args.categoria || "").toLowerCase() && c.tipo === "Despesa")
+          || ctx.categories.find(c => /outr/i.test(c.nome) && c.tipo === "Despesa")
+          || ctx.categories.find(c => c.tipo === "Despesa")
+          || ctx.categories[0];
+        // Forma de pagamento (resolve/cria pelo nome).
+        let formaId: number | null = null;
+        let formaNome: string | undefined;
+        if (args.forma_pagamento) {
+          const fp = await resolveOuCriaFormaPagamento(ctx.userId, args.forma_pagamento);
+          formaId = fp.id || null;
+          formaNome = fp.nome;
+        }
+        const dataInicio = /^\d{4}-\d{2}-\d{2}$/.test(args.data_inicio || "") ? args.data_inicio : new Date().toISOString().slice(0, 10);
+
+        const r = await criarCompraParcelada({
+          walletId: ctx.walletId,
+          categoriaId: catP!.id,
+          descricao: args.descricao || "Compra",
+          valorParcela,
+          parcelas,
+          formaPagamentoId: formaId,
+          dataInicio,
+        });
+        return JSON.stringify({
+          success: true, compra_grupo: r.compra_grupo, parcelas: r.parcelas,
+          valor_parcela: r.valor_parcela, total: Math.round(r.valor_parcela * r.parcelas * 100) / 100,
+          categoria: catP?.nome, forma_pagamento: formaNome, ids: r.ids,
+        });
+      }
+
+      case "editar_ultima_compra": {
+        const compra = await getUltimaCompra(ctx.walletId);
+        if (!compra || compra.ids.length === 0) {
+          return JSON.stringify({ error: "Não encontrei uma compra recente para editar." });
+        }
+        const patch: any = {};
+        let formaNome: string | undefined;
+        let catNome: string | undefined;
+        if (args.forma_pagamento) {
+          const fp = await resolveOuCriaFormaPagamento(ctx.userId, args.forma_pagamento);
+          if (fp.id) { patch.forma_pagamento_id = fp.id; formaNome = fp.nome; }
+        }
+        if (args.categoria) {
+          const cat = ctx.categories.find(c => c.nome.toLowerCase() === args.categoria.toLowerCase());
+          if (cat) { patch.categoria_id = cat.id; catNome = cat.nome; }
+        }
+        if (args.descricao) patch.descricao_base = String(args.descricao);
+        if (Object.keys(patch).length === 0) {
+          return JSON.stringify({ error: "Diga o que mudar: forma de pagamento, categoria ou descrição." });
+        }
+        const n = await editarTransacoesPorIds(compra.ids, patch);
+        return JSON.stringify({
+          success: true, parcelas_afetadas: n, compra: compra.descricao_base,
+          forma_pagamento: formaNome, categoria: catNome, nova_descricao: args.descricao,
         });
       }
 

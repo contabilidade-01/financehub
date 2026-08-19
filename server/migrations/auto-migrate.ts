@@ -23,6 +23,11 @@ const STEPS: Step[] = [
       await db.execute(sql`ALTER TABLE transacoes ADD COLUMN IF NOT EXISTS data_pagamento DATE`);
       await db.execute(sql`ALTER TABLE transacoes ADD COLUMN IF NOT EXISTS recorrente BOOLEAN NOT NULL DEFAULT false`);
       await db.execute(sql`ALTER TABLE transacoes ADD COLUMN IF NOT EXISTS classificacao_despesa VARCHAR(20)`);
+      // Agrupamento de parcelas de uma mesma compra
+      await db.execute(sql`ALTER TABLE transacoes ADD COLUMN IF NOT EXISTS compra_grupo VARCHAR(40)`);
+      await db.execute(sql`ALTER TABLE transacoes ADD COLUMN IF NOT EXISTS parcela_num INTEGER`);
+      await db.execute(sql`ALTER TABLE transacoes ADD COLUMN IF NOT EXISTS parcela_total INTEGER`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_transacoes_compra_grupo ON transacoes(compra_grupo)`);
     },
   },
   {
