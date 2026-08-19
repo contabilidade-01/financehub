@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
+import { storage, listIngestionEvents } from "./storage";
 import { auth } from "./middleware/auth.middleware";
 import { apiKeyAuth } from "./middleware/apiKey.middleware";
 import { combinedAuth } from "./middleware/combinedAuth.middleware";
@@ -741,6 +741,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Welcome Messages endpoints (apenas superadmin)
+  // Log de ingestão por IA (diagnóstico de falhas: sem_credito × transitorio × bug)
+  app.get("/api/admin/ingestion-events", combinedAuth, requireSuperAdmin, async (req, res) => {
+    try {
+      const resultado = req.query.resultado as string | undefined;
+      const limit = req.query.limit ? Number(req.query.limit) : 100;
+      const offset = req.query.offset ? Number(req.query.offset) : 0;
+      const eventos = await listIngestionEvents({ resultado, limit, offset });
+      res.json(eventos);
+    } catch (e: any) {
+      res.status(500).json({ error: "Erro ao listar eventos de ingestão", detail: e?.message });
+    }
+  });
+
   app.get("/api/admin/welcome-messages", combinedAuth, requireSuperAdmin, welcomeMessagesController.getWelcomeMessages);
   app.get("/api/admin/welcome-messages/:type", combinedAuth, requireSuperAdmin, welcomeMessagesController.getWelcomeMessageByType);
   app.put("/api/admin/welcome-messages/:type", combinedAuth, requireSuperAdmin, welcomeMessagesController.updateWelcomeMessage);

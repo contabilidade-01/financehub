@@ -2431,3 +2431,49 @@ export async function comparePeriods(walletId: number, p1Start: string, p1End: s
 }
 
 export const storage = new DbStorage();
+
+// ============================================
+// Log de ingestão por IA (diagnóstico / painel admin)
+// ============================================
+export async function createIngestionEvent(ev: {
+  usuario_id?: number | null;
+  remote_jid?: string | null;
+  canal?: string;
+  tipo_mensagem?: string | null;
+  mensagem_raw?: string | null;
+  resultado: string; // sucesso | sem_credito | rate_limit | transitorio | timeout | auth | bug | erro_parsing | usuario_inativo
+  etapa?: string | null; // transcricao | visao | agente | envio | pipeline
+  detalhe?: string | null;
+  provider?: string | null;
+}): Promise<void> {
+  try {
+    await db.execute(sql`
+      INSERT INTO ingestion_events
+        (usuario_id, remote_jid, canal, tipo_mensagem, mensagem_raw, resultado, etapa, detalhe, provider)
+      VALUES
+        (${ev.usuario_id ?? null}, ${ev.remote_jid ?? null}, ${ev.canal ?? 'whatsapp'},
+         ${ev.tipo_mensagem ?? null}, ${ev.mensagem_raw ?? null}, ${ev.resultado},
+         ${ev.etapa ?? null}, ${ev.detalhe ?? null}, ${ev.provider ?? null})
+    `);
+  } catch (err: any) {
+    // Nunca deixar o log de ingestão derrubar o fluxo principal.
+    console.error("[IngestionEvent] falha ao registrar evento:", err?.message);
+  }
+}
+
+export async function listIngestionEvents(opts: {
+  resultado?: string;
+  limit?: number;
+  offset?: number;
+} = {}): Promise<any[]> {
+  const limit = Math.min(opts.limit ?? 100, 500);
+  const offset = opts.offset ?? 0;
+  const result = opts.resultado
+    ? await db.execute(sql`
+        SELECT * FROM ingestion_events WHERE resultado = ${opts.resultado}
+        ORDER BY data_criacao DESC LIMIT ${limit} OFFSET ${offset}`)
+    : await db.execute(sql`
+        SELECT * FROM ingestion_events
+        ORDER BY data_criacao DESC LIMIT ${limit} OFFSET ${offset}`);
+  return result as any[];
+}

@@ -1,8 +1,9 @@
 import { Request, Response } from "express";
 import { storage } from "../storage";
-import { seedPlanoContasPessoal } from "../storage";
+import { seedPlanoContasPessoal, createIngestionEvent } from "../storage";
 import { uazapiService } from "../services/uazapi.service";
 import { transcribeAudio, analyzeWithGemini, runAgent } from "../services/ai-agent.service";
+import { classifyAiError } from "../utils/ai-errors";
 import bcrypt from "bcryptjs";
 
 /**
@@ -150,9 +151,20 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
           resolvedText = await transcribeAudio(audioData.base64Data, audioData.mimetype);
           console.log(`[UazAPI Webhook] Transcrição: "${resolvedText.slice(0, 80)}..."`);
         } catch (audioErr: any) {
-          console.error(`[UazAPI Webhook] ❌ Erro ao transcrever áudio:`, audioErr.message);
+          const c = classifyAiError(audioErr, "openai-whisper");
+          console.error(`[UazAPI Webhook] ❌ Erro ao transcrever áudio (${c.kind}):`, c.detail);
+          if (c.kind === "sem_credito" || c.kind === "auth") {
+            console.error(`[ALERTA-ADMIN] 🚨 Whisper indisponível por '${c.kind}'.`);
+          }
+          await createIngestionEvent({
+            usuario_id: user.id, remote_jid: chatid, tipo_mensagem: messageType,
+            resultado: c.kind, etapa: "transcricao", detalhe: c.detail, provider: c.provider,
+          });
+          // Se for falta de crédito/config, avisa; senão mantém a dica de áudio.
           await uazapiService.sendText(BaseUrl, token, chatid,
-            "🎙️ Não consegui entender esse áudio. Pode tentar enviar novamente?\n\n_Dicas:_\n• Fale mais perto do microfone\n• Evite locais com muito ruído\n• Ou digite a mensagem por texto");
+            c.kind === "sem_credito" || c.kind === "auth"
+              ? c.userMessage
+              : "🎙️ Não consegui entender esse áudio. Pode tentar enviar novamente?\n\n_Dicas:_\n• Fale mais perto do microfone\n• Evite locais com muito ruído\n• Ou digite a mensagem por texto");
           return;
         }
         break;
@@ -166,9 +178,19 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
           resolvedText = text ? `${imgText}, ${text}` : imgText;
           console.log(`[UazAPI Webhook] Análise imagem: "${resolvedText.slice(0, 80)}..."`);
         } catch (imgErr: any) {
-          console.error(`[UazAPI Webhook] ❌ Erro ao analisar imagem:`, imgErr.message);
+          const c = classifyAiError(imgErr, "gemini");
+          console.error(`[UazAPI Webhook] ❌ Erro ao analisar imagem (${c.kind}):`, c.detail);
+          if (c.kind === "sem_credito" || c.kind === "auth") {
+            console.error(`[ALERTA-ADMIN] 🚨 Gemini (visão) indisponível por '${c.kind}'.`);
+          }
+          await createIngestionEvent({
+            usuario_id: user.id, remote_jid: chatid, tipo_mensagem: messageType,
+            resultado: c.kind, etapa: "visao", detalhe: c.detail, provider: c.provider,
+          });
           await uazapiService.sendText(BaseUrl, token, chatid,
-            "📷 Não consegui ler essa imagem. Pode tentar enviar novamente?\n\n_Dicas:_\n• Tire a foto com boa iluminação\n• Certifique-se que o texto/valores estejam legíveis\n• Ou digite os valores manualmente");
+            c.kind === "sem_credito" || c.kind === "auth"
+              ? c.userMessage
+              : "📷 Não consegui ler essa imagem. Pode tentar enviar novamente?\n\n_Dicas:_\n• Tire a foto com boa iluminação\n• Certifique-se que o texto/valores estejam legíveis\n• Ou digite os valores manualmente");
           return;
         }
         break;
@@ -181,9 +203,19 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
           resolvedText = await analyzeWithGemini(docData.base64Data, docData.mimetype, "document");
           console.log(`[UazAPI Webhook] Análise doc: "${resolvedText.slice(0, 80)}..."`);
         } catch (docErr: any) {
-          console.error(`[UazAPI Webhook] ❌ Erro ao analisar documento:`, docErr.message);
+          const c = classifyAiError(docErr, "gemini");
+          console.error(`[UazAPI Webhook] ❌ Erro ao analisar documento (${c.kind}):`, c.detail);
+          if (c.kind === "sem_credito" || c.kind === "auth") {
+            console.error(`[ALERTA-ADMIN] 🚨 Gemini (documento) indisponível por '${c.kind}'.`);
+          }
+          await createIngestionEvent({
+            usuario_id: user.id, remote_jid: chatid, tipo_mensagem: messageType,
+            resultado: c.kind, etapa: "visao", detalhe: c.detail, provider: c.provider,
+          });
           await uazapiService.sendText(BaseUrl, token, chatid,
-            "📄 Não consegui ler esse documento. Pode tentar enviar novamente?\n\n_Dicas:_\n• Formatos aceitos: PDF, imagens de notas fiscais\n• Se for um documento muito longo, tente enviar só a parte relevante\n• Ou digite os valores manualmente");
+            c.kind === "sem_credito" || c.kind === "auth"
+              ? c.userMessage
+              : "📄 Não consegui ler esse documento. Pode tentar enviar novamente?\n\n_Dicas:_\n• Formatos aceitos: PDF, imagens de notas fiscais\n• Se for um documento muito longo, tente enviar só a parte relevante\n• Ou digite os valores manualmente");
           return;
         }
         break;
@@ -229,9 +261,18 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
       agentResponse = await runAgent(resolvedText, agentContext);
       console.log(`[UazAPI Webhook] Resposta agente: "${agentResponse.slice(0, 100)}..."`);
     } catch (aiErr: any) {
-      console.error(`[UazAPI Webhook] ❌ Erro no agente IA:`, aiErr.message);
-      await uazapiService.sendText(BaseUrl, token, chatid,
-        "🤖 Estou com dificuldade para processar sua solicitação agora. Tente novamente em instantes!\n\n_Se o problema persistir, tente simplificar sua mensagem._");
+      const c = classifyAiError(aiErr, "openai-chat");
+      console.error(`[UazAPI Webhook] ❌ Erro no agente IA (${c.kind}):`, c.detail);
+      // Falta de crédito ou problema de configuração precisa de atenção do admin.
+      if (c.kind === "sem_credito" || c.kind === "auth") {
+        console.error(`[ALERTA-ADMIN] 🚨 IA indisponível por '${c.kind}' — verifique o saldo/config do provedor (${c.provider}).`);
+      }
+      await createIngestionEvent({
+        usuario_id: user.id, remote_jid: chatid, tipo_mensagem: messageType,
+        mensagem_raw: resolvedText, resultado: c.kind, etapa: "agente",
+        detalhe: c.detail, provider: c.provider,
+      });
+      await uazapiService.sendText(BaseUrl, token, chatid, c.userMessage);
       return;
     }
 
@@ -252,6 +293,10 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
       }
 
       console.log(`[UazAPI Webhook] ✅ Resposta enviada para ${chatid}`);
+      await createIngestionEvent({
+        usuario_id: user.id, remote_jid: chatid, tipo_mensagem: messageType,
+        mensagem_raw: resolvedText, resultado: "sucesso", etapa: "envio",
+      });
     } catch (sendErr: any) {
       console.error(`[UazAPI Webhook] ❌ Erro ao enviar resposta:`, sendErr.message);
       // Última tentativa — mensagem mais simples
@@ -261,6 +306,13 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
     }
   } catch (error: any) {
     console.error(`[UazAPI Webhook] ❌ Erro crítico no pipeline:`, error.message);
+    try {
+      await createIngestionEvent({
+        remote_jid: req.body?.message?.chatid ?? null,
+        tipo_mensagem: req.body?.message?.messageType ?? null,
+        resultado: "bug", etapa: "pipeline", detalhe: (error?.message || String(error)).slice(0, 500),
+      });
+    } catch (_) { /* nunca falhar por causa do log */ }
     try {
       const { BaseUrl, token, message } = req.body;
       if (BaseUrl && token && message?.chatid) {

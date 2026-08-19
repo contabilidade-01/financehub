@@ -2,6 +2,7 @@ import axios from "axios";
 import { storage, getDailySummary, getPeriodSummary, getWeeklySummary, getCategoryBreakdown, comparePeriods, createMeta, getMetasByUsuarioId, depositarMeta, verificarOrcamentos, getContasAPagar, marcarComoPaga, marcarRecorrente, getFluxoCaixaResumo, getSaldoCartao, getCartoesComSaldo, getFaturaCartao } from "../storage";
 import { FINANCIAL_AGENT_SYSTEM_PROMPT, buildDynamicContext } from "../prompts/financial-agent";
 import { insertTransactionSchema } from "@shared/schema";
+import { withRetry } from "../utils/ai-errors";
 
 /**
  * AI Agent Service — processa mensagens financeiras com function calling.
@@ -47,16 +48,19 @@ export async function transcribeAudio(base64Data: string, mimetype?: string): Pr
   form.append("file", buffer, { filename: `audio.${ext}`, contentType });
   form.append("model", "gpt-4o-transcribe");
 
-  const response = await axios.post(
-    "https://api.openai.com/v1/audio/transcriptions",
-    form,
-    {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        ...form.getHeaders(),
-      },
-      timeout: 60000,
-    }
+  const response = await withRetry(
+    () => axios.post(
+      "https://api.openai.com/v1/audio/transcriptions",
+      form,
+      {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          ...form.getHeaders(),
+        },
+        timeout: 60000,
+      }
+    ),
+    { provider: "openai-whisper" }
   );
 
   return response.data.text || "";
@@ -82,19 +86,22 @@ Comprei DESCRICAO DO ITEM 2 por VALOR
 
 Ao responder os números do valor devem usar a notação decimal americana`;
 
-  const response = await axios.post(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-    {
-      contents: [
-        {
-          parts: [
-            { text: prompt },
-            { inline_data: { mime_type: mimetype, data: base64Data } },
-          ],
-        },
-      ],
-    },
-    { timeout: 60000 }
+  const response = await withRetry(
+    () => axios.post(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        contents: [
+          {
+            parts: [
+              { text: prompt },
+              { inline_data: { mime_type: mimetype, data: base64Data } },
+            ],
+          },
+        ],
+      },
+      { timeout: 60000 }
+    ),
+    { provider: "gemini" }
   );
 
   return response.data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
@@ -832,19 +839,22 @@ ${ctx.categories.map(c => `- ${c.nome} (${c.tipo})`).join("\n")}`;
   const maxIterations = 8; // safety net
 
   for (let i = 0; i < maxIterations; i++) {
-    const response = await axios.post(
-      "https://api.openai.com/v1/chat/completions",
-      {
-        model,
-        messages,
-        tools,
-        tool_choice: "auto",
-        temperature: 0.3,
-      },
-      {
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        timeout: 60000,
-      }
+    const response = await withRetry(
+      () => axios.post(
+        "https://api.openai.com/v1/chat/completions",
+        {
+          model,
+          messages,
+          tools,
+          tool_choice: "auto",
+          temperature: 0.3,
+        },
+        {
+          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          timeout: 60000,
+        }
+      ),
+      { provider: "openai-chat" }
     );
 
     const choice = response.data.choices[0];
