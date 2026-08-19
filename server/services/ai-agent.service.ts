@@ -497,6 +497,66 @@ function buildTools() {
         },
       },
     },
+    // ---- Ferramentas de EMPRESA / PJ ----
+    {
+      type: "function" as const,
+      function: {
+        name: "listar_empresas",
+        description: "Lista as empresas (PJ) do usuário. Use quando ele falar em 'empresa', 'PJ', 'CNPJ', 'meu negócio', ou antes de lançar/consultar algo de uma empresa e você não souber qual é.",
+        parameters: { type: "object", properties: {} },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "lancar_empresa",
+        description: "Lança uma receita ou despesa NA EMPRESA (PJ), separada das finanças pessoais. Use quando o usuário deixar claro que é da empresa/negócio. Precisa saber de qual empresa e em qual conta do plano de contas.",
+        parameters: {
+          type: "object",
+          properties: {
+            empresa: { type: "string", description: "Nome (ou parte) da empresa. Se houver dúvida, use listar_empresas e pergunte." },
+            conta: { type: "string", description: "Nome ou código da conta do plano de contas da empresa (ex.: 'Consultoria', '3.1.1')." },
+            descricao: { type: "string" },
+            valor: { type: "number" },
+            tipo: { type: "string", enum: ["Receita", "Despesa"] },
+            data_transacao: { type: "string", description: "AAAA-MM-DD (default hoje)" },
+          },
+          required: ["empresa", "valor", "tipo"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "resumo_empresa",
+        description: "Resumo financeiro de uma empresa no período (receitas, despesas, saldo). Use para 'como está minha empresa', 'quanto a empresa faturou', etc.",
+        parameters: {
+          type: "object",
+          properties: {
+            empresa: { type: "string", description: "Nome (ou parte) da empresa." },
+            de: { type: "string", description: "AAAA-MM-DD (opcional)" },
+            ate: { type: "string", description: "AAAA-MM-DD (opcional)" },
+          },
+          required: ["empresa"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "dre_empresa",
+        description: "DRE gerencial da empresa (Receita, Custos Variáveis, Margem de Contribuição, Despesas Fixas, Resultado). Use para 'DRE', 'demonstrativo', 'margem', 'lucro da empresa'.",
+        parameters: {
+          type: "object",
+          properties: {
+            empresa: { type: "string", description: "Nome (ou parte) da empresa." },
+            de: { type: "string", description: "AAAA-MM-DD (opcional)" },
+            ate: { type: "string", description: "AAAA-MM-DD (opcional)" },
+          },
+          required: ["empresa"],
+        },
+      },
+    },
   ];
 }
 
@@ -824,6 +884,64 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         });
       }
 
+      // ---- EMPRESA / PJ ----
+      case "listar_empresas": {
+        const empresas = await storage.getEmpresasByUsuarioId(ctx.userId);
+        if (empresas.length === 0) {
+          return JSON.stringify({ mensagem: "Você ainda não tem empresa cadastrada. Cadastre pelo painel para começar a usar o modo PJ." });
+        }
+        return JSON.stringify({ empresas: empresas.map((e) => ({ id: e.id, nome: e.nome_fantasia || e.razao_social })) });
+      }
+
+      case "lancar_empresa": {
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        if ("erro" in empresa) return JSON.stringify(empresa);
+
+        const contas = await storage.getEmpresasContasByEmpresaId(empresa.id);
+        const tipo = args.tipo === "Receita" ? "Receita" : "Despesa";
+        // Resolve a conta pelo código ou nome; senão usa "Outros"/"Outras" do tipo.
+        const alvo = (args.conta || "").toString().toLowerCase();
+        let conta = alvo
+          ? contas.find((c) => c.codigo.toLowerCase() === alvo || c.nome.toLowerCase() === alvo)
+            || contas.find((c) => c.nome.toLowerCase().includes(alvo))
+          : undefined;
+        if (!conta) conta = contas.find((c) => c.tipo === tipo && /outr/i.test(c.nome));
+        if (!conta) conta = contas.find((c) => c.tipo === tipo);
+        if (!conta) {
+          return JSON.stringify({ error: `A empresa não tem uma conta do tipo ${tipo} no plano de contas. Peça ao usuário para escolher uma conta.` });
+        }
+
+        const today = new Date().toISOString().slice(0, 10);
+        const criada = await storage.createEmpresaTransacao({
+          empresa_id: empresa.id,
+          categoria_id: conta.id,
+          descricao: args.descricao || "Lançamento",
+          valor: args.valor || 0,
+          tipo,
+          data_transacao: args.data_transacao || today,
+          status: "Efetivada",
+          origem: "whatsapp",
+        } as any);
+        return JSON.stringify({
+          success: true, id: criada.id, empresa: empresa.nome_fantasia || empresa.razao_social,
+          conta: conta.nome, valor: args.valor, tipo, data: args.data_transacao || today,
+        });
+      }
+
+      case "resumo_empresa": {
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        if ("erro" in empresa) return JSON.stringify(empresa);
+        const resumo = await storage.getEmpresaResumo(empresa.id, { de: args.de, ate: args.ate });
+        return JSON.stringify({ empresa: empresa.nome_fantasia || empresa.razao_social, ...resumo });
+      }
+
+      case "dre_empresa": {
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        if ("erro" in empresa) return JSON.stringify(empresa);
+        const dre = await storage.getEmpresaDRE(empresa.id, { de: args.de, ate: args.ate });
+        return JSON.stringify({ empresa: empresa.nome_fantasia || empresa.razao_social, ...dre });
+      }
+
       default:
         return JSON.stringify({ error: `Tool '${name}' não reconhecida` });
     }
@@ -831,6 +949,29 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
     console.error(`[AI Agent] Erro ao executar tool '${name}':`, err.message);
     return JSON.stringify({ error: err.message });
   }
+}
+
+// Resolve a empresa do usuário por nome/parte; garante que pertence a ele.
+async function resolverEmpresa(
+  userId: number,
+  nome: string,
+): Promise<any> {
+  const empresas = await storage.getEmpresasByUsuarioId(userId);
+  if (empresas.length === 0) return { erro: true, error: "Nenhuma empresa cadastrada." };
+  const alvo = (nome || "").toString().toLowerCase().trim();
+  if (!alvo) {
+    if (empresas.length === 1) return empresas[0];
+    return { erro: true, error: "Especifique a empresa.", empresas: empresas.map((e) => e.nome_fantasia || e.razao_social) };
+  }
+  const matches = empresas.filter(
+    (e) => (e.nome_fantasia || "").toLowerCase().includes(alvo) || (e.razao_social || "").toLowerCase().includes(alvo),
+  );
+  if (matches.length === 1) return matches[0];
+  if (matches.length === 0) {
+    if (empresas.length === 1) return empresas[0];
+    return { erro: true, error: `Empresa '${nome}' não encontrada.`, empresas: empresas.map((e) => e.nome_fantasia || e.razao_social) };
+  }
+  return { erro: true, error: "Mais de uma empresa corresponde; peça para o usuário especificar.", empresas: matches.map((e) => e.nome_fantasia || e.razao_social) };
 }
 
 // ============================================
