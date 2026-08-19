@@ -26,10 +26,12 @@ try {
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import MemoryStore from "memorystore";
+import connectPgSimple from "connect-pg-simple";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { validateAndInitializeDatabase, waitForDatabase } from "./startup";
 import { setupRedirect } from "./middleware/setup.middleware";
+import { securityHeaders } from "./middleware/security.middleware";
 
 // Configurar timezone global da aplicação para São Paulo
 process.env.TZ = 'America/Sao_Paulo';
@@ -72,22 +74,58 @@ function setupUploadDirectories() {
 setupUploadDirectories();
 
 const app = express();
+
+const isProduction = process.env.NODE_ENV === 'production';
+
+// Necessário para cookie 'secure' funcionar atrás de proxy/HTTPS (EasyPanel).
+if (isProduction) {
+  app.set('trust proxy', 1);
+}
+
+// Cabeçalhos de segurança (helmet)
+app.use(securityHeaders);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Configuração da sessão
-const MemoryStoreSession = MemoryStore(session);
+// Segredo de sessão vem do ambiente. Em produção é obrigatório; se faltar,
+// aborta o boot em vez de subir com um segredo previsível e conhecido.
+const sessionSecret = process.env.SESSION_SECRET;
+if (isProduction && (!sessionSecret || sessionSecret.length < 32)) {
+  console.error('❌ SESSION_SECRET ausente ou muito curto em produção. Defina 64+ caracteres aleatórios no .env.');
+  process.exit(1);
+}
+const resolvedSessionSecret = sessionSecret || 'dev-only-insecure-secret-change-me';
+
+// Store de sessão: PostgreSQL (connect-pg-simple) quando há DATABASE_URL —
+// persiste entre restarts/deploys e permite mais de uma instância.
+// Fallback para MemoryStore só quando o banco ainda não está configurado.
+let sessionStore: session.Store;
+if (process.env.DATABASE_URL) {
+  const PgSession = connectPgSimple(session);
+  sessionStore = new PgSession({
+    conString: process.env.DATABASE_URL,
+    tableName: 'user_sessions',
+    createTableIfMissing: true,
+    pruneSessionInterval: 60 * 60,
+  });
+  console.log('🔐 Store de sessão: PostgreSQL (connect-pg-simple)');
+} else {
+  const MemoryStoreSession = MemoryStore(session);
+  sessionStore = new MemoryStoreSession({ checkPeriod: 86400000 });
+  console.warn('⚠️ Store de sessão: MemoryStore (sem DATABASE_URL).');
+}
+
 app.use(session({
-  secret: "financehub-secret-key",
+  secret: resolvedSessionSecret,
   resave: false,
   saveUninitialized: false,
-  store: new MemoryStoreSession({
-    checkPeriod: 86400000 // limpa sessões expiradas a cada 24h
-  }),
+  store: sessionStore,
   cookie: {
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 dias
-    secure: false, // set to true if using HTTPS
-    httpOnly: true
+    secure: isProduction, // cookie só por HTTPS em produção
+    httpOnly: true,
+    sameSite: 'lax',
   }
 }));
 

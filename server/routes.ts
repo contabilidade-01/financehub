@@ -5,6 +5,7 @@ import { storage, listIngestionEvents } from "./storage";
 import { auth } from "./middleware/auth.middleware";
 import { apiKeyAuth } from "./middleware/apiKey.middleware";
 import { combinedAuth } from "./middleware/combinedAuth.middleware";
+import { authLimiter } from "./middleware/security.middleware";
 import {
   checkImpersonation,
   requireSuperAdmin,
@@ -134,8 +135,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Note: Using middleware already imported at the top from adminAuth.middleware.ts
 
   // Auth routes
-  app.post("/api/auth/register", userController.register);
-  app.post("/api/auth/login", userController.login);
+  app.post("/api/auth/register", authLimiter, userController.register);
+  app.post("/api/auth/login", authLimiter, userController.login);
   app.post("/api/auth/logout", userController.logout);
   
   // Endpoint para verificação de sessão (usado pelo WebSocket)
