@@ -132,6 +132,7 @@ function buildTools() {
             tipo: { type: "string", enum: ["Receita", "Despesa"], description: "Tipo da transação" },
             data_transacao: { type: "string", description: "Data no formato YYYY-MM-DD" },
             categoria: { type: "string", description: "Nome da categoria (ex: Alimentação, Transporte)" },
+            forma_pagamento: { type: "string", description: "Forma de pagamento/cartão (ex: 'Pix', 'Nubank', 'Cartão de Crédito'). Se for cartão e o usuário não disser qual, PERGUNTE antes." },
           },
           required: ["descricao", "valor", "tipo", "data_transacao", "categoria"],
         },
@@ -500,6 +501,14 @@ function buildTools() {
     {
       type: "function" as const,
       function: {
+        name: "listar_cartoes",
+        description: "Lista as formas de pagamento/cartões que o usuário já tem cadastrados. Use quando precisar perguntar 'em qual cartão?' e mostrar as opções.",
+        parameters: { type: "object", properties: {} },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
         name: "parcelar_compra",
         description: "Registra uma compra PARCELADA em várias vezes, agrupadas como UMA compra. Use quando disserem 'parcelado em Nx', 'em N vezes', 'dividido em N'. Cria uma parcela por mês.",
         parameters: {
@@ -654,8 +663,16 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           return JSON.stringify({ error: "Não há categorias disponíveis para lançar. O plano de contas deste usuário não foi criado." });
         }
 
+        // Forma de pagamento: resolve pelo nome (cadastra se não existir).
+        let formaPagId: number | undefined;
+        let formaPagNome: string | undefined;
+        if (args.forma_pagamento) {
+          const fp = await resolveOuCriaFormaPagamento(ctx.userId, args.forma_pagamento);
+          if (fp.id) { formaPagId = fp.id; formaPagNome = fp.nome; }
+        }
+
         const today = new Date().toISOString().slice(0, 10);
-        const txData = {
+        const txData: any = {
           carteira_id: ctx.walletId,
           categoria_id: categoriaId,
           descricao: args.descricao || "Transação",
@@ -664,6 +681,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           data_transacao: args.data_transacao || today,
           status: "Efetivada",
         };
+        if (formaPagId) txData.forma_pagamento_id = formaPagId;
 
         try {
           const result = await storage.createTransaction(txData as any);
@@ -671,7 +689,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           if (cat && args.descricao) {
             await aprenderMemoriaCategoria(ctx.userId, args.descricao, cat.id, cat.nome);
           }
-          return JSON.stringify({ success: true, id: result.id, ...txData, categoria: categoriaNome || "Outros" });
+          return JSON.stringify({ success: true, id: result.id, ...txData, categoria: categoriaNome || "Outros", forma_pagamento: formaPagNome });
         } catch (dbErr: any) {
           // Loga a causa REAL (constraint, coluna, etc.) para diagnóstico.
           console.error(`[AI Agent] insere_transacao FALHOU no banco:`, dbErr?.message, "| payload:", JSON.stringify(txData));
@@ -952,6 +970,20 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
             ? `Você pode gastar ~R$${porDia.toFixed(2)} por dia (${diasRestantes} dias restantes)`
             : `⚠️ Sem folga! Despesas já ultrapassaram a renda em R$${Math.abs(sobraMes).toFixed(2)}`
         });
+      }
+
+      case "listar_cartoes": {
+        const doUsuario = await storage.getPaymentMethodsByUserId(ctx.userId);
+        const globais = await storage.getGlobalPaymentMethods();
+        const todos = [...doUsuario, ...globais]
+          .filter((p: any) => p.ativo !== false)
+          .map((p: any) => p.nome);
+        // remove duplicados preservando ordem
+        const nomes = Array.from(new Set(todos));
+        if (nomes.length === 0) {
+          return JSON.stringify({ cartoes: [], mensagem: "Nenhum cartão/forma cadastrado ainda. Peça o nome do cartão para cadastrar." });
+        }
+        return JSON.stringify({ cartoes: nomes });
       }
 
       case "parcelar_compra": {
