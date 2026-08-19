@@ -2713,3 +2713,49 @@ export async function editarTransacoesPorIds(
   }
   return n;
 }
+
+// Status do orçamento (limite_categoria) de UMA categoria no mês atual.
+// Usado para avisar o percentual logo após um gasto. null = sem limite definido.
+export async function getStatusOrcamentoCategoria(
+  userId: number,
+  walletId: number,
+  categoriaId: number,
+): Promise<{ categoria: string; limite: number; gasto: number; percentual: number; status: string } | null> {
+  try {
+    const metaRows = await db.execute(sql`
+      SELECT valor_alvo FROM metas_financeiras
+      WHERE usuario_id = ${userId} AND tipo = 'limite_categoria' AND ativo = true AND categoria_id = ${categoriaId}
+      LIMIT 1
+    `);
+    const meta = (metaRows as any[])[0];
+    if (!meta) return null;
+    const limite = parseFloat(meta.valor_alvo) || 0;
+    if (limite <= 0) return null;
+
+    const now = new Date();
+    const de = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+    const ate = now.toISOString().slice(0, 10);
+    const gRows = await db.execute(sql`
+      SELECT COALESCE(SUM(valor::numeric), 0) AS total FROM transacoes
+      WHERE carteira_id = ${walletId} AND categoria_id = ${categoriaId} AND tipo = 'Despesa'
+        AND data_transacao >= ${de} AND data_transacao <= ${ate}
+    `);
+    const gasto = parseFloat((gRows as any[])[0]?.total) || 0;
+    const pct = (gasto / limite) * 100;
+    const catRows = await db.execute(sql`SELECT nome FROM categorias WHERE id = ${categoriaId} LIMIT 1`);
+    const catNome = (catRows as any[])[0]?.nome || "";
+    let status = "ok";
+    if (pct >= 100) status = "estourado";
+    else if (pct >= 80) status = "atencao";
+    return {
+      categoria: catNome,
+      limite: Math.round(limite * 100) / 100,
+      gasto: Math.round(gasto * 100) / 100,
+      percentual: Math.round(pct * 10) / 10,
+      status,
+    };
+  } catch (err: any) {
+    console.error("[Orçamento] falha ao calcular status:", err?.message);
+    return null;
+  }
+}

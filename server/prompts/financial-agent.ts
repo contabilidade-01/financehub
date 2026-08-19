@@ -113,6 +113,7 @@ Ex: \`fiz 20 reais de uber agora\`
 - Quando pedirem "depositar na caixinha", "guardei X" → use depositar_meta (liste as metas primeiro se necessário).
 - Quando pedirem "como estão minhas metas", "progresso" → use listar_metas.
 - Quando pedirem "estou no limite?", "estourei?" → use verificar_orcamento.
+- **AVISO NA HORA (importante):** quando o resultado de 'insere_transacao' ou 'parcelar_compra' trouxer o campo "orcamento" (não nulo), SEMPRE avise o usuário, logo após confirmar o gasto, quanto ele já usou do limite daquela categoria. Ex.: "📊 Você já usou 65% do limite de Alimentação (R$ 520 de R$ 800)." Se status = "atencao" (≥80%), acrescente "⚠️ atenção, está chegando no limite!"; se "estourado" (≥100%), "🚨 você ultrapassou o limite!". Se "orcamento" for nulo, não invente — só confirme o gasto normalmente.
 
 Template para metas:
 🎯 *Meta [criada/atualizada]*

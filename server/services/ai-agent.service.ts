@@ -1,5 +1,5 @@
 import axios from "axios";
-import { storage, getDailySummary, getPeriodSummary, getWeeklySummary, getCategoryBreakdown, comparePeriods, createMeta, getMetasByUsuarioId, depositarMeta, verificarOrcamentos, getContasAPagar, marcarComoPaga, marcarRecorrente, getFluxoCaixaResumo, getSaldoCartao, getCartoesComSaldo, getFaturaCartao, resolveMemoriaCategoria, aprenderMemoriaCategoria, resolveOuCriaFormaPagamento, criarCompraParcelada, getUltimaCompra, editarTransacoesPorIds } from "../storage";
+import { storage, getDailySummary, getPeriodSummary, getWeeklySummary, getCategoryBreakdown, comparePeriods, createMeta, getMetasByUsuarioId, depositarMeta, verificarOrcamentos, getContasAPagar, marcarComoPaga, marcarRecorrente, getFluxoCaixaResumo, getSaldoCartao, getCartoesComSaldo, getFaturaCartao, resolveMemoriaCategoria, aprenderMemoriaCategoria, resolveOuCriaFormaPagamento, criarCompraParcelada, getUltimaCompra, editarTransacoesPorIds, getStatusOrcamentoCategoria } from "../storage";
 import { FINANCIAL_AGENT_SYSTEM_PROMPT, buildDynamicContext } from "../prompts/financial-agent";
 import { insertTransactionSchema } from "@shared/schema";
 import { withRetry } from "../utils/ai-errors";
@@ -689,7 +689,11 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           if (cat && args.descricao) {
             await aprenderMemoriaCategoria(ctx.userId, args.descricao, cat.id, cat.nome);
           }
-          return JSON.stringify({ success: true, id: result.id, ...txData, categoria: categoriaNome || "Outros", forma_pagamento: formaPagNome });
+          // Aviso na hora: status do orçamento da categoria (se houver limite).
+          const orcamento = tipo === "Despesa"
+            ? await getStatusOrcamentoCategoria(ctx.userId, ctx.walletId, categoriaId!)
+            : null;
+          return JSON.stringify({ success: true, id: result.id, ...txData, categoria: categoriaNome || "Outros", forma_pagamento: formaPagNome, orcamento });
         } catch (dbErr: any) {
           // Loga a causa REAL (constraint, coluna, etc.) para diagnóstico.
           console.error(`[AI Agent] insere_transacao FALHOU no banco:`, dbErr?.message, "| payload:", JSON.stringify(txData));
@@ -1016,10 +1020,11 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           formaPagamentoId: formaId,
           dataInicio,
         });
+        const orcamentoP = await getStatusOrcamentoCategoria(ctx.userId, ctx.walletId, catP!.id);
         return JSON.stringify({
           success: true, compra_grupo: r.compra_grupo, parcelas: r.parcelas,
           valor_parcela: r.valor_parcela, total: Math.round(r.valor_parcela * r.parcelas * 100) / 100,
-          categoria: catP?.nome, forma_pagamento: formaNome, ids: r.ids,
+          categoria: catP?.nome, forma_pagamento: formaNome, ids: r.ids, orcamento: orcamentoP,
         });
       }
 
