@@ -568,11 +568,17 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
   try {
     switch (name) {
       case "insere_transacao": {
-        // Resolver categoria pelo nome
+        // Normaliza o tipo para o padrão do banco ("Receita" | "Despesa").
+        const tipo = /receita|entrada|income|recebimento/i.test(args.tipo || "")
+          ? "Receita"
+          : "Despesa";
+
+        // Resolver categoria pelo nome (case-insensitive), preferindo o tipo.
+        const nomeBusca = (args.categoria || "").toLowerCase();
         const cat = ctx.categories.find(
-          (c) => c.nome.toLowerCase() === (args.categoria || "").toLowerCase() && c.tipo === args.tipo
+          (c) => c.nome.toLowerCase() === nomeBusca && c.tipo === tipo
         ) || ctx.categories.find(
-          (c) => c.nome.toLowerCase() === (args.categoria || "").toLowerCase()
+          (c) => c.nome.toLowerCase() === nomeBusca
         );
 
         // F4.2 — Memória: se o modelo não casou categoria, tenta o que o
@@ -586,7 +592,32 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
             categoriaNome = mem.categoria_nome;
           }
         }
-        categoriaId = categoriaId || ctx.categories.find(c => c.nome === "Outros" && c.tipo === args.tipo)?.id || ctx.categories[0]?.id;
+        // Fallbacks: "Outros" do tipo → qualquer do tipo → qualquer categoria.
+        if (!categoriaId) {
+          const fb = ctx.categories.find(c => /outr/i.test(c.nome) && c.tipo === tipo)
+            || ctx.categories.find(c => c.tipo === tipo)
+            || ctx.categories[0];
+          if (fb) { categoriaId = fb.id; categoriaNome = categoriaNome || fb.nome; }
+        }
+        // Defensivo: usuário sem categorias (plano de contas não criado) —
+        // cria uma "Outros" na hora, para o lançamento nunca falhar por isso.
+        if (!categoriaId) {
+          try {
+            const nova = await storage.createCategory({
+              nome: "Outros", tipo, usuario_id: ctx.userId, global: false,
+            } as any);
+            categoriaId = nova.id;
+            categoriaNome = categoriaNome || nova.nome;
+          } catch {
+            const todas = await storage.getCategoriesByUserId(ctx.userId);
+            categoriaId = todas[0]?.id;
+            categoriaNome = categoriaNome || todas[0]?.nome;
+          }
+        }
+        if (!categoriaId) {
+          console.error(`[AI Agent] insere_transacao: sem categoria disponível para user ${ctx.userId}`);
+          return JSON.stringify({ error: "Não há categorias disponíveis para lançar. O plano de contas deste usuário não foi criado." });
+        }
 
         const today = new Date().toISOString().slice(0, 10);
         const txData = {
@@ -594,19 +625,23 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           categoria_id: categoriaId,
           descricao: args.descricao || "Transação",
           valor: args.valor || 0,
-          tipo: args.tipo || "Despesa",
+          tipo,
           data_transacao: args.data_transacao || today,
           status: "Efetivada",
         };
 
-        const result = await storage.createTransaction(txData as any);
-
-        // F4.2 — Aprender: se o modelo deu uma categoria real (não fallback)
-        // e há descrição, memoriza para acertar da próxima vez.
-        if (cat && args.descricao) {
-          await aprenderMemoriaCategoria(ctx.userId, args.descricao, cat.id, cat.nome);
+        try {
+          const result = await storage.createTransaction(txData as any);
+          // F4.2 — Aprender: se o modelo deu categoria real (não fallback).
+          if (cat && args.descricao) {
+            await aprenderMemoriaCategoria(ctx.userId, args.descricao, cat.id, cat.nome);
+          }
+          return JSON.stringify({ success: true, id: result.id, ...txData, categoria: categoriaNome || "Outros" });
+        } catch (dbErr: any) {
+          // Loga a causa REAL (constraint, coluna, etc.) para diagnóstico.
+          console.error(`[AI Agent] insere_transacao FALHOU no banco:`, dbErr?.message, "| payload:", JSON.stringify(txData));
+          return JSON.stringify({ error: `Falha ao gravar a transação: ${dbErr?.message || "erro no banco"}` });
         }
-        return JSON.stringify({ success: true, id: result.id, ...txData, categoria: categoriaNome || "Outros" });
       }
 
       case "atualiza_transacao": {
