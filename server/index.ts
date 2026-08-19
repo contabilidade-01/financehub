@@ -33,6 +33,7 @@ import { validateAndInitializeDatabase, waitForDatabase } from "./startup";
 import { setupRedirect } from "./middleware/setup.middleware";
 import { securityHeaders } from "./middleware/security.middleware";
 import { runAutoMigrations } from "./migrations/auto-migrate";
+import { randomBytes } from "crypto";
 
 // Configurar timezone global da aplicação para São Paulo
 process.env.TZ = 'America/Sao_Paulo';
@@ -89,14 +90,20 @@ app.use(securityHeaders);
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Segredo de sessão vem do ambiente. Em produção é obrigatório; se faltar,
-// aborta o boot em vez de subir com um segredo previsível e conhecido.
+// Segredo de sessão vem do ambiente. Se faltar em produção, o app NÃO aborta:
+// gera um secret aleatório na hora e avisa (evita derrubar o deploy). Defina
+// SESSION_SECRET nas variáveis de ambiente para manter as sessões estáveis
+// entre reinícios.
 const sessionSecret = process.env.SESSION_SECRET;
-if (isProduction && (!sessionSecret || sessionSecret.length < 32)) {
-  console.error('❌ SESSION_SECRET ausente ou muito curto em produção. Defina 64+ caracteres aleatórios no .env.');
-  process.exit(1);
+let resolvedSessionSecret = sessionSecret;
+if (!resolvedSessionSecret || resolvedSessionSecret.length < 32) {
+  if (isProduction) {
+    resolvedSessionSecret = randomBytes(48).toString('hex');
+    console.warn('⚠️ SESSION_SECRET ausente/curto — usando um segredo gerado agora. Defina SESSION_SECRET nas variáveis de ambiente para manter os logins estáveis entre reinícios.');
+  } else {
+    resolvedSessionSecret = 'dev-only-insecure-secret-change-me';
+  }
 }
-const resolvedSessionSecret = sessionSecret || 'dev-only-insecure-secret-change-me';
 
 // Store de sessão: PostgreSQL (connect-pg-simple) quando há DATABASE_URL —
 // persiste entre restarts/deploys e permite mais de uma instância.
