@@ -188,6 +188,8 @@ app.use((req, res, next) => {
     // (evita erros como 'column data_vencimento does not exist' em produção).
     await runAutoMigrations();
     console.log('✅ Aplicação inicializada com sucesso!');
+    // Cérebro coletivo: agrega a memória global (PF) sem bloquear o boot.
+    import('./storage').then(({ agregarMemoriaGlobalPF }) => agregarMemoriaGlobalPF().catch(() => {}));
   } catch (error) {
     console.error('❌ Falha na inicialização do banco:', error);
     console.log('⚠️ Continuando sem inicialização automática...');

@@ -183,6 +183,25 @@ const STEPS: Step[] = [
       await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_lixeira_carteira ON transacoes_lixeira(carteira_id, excluida_em)`);
     },
   },
+  {
+    name: "memoria_global (cerebro coletivo agregado, sem dados pessoais)",
+    run: async () => {
+      // Opt-out do aprendizado coletivo (padrao: participa).
+      await db.execute(sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS aprendizado_coletivo BOOLEAN NOT NULL DEFAULT true`);
+      // Banco global: SO agregado. Nunca tem usuario_id nem valores/datas.
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS memoria_global (
+          id            SERIAL PRIMARY KEY,
+          escopo        VARCHAR(4) NOT NULL DEFAULT 'pf',
+          chave         VARCHAR(200) NOT NULL,
+          resposta      VARCHAR(200) NOT NULL,
+          votos         INTEGER NOT NULL DEFAULT 0,
+          atualizado_em TIMESTAMPTZ DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')
+        )
+      `);
+      await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS memoria_global_uq ON memoria_global(escopo, chave)`);
+    },
+  },
 ];
 
 export async function runAutoMigrations(): Promise<void> {

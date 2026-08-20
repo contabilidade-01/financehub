@@ -1,5 +1,5 @@
 import axios from "axios";
-import { storage, getDailySummary, getPeriodSummary, getWeeklySummary, getCategoryBreakdown, comparePeriods, createMeta, getMetasByUsuarioId, depositarMeta, verificarOrcamentos, getContasAPagar, marcarComoPaga, marcarRecorrente, getFluxoCaixaResumo, getSaldoCartao, getCartoesComSaldo, getFaturaCartao, resolveMemoriaCategoria, aprenderMemoriaCategoria, resolveOuCriaFormaPagamento, criarCompraParcelada, getUltimaCompra, editarTransacoesPorIds, getStatusOrcamentoCategoria, softDeleteTransacao, softDeleteTodasTransacoes, restaurarUltimaExcluida, transacaoPertenceAoWallet, cadastrarOuAtualizarCartao } from "../storage";
+import { storage, getDailySummary, getPeriodSummary, getWeeklySummary, getCategoryBreakdown, comparePeriods, createMeta, getMetasByUsuarioId, depositarMeta, verificarOrcamentos, getContasAPagar, marcarComoPaga, marcarRecorrente, getFluxoCaixaResumo, getSaldoCartao, getCartoesComSaldo, getFaturaCartao, resolveMemoriaCategoria, aprenderMemoriaCategoria, resolveOuCriaFormaPagamento, criarCompraParcelada, getUltimaCompra, editarTransacoesPorIds, getStatusOrcamentoCategoria, softDeleteTransacao, softDeleteTodasTransacoes, restaurarUltimaExcluida, transacaoPertenceAoWallet, cadastrarOuAtualizarCartao, resolveMemoriaGlobal } from "../storage";
 import { FINANCIAL_AGENT_SYSTEM_PROMPT, buildDynamicContext } from "../prompts/financial-agent";
 import { insertTransactionSchema } from "@shared/schema";
 import { withRetry } from "../utils/ai-errors";
@@ -650,6 +650,16 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           if (mem) {
             categoriaId = mem.categoria_id;
             categoriaNome = mem.categoria_nome;
+          }
+        }
+        // Cérebro coletivo (global agregado): usa o consenso da multidão quando
+        // o modelo e a memória pessoal não resolveram.
+        if (!categoriaId && args.descricao) {
+          const g = await resolveMemoriaGlobal("pf", args.descricao);
+          if (g) {
+            const gc = ctx.categories.find(c => c.nome.toLowerCase() === g.categoria_nome.toLowerCase() && c.tipo === tipo)
+              || ctx.categories.find(c => c.nome.toLowerCase() === g.categoria_nome.toLowerCase());
+            if (gc) { categoriaId = gc.id; categoriaNome = gc.nome; }
           }
         }
         // Fallbacks: "Outros" do tipo → qualquer do tipo → qualquer categoria.

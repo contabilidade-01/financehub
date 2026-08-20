@@ -2893,3 +2893,82 @@ export async function cadastrarOuAtualizarCartao(userId: number, data: {
   const created = (ins as any[])[0];
   return { id: created.id, nome: created.nome, atualizado: false };
 }
+
+// ============================================
+// Cérebro coletivo (memória global agregada) — PF
+// ============================================
+
+// Agrega a memória PESSOAL de todos (que participam do coletivo) em regras
+// GLOBAIS anônimas. Só promove comerciante→categoria com >= minUsuarios
+// usuários DISTINTOS (k-anonimato). Grava apenas o agregado (sem usuario_id).
+export async function agregarMemoriaGlobalPF(minUsuarios = 5): Promise<number> {
+  try {
+    const rows = await db.execute(sql`
+      WITH base AS (
+        SELECT m.chave AS chave,
+               m.usuario_id AS usuario_id,
+               (m.valor->>'categoria_nome') AS categoria
+        FROM memoria_usuario m
+        JOIN usuarios u ON u.id = m.usuario_id
+        WHERE m.tipo = 'merchant_categoria'
+          AND u.aprendizado_coletivo IS NOT FALSE
+          AND (m.valor->>'categoria_nome') IS NOT NULL
+      ),
+      votos AS (
+        SELECT chave, categoria, COUNT(DISTINCT usuario_id) AS n
+        FROM base GROUP BY chave, categoria
+      ),
+      total AS (
+        SELECT chave, COUNT(DISTINCT usuario_id) AS total_n
+        FROM base GROUP BY chave
+      ),
+      vencedor AS (
+        SELECT DISTINCT ON (v.chave) v.chave, v.categoria, t.total_n
+        FROM votos v JOIN total t ON t.chave = v.chave
+        ORDER BY v.chave, v.n DESC
+      )
+      SELECT chave, categoria, total_n FROM vencedor WHERE total_n >= ${minUsuarios}
+    `);
+    let n = 0;
+    for (const r of rows as any[]) {
+      await db.execute(sql`
+        INSERT INTO memoria_global (escopo, chave, resposta, votos)
+        VALUES ('pf', ${r.chave}, ${r.categoria}, ${Number(r.total_n)})
+        ON CONFLICT (escopo, chave)
+        DO UPDATE SET resposta = ${r.categoria}, votos = ${Number(r.total_n)},
+                      atualizado_em = (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')
+      `);
+      n++;
+    }
+    console.log(`[MemóriaGlobal] PF: ${n} regra(s) agregada(s) (min ${minUsuarios} usuários distintos).`);
+    return n;
+  } catch (err: any) {
+    console.error("[MemóriaGlobal] falha na agregação:", err?.message);
+    return 0;
+  }
+}
+
+// Resolve um texto contra o cérebro global do escopo (pf/pj). Só devolve o
+// consenso da multidão — nunca dado de indivíduo.
+export async function resolveMemoriaGlobal(
+  escopo: string,
+  texto: string,
+): Promise<{ categoria_nome: string; votos: number } | undefined> {
+  const norm = (s: string) => (s || "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const alvo = norm(texto);
+  if (!alvo) return undefined;
+  try {
+    const rows = await db.execute(sql`SELECT chave, resposta, votos FROM memoria_global WHERE escopo = ${escopo}`);
+    let melhor: any;
+    for (const r of rows as any[]) {
+      const k = norm(r.chave);
+      if (k && (alvo.includes(k) || k.includes(alvo))) {
+        if (!melhor || k.length > norm(melhor.chave).length) melhor = r;
+      }
+    }
+    return melhor ? { categoria_nome: melhor.resposta, votos: melhor.votos } : undefined;
+  } catch (err: any) {
+    console.error("[MemóriaGlobal] falha ao resolver:", err?.message);
+    return undefined;
+  }
+}
