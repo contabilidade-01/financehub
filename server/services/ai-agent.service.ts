@@ -682,9 +682,11 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         // Forma de pagamento: resolve pelo nome (cadastra se não existir).
         let formaPagId: number | undefined;
         let formaPagNome: string | undefined;
+        let cartaoIncompleto: any = undefined;
         if (args.forma_pagamento) {
           const fp = await resolveOuCriaFormaPagamento(ctx.userId, args.forma_pagamento);
           if (fp.id) { formaPagId = fp.id; formaPagNome = fp.nome; }
+          if (fp.incompleto) cartaoIncompleto = { nome: fp.nome, faltando: fp.faltando };
         }
 
         const today = new Date().toISOString().slice(0, 10);
@@ -709,7 +711,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           const orcamento = tipo === "Despesa"
             ? await getStatusOrcamentoCategoria(ctx.userId, ctx.walletId, categoriaId!)
             : null;
-          return JSON.stringify({ success: true, id: result.id, ...txData, categoria: categoriaNome || "Outros", forma_pagamento: formaPagNome, orcamento });
+          return JSON.stringify({ success: true, id: result.id, ...txData, categoria: categoriaNome || "Outros", forma_pagamento: formaPagNome, orcamento, cartao_incompleto: cartaoIncompleto });
         } catch (dbErr: any) {
           // Loga a causa REAL (constraint, coluna, etc.) para diagnóstico.
           console.error(`[AI Agent] insere_transacao FALHOU no banco:`, dbErr?.message, "| payload:", JSON.stringify(txData));
@@ -1033,10 +1035,12 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         // Forma de pagamento (resolve/cria pelo nome).
         let formaId: number | null = null;
         let formaNome: string | undefined;
+        let cartaoIncompletoP: any = undefined;
         if (args.forma_pagamento) {
           const fp = await resolveOuCriaFormaPagamento(ctx.userId, args.forma_pagamento);
           formaId = fp.id || null;
           formaNome = fp.nome;
+          if (fp.incompleto) cartaoIncompletoP = { nome: fp.nome, faltando: fp.faltando };
         }
         const dataInicio = /^\d{4}-\d{2}-\d{2}$/.test(args.data_inicio || "") ? args.data_inicio : new Date().toISOString().slice(0, 10);
 
@@ -1053,7 +1057,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         return JSON.stringify({
           success: true, compra_grupo: r.compra_grupo, parcelas: r.parcelas,
           valor_parcela: r.valor_parcela, total: Math.round(r.valor_parcela * r.parcelas * 100) / 100,
-          categoria: catP?.nome, forma_pagamento: formaNome, ids: r.ids, orcamento: orcamentoP,
+          categoria: catP?.nome, forma_pagamento: formaNome, ids: r.ids, orcamento: orcamentoP, cartao_incompleto: cartaoIncompletoP,
         });
       }
 

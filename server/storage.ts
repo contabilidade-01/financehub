@@ -2586,33 +2586,66 @@ export async function aprenderMemoriaCategoria(
 // ============================================
 
 // Resolve uma forma de pagamento pelo nome (usuário + globais); cria se não achar.
+// Nomes genéricos que NÃO são cartões nominais (não pedimos limite/fechamento).
+const FORMAS_GENERICAS = /^(pix|dinheiro|d[eé]bito|cart[aã]o de d[eé]bito|cart[aã]o de cr[eé]dito|boleto|transfer[eê]ncia|esp[eé]cie|cart[aã]o)$/i;
+
 export async function resolveOuCriaFormaPagamento(
   userId: number,
   nome: string,
-): Promise<{ id: number; nome: string }> {
-  const alvo = (nome || "").trim().toLowerCase();
+): Promise<{ id: number; nome: string; criado: boolean; incompleto: boolean; faltando: string[] }> {
+  const norm = (s: string) => (s || "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const alvo = norm(nome);
   const rows = await db.execute(sql`
-    SELECT id, nome FROM formas_pagamento
+    SELECT id, nome, dia_fechamento, dia_vencimento, limite FROM formas_pagamento
     WHERE (usuario_id = ${userId} OR global = true) AND ativo = true
   `);
   const lista = rows as any[];
-  let match =
-    lista.find((r) => r.nome.toLowerCase() === alvo) ||
-    lista.find((r) => r.nome.toLowerCase().includes(alvo) || alvo.includes(r.nome.toLowerCase()));
-  if (match) return { id: match.id, nome: match.nome };
+
+  // 1) match exato. 2) match por substring — mas ignora nomes genéricos na
+  //    direção "alvo contém nome" (evita o 'Cartão de Crédito' engolir 'Nubank').
+  let match = lista.find((r) => norm(r.nome) === alvo);
+  if (!match) {
+    const candidatos = lista.filter((r) => {
+      const n = norm(r.nome);
+      if (!n) return false;
+      if (n === alvo) return true;
+      if (n.includes(alvo)) return true; // ex.: alvo "nu" em "nubank"
+      if (alvo.includes(n) && !FORMAS_GENERICAS.test(r.nome)) return true; // ex.: "nubank" em "cartão nubank"
+      return false;
+    });
+    // mais específico (nome mais longo) vence
+    match = candidatos.sort((a, b) => norm(b.nome).length - norm(a.nome).length)[0];
+  }
+
+  const analisar = (r: any) => {
+    const ehCartaoNominal = !FORMAS_GENERICAS.test(r.nome);
+    const faltando: string[] = [];
+    if (ehCartaoNominal) {
+      if (r.limite == null) faltando.push("limite");
+      if (r.dia_fechamento == null) faltando.push("dia de fechamento");
+      if (r.dia_vencimento == null) faltando.push("dia de vencimento");
+    }
+    return { incompleto: faltando.length > 0, faltando };
+  };
+
+  if (match) {
+    const a = analisar(match);
+    return { id: match.id, nome: match.nome, criado: false, ...a };
+  }
   try {
     const ins = await db.execute(sql`
       INSERT INTO formas_pagamento (nome, usuario_id, global, ativo)
       VALUES (${nome.trim()}, ${userId}, false, true)
-      RETURNING id, nome
+      RETURNING id, nome, dia_fechamento, dia_vencimento, limite
     `);
     const created = (ins as any[])[0];
-    return { id: created.id, nome: created.nome };
+    const a = analisar(created);
+    return { id: created.id, nome: created.nome, criado: true, ...a };
   } catch {
-    // Conflito de nome único — reusa o que já existe com esse nome.
-    const again = await db.execute(sql`SELECT id, nome FROM formas_pagamento WHERE lower(nome) = ${alvo} LIMIT 1`);
+    const again = await db.execute(sql`SELECT id, nome, dia_fechamento, dia_vencimento, limite FROM formas_pagamento WHERE lower(nome) = ${alvo} LIMIT 1`);
     const row = (again as any[])[0];
-    return row ? { id: row.id, nome: row.nome } : { id: 0, nome };
+    if (row) { const a = analisar(row); return { id: row.id, nome: row.nome, criado: false, ...a }; }
+    return { id: 0, nome, criado: false, incompleto: false, faltando: [] };
   }
 }
 
