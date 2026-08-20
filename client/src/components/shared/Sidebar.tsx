@@ -117,6 +117,7 @@ function Sidebar() {
         { icon: <TrendingUp className="mr-3 h-4 w-4" />, text: 'Relatórios', path: "/p/relatorios" },
         { icon: <Tag className="mr-3 h-4 w-4" />, text: 'Plano de Contas', path: "/p/categorias" },
         { icon: <Building2 className="mr-3 h-4 w-4" />, text: 'Minhas Empresas', path: "/p/empresas" },
+        { icon: <CreditCard className="mr-3 h-4 w-4" />, text: 'Conciliação', path: "/p/conciliacao" },
       ]
     }] : []),
     {
@@ -146,7 +147,8 @@ function Sidebar() {
         { icon: <Search className="mr-3 h-4 w-4" />, text: t('navigation.manage_payments', 'Gerenciar Pagamentos'), path: "/admin/payments" },
         { icon: <CreditCard className="mr-3 h-4 w-4" />, text: t('navigation.payment_settings', 'Config. Pagamento'), path: "/admin/payment-settings" },
         { icon: <Settings className="mr-3 h-4 w-4" />, text: t('navigation.customize', 'Personalizar'), path: "/admin/customize" },
-        { icon: <Wrench className="mr-3 h-4 w-4" />, text: t('navigation.maintenance', 'Manutenção'), path: "/admin/maintenance" }
+        { icon: <Wrench className="mr-3 h-4 w-4" />, text: t('navigation.maintenance', 'Manutenção'), path: "/admin/maintenance" },
+        { icon: <Shield className="mr-3 h-4 w-4" />, text: 'Consentimentos LGPD', path: "/admin/lgpd" }
 
       ]
     }

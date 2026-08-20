@@ -3004,3 +3004,234 @@ export async function listarConsentimentosLgpd(opts: { limit?: number; offset?: 
   `);
   return rows as any[];
 }
+
+// ============================================
+// Conciliação bancária — Contas bancárias
+// ============================================
+export async function createContaBancaria(data: any): Promise<any> {
+  const r = await db.execute(sql`
+    INSERT INTO contas_bancarias (empresa_id, usuario_id, banco, agencia, numero, tipo, saldo_inicial, ativo)
+    VALUES (${data.empresa_id}, ${data.usuario_id ?? null}, ${data.banco}, ${data.agencia ?? null},
+            ${data.numero ?? null}, ${data.tipo ?? 'corrente'}, ${Number(data.saldo_inicial ?? 0).toFixed(2)}, true)
+    RETURNING *
+  `);
+  return (r as any[])[0];
+}
+export async function getContasBancariasByEmpresa(empresaId: number): Promise<any[]> {
+  return (await db.execute(sql`SELECT * FROM contas_bancarias WHERE empresa_id = ${empresaId} ORDER BY banco`)) as any[];
+}
+export async function getContaBancariaById(id: number): Promise<any | undefined> {
+  return ((await db.execute(sql`SELECT * FROM contas_bancarias WHERE id = ${id} LIMIT 1`)) as any[])[0];
+}
+export async function updateContaBancaria(id: number, data: any): Promise<any> {
+  const r = await db.execute(sql`
+    UPDATE contas_bancarias SET
+      banco = COALESCE(${data.banco ?? null}, banco),
+      agencia = COALESCE(${data.agencia ?? null}, agencia),
+      numero = COALESCE(${data.numero ?? null}, numero),
+      tipo = COALESCE(${data.tipo ?? null}, tipo),
+      saldo_inicial = COALESCE(${data.saldo_inicial != null ? Number(data.saldo_inicial).toFixed(2) : null}, saldo_inicial),
+      ativo = COALESCE(${data.ativo ?? null}, ativo)
+    WHERE id = ${id} RETURNING *
+  `);
+  return (r as any[])[0];
+}
+export async function deleteContaBancaria(id: number): Promise<boolean> {
+  const r = await db.execute(sql`DELETE FROM contas_bancarias WHERE id = ${id} RETURNING id`);
+  return (r as any[]).length > 0;
+}
+
+// Saldo do sistema para a conta = saldo_inicial + Σ(Receita) − Σ(Despesa) das
+// transações vinculadas àquela conta bancária.
+export async function getSaldoSistemaConta(contaBancariaId: number): Promise<number> {
+  const conta = await getContaBancariaById(contaBancariaId);
+  if (!conta) return 0;
+  const r = await db.execute(sql`
+    SELECT COALESCE(SUM(CASE WHEN tipo = 'Receita' THEN valor::numeric ELSE -valor::numeric END), 0) AS mov
+    FROM empresas_transacoes WHERE conta_bancaria_id = ${contaBancariaId}
+  `);
+  const mov = parseFloat((r as any[])[0]?.mov || "0") || 0;
+  return Math.round((parseFloat(conta.saldo_inicial) + mov) * 100) / 100;
+}
+
+// ============================================
+// Conciliação — Importação e movimentos
+// ============================================
+export async function getUltimoSaldoInformado(contaBancariaId: number): Promise<number | null> {
+  const r = await db.execute(sql`
+    SELECT saldo_final_informado FROM importacoes_extrato
+    WHERE conta_bancaria_id = ${contaBancariaId} AND saldo_final_informado IS NOT NULL
+    ORDER BY criado_em DESC LIMIT 1
+  `);
+  const v = (r as any[])[0]?.saldo_final_informado;
+  return v != null ? parseFloat(v) : null;
+}
+export async function hashExtratoJaImportado(contaBancariaId: number, hash: string): Promise<boolean> {
+  const r = await db.execute(sql`SELECT 1 FROM importacoes_extrato WHERE conta_bancaria_id = ${contaBancariaId} AND hash_arquivo = ${hash} LIMIT 1`);
+  return (r as any[]).length > 0;
+}
+export async function criarImportacao(data: any): Promise<any> {
+  const r = await db.execute(sql`
+    INSERT INTO importacoes_extrato (empresa_id, conta_bancaria_id, arquivo_nome, formato, periodo_de, periodo_ate, saldo_final_informado, hash_arquivo, status)
+    VALUES (${data.empresa_id}, ${data.conta_bancaria_id}, ${data.arquivo_nome ?? null}, ${data.formato ?? 'ofx'},
+            ${data.periodo_de ?? null}, ${data.periodo_ate ?? null}, ${data.saldo_final_informado ?? null}, ${data.hash_arquivo ?? null}, 'revisao')
+    RETURNING *
+  `);
+  return (r as any[])[0];
+}
+// Insere um movimento; se o FITID já existe naquela conta, ignora (dedup).
+export async function criarExtratoMovimento(data: any): Promise<any | null> {
+  const r = await db.execute(sql`
+    INSERT INTO extrato_movimentos
+      (importacao_id, conta_bancaria_id, empresa_id, fitid, data, valor, tipo, descricao, memo, status,
+       transacao_id, conta_contabil_id, sugestao_conta_id, sugestao_origem, sugestao_confianca)
+    VALUES (${data.importacao_id}, ${data.conta_bancaria_id}, ${data.empresa_id}, ${data.fitid ?? null},
+            ${data.data}, ${Number(data.valor).toFixed(2)}, ${data.tipo}, ${data.descricao ?? null}, ${data.memo ?? null},
+            ${data.status ?? 'pendente'}, ${data.transacao_id ?? null}, ${data.conta_contabil_id ?? null},
+            ${data.sugestao_conta_id ?? null}, ${data.sugestao_origem ?? null}, ${data.sugestao_confianca ?? null})
+    ON CONFLICT (conta_bancaria_id, fitid) DO NOTHING
+    RETURNING *
+  `);
+  return (r as any[])[0] || null;
+}
+export async function getMovimentos(opts: { importacaoId?: number; contaBancariaId?: number; status?: string } = {}): Promise<any[]> {
+  const conds: any[] = [];
+  if (opts.importacaoId) conds.push(sql`importacao_id = ${opts.importacaoId}`);
+  if (opts.contaBancariaId) conds.push(sql`conta_bancaria_id = ${opts.contaBancariaId}`);
+  if (opts.status) conds.push(sql`status = ${opts.status}`);
+  let where = sql``;
+  if (conds.length) { where = sql`WHERE ${conds[0]}`; for (let i = 1; i < conds.length; i++) where = sql`${where} AND ${conds[i]}`; }
+  return (await db.execute(sql`SELECT * FROM extrato_movimentos ${where} ORDER BY data DESC, id DESC`)) as any[];
+}
+export async function getMovimentoById(id: number): Promise<any | undefined> {
+  return ((await db.execute(sql`SELECT * FROM extrato_movimentos WHERE id = ${id} LIMIT 1`)) as any[])[0];
+}
+export async function updateMovimento(id: number, patch: any): Promise<any> {
+  const sets: any[] = [];
+  if (patch.status !== undefined) sets.push(sql`status = ${patch.status}`);
+  if (patch.transacao_id !== undefined) sets.push(sql`transacao_id = ${patch.transacao_id}`);
+  if (patch.conta_contabil_id !== undefined) sets.push(sql`conta_contabil_id = ${patch.conta_contabil_id}`);
+  if (!sets.length) return getMovimentoById(id);
+  let setClause = sets[0]; for (let i = 1; i < sets.length; i++) setClause = sql`${setClause}, ${sets[i]}`;
+  const r = await db.execute(sql`UPDATE extrato_movimentos SET ${setClause} WHERE id = ${id} RETURNING *`);
+  return (r as any[])[0];
+}
+
+// Casamento determinístico: transação PJ não conciliada, mesmo valor absoluto,
+// data dentro de ±tolDias.
+export async function buscarCandidatosConciliacao(empresaId: number, valor: number, data: string, tolDias = 3): Promise<any[]> {
+  const abs = Math.abs(valor).toFixed(2);
+  return (await db.execute(sql`
+    SELECT id, descricao, valor, tipo, data_transacao
+    FROM empresas_transacoes
+    WHERE empresa_id = ${empresaId}
+      AND conciliado = false
+      AND ABS(valor::numeric) = ${abs}
+      AND data_transacao BETWEEN (${data}::date - ${tolDias} * INTERVAL '1 day') AND (${data}::date + ${tolDias} * INTERVAL '1 day')
+    ORDER BY ABS(data_transacao - ${data}::date) ASC
+    LIMIT 5
+  `)) as any[];
+}
+
+// ============================================
+// Memória de classificação PJ (descrição bancária -> conta contábil)
+// ============================================
+export async function resolveMemoriaContaPJ(userId: number, texto: string): Promise<{ conta_contabil_id: number; nome?: string } | undefined> {
+  const norm = (s: string) => (s || "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const alvo = norm(texto);
+  if (!alvo) return undefined;
+  try {
+    const rows = await db.execute(sql`SELECT chave, valor FROM memoria_usuario WHERE usuario_id = ${userId} AND tipo = 'merchant_conta_pj'`);
+    let melhor: any;
+    for (const r of rows as any[]) {
+      const k = norm(r.chave);
+      if (k && (alvo.includes(k) || k.includes(alvo))) { if (!melhor || k.length > norm(melhor.chave).length) melhor = r; }
+    }
+    if (!melhor) return undefined;
+    const v = typeof melhor.valor === "string" ? JSON.parse(melhor.valor) : melhor.valor;
+    return v?.conta_contabil_id ? { conta_contabil_id: Number(v.conta_contabil_id), nome: v.nome } : undefined;
+  } catch { return undefined; }
+}
+export async function aprenderMemoriaContaPJ(userId: number, chave: string, contaContabilId: number, nome?: string): Promise<void> {
+  const norm = (s: string) => (s || "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const chaveNorm = norm(chave);
+  if (!chaveNorm) return;
+  try {
+    const valor = JSON.stringify({ conta_contabil_id: contaContabilId, nome });
+    await db.execute(sql`
+      INSERT INTO memoria_usuario (usuario_id, tipo, chave, valor)
+      VALUES (${userId}, 'merchant_conta_pj', ${chaveNorm}, ${valor}::jsonb)
+      ON CONFLICT (usuario_id, tipo, chave)
+      DO UPDATE SET valor = ${valor}::jsonb, hits = memoria_usuario.hits + 1, updated_at = (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')
+    `);
+  } catch (err: any) { console.error("[MemóriaPJ] falha ao aprender:", err?.message); }
+}
+
+// Concilia um movimento a uma transação PJ existente (marca ambos).
+export async function conciliarMovimentoComTransacao(movId: number, txId: number): Promise<void> {
+  await db.execute(sql`UPDATE extrato_movimentos SET status = 'conciliado', transacao_id = ${txId} WHERE id = ${movId}`);
+  await db.execute(sql`UPDATE empresas_transacoes SET conciliado = true WHERE id = ${txId}`);
+}
+
+// Lança um movimento como nova transação PJ na conta contábil escolhida,
+// já conciliada e ligada à conta bancária. Retorna a transação criada.
+export async function lancarMovimentoComoTransacao(mov: any, contaContabilId: number): Promise<any> {
+  const tipo = Number(mov.valor) >= 0 ? "Receita" : "Despesa";
+  const r = await db.execute(sql`
+    INSERT INTO empresas_transacoes
+      (empresa_id, categoria_id, descricao, valor, tipo, data_transacao, status, origem, conta_bancaria_id, conciliado, fitid)
+    VALUES (${mov.empresa_id}, ${contaContabilId}, ${mov.descricao || 'Movimento bancário'},
+            ${Math.abs(Number(mov.valor)).toFixed(2)}, ${tipo}, ${mov.data}, 'Efetivada', 'conciliacao',
+            ${mov.conta_bancaria_id}, true, ${mov.fitid ?? null})
+    RETURNING *
+  `);
+  const tx = (r as any[])[0];
+  await db.execute(sql`UPDATE extrato_movimentos SET status = 'lancado', transacao_id = ${tx.id}, conta_contabil_id = ${contaContabilId} WHERE id = ${mov.id}`);
+  return tx;
+}
+
+// ============================================
+// Soft-delete PJ (lixeira + undo) — Parte 2 do plano
+// Reutiliza `transacoes_lixeira` com empresa_id (coluna opcional).
+// ============================================
+
+// Confirma que a transação PJ pertence à empresa.
+export async function transacaoPjPertenceAEmpresa(transacaoId: number, empresaId: number): Promise<boolean> {
+  const rows = await db.execute(sql`SELECT 1 FROM empresas_transacoes WHERE id = ${transacaoId} AND empresa_id = ${empresaId} LIMIT 1`);
+  return (rows as any[]).length > 0;
+}
+
+// Soft-delete PJ: move para lixeira, remove da tabela principal.
+export async function softDeleteEmpresaTransacao(transacaoId: number, empresaId: number, userId: number): Promise<boolean> {
+  const dono = await transacaoPjPertenceAEmpresa(transacaoId, empresaId);
+  if (!dono) return false;
+  await db.execute(sql`
+    INSERT INTO transacoes_lixeira (usuario_id, empresa_id, transacao_id, dados)
+    SELECT ${userId}, ${empresaId}, id, to_jsonb(t) FROM empresas_transacoes t WHERE id = ${transacaoId} AND empresa_id = ${empresaId}
+  `);
+  await db.execute(sql`DELETE FROM empresas_transacoes WHERE id = ${transacaoId} AND empresa_id = ${empresaId}`);
+  return true;
+}
+
+// Restaurar última transação PJ excluída da empresa.
+export async function restaurarUltimaExcluidaPJ(empresaId: number): Promise<{ restaurada: boolean; descricao?: string }> {
+  const rows = await db.execute(sql`
+    SELECT id, dados FROM transacoes_lixeira WHERE empresa_id = ${empresaId}
+    ORDER BY excluida_em DESC LIMIT 1
+  `);
+  const item = (rows as any[])[0];
+  if (!item) return { restaurada: false };
+  await db.execute(sql`INSERT INTO empresas_transacoes SELECT (jsonb_populate_record(NULL::empresas_transacoes, ${item.dados}::jsonb)).*`);
+  await db.execute(sql`DELETE FROM transacoes_lixeira WHERE id = ${item.id}`);
+  const desc = item.dados?.descricao || undefined;
+  return { restaurada: true, descricao: desc };
+}
+
+// Listar lixeira PJ para uma empresa.
+export async function listarLixeiraPJ(empresaId: number, limit = 50): Promise<any[]> {
+  return (await db.execute(sql`
+    SELECT id, transacao_id, dados, excluida_em FROM transacoes_lixeira
+    WHERE empresa_id = ${empresaId} ORDER BY excluida_em DESC LIMIT ${Math.min(limit, 200)}
+  `)) as any[];
+}
+

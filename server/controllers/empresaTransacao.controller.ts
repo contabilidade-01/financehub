@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { storage } from "../storage";
+import { softDeleteEmpresaTransacao, restaurarUltimaExcluidaPJ, listarLixeiraPJ } from "../storage";
 import { insertEmpresaTransacaoSchema, updateEmpresaTransacaoSchema } from "@shared/schema";
 
 /**
@@ -167,7 +168,10 @@ export const deleteEmpresaTransacao = async (req: Request, res: Response) => {
     if (!transacao) return res.status(404).json({ error: "Transação não encontrada." });
     if (transacao.empresa_id !== empresaId) return res.status(403).json({ error: "Transação não pertence a esta empresa." });
 
-    await storage.deleteEmpresaTransacao(transacaoId);
+    // Soft-delete: move para lixeira
+    const deletado = await softDeleteEmpresaTransacao(transacaoId, empresaId, userId);
+    if (!deletado) return res.status(500).json({ error: "Erro ao deletar transação." });
+
     return res.status(204).send();
   } catch (err) {
     console.error("deleteEmpresaTransacao:", err);

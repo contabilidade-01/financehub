@@ -8,6 +8,7 @@ import PjTransactions from "@/pages/pj/transactions";
 import PjCategorias from "@/pages/pj/categorias";
 import PjEmpresas from "@/pages/pj/empresas";
 import PjDRE from "@/pages/pj/relatorios/dre";
+import ConciliacaoPage from "@/pages/pj/conciliacao";
 
 /**
  * PjRouter — resolve a empresa ativa e renderiza o componente PJ correto.
@@ -73,6 +74,8 @@ export default function PjRouter() {
         return <PjEmpresas />;
       case "relatorios":
         return <PjDRE empresaId={empresaAtiva} />;
+      case "conciliacao":
+        return <ConciliacaoPage empresaId={empresaAtiva} />;
       default:
         return <PjDashboard empresaId={empresaAtiva} />;
     }

@@ -175,12 +175,14 @@ const STEPS: Step[] = [
           id             SERIAL PRIMARY KEY,
           usuario_id     INTEGER REFERENCES usuarios(id) ON DELETE CASCADE,
           carteira_id    INTEGER,
+          empresa_id     INTEGER,
           transacao_id   INTEGER,
           dados          JSONB NOT NULL,
           excluida_em    TIMESTAMPTZ DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')
         )
       `);
       await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_lixeira_carteira ON transacoes_lixeira(carteira_id, excluida_em)`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_lixeira_empresa ON transacoes_lixeira(empresa_id, excluida_em)`);
     },
   },
   {
@@ -216,6 +218,72 @@ const STEPS: Step[] = [
         )
       `);
       await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_consent_usuario ON consentimentos_lgpd(usuario_id)`);
+    },
+  },
+  {
+    name: "conciliacao bancaria (contas_bancarias, importacoes_extrato, extrato_movimentos)",
+    run: async () => {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS contas_bancarias (
+          id            SERIAL PRIMARY KEY,
+          empresa_id    INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+          usuario_id    INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+          banco         VARCHAR(120) NOT NULL,
+          agencia       VARCHAR(20),
+          numero        VARCHAR(30),
+          tipo          VARCHAR(20) NOT NULL DEFAULT 'corrente',
+          saldo_inicial NUMERIC(14,2) NOT NULL DEFAULT 0,
+          ativo         BOOLEAN NOT NULL DEFAULT true,
+          criado_em     TIMESTAMPTZ DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')
+        )
+      `);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_contas_banc_empresa ON contas_bancarias(empresa_id)`);
+
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS importacoes_extrato (
+          id                    SERIAL PRIMARY KEY,
+          empresa_id            INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+          conta_bancaria_id     INTEGER NOT NULL REFERENCES contas_bancarias(id) ON DELETE CASCADE,
+          arquivo_nome          VARCHAR(255),
+          formato               VARCHAR(10) NOT NULL DEFAULT 'ofx',
+          periodo_de            DATE,
+          periodo_ate           DATE,
+          saldo_final_informado NUMERIC(14,2),
+          hash_arquivo          VARCHAR(64),
+          status                VARCHAR(15) NOT NULL DEFAULT 'revisao',
+          criado_em             TIMESTAMPTZ DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')
+        )
+      `);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_import_conta ON importacoes_extrato(conta_bancaria_id)`);
+
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS extrato_movimentos (
+          id                SERIAL PRIMARY KEY,
+          importacao_id     INTEGER NOT NULL REFERENCES importacoes_extrato(id) ON DELETE CASCADE,
+          conta_bancaria_id INTEGER NOT NULL REFERENCES contas_bancarias(id) ON DELETE CASCADE,
+          empresa_id        INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+          fitid             VARCHAR(120),
+          data              DATE NOT NULL,
+          valor             NUMERIC(14,2) NOT NULL,
+          tipo              VARCHAR(10) NOT NULL,
+          descricao         VARCHAR(255),
+          memo              VARCHAR(255),
+          status            VARCHAR(12) NOT NULL DEFAULT 'pendente',
+          transacao_id      INTEGER,
+          conta_contabil_id INTEGER,
+          sugestao_conta_id INTEGER,
+          sugestao_origem   VARCHAR(20),
+          sugestao_confianca INTEGER,
+          criado_em         TIMESTAMPTZ DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')
+        )
+      `);
+      await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS extrato_mov_fitid_uq ON extrato_movimentos(conta_bancaria_id, fitid) WHERE fitid IS NOT NULL`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_extrato_mov_import ON extrato_movimentos(importacao_id, status)`);
+
+      // Ligações da transação PJ com a origem bancária
+      await db.execute(sql`ALTER TABLE empresas_transacoes ADD COLUMN IF NOT EXISTS conta_bancaria_id INTEGER`);
+      await db.execute(sql`ALTER TABLE empresas_transacoes ADD COLUMN IF NOT EXISTS conciliado BOOLEAN NOT NULL DEFAULT false`);
+      await db.execute(sql`ALTER TABLE empresas_transacoes ADD COLUMN IF NOT EXISTS fitid VARCHAR(120)`);
     },
   },
 ];

@@ -94,11 +94,11 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
     if (!user) {
       // Criar usuário (mesmo padrão do N8N)
       console.log(`[UazAPI Webhook] Novo usuário: ${senderName} (${chatid})`);
-      const phone = chatid.split("@")[0];
+      const phone = chatid.split("@")[0]; // ex: 5511984630568
 
       user = await storage.createUser({
         nome: senderName || "Usuário WhatsApp",
-        email: chatid, // usa chatid como email provisório
+        email: `${phone}@telefone.local`, // placeholder — login será por telefone+senha
         telefone: phone,
         senha: "mudar@123",
         remoteJid: chatid,

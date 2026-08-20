@@ -1252,6 +1252,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/empresas/:id/dashboard/resumo", combinedAuth, empresaTransacaoCtrl.getEmpresaResumo);
   app.get("/api/empresas/:id/relatorios/dre", combinedAuth, empresaTransacaoCtrl.getEmpresaDRE);
 
+  // Lixeira PJ (soft-delete/undo)
+  const { restaurarUltimaExcluidaPJ, listarLixeiraPJ } = await import("./storage");
+  app.get("/api/empresas/:id/lixeira", combinedAuth, async (req: Request, res: Response) => {
+    const emp = await (await import("./storage")).storage.getEmpresaById(parseInt(req.params.id));
+    if (!emp || emp.usuario_id !== req.user!.id) return res.status(404).json({ error: "Empresa não encontrada" });
+    const items = await listarLixeiraPJ(emp.id);
+    res.json(items);
+  });
+  app.post("/api/empresas/:id/lixeira/restaurar", combinedAuth, async (req: Request, res: Response) => {
+    const emp = await (await import("./storage")).storage.getEmpresaById(parseInt(req.params.id));
+    if (!emp || emp.usuario_id !== req.user!.id) return res.status(404).json({ error: "Empresa não encontrada" });
+    const result = await restaurarUltimaExcluidaPJ(emp.id);
+    res.json(result);
+  });
+
+  // Conciliação bancária (contas bancárias + import OFX + matching + IA sugere)
+  const { ConciliacaoController } = await import("./controllers/conciliacao.controller");
+  const uploadMemoria = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
+  app.get("/api/empresas/:id/contas-bancarias", combinedAuth, ConciliacaoController.listarContas);
+  app.post("/api/empresas/:id/contas-bancarias", combinedAuth, ConciliacaoController.criarConta);
+  app.put("/api/empresas/:id/contas-bancarias/:contaId", combinedAuth, ConciliacaoController.atualizarConta);
+  app.delete("/api/empresas/:id/contas-bancarias/:contaId", combinedAuth, ConciliacaoController.removerConta);
+  app.post("/api/empresas/:id/conciliacao/importar", combinedAuth, uploadMemoria.single("arquivo"), ConciliacaoController.importar);
+  app.get("/api/empresas/:id/conciliacao/movimentos", combinedAuth, ConciliacaoController.listarMovimentos);
+  app.post("/api/empresas/:id/conciliacao/movimentos/:mid/lancar", combinedAuth, ConciliacaoController.lancar);
+  app.post("/api/empresas/:id/conciliacao/movimentos/:mid/conciliar", combinedAuth, ConciliacaoController.conciliar);
+  app.post("/api/empresas/:id/conciliacao/movimentos/:mid/ignorar", combinedAuth, ConciliacaoController.ignorar);
+  app.post("/api/empresas/:id/conciliacao/aceitar-sugestoes", combinedAuth, ConciliacaoController.aceitarSugestoes);
+  app.get("/api/empresas/:id/conciliacao/bater-saldo", combinedAuth, ConciliacaoController.baterSaldo);
+
   // ==========================================
   // WEBHOOK UAZAPI — Pipeline IA internalizado (substitui N8N)
   // Recebe mensagens do WhatsApp via UazAPI, processa com IA, insere transação, responde.
