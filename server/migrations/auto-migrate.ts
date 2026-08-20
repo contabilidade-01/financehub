@@ -167,6 +167,22 @@ const STEPS: Step[] = [
       await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS memoria_usuario_uq ON memoria_usuario(usuario_id, tipo, chave)`);
     },
   },
+  {
+    name: "transacoes_lixeira (backup/undo de exclusoes, por usuario)",
+    run: async () => {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS transacoes_lixeira (
+          id             SERIAL PRIMARY KEY,
+          usuario_id     INTEGER REFERENCES usuarios(id) ON DELETE CASCADE,
+          carteira_id    INTEGER,
+          transacao_id   INTEGER,
+          dados          JSONB NOT NULL,
+          excluida_em    TIMESTAMPTZ DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')
+        )
+      `);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_lixeira_carteira ON transacoes_lixeira(carteira_id, excluida_em)`);
+    },
+  },
 ];
 
 export async function runAutoMigrations(): Promise<void> {

@@ -1,5 +1,5 @@
 import axios from "axios";
-import { storage, getDailySummary, getPeriodSummary, getWeeklySummary, getCategoryBreakdown, comparePeriods, createMeta, getMetasByUsuarioId, depositarMeta, verificarOrcamentos, getContasAPagar, marcarComoPaga, marcarRecorrente, getFluxoCaixaResumo, getSaldoCartao, getCartoesComSaldo, getFaturaCartao, resolveMemoriaCategoria, aprenderMemoriaCategoria, resolveOuCriaFormaPagamento, criarCompraParcelada, getUltimaCompra, editarTransacoesPorIds, getStatusOrcamentoCategoria } from "../storage";
+import { storage, getDailySummary, getPeriodSummary, getWeeklySummary, getCategoryBreakdown, comparePeriods, createMeta, getMetasByUsuarioId, depositarMeta, verificarOrcamentos, getContasAPagar, marcarComoPaga, marcarRecorrente, getFluxoCaixaResumo, getSaldoCartao, getCartoesComSaldo, getFaturaCartao, resolveMemoriaCategoria, aprenderMemoriaCategoria, resolveOuCriaFormaPagamento, criarCompraParcelada, getUltimaCompra, editarTransacoesPorIds, getStatusOrcamentoCategoria, softDeleteTransacao, softDeleteTodasTransacoes, restaurarUltimaExcluida, transacaoPertenceAoWallet, cadastrarOuAtualizarCartao } from "../storage";
 import { FINANCIAL_AGENT_SYSTEM_PROMPT, buildDynamicContext } from "../prompts/financial-agent";
 import { insertTransactionSchema } from "@shared/schema";
 import { withRetry } from "../utils/ai-errors";
@@ -183,7 +183,7 @@ function buildTools() {
       type: "function" as const,
       function: {
         name: "deleta_transacao",
-        description: "Remove uma transação pelo ID.",
+        description: "Remove uma transação pelo ID (vai para a lixeira, recuperável por 30 dias).",
         parameters: {
           type: "object",
           properties: {
@@ -191,6 +191,22 @@ function buildTools() {
           },
           required: ["id_transacao"],
         },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "excluir_todas",
+        description: "Exclui TODAS as transações do usuário (vão para a lixeira, recuperáveis por 30 dias). Use SÓ quando o usuário pedir para apagar tudo E confirmar. SEMPRE confirme antes de chamar.",
+        parameters: { type: "object", properties: {} },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "restaurar_transacao",
+        description: "Restaura a ÚLTIMA transação excluída (desfaz a exclusão). Use quando disserem 'me arrependi', 'volta o que apaguei', 'desfazer exclusão', 'restaura'.",
+        parameters: { type: "object", properties: {} },
       },
     },
     {
@@ -712,6 +728,9 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           if (cat) updateData.categoria_id = cat.id;
         }
 
+        // Isolamento: só edita transação da própria carteira.
+        const doDono = await transacaoPertenceAoWallet(args.id_transacao, ctx.walletId);
+        if (!doDono) return JSON.stringify({ success: false, error: "Transação não encontrada nas suas transações." });
         const result = await storage.updateTransaction(args.id_transacao, updateData);
         return JSON.stringify({ success: !!result, transaction: result });
       }
@@ -727,8 +746,21 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       }
 
       case "deleta_transacao": {
-        const deleted = await storage.deleteTransaction(args.id_transacao);
-        return JSON.stringify({ success: deleted });
+        // Soft delete + isolamento: só apaga se for da carteira do usuário.
+        const ok = await softDeleteTransacao(args.id_transacao, ctx.walletId, ctx.userId);
+        if (!ok) return JSON.stringify({ success: false, error: "Transação não encontrada nas suas transações." });
+        return JSON.stringify({ success: true, recuperavel: true, msg: "Excluída (dá pra restaurar por 30 dias)." });
+      }
+
+      case "excluir_todas": {
+        const n = await softDeleteTodasTransacoes(ctx.walletId, ctx.userId);
+        return JSON.stringify({ success: true, excluidas: n, recuperavel: true, msg: `${n} transação(ões) movidas para a lixeira (recuperáveis por 30 dias).` });
+      }
+
+      case "restaurar_transacao": {
+        const r = await restaurarUltimaExcluida(ctx.walletId);
+        if (!r.restaurada) return JSON.stringify({ success: false, error: "Não há transações excluídas para restaurar." });
+        return JSON.stringify({ success: true, restaurada: r.descricao || "última transação" });
       }
 
       case "insere_lembrete": {
@@ -913,21 +945,18 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       }
 
       case "cadastrar_cartao": {
-        const cartao = await storage.createPaymentMethod({
+        // Upsert: se o cartão já existe (ex.: criado automaticamente numa compra),
+        // atualiza em vez de falhar por nome duplicado.
+        const c = await cadastrarOuAtualizarCartao(ctx.userId, {
           nome: args.nome,
-          descricao: `Cartão ${args.bandeira || ''} final ${args.ultimos_digitos || '****'}`.trim(),
-          icone: '💳',
-          cor: '#FF6B35',
-          usuario_id: ctx.userId,
-          global: false,
-          ativo: true,
           limite: args.limite,
           dia_fechamento: args.dia_fechamento,
           dia_vencimento: args.dia_vencimento,
-          bandeira: args.bandeira || null,
-          ultimos_digitos: args.ultimos_digitos || null,
-        } as any);
-        return JSON.stringify({ success: true, id: cartao.id, nome: cartao.nome, limite: args.limite, msg: `Cartão ${args.nome} cadastrado! Limite: R$${args.limite}. Fecha dia ${args.dia_fechamento}, vence dia ${args.dia_vencimento}.` });
+          bandeira: args.bandeira,
+          ultimos_digitos: args.ultimos_digitos,
+        });
+        const verbo = c.atualizado ? "atualizado" : "cadastrado";
+        return JSON.stringify({ success: true, id: c.id, nome: c.nome, limite: args.limite, msg: `Cartão ${c.nome} ${verbo}! Limite: R$${args.limite}. Fecha dia ${args.dia_fechamento}, vence dia ${args.dia_vencimento}.` });
       }
 
       case "saldo_cartao": {
@@ -1149,13 +1178,46 @@ async function resolverEmpresa(
 // AGENT LOOP — function calling até resposta
 // ============================================
 
+// Chama o modelo de chat com FALLBACK: tenta o principal (OpenAI) e, se falhar,
+// um reserva (qualquer endpoint compatível com a API da OpenAI — ex.: Groq,
+// OpenRouter, ou outro modelo). Configurar via env:
+//   AI_FALLBACK_API_KEY, AI_FALLBACK_BASE_URL (default OpenAI), AI_MODEL_FALLBACK
+async function callChatCompletion(messages: any[], tools: any[]): Promise<any> {
+  const payload = { messages, tools, tool_choice: "auto", temperature: 0.3 };
+  const primaryKey = process.env.OPENAI_API_KEY;
+  const primaryModel = process.env.AI_MODEL || "gpt-4o-mini";
+  try {
+    return await withRetry(
+      () => axios.post(
+        "https://api.openai.com/v1/chat/completions",
+        { model: primaryModel, ...payload },
+        { headers: { Authorization: `Bearer ${primaryKey}`, "Content-Type": "application/json" }, timeout: 60000 },
+      ),
+      { provider: "openai-chat" },
+    );
+  } catch (primaryErr) {
+    const fbKey = process.env.AI_FALLBACK_API_KEY;
+    if (!fbKey) throw primaryErr; // sem reserva configurado
+    const fbUrl = (process.env.AI_FALLBACK_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "") + "/chat/completions";
+    const fbModel = process.env.AI_MODEL_FALLBACK || "gpt-4o-mini";
+    console.warn(`[AI] modelo principal falhou — usando reserva (${fbModel} em ${fbUrl})`);
+    return await withRetry(
+      () => axios.post(
+        fbUrl,
+        { model: fbModel, ...payload },
+        { headers: { Authorization: `Bearer ${fbKey}`, "Content-Type": "application/json" }, timeout: 60000 },
+      ),
+      { provider: "ai-fallback" },
+    );
+  }
+}
+
 export async function runAgent(
   userMessage: string,
   ctx: ToolContext,
   history: { role: string; content: string }[] = [],
 ): Promise<string> {
   const apiKey = process.env.OPENAI_API_KEY;
-  const model = process.env.AI_MODEL || "gpt-4o-mini";
   if (!apiKey) throw new Error("OPENAI_API_KEY não configurada");
 
   const systemPrompt = FINANCIAL_AGENT_SYSTEM_PROMPT + buildDynamicContext() + `
@@ -1179,23 +1241,7 @@ ${ctx.categories.map(c => `- ${c.nome} (${c.tipo})`).join("\n")}`;
   const maxIterations = 8; // safety net
 
   for (let i = 0; i < maxIterations; i++) {
-    const response = await withRetry(
-      () => axios.post(
-        "https://api.openai.com/v1/chat/completions",
-        {
-          model,
-          messages,
-          tools,
-          tool_choice: "auto",
-          temperature: 0.3,
-        },
-        {
-          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-          timeout: 60000,
-        }
-      ),
-      { provider: "openai-chat" }
-    );
+    const response = await callChatCompletion(messages, tools);
 
     const choice = response.data.choices[0];
     const assistantMessage = choice.message;

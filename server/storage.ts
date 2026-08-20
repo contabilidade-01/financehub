@@ -2759,3 +2759,104 @@ export async function getStatusOrcamentoCategoria(
     return null;
   }
 }
+
+// ============================================
+// Isolamento + Soft delete (lixeira/undo) + Backup por usuário
+// ============================================
+
+// Confirma que a transação pertence à carteira do usuário (isolamento).
+export async function transacaoPertenceAoWallet(transacaoId: number, walletId: number): Promise<boolean> {
+  const rows = await db.execute(sql`SELECT 1 FROM transacoes WHERE id = ${transacaoId} AND carteira_id = ${walletId} LIMIT 1`);
+  return (rows as any[]).length > 0;
+}
+
+// Soft delete: move a transação para a lixeira (mantém 30 dias) e remove da tabela.
+// Só afeta transação da PRÓPRIA carteira (nunca de outro usuário).
+export async function softDeleteTransacao(transacaoId: number, walletId: number, userId: number): Promise<boolean> {
+  const dono = await transacaoPertenceAoWallet(transacaoId, walletId);
+  if (!dono) return false;
+  await db.execute(sql`
+    INSERT INTO transacoes_lixeira (usuario_id, carteira_id, transacao_id, dados)
+    SELECT ${userId}, carteira_id, id, to_jsonb(t) FROM transacoes t WHERE id = ${transacaoId} AND carteira_id = ${walletId}
+  `);
+  await db.execute(sql`DELETE FROM transacoes WHERE id = ${transacaoId} AND carteira_id = ${walletId}`);
+  return true;
+}
+
+// Move TODAS as transações da carteira para a lixeira. Retorna a quantidade.
+export async function softDeleteTodasTransacoes(walletId: number, userId: number): Promise<number> {
+  const cnt = await db.execute(sql`SELECT COUNT(*)::int AS n FROM transacoes WHERE carteira_id = ${walletId}`);
+  const n = (cnt as any[])[0]?.n || 0;
+  if (n === 0) return 0;
+  await db.execute(sql`
+    INSERT INTO transacoes_lixeira (usuario_id, carteira_id, transacao_id, dados)
+    SELECT ${userId}, carteira_id, id, to_jsonb(t) FROM transacoes t WHERE carteira_id = ${walletId}
+  `);
+  await db.execute(sql`DELETE FROM transacoes WHERE carteira_id = ${walletId}`);
+  return n;
+}
+
+// Restaura a última transação excluída da carteira (arrependimento).
+export async function restaurarUltimaExcluida(walletId: number): Promise<{ restaurada: boolean; descricao?: string }> {
+  const rows = await db.execute(sql`
+    SELECT id, dados FROM transacoes_lixeira WHERE carteira_id = ${walletId}
+    ORDER BY excluida_em DESC LIMIT 1
+  `);
+  const item = (rows as any[])[0];
+  if (!item) return { restaurada: false };
+  // Reconstrói a linha original a partir do JSON e reinsere.
+  await db.execute(sql`INSERT INTO transacoes SELECT (jsonb_populate_record(NULL::transacoes, ${item.dados}::jsonb)).*`);
+  await db.execute(sql`DELETE FROM transacoes_lixeira WHERE id = ${item.id}`);
+  const desc = (item.dados && (item.dados.descricao || item.dados["descricao"])) || undefined;
+  return { restaurada: true, descricao: desc };
+}
+
+// Backup: lista os itens na lixeira do usuário (para conferência/recuperação).
+export async function listarLixeira(walletId: number, limit = 50): Promise<any[]> {
+  const rows = await db.execute(sql`
+    SELECT id, transacao_id, dados, excluida_em FROM transacoes_lixeira
+    WHERE carteira_id = ${walletId} ORDER BY excluida_em DESC LIMIT ${Math.min(limit, 200)}
+  `);
+  return rows as any[];
+}
+
+// Limpa a lixeira antiga (>30 dias). Chamado no boot / periodicamente.
+export async function limparLixeiraAntiga(): Promise<void> {
+  try {
+    await db.execute(sql`DELETE FROM transacoes_lixeira WHERE excluida_em < (CURRENT_DATE - INTERVAL '30 days')`);
+  } catch (err: any) {
+    console.error("[Lixeira] falha ao limpar antigas:", err?.message);
+  }
+}
+
+// Cadastra OU atualiza um cartão pelo nome (evita erro de nome duplicado).
+export async function cadastrarOuAtualizarCartao(userId: number, data: {
+  nome: string; limite?: number; dia_fechamento?: number; dia_vencimento?: number; bandeira?: string; ultimos_digitos?: string;
+}): Promise<{ id: number; nome: string; atualizado: boolean }> {
+  const alvo = data.nome.trim().toLowerCase();
+  const existentes = await db.execute(sql`
+    SELECT id, nome FROM formas_pagamento WHERE lower(nome) = ${alvo} AND (usuario_id = ${userId} OR global = true) LIMIT 1
+  `);
+  const ex = (existentes as any[])[0];
+  if (ex) {
+    await db.execute(sql`
+      UPDATE formas_pagamento SET
+        limite = COALESCE(${data.limite ?? null}, limite),
+        dia_fechamento = COALESCE(${data.dia_fechamento ?? null}, dia_fechamento),
+        dia_vencimento = COALESCE(${data.dia_vencimento ?? null}, dia_vencimento),
+        bandeira = COALESCE(${data.bandeira ?? null}, bandeira),
+        ultimos_digitos = COALESCE(${data.ultimos_digitos ?? null}, ultimos_digitos),
+        ativo = true
+      WHERE id = ${ex.id}
+    `);
+    return { id: ex.id, nome: ex.nome, atualizado: true };
+  }
+  const ins = await db.execute(sql`
+    INSERT INTO formas_pagamento (nome, descricao, icone, cor, usuario_id, global, ativo, limite, dia_fechamento, dia_vencimento, bandeira, ultimos_digitos)
+    VALUES (${data.nome.trim()}, ${'Cartão'}, ${'💳'}, ${'#FF6B35'}, ${userId}, false, true,
+            ${data.limite ?? null}, ${data.dia_fechamento ?? null}, ${data.dia_vencimento ?? null}, ${data.bandeira ?? null}, ${data.ultimos_digitos ?? null})
+    RETURNING id, nome
+  `);
+  const created = (ins as any[])[0];
+  return { id: created.id, nome: created.nome, atualizado: false };
+}
