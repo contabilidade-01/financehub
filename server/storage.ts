@@ -2972,3 +2972,35 @@ export async function resolveMemoriaGlobal(
     return undefined;
   }
 }
+
+// ============================================
+// Consentimento LGPD (registro de aceite)
+// ============================================
+export const LGPD_VERSAO_ATUAL = "1.0";
+
+export async function jaConsentiuLgpd(userId: number, versao = LGPD_VERSAO_ATUAL): Promise<boolean> {
+  try {
+    const rows = await db.execute(sql`SELECT 1 FROM consentimentos_lgpd WHERE usuario_id = ${userId} AND versao = ${versao} LIMIT 1`);
+    return (rows as any[]).length > 0;
+  } catch { return false; }
+}
+
+export async function registrarConsentimentoLgpd(userId: number, versao: string, ip?: string, userAgent?: string): Promise<void> {
+  await db.execute(sql`
+    INSERT INTO consentimentos_lgpd (usuario_id, versao, ip, user_agent)
+    VALUES (${userId}, ${versao}, ${ip ?? null}, ${(userAgent || "").slice(0, 400) || null})
+  `);
+}
+
+export async function listarConsentimentosLgpd(opts: { limit?: number; offset?: number } = {}): Promise<any[]> {
+  const limit = Math.min(opts.limit ?? 200, 1000);
+  const offset = opts.offset ?? 0;
+  const rows = await db.execute(sql`
+    SELECT c.id, c.usuario_id, u.nome, u.email, c.versao, c.aceito_em, c.ip, c.user_agent
+    FROM consentimentos_lgpd c
+    JOIN usuarios u ON u.id = c.usuario_id
+    ORDER BY c.aceito_em DESC
+    LIMIT ${limit} OFFSET ${offset}
+  `);
+  return rows as any[];
+}

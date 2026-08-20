@@ -202,6 +202,22 @@ const STEPS: Step[] = [
       await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS memoria_global_uq ON memoria_global(escopo, chave)`);
     },
   },
+  {
+    name: "consentimentos_lgpd (registro de aceite p/ prova legal)",
+    run: async () => {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS consentimentos_lgpd (
+          id          SERIAL PRIMARY KEY,
+          usuario_id  INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+          versao      VARCHAR(20) NOT NULL,
+          aceito_em   TIMESTAMPTZ DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo'),
+          ip          VARCHAR(60),
+          user_agent  VARCHAR(400)
+        )
+      `);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_consent_usuario ON consentimentos_lgpd(usuario_id)`);
+    },
+  },
 ];
 
 export async function runAutoMigrations(): Promise<void> {

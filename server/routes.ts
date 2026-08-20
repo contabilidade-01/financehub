@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
-import { storage, listIngestionEvents } from "./storage";
+import { storage, listIngestionEvents, jaConsentiuLgpd, registrarConsentimentoLgpd, listarConsentimentosLgpd, LGPD_VERSAO_ATUAL } from "./storage";
 import { auth } from "./middleware/auth.middleware";
 import { apiKeyAuth } from "./middleware/apiKey.middleware";
 import { combinedAuth } from "./middleware/combinedAuth.middleware";
@@ -742,6 +742,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Welcome Messages endpoints (apenas superadmin)
+  // LGPD — consentimento
+  app.get("/api/lgpd/status", combinedAuth, async (req: any, res) => {
+    try {
+      const aceito = await jaConsentiuLgpd(req.user.id, LGPD_VERSAO_ATUAL);
+      res.json({ aceito, versao: LGPD_VERSAO_ATUAL });
+    } catch (e: any) { res.status(500).json({ error: e?.message }); }
+  });
+  app.post("/api/lgpd/aceitar", combinedAuth, async (req: any, res) => {
+    try {
+      const ip = (req.headers["x-forwarded-for"]?.toString().split(",")[0] || req.ip || "").slice(0, 60);
+      const ua = req.headers["user-agent"]?.toString();
+      await registrarConsentimentoLgpd(req.user.id, LGPD_VERSAO_ATUAL, ip, ua);
+      res.json({ ok: true, versao: LGPD_VERSAO_ATUAL });
+    } catch (e: any) { res.status(500).json({ error: e?.message }); }
+  });
+  app.get("/api/admin/lgpd/consentimentos", combinedAuth, requireSuperAdmin, async (req, res) => {
+    try {
+      const limit = req.query.limit ? Number(req.query.limit) : 200;
+      const offset = req.query.offset ? Number(req.query.offset) : 0;
+      res.json(await listarConsentimentosLgpd({ limit, offset }));
+    } catch (e: any) { res.status(500).json({ error: e?.message }); }
+  });
+
   // Log de ingestão por IA (diagnóstico de falhas: sem_credito × transitorio × bug)
   app.get("/api/admin/ingestion-events", combinedAuth, requireSuperAdmin, async (req, res) => {
     try {

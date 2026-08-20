@@ -34,6 +34,8 @@ import Reminders from "@/pages/reminders";
 import PaymentMethods from "@/pages/payment-methods";
 import AdminDashboard from "@/pages/admin/dashboard";
 import AdminUsers from "@/pages/admin/users";
+import AdminLgpd from "@/pages/admin/lgpd";
+import LgpdConsent from "@/components/LgpdConsent";
 import DatabasePage from "@/pages/admin/database";
 import CancelSubscription from "@/pages/subscription/cancel";
 import SubscriptionExpired from "@/pages/subscription-expired";
@@ -121,6 +123,8 @@ function Router() {
   }
 
   return (
+    <>
+    <LgpdConsent />
     <AnimatePresence mode="wait">
       <Switch key={location}>
         {!isAuthenticated ? (
@@ -220,6 +224,11 @@ function Router() {
                 <AdminUsers />
               </MainLayout>
             </Route>
+            <Route path="/admin/lgpd">
+              <MainLayout>
+                <AdminLgpd />
+              </MainLayout>
+            </Route>
             <Route path="/admin/database">
               <MainLayout>
                 <DatabasePage />
@@ -287,6 +296,7 @@ function Router() {
         <Route component={NotFound} />
       </Switch>
     </AnimatePresence>
+    </>
   );
 }
 
