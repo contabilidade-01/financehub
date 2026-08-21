@@ -1302,3 +1302,93 @@ export async function resetGlobals(req: Request, res: Response) {
     res.status(500).json({ success: false, message: 'Erro ao resetar globais', error: error instanceof Error ? error.message : 'Erro desconhecido' });
   }
 }
+
+// ============================================
+// Assinaturas — ciclo (mensal/trimestral/anual) + vencimento (controle manual)
+// ============================================
+const MESES_CICLO: Record<string, number> = { mensal: 1, trimestral: 3, anual: 12 };
+function addMeses(base: Date, meses: number): Date {
+  const d = new Date(base);
+  d.setMonth(d.getMonth() + meses);
+  return d;
+}
+
+// GET /api/admin/assinaturas — lista clientes com ciclo, vencimento e situação.
+export async function getAssinaturas(req: Request, res: Response) {
+  try {
+    const todos = await storage.getAllUsers();
+    const hoje = new Date();
+    const lista = todos
+      .filter((u) => u.tipo_usuario === "normal" || u.tipo_usuario === "usuario")
+      .map((u) => {
+        const venc = u.data_expiracao_assinatura ? new Date(u.data_expiracao_assinatura) : null;
+        let situacao: string = "sem_data";
+        let dias: number | null = null;
+        if ((u.status_assinatura || "").startsWith("degustacao")) situacao = "degustacao";
+        if (venc) {
+          dias = Math.ceil((venc.getTime() - hoje.getTime()) / 86400000);
+          situacao = dias < 0 ? "vencido" : dias <= 7 ? "vence_breve" : "em_dia";
+        }
+        return {
+          id: u.id, nome: u.nome, telefone: u.telefone, email: u.email,
+          tipo_pessoa: (u as any).tipo_pessoa || "fisica",
+          ativo: u.ativo, status_assinatura: u.status_assinatura,
+          ciclo_assinatura: (u as any).ciclo_assinatura || null,
+          data_expiracao_assinatura: u.data_expiracao_assinatura,
+          situacao, dias_para_vencer: dias,
+        };
+      });
+    return res.json(lista);
+  } catch (err) {
+    console.error("getAssinaturas:", err);
+    return res.status(500).json({ error: "Erro ao listar assinaturas" });
+  }
+}
+
+// POST /api/admin/assinaturas/:id/definir  { ciclo, inicio? }
+// Transforma o cliente em assinante: define ciclo e calcula o vencimento.
+export async function definirAssinatura(req: Request, res: Response) {
+  try {
+    const userId = parseInt(req.params.id);
+    const { ciclo, inicio } = req.body || {};
+    const meses = MESES_CICLO[ciclo];
+    if (!meses) return res.status(400).json({ error: "ciclo inválido (mensal | trimestral | anual)" });
+    const user = await storage.getUserById(userId);
+    if (!user) return res.status(404).json({ error: "Usuário não encontrado" });
+    const base = typeof inicio === "string" && /^\d{4}-\d{2}-\d{2}/.test(inicio) ? new Date(inicio) : new Date();
+    const venc = addMeses(base, meses);
+    const updated = await storage.updateUser(userId, {
+      ciclo_assinatura: ciclo, data_expiracao_assinatura: venc, ativo: true,
+      status_assinatura: "ativa", subscriptionActive: true,
+    } as any);
+    return res.json(updated);
+  } catch (err) {
+    console.error("definirAssinatura:", err);
+    return res.status(500).json({ error: "Erro ao definir assinatura" });
+  }
+}
+
+// POST /api/admin/assinaturas/:id/renovar  { ciclo? }
+// Empurra o vencimento +1 ciclo. Se ainda válido, soma ao fim atual; se vencido, a partir de hoje.
+export async function renovarAssinatura(req: Request, res: Response) {
+  try {
+    const userId = parseInt(req.params.id);
+    const user = await storage.getUserById(userId);
+    if (!user) return res.status(404).json({ error: "Usuário não encontrado" });
+    const ciclo = (req.body?.ciclo) || (user as any).ciclo_assinatura;
+    const meses = MESES_CICLO[ciclo];
+    if (!meses) return res.status(400).json({ error: "Defina o ciclo antes de renovar" });
+    const hoje = new Date();
+    const atual = user.data_expiracao_assinatura ? new Date(user.data_expiracao_assinatura) : hoje;
+    const base = atual.getTime() > hoje.getTime() ? atual : hoje;
+    const venc = addMeses(base, meses);
+    const updated = await storage.updateUser(userId, {
+      ciclo_assinatura: ciclo, data_expiracao_assinatura: venc, ativo: true,
+      status_assinatura: "ativa", subscriptionActive: true,
+    } as any);
+    return res.json(updated);
+  } catch (err) {
+    console.error("renovarAssinatura:", err);
+    return res.status(500).json({ error: "Erro ao renovar assinatura" });
+  }
+}

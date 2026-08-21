@@ -53,6 +53,7 @@ import BillingSuccessPage from "@/pages/billing/success";
 import InvoicesPage from "@/pages/billing/invoices";
 import BillingSettingsPage from "@/pages/billing/settings";
 import AdminBillingDashboard from "@/pages/admin/billing-dashboard";
+import AdminAssinaturas from "@/pages/admin/assinaturas";
 import PaymentSettingsPage from "@/pages/admin/payment-settings";
 import AdminPaymentsPage from "@/pages/admin/payments";
 import ExternalCheckout from "@/pages/checkout/ExternalCheckout";
@@ -257,6 +258,11 @@ function Router() {
             <Route path="/admin/billing">
               <MainLayout>
                 <AdminBillingDashboard />
+              </MainLayout>
+            </Route>
+            <Route path="/admin/assinaturas">
+              <MainLayout>
+                <AdminAssinaturas />
               </MainLayout>
             </Route>
             <Route path="/admin/payments">

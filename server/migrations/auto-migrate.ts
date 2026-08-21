@@ -287,6 +287,12 @@ const STEPS: Step[] = [
     },
   },
   {
+    name: "usuarios: ciclo_assinatura (mensal/trimestral/anual)",
+    run: async () => {
+      await db.execute(sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS ciclo_assinatura VARCHAR(12)`);
+    },
+  },
+  {
     name: "empresas_contas: grupo_gerencial + is_cmv (fluxo de caixa gerencial)",
     run: async () => {
       await db.execute(sql`ALTER TABLE empresas_contas ADD COLUMN IF NOT EXISTS grupo_gerencial VARCHAR(30)`);

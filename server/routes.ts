@@ -611,6 +611,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireSuperAdmin,
     adminController.deleteUser,
   );
+  // Assinaturas — ciclo (mensal/trimestral/anual) + vencimento
+  app.get("/api/admin/assinaturas", combinedAuth, checkImpersonation, requireSuperAdmin, adminController.getAssinaturas);
+  app.post("/api/admin/assinaturas/:id/definir", combinedAuth, checkImpersonation, requireSuperAdmin, adminController.definirAssinatura);
+  app.post("/api/admin/assinaturas/:id/renovar", combinedAuth, checkImpersonation, requireSuperAdmin, adminController.renovarAssinatura);
   app.post(
     "/api/admin/impersonate",
     combinedAuth,
