@@ -36,6 +36,7 @@ interface UpdateUserForm {
   email: string;
   ativo: boolean;
   tipo_usuario: "usuario" | "admin" | "super_admin";
+  tipo_pessoa?: "fisica" | "juridica";
   nova_senha?: string;
   data_expiracao_assinatura?: string;
   telefone?: string;
@@ -113,6 +114,7 @@ export default function AdminUsers() {
     email: "",
     ativo: true,
     tipo_usuario: "usuario",
+    tipo_pessoa: "fisica",
     nova_senha: "",
     data_expiracao_assinatura: "",
     telefone: ""
@@ -319,6 +321,7 @@ export default function AdminUsers() {
       email: user.email,
       ativo: user.ativo,
       tipo_usuario: user.tipo_usuario as "usuario" | "admin" | "super_admin",
+      tipo_pessoa: ((user as any).tipo_pessoa as "fisica" | "juridica") || "fisica",
       nova_senha: "",
       data_expiracao_assinatura: user.data_expiracao_assinatura 
         ? new Date(user.data_expiracao_assinatura).toISOString().split('T')[0] 
@@ -1097,7 +1100,21 @@ export default function AdminUsers() {
             <option value="super_admin">{t("admin.users.roles.super_admin", "Super Administrador")}</option>
           </select>
         </div>
-        
+
+        <div className="admin-edit-form-group">
+          <label className="admin-edit-form-label">
+            {t("admin.users.edit_modal.fields.person_type.label", "Tipo de Pessoa")}
+          </label>
+          <select
+            value={editForm.tipo_pessoa || "fisica"}
+            onChange={(e) => setEditForm(prev => ({ ...prev, tipo_pessoa: e.target.value as "fisica" | "juridica" }))}
+            className="admin-edit-form-select"
+          >
+            <option value="fisica">{t("admin.users.person_type.pf", "Pessoa Física (PF)")}</option>
+            <option value="juridica">{t("admin.users.person_type.pj", "Pessoa Jurídica (PJ)")}</option>
+          </select>
+        </div>
+
         <div className="admin-edit-form-group">
           <div className="admin-edit-switch-container">
             <Switch

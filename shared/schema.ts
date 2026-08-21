@@ -18,6 +18,7 @@ export const users = pgTable("usuarios", {
   telefone: varchar("telefone", { length: 20 }),
   senha: varchar("senha", { length: 255 }).notNull(),
   tipo_usuario: varchar("tipo_usuario", { length: 50 }).notNull().default("normal"),
+  tipo_pessoa: varchar("tipo_pessoa", { length: 20 }).notNull().default("fisica"), // 'fisica' (PF) | 'juridica' (PJ)
   ativo: boolean("ativo").notNull().default(true),
   data_cadastro: timestamp("data_cadastro", { withTimezone: true }).default(sql`(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')`),
   ultimo_acesso: timestamp("ultimo_acesso", { withTimezone: true }),

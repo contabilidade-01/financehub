@@ -34,6 +34,108 @@ function isDuplicate(messageId: string): boolean {
   return false;
 }
 
+// ============================================
+// Onboarding / Degustação (15 dias) — máquina de estados via status_assinatura
+//   aguardando_confirmacao → aguardando_tipo_pessoa → degustacao → degustacao_expirada
+// ============================================
+const TRIAL_DIAS = 15;
+const norm = (s: string) => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+const ehAfirmativo = (text: string) => {
+  const t = norm(text);
+  return /\b(sim|quero|aceito|aceitar|ativar|bora|vamos|claro|pode|comecar|começar|ok|isso|quero sim)\b/.test(t) || t === "s" || t === "1" || t.includes("👍");
+};
+const detectarTipoPessoa = (text: string): "fisica" | "juridica" | null => {
+  const t = norm(text);
+  if (/\b(pj|2|empresa|empresarial|juridica|negocio|cnpj|comercio)\b/.test(t)) return "juridica";
+  if (/\b(pf|1|pessoal|pessoa fisica|fisica|particular|eu mesmo|minhas financas)\b/.test(t)) return "fisica";
+  return null;
+};
+const dataTrialFim = () => new Date(Date.now() + TRIAL_DIAS * 24 * 60 * 60 * 1000);
+const fmtData = (d: Date) => d.toLocaleDateString("pt-BR");
+const primeiro = (nome?: string | null) => (nome || "").split(" ")[0] || "";
+
+const msgOferta = (nome?: string | null) =>
+  `Olá ${primeiro(nome)}! 👋 Sou o assistente do *Controle Financeiro*.\n\nPosso liberar *${TRIAL_DIAS} dias grátis* para você testar tudo — é só responder *SIM* que eu ativo agora mesmo. 😊`;
+const msgPerguntaTipo = (nome?: string | null) =>
+  `Que ótimo, ${primeiro(nome)}! 🎉\n\nÉ para suas finanças *pessoais* ou da sua *empresa*?\n\nResponda:\n*1* — Pessoal (PF)\n*2* — Empresa (PJ)`;
+const msgAtivadoPF = (nome: string | null | undefined, fim: Date) =>
+  `Prontinho, ${primeiro(nome)}! ✅ Sua degustação de *${TRIAL_DIAS} dias* está ativa até *${fmtData(fim)}*.\n\nPode começar agora: me manda suas receitas e despesas por aqui que eu registro tudo. 📊`;
+const msgAtivadoPJ = (nome: string | null | undefined, fim: Date) =>
+  `Prontinho, ${primeiro(nome)}! ✅ Sua degustação *empresarial* de *${TRIAL_DIAS} dias* está ativa até *${fmtData(fim)}*.\n\nJá preparei o ambiente da sua empresa. Pode começar: me manda as entradas e saídas por aqui. 📊`;
+const msgNudge = () => `Sem problema! Quando quiser testar os *${TRIAL_DIAS} dias grátis*, é só mandar *SIM*. 😉`;
+const msgReperguntaTipo = () => `Só pra eu configurar certinho: responda *1* para *Pessoal (PF)* ou *2* para *Empresa (PJ)*.`;
+const msgExpirado = (nome?: string | null) =>
+  `Oi ${primeiro(nome)}! Seus *${TRIAL_DIAS} dias* de degustação chegaram ao fim. 🙌\n\nGostou? Nossa equipe vai entrar em contato para te ajudar a continuar. Qualquer coisa, estou por aqui!`;
+const msgEmAnalise = (nome?: string | null) =>
+  `Oi ${primeiro(nome)}! Sua conta está em análise no momento. Nossa equipe vai falar com você em breve para liberar o acesso. 😊`;
+
+// Retorna true se a mensagem foi tratada pelo onboarding (não processar como transação).
+async function tratarOnboarding(user: any, text: string, chatid: string, BaseUrl: string, token: string): Promise<boolean> {
+  const status = user.status_assinatura || "";
+
+  // Em degustação ativa: checa expiração dos 15 dias
+  if (user.ativo && status === "degustacao") {
+    const fim = user.data_expiracao_assinatura ? new Date(user.data_expiracao_assinatura) : null;
+    if (fim && fim.getTime() < Date.now()) {
+      await storage.updateUser(user.id, { ativo: false, status_assinatura: "degustacao_expirada" } as any);
+      await uazapiService.sendText(BaseUrl, token, chatid, msgExpirado(user.nome));
+      console.log(`[ALERTA-ADMIN] ⏰ Degustação EXPIRADA — validar/contatar cliente: ${user.nome} (${user.telefone}) id=${user.id}`);
+      return true;
+    }
+    return false; // dentro do prazo → segue fluxo normal
+  }
+
+  // Aguardando o SIM da oferta
+  if (status === "aguardando_confirmacao") {
+    if (ehAfirmativo(text)) {
+      await storage.updateUser(user.id, { status_assinatura: "aguardando_tipo_pessoa" } as any);
+      await uazapiService.sendText(BaseUrl, token, chatid, msgPerguntaTipo(user.nome));
+    } else {
+      await uazapiService.sendText(BaseUrl, token, chatid, msgNudge());
+    }
+    return true;
+  }
+
+  // Aguardando PF/PJ
+  if (status === "aguardando_tipo_pessoa") {
+    const tipo = detectarTipoPessoa(text);
+    if (!tipo) {
+      await uazapiService.sendText(BaseUrl, token, chatid, msgReperguntaTipo());
+      return true;
+    }
+    const fim = dataTrialFim();
+    if (tipo === "juridica") {
+      try {
+        const empresa = await storage.createEmpresa({
+          usuario_id: user.id,
+          razao_social: user.nome || "Minha Empresa",
+          nome_fantasia: user.nome || null,
+          segmento: "servicos",
+        } as any);
+        await storage.seedEmpresasContas(empresa.id);
+      } catch (e) {
+        console.error("[Onboarding] falha ao criar empresa PJ:", e);
+      }
+      await storage.updateUser(user.id, { ativo: true, tipo_pessoa: "juridica", status_assinatura: "degustacao", data_expiracao_assinatura: fim } as any);
+      await uazapiService.sendText(BaseUrl, token, chatid, msgAtivadoPJ(user.nome, fim));
+      console.log(`[ALERTA-ADMIN] 🆕 Nova degustação PJ: ${user.nome} (${user.telefone}) id=${user.id} — expira ${fmtData(fim)}`);
+    } else {
+      await storage.updateUser(user.id, { ativo: true, tipo_pessoa: "fisica", status_assinatura: "degustacao", data_expiracao_assinatura: fim } as any);
+      await uazapiService.sendText(BaseUrl, token, chatid, msgAtivadoPF(user.nome, fim));
+      console.log(`[ALERTA-ADMIN] 🆕 Nova degustação PF: ${user.nome} (${user.telefone}) id=${user.id} — expira ${fmtData(fim)}`);
+    }
+    return true;
+  }
+
+  // Pós-degustação (expirada) ou conta inativa → aguarda validação do admin
+  if (status === "degustacao_expirada" || !user.ativo) {
+    await uazapiService.sendText(BaseUrl, token, chatid, msgEmAnalise(user.nome));
+    return true;
+  }
+
+  return false; // usuário ativo por outra via (assinante) → segue normal
+}
+
 interface UazapiWebhookBody {
   BaseUrl: string;
   token: string;
@@ -106,6 +208,7 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
         remoteJid: chatid,
         tipo_usuario: "normal",
         ativo: false,
+        status_assinatura: "aguardando_confirmacao", // aguarda o SIM da degustação
       } as any);
 
       // Criar carteira
@@ -119,21 +222,14 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
       await seedPlanoContasPessoal(user.id);
       console.log(`[UazAPI Webhook] Plano de contas pessoal criado para user ${user.id}`);
 
-      // Enviar mensagem de boas-vindas
-      // Buscar mensagem customizada se existir (welcome_messages table)
-      const welcomeMsg = `Olá ${senderName?.split(" ")[0] || ""}! 👋\n\nBem-vindo ao *Controle Financeiro*!\n\nPara começar, ative sua assinatura e depois é só me mandar suas receitas e despesas por aqui. 📊`;
-
-      await uazapiService.sendText(BaseUrl, token, chatid, welcomeMsg);
+      // Oferta de degustação (15 dias) — em vez de pedir assinatura direto.
+      await uazapiService.sendText(BaseUrl, token, chatid, msgOferta(senderName));
       return;
     }
 
-    // Verificar se está ativo
-    if (!user.ativo) {
-      console.log(`[UazAPI Webhook] Usuário inativo: ${user.nome} (${user.id})`);
-      const inactiveMsg = `Olá ${user.nome?.split(" ")[0] || ""}! 👋\n\nSua conta ainda não está ativa. Para começar a usar o sistema, ative sua assinatura.`;
-      await uazapiService.sendText(BaseUrl, token, chatid, inactiveMsg);
-      return;
-    }
+    // Onboarding / degustação: se a mensagem for de confirmação, escolha PF/PJ,
+    // expiração de trial ou conta inativa, o fluxo é tratado aqui e retornamos.
+    if (await tratarOnboarding(user, text || "", chatid, BaseUrl, token)) return;
 
     // ============================================
     // 2. RESOLVER CONTEÚDO (texto/áudio/imagem/pdf)
