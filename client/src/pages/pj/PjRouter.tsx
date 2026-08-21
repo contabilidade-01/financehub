@@ -7,7 +7,7 @@ import PjDashboard from "@/pages/pj/dashboard";
 import PjTransactions from "@/pages/pj/transactions";
 import PjCategorias from "@/pages/pj/categorias";
 import PjEmpresas from "@/pages/pj/empresas";
-import PjDRE from "@/pages/pj/relatorios/dre";
+import PjRelatorios from "@/pages/pj/relatorios";
 import ConciliacaoPage from "@/pages/pj/conciliacao";
 
 /**
@@ -73,7 +73,7 @@ export default function PjRouter() {
       case "empresas":
         return <PjEmpresas />;
       case "relatorios":
-        return <PjDRE empresaId={empresaAtiva} />;
+        return <PjRelatorios empresaId={empresaAtiva} />;
       case "conciliacao":
         return <ConciliacaoPage empresaId={empresaAtiva} />;
       default:

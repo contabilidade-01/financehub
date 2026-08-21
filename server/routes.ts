@@ -1251,6 +1251,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Dashboard e relatórios PJ
   app.get("/api/empresas/:id/dashboard/resumo", combinedAuth, empresaTransacaoCtrl.getEmpresaResumo);
   app.get("/api/empresas/:id/relatorios/dre", combinedAuth, empresaTransacaoCtrl.getEmpresaDRE);
+  app.get("/api/empresas/:id/relatorios/fluxo-caixa", combinedAuth, empresaTransacaoCtrl.getEmpresaFluxoCaixa);
 
   // Lixeira PJ (soft-delete/undo)
   const { restaurarUltimaExcluidaPJ, listarLixeiraPJ } = await import("./storage");

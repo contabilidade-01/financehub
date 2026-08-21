@@ -66,6 +66,7 @@ import {
   type EmpresaTransacaoWithDetails,
   type EmpresaResumo,
   type EmpresaDRE,
+  type EmpresaFluxoCaixaMensal,
   metasFinanceiras,
   type MetaFinanceira,
   type InsertMeta,
@@ -267,6 +268,7 @@ export interface IStorage {
   // Resumo / DRE
   getEmpresaResumo(empresaId: number, opts?: { de?: string; ate?: string }): Promise<EmpresaResumo>;
   getEmpresaDRE(empresaId: number, opts?: { de?: string; ate?: string }): Promise<EmpresaDRE>;
+  getEmpresaFluxoCaixaMensal(empresaId: number, ano: number): Promise<EmpresaFluxoCaixaMensal>;
 }
 
 export class DbStorage implements IStorage {
@@ -1855,6 +1857,74 @@ export class DbStorage implements IStorage {
       lucro_prejuizo: round2(lucro),
       lucro_prejuizo_pct: pct(lucro, receita)
     };
+  }
+
+  // Fluxo de Caixa Gerencial mensal (visão avançada/CFO). Agrega
+  // empresas_transacoes por conta (categoria_id → empresas_contas) × mês do ano,
+  // com sinal (Receita +, Despesa −). O front monta a árvore e as linhas
+  // calculadas a partir da classificacao. Mesmo escopo do DRE (empresas_transacoes).
+  async getEmpresaFluxoCaixaMensal(empresaId: number, ano: number): Promise<EmpresaFluxoCaixaMensal> {
+    const contas = await db.select().from(empresasContas)
+      .where(eq(empresasContas.empresa_id, empresaId))
+      .orderBy(empresasContas.codigo);
+
+    const rows = await db.execute(sql`
+      SELECT t.categoria_id AS conta_id,
+             EXTRACT(MONTH FROM t.data_transacao)::int AS mes,
+             SUM(CASE WHEN t.tipo = 'Receita' THEN t.valor::numeric ELSE -t.valor::numeric END) AS total
+      FROM empresas_transacoes t
+      WHERE t.empresa_id = ${empresaId}
+        AND EXTRACT(YEAR FROM t.data_transacao) = ${ano}
+      GROUP BY t.categoria_id, mes
+    `);
+
+    const agregado = (rows as any[]).map((r) => ({
+      conta_id: Number(r.conta_id),
+      mes: Number(r.mes),
+      total: parseFloat(r.total) || 0,
+    }));
+
+    // ---- Disponibilidades: contas bancárias + movimento por conta × mês ----
+    const contasBancRows = await db.execute(sql`
+      SELECT id, banco, saldo_inicial::numeric AS saldo_inicial
+      FROM contas_bancarias
+      WHERE empresa_id = ${empresaId} AND ativo = true
+      ORDER BY banco
+    `);
+    const contasBancarias = (contasBancRows as any[]).map((r) => ({
+      id: Number(r.id), banco: String(r.banco), saldo_inicial: parseFloat(r.saldo_inicial) || 0,
+    }));
+
+    // Movimento (com sinal) por conta bancária × mês, dentro do ano.
+    const movRows = await db.execute(sql`
+      SELECT t.conta_bancaria_id,
+             EXTRACT(MONTH FROM t.data_transacao)::int AS mes,
+             SUM(CASE WHEN t.tipo = 'Receita' THEN t.valor::numeric ELSE -t.valor::numeric END) AS total
+      FROM empresas_transacoes t
+      WHERE t.empresa_id = ${empresaId}
+        AND t.conta_bancaria_id IS NOT NULL
+        AND EXTRACT(YEAR FROM t.data_transacao) = ${ano}
+      GROUP BY t.conta_bancaria_id, mes
+    `);
+    const movContas = (movRows as any[]).map((r) => ({
+      conta_bancaria_id: Number(r.conta_bancaria_id), mes: Number(r.mes), total: parseFloat(r.total) || 0,
+    }));
+
+    // Movimento acumulado ANTES do ano (para o saldo inicial de janeiro).
+    const antesRows = await db.execute(sql`
+      SELECT t.conta_bancaria_id,
+             SUM(CASE WHEN t.tipo = 'Receita' THEN t.valor::numeric ELSE -t.valor::numeric END) AS total
+      FROM empresas_transacoes t
+      WHERE t.empresa_id = ${empresaId}
+        AND t.conta_bancaria_id IS NOT NULL
+        AND EXTRACT(YEAR FROM t.data_transacao) < ${ano}
+      GROUP BY t.conta_bancaria_id
+    `);
+    const saldoAntesAno = (antesRows as any[]).map((r) => ({
+      conta_bancaria_id: Number(r.conta_bancaria_id), total: parseFloat(r.total) || 0,
+    }));
+
+    return { empresa_id: empresaId, ano, contas: contas as any, agregado, contasBancarias, movContas, saldoAntesAno };
   }
 }
 

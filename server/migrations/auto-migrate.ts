@@ -286,6 +286,32 @@ const STEPS: Step[] = [
       await db.execute(sql`ALTER TABLE empresas_transacoes ADD COLUMN IF NOT EXISTS fitid VARCHAR(120)`);
     },
   },
+  {
+    name: "empresas_contas: grupo_gerencial + is_cmv (fluxo de caixa gerencial)",
+    run: async () => {
+      await db.execute(sql`ALTER TABLE empresas_contas ADD COLUMN IF NOT EXISTS grupo_gerencial VARCHAR(30)`);
+      await db.execute(sql`ALTER TABLE empresas_contas ADD COLUMN IF NOT EXISTS is_cmv BOOLEAN NOT NULL DEFAULT false`);
+      // Backfill das contas já existentes (só onde ainda está nulo), derivando o
+      // grupo gerencial a partir de tipo/classificacao. Assim o relatório rico
+      // já funciona para empresas antigas sem reclassificação manual.
+      await db.execute(sql`
+        UPDATE empresas_contas SET grupo_gerencial = CASE
+          WHEN tipo = 'Receita' THEN 'receita'
+          WHEN classificacao = 'VARIAVEL' THEN 'custo_variavel'
+          WHEN classificacao = 'FIXA' THEN 'despesa_fixa'
+          ELSE 'outras'
+        END
+        WHERE grupo_gerencial IS NULL
+      `);
+      // Marca CMV pelas contas de custo variável ligadas a mercadoria vendida.
+      await db.execute(sql`
+        UPDATE empresas_contas SET is_cmv = true
+        WHERE grupo_gerencial = 'custo_variavel'
+          AND is_cmv = false
+          AND (nome ILIKE '%CMV%' OR nome ILIKE '%mercadoria vendida%' OR codigo = '3.01')
+      `);
+    },
+  },
 ];
 
 export async function runAutoMigrations(): Promise<void> {

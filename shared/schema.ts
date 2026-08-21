@@ -701,6 +701,11 @@ export const empresasContas = pgTable("empresas_contas", {
   nome: varchar("nome", { length: 255 }).notNull(),
   tipo: varchar("tipo", { length: 10 }).notNull(),        // 'Receita' | 'Despesa'
   classificacao: varchar("classificacao", { length: 30 }).notNull(), // 'FIXA' | 'VARIAVEL' | 'OUTRA'
+  // Grupo gerencial do fluxo de caixa (visão CFO): receita | custo_variavel |
+  // despesa_fixa | investimento | nao_operacional | outras. Opcional: quando
+  // nulo, o relatório cai de volta na classificacao. Aditivo, não-quebra.
+  grupo_gerencial: varchar("grupo_gerencial", { length: 30 }),
+  is_cmv: boolean("is_cmv").notNull().default(false), // custo da mercadoria vendida → habilita Margem Bruta/Markup
   parent_id: integer("parent_id"),
   icone: varchar("icone", { length: 100 }),
   cor: varchar("cor", { length: 50 }),
@@ -758,6 +763,8 @@ export const insertEmpresaContaSchema = z.object({
   nome: z.string().min(1, { message: 'Nome é obrigatório' }),
   tipo: empresaContaTipoSchema,
   classificacao: empresaContaClassificacaoSchema,
+  grupo_gerencial: z.string().optional().nullable(),
+  is_cmv: z.boolean().optional().default(false),
   parent_id: z.number().int().optional().nullable(),
   icone: z.string().optional().nullable(),
   cor: z.string().optional().nullable(),
@@ -848,6 +855,20 @@ export interface EmpresaDRE {
   outras_despesas: number;
   lucro_prejuizo: number;
   lucro_prejuizo_pct: number | null;
+}
+
+// Fluxo de Caixa Gerencial mensal (visão avançada/CFO): as contas nas linhas,
+// os meses nas colunas. Dados crus; o front monta a árvore e as linhas
+// calculadas (Margem de Contribuição, Lucro) a partir da classificacao.
+export interface EmpresaFluxoCaixaMensal {
+  empresa_id: number;
+  ano: number;
+  contas: EmpresaConta[]; // plano de contas da empresa
+  agregado: { conta_id: number; mes: number; total: number }[]; // sinal: Receita +, Despesa −
+  // Disponibilidades (rodapé): saldo por conta bancária ao longo dos meses.
+  contasBancarias: { id: number; banco: string; saldo_inicial: number }[];
+  movContas: { conta_bancaria_id: number; mes: number; total: number }[];   // movimento do ano, com sinal
+  saldoAntesAno: { conta_bancaria_id: number; total: number }[];            // movimento acumulado antes do ano
 }
 
 // ============================================

@@ -226,3 +226,23 @@ export const getEmpresaDRE = async (req: Request, res: Response) => {
     return res.status(500).json({ error: "Erro interno." });
   }
 };
+
+// GET /api/empresas/:id/relatorios/fluxo-caixa?ano=YYYY
+// Fluxo de Caixa Gerencial mensal (visão avançada/CFO): contas × meses.
+export const getEmpresaFluxoCaixa = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const empresaId = parseInt(req.params.id);
+    if (isNaN(empresaId)) return res.status(400).json({ error: "ID inválido." });
+
+    const empresa = await resolveEmpresa(empresaId, userId, res);
+    if (!empresa) return;
+
+    const ano = parseInt(req.query.ano as string) || new Date().getFullYear();
+    const data = await storage.getEmpresaFluxoCaixaMensal(empresaId, ano);
+    return res.json(data);
+  } catch (err) {
+    console.error("getEmpresaFluxoCaixa:", err);
+    return res.status(500).json({ error: "Erro interno." });
+  }
+};
