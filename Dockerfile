@@ -42,5 +42,8 @@ RUN npm run build
 # Exponha a porta padrão
 EXPOSE 5000
 
-# Comando para iniciar a aplicação
-CMD ["npm", "start"]
+# Roda o Node DIRETO (não via npm). Assim o SIGTERM do redeploy chega ao Node
+# (PID 1), que trata o encerramento gracioso — sem o ruído "npm error signal
+# SIGTERM". O NODE_ENV é definido aqui já que não passamos mais pelo npm start.
+ENV NODE_ENV=production
+CMD ["node", "dist/index.js"]
