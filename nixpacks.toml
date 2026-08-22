@@ -1,0 +1,10 @@
+# Só é usado se o EasyPanel construir com Nixpacks (não com o Dockerfile).
+# Força o start do app como Node DIRETO (em vez de `npm start`), para que o
+# SIGTERM do redeploy chegue ao Node e o encerramento seja gracioso — sem o
+# ruído "npm error signal SIGTERM". Se o build for por Dockerfile, este arquivo
+# é ignorado (inofensivo).
+[phases.build]
+cmds = ["npm run build"]
+
+[start]
+cmd = "NODE_ENV=production node dist/index.js"

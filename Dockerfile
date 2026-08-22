@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y \
     librsvg2-dev \
     python3 \
     chromium \
+    tini \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -42,8 +43,12 @@ RUN npm run build
 # Exponha a porta padrão
 EXPOSE 5000
 
-# Roda o Node DIRETO (não via npm). Assim o SIGTERM do redeploy chega ao Node
-# (PID 1), que trata o encerramento gracioso — sem o ruído "npm error signal
-# SIGTERM". O NODE_ENV é definido aqui já que não passamos mais pelo npm start.
+# Init do container (tini): vira PID 1, repassa sinais (SIGTERM/SIGINT) ao Node
+# e reap de zumbis. Junto com o CMD abaixo, garante encerramento gracioso no
+# redeploy — sem o ruído "npm error signal SIGTERM".
+ENTRYPOINT ["/usr/bin/tini", "--"]
+
+# Roda o Node DIRETO (não via npm). NODE_ENV definido via ENV pois não passamos
+# mais pelo npm start.
 ENV NODE_ENV=production
 CMD ["node", "dist/index.js"]
