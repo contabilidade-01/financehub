@@ -181,6 +181,9 @@ const STEPS: Step[] = [
           excluida_em    TIMESTAMPTZ DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')
         )
       `);
+      // Tabelas criadas em versões antigas não tinham empresa_id (CREATE IF NOT
+      // EXISTS não altera tabela existente) — garante a coluna antes do índice.
+      await db.execute(sql`ALTER TABLE transacoes_lixeira ADD COLUMN IF NOT EXISTS empresa_id INTEGER`);
       await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_lixeira_carteira ON transacoes_lixeira(carteira_id, excluida_em)`);
       await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_lixeira_empresa ON transacoes_lixeira(empresa_id, excluida_em)`);
     },
