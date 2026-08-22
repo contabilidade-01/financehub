@@ -296,6 +296,47 @@ const STEPS: Step[] = [
     },
   },
   {
+    name: "usuarios: ativação honesta (status_assinatura default + backfill c/ carência)",
+    run: async () => {
+      // Novos usuários nascem 'sem_assinatura' (não mais 'ativa' por engano).
+      await db.execute(sql`ALTER TABLE usuarios ALTER COLUMN status_assinatura SET DEFAULT 'sem_assinatura'`);
+
+      // Admin/superadmin: acesso ilimitado (data bem no futuro).
+      await db.execute(sql`
+        UPDATE usuarios SET data_expiracao_assinatura = TIMESTAMPTZ '2099-12-31'
+        WHERE tipo_usuario IN ('super_admin','admin')
+          AND (data_expiracao_assinatura IS NULL OR data_expiracao_assinatura < NOW())
+      `);
+
+      // Quem tem assinatura Asaas ativa: alinhar a data ao fim do período.
+      await db.execute(sql`
+        UPDATE usuarios u SET data_expiracao_assinatura = s.current_period_end, status_assinatura = 'ativa'
+        FROM user_subscriptions s
+        WHERE s.usuario_id = u.id AND s.status = 'active' AND s.current_period_end IS NOT NULL
+          AND (u.data_expiracao_assinatura IS NULL OR u.data_expiracao_assinatura < s.current_period_end)
+      `);
+
+      // Carência: usuários ativos SEM data e SEM assinatura real ganham 30 dias
+      // (para NÃO bloquear ninguém agora). Vira degustação/cortesia; o admin
+      // depois converte em assinatura real, e o job expira no fim.
+      await db.execute(sql`
+        UPDATE usuarios u SET
+          data_expiracao_assinatura = NOW() + INTERVAL '30 days',
+          status_assinatura = 'degustacao'
+        WHERE u.ativo = true
+          AND u.data_expiracao_assinatura IS NULL
+          AND u.tipo_usuario NOT IN ('super_admin','admin')
+          AND NOT EXISTS (SELECT 1 FROM user_subscriptions s WHERE s.usuario_id = u.id AND s.status = 'active')
+      `);
+
+      // Sincroniza o flag denormalizado com a verdade (data futura).
+      await db.execute(sql`
+        UPDATE usuarios SET subscription_active = (data_expiracao_assinatura IS NOT NULL AND data_expiracao_assinatura > NOW())
+        WHERE tipo_usuario NOT IN ('super_admin','admin')
+      `);
+    },
+  },
+  {
     name: "fatura PJ (empresas_cartoes, empresas_faturas + competência em empresas_transacoes)",
     run: async () => {
       await db.execute(sql`

@@ -52,20 +52,21 @@ export async function checkActiveSubscription(req: Request, res: Response, next:
       return next();
     }
 
-    // Verificar se usuário tem assinatura ativa (campo denormalizado para performance)
-    if (user.subscriptionActive === true) {
+    // Admin também tem acesso liberado.
+    if (user.tipo_usuario === 'admin') {
       return next();
     }
 
-    // Se campo denormalizado indica inativo, fazer double-check no serviço
+    // Fonte única de verdade: acesso = data de expiração no futuro.
+    const venc = user.data_expiracao_assinatura ? new Date(user.data_expiracao_assinatura) : null;
+    if (venc && venc.getTime() > Date.now()) {
+      return next();
+    }
+
+    // Double-check no serviço (recomputa e sincroniza o campo denormalizado).
     const subscriptionService = getSubscriptionService(storage);
     const hasAccess = await subscriptionService.checkUserAccess(user.id);
-
     if (hasAccess) {
-      // Atualizar campo denormalizado se estava dessincronizado
-      if (user.subscriptionActive !== true) {
-        await storage.updateUser(user.id, { subscriptionActive: true });
-      }
       return next();
     }
 

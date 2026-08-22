@@ -3,38 +3,32 @@ import { useAuth } from "@/hooks/use-auth";
 export function useSubscriptionStatus() {
   const { user } = useAuth();
 
+  const isAdmin = (): boolean => {
+    const tipo = (user as any)?.tipo_usuario;
+    return tipo === 'super_admin' || tipo === 'admin';
+  };
+
   const isSubscriptionExpired = (): boolean => {
     if (!user) return false;
-    
-    // Check if user has expiration date and it's in the past
+    if (isAdmin()) return false; // admin nunca expira
+
+    // Fonte única: expirado = sem data futura de expiração.
     if (user.data_expiracao_assinatura) {
-      const expirationDate = new Date(user.data_expiracao_assinatura);
-      const now = new Date();
-      return expirationDate <= now;
+      return new Date(user.data_expiracao_assinatura) <= new Date();
     }
-
-    // Check if user is canceled without expiration date (legacy cases)
-    if (user.data_cancelamento && !user.data_expiracao_assinatura) {
-      return true;
-    }
-
-    return false;
+    // Sem data de expiração = sem plano → tratar como expirado (mostra a tela de assinar).
+    return true;
   };
 
   const hasActiveAccess = (): boolean => {
     if (!user) return false;
-    
-    // If not canceled, has access
-    if (!user.data_cancelamento) return true;
-    
-    // If canceled but not expired yet, has access
-    if (user.data_expiracao_assinatura) {
-      const expirationDate = new Date(user.data_expiracao_assinatura);
-      const now = new Date();
-      return expirationDate > now;
-    }
+    if (isAdmin()) return true; // admin sempre tem acesso
 
-    // If canceled without expiration date, no access
+    // Acesso = tem data de expiração no futuro.
+    if (user.data_expiracao_assinatura) {
+      return new Date(user.data_expiracao_assinatura) > new Date();
+    }
+    // Sem data = sem acesso.
     return false;
   };
 

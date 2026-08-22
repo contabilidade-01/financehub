@@ -540,11 +540,20 @@ export class SubscriptionService {
       const user = await this.storage.getUserById(userId);
       if (!user) return false;
 
-      // Super admin sempre tem acesso
-      if (user.tipo_usuario === 'super_admin') return true;
+      // Admin/superadmin sempre têm acesso
+      if (user.tipo_usuario === 'super_admin' || user.tipo_usuario === 'admin') return true;
 
-      // Verificar flag de assinatura ativa (denormalização para performance)
-      return user.subscriptionActive || false;
+      // Fonte ÚNICA de verdade: tem acesso = data de expiração no futuro.
+      // (trial ou assinatura paga ambos gravam data_expiracao_assinatura;
+      // acesso ilimitado = data bem no futuro definida pelo admin.)
+      const venc = (user as any).data_expiracao_assinatura ? new Date((user as any).data_expiracao_assinatura) : null;
+      const temAcesso = !!venc && venc.getTime() > Date.now();
+
+      // Mantém o campo denormalizado honesto (espelho).
+      if ((user.subscriptionActive || false) !== temAcesso) {
+        try { await this.storage.updateUser(userId, { subscriptionActive: temAcesso } as any); } catch { /* não bloquear por erro de sync */ }
+      }
+      return temAcesso;
     } catch (error) {
       console.error('[SubscriptionService] Error checking user access:', error);
       return false;

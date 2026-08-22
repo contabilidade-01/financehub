@@ -72,6 +72,23 @@ export async function register(req: Request, res: Response) {
 
     console.log(`[Register] User created - ID: ${newUser.id}, Email: ${newUser.email}`);
 
+    // Ativação automática: 1º acesso ao portal inicia a degustação de 15 dias.
+    try {
+      const fim = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000);
+      await storage.updateUser(newUser.id, {
+        ativo: true,
+        status_assinatura: "degustacao",
+        data_expiracao_assinatura: fim,
+        subscriptionActive: true,
+      } as any);
+      (newUser as any).data_expiracao_assinatura = fim;
+      (newUser as any).status_assinatura = "degustacao";
+      (newUser as any).subscriptionActive = true;
+      console.log(`[Register] Degustação de 15 dias iniciada para user ${newUser.id} (expira ${fim.toISOString().slice(0, 10)})`);
+    } catch (e: any) {
+      console.error(`[Register] Falha ao iniciar degustação:`, e?.message);
+    }
+
     // Create default wallet for new user
     await storage.createWallet({
       usuario_id: newUser.id,
