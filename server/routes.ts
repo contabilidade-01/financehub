@@ -1259,6 +1259,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/empresas/:id/relatorios/fluxo-caixa", combinedAuth, empresaTransacaoCtrl.getEmpresaFluxoCaixa);
   // Fatura de cartão PJ (competência × caixa)
   const empresaFaturaCtrl = await import("./controllers/empresaFatura.controller");
+  const uploadFatura = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
   app.get("/api/empresas/:id/cartoes", combinedAuth, empresaFaturaCtrl.listarCartoes);
   app.post("/api/empresas/:id/cartoes", combinedAuth, empresaFaturaCtrl.criarCartao);
   app.delete("/api/empresas/:id/cartoes/:cartaoId", combinedAuth, empresaFaturaCtrl.excluirCartao);
@@ -1267,6 +1268,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/empresas/:id/faturas/:faturaId", combinedAuth, empresaFaturaCtrl.detalheFatura);
   app.post("/api/empresas/:id/faturas/:faturaId/fechar", combinedAuth, empresaFaturaCtrl.fecharFatura);
   app.post("/api/empresas/:id/faturas/:faturaId/pagar", combinedAuth, empresaFaturaCtrl.pagarFatura);
+  app.post("/api/empresas/:id/faturas/:faturaId/conciliar", combinedAuth, uploadFatura.single("arquivo"), empresaFaturaCtrl.conciliarFatura);
 
   // Lixeira PJ (soft-delete/undo)
   const { restaurarUltimaExcluidaPJ, listarLixeiraPJ } = await import("./storage");

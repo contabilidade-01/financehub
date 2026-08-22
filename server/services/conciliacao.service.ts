@@ -206,6 +206,20 @@ export async function processarImportacaoOfx(params: {
   );
 }
 
+// Parser genérico (OFX/CSV/XLSX) → lista de movimentos. Usado também pela
+// conciliação de fatura de cartão.
+export function parseArquivoExtrato(buffer: Buffer, filename: string): MovExtrato[] {
+  const nome = (filename || "").toLowerCase();
+  const amostra = buffer.slice(0, 512).toString("utf8");
+  const ehOfx = nome.endsWith(".ofx") || /<ofx|<stmttrn/i.test(amostra);
+  if (ehOfx) {
+    let conteudo = buffer.toString("utf8");
+    if (/�/.test(conteudo)) conteudo = buffer.toString("latin1");
+    return (parseOfx(conteudo).movimentos as any) as MovExtrato[];
+  }
+  return parsePlanilha(buffer);
+}
+
 // Processa um extrato de planilha (CSV ou XLSX).
 export async function processarImportacaoPlanilha(params: {
   empresaId: number; contaBancariaId: number; usuarioId: number; arquivoNome: string; buffer: Buffer; formato: string;

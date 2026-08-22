@@ -454,6 +454,12 @@ export default function AdminUsers() {
     }
   };
 
+  const getPessoaBadge = (user: any) => (
+    (user as any).tipo_pessoa === 'juridica'
+      ? <Badge variant="outline" className="border-indigo-400 text-indigo-600">PJ</Badge>
+      : <Badge variant="outline" className="text-muted-foreground">PF</Badge>
+  );
+
   const getStatusBadge = (user: UserWithStats) => {
     if (user.status_assinatura === 'cancelada' || user.data_cancelamento) {
       return (
@@ -744,6 +750,7 @@ export default function AdminUsers() {
                             <h3 className={`font-medium ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>{user.nome}</h3>
                             {getStatusBadge(user)}
                             {getTipoUsuarioBadge(user.tipo_usuario)}
+                            {getPessoaBadge(user)}
                             {getWalletBalanceBadge(user.walletBalance || 0)}
                           </div>
                           <p className={`text-sm ${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>
@@ -849,6 +856,7 @@ export default function AdminUsers() {
                             <h3 className="font-medium text-white">{user.nome}</h3>
                             {getStatusBadge(user)}
                             {getTipoUsuarioBadge(user.tipo_usuario)}
+                            {getPessoaBadge(user)}
                             {getWalletBalanceBadge(user.walletBalance || 0)}
                           </div>
                           <p className="text-sm text-gray-400">
@@ -958,6 +966,7 @@ export default function AdminUsers() {
                             <h3 className="font-medium text-white">{user.nome}</h3>
                             {getStatusBadge(user)}
                             {getTipoUsuarioBadge(user.tipo_usuario)}
+                            {getPessoaBadge(user)}
                             {getWalletBalanceBadge(user.walletBalance || 0)}
                           </div>
                           <p className="text-sm text-gray-400">

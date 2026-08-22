@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, CreditCard, Lock, CheckCircle2, Trash2, ShoppingCart } from "lucide-react";
+import { Plus, CreditCard, Lock, CheckCircle2, Trash2, ShoppingCart, FileUp } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import type { EmpresaConta } from "@shared/schema";
 
@@ -31,6 +31,9 @@ export default function PjFaturas({ empresaId }: { empresaId: number }) {
   const [faturaAberta, setFaturaAberta] = useState<number | null>(null);
   const [pagando, setPagando] = useState<{ fatura: Fatura } | null>(null);
   const [pag, setPag] = useState({ conta_contabil_id: "", conta_bancaria_id: "", data_pagamento: hoje() });
+  const concFileRef = useRef<HTMLInputElement>(null);
+  const [conc, setConc] = useState<any>(null);
+  const [concLoading, setConcLoading] = useState(false);
 
   const base = `/api/empresas/${empresaId}`;
   const { data: cartoes = [], isLoading } = useQuery<Cartao[]>({ queryKey: [`${base}/cartoes`], queryFn: () => apiRequest(`${base}/cartoes`), enabled: !!empresaId });
@@ -97,6 +100,25 @@ export default function PjFaturas({ empresaId }: { empresaId: number }) {
     if (!pagando) return;
     if (!pag.conta_contabil_id) { toast({ title: "Escolha a conta contábil do pagamento", variant: "destructive" }); return; }
     pagarF.mutate({ id: pagando.fatura.id, data: { conta_contabil_id: Number(pag.conta_contabil_id), conta_bancaria_id: pag.conta_bancaria_id ? Number(pag.conta_bancaria_id) : null, data_pagamento: pag.data_pagamento } });
+  };
+
+  const onConcFile = async (file: File) => {
+    if (!faturaAberta) return;
+    setConcLoading(true); setConc(null);
+    try {
+      const fd = new FormData(); fd.append("arquivo", file);
+      const res = await fetch(`${base}/faturas/${faturaAberta}/conciliar`, { method: "POST", body: fd, credentials: "include" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Falha ao conciliar");
+      setConc(data); inval();
+      toast({ title: "Conciliação concluída", description: `${data.conciliados_qtd} casado(s).` });
+    } catch (e: any) { toast({ title: "Erro", description: e?.message, variant: "destructive" }); }
+    finally { setConcLoading(false); if (concFileRef.current) concFileRef.current.value = ""; }
+  };
+  const lancarDoExtrato = (linha: any) => {
+    setFaturaAberta(null);
+    setCompra({ categoria_id: "", descricao: linha.descricao || "", valor: String(Math.abs(linha.valor)), data_transacao: String(linha.data).slice(0, 10) });
+    setComprando(true);
   };
 
   return (
@@ -184,7 +206,7 @@ export default function PjFaturas({ empresaId }: { empresaId: number }) {
       </Dialog>
 
       {/* Detalhe fatura */}
-      <Dialog open={faturaAberta != null} onOpenChange={(o) => !o && setFaturaAberta(null)}>
+      <Dialog open={faturaAberta != null} onOpenChange={(o) => { if (!o) { setFaturaAberta(null); setConc(null); } }}>
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>Fatura {detalhe?.fatura?.competencia}</DialogTitle></DialogHeader>
           {!detalhe ? <Skeleton className="h-40" /> : (
@@ -200,6 +222,41 @@ export default function PjFaturas({ empresaId }: { empresaId: number }) {
                   ))}
               </div>
               <div className="flex items-center justify-between font-bold"><span>Total</span><span>{money(detalhe.total)}</span></div>
+
+              {/* Conciliar extrato do cartão */}
+              <div className="rounded-md border p-3 space-y-2 bg-muted/30">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium flex items-center gap-1"><FileUp className="h-4 w-4" /> Conciliar extrato do cartão</span>
+                  <input ref={concFileRef} type="file" accept=".ofx,.csv,.xlsx,.xls" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) onConcFile(f); }} />
+                  <Button size="sm" variant="outline" onClick={() => concFileRef.current?.click()} disabled={concLoading}>{concLoading ? "Lendo…" : "Importar OFX/CSV/Excel"}</Button>
+                </div>
+                {conc && (
+                  <div className="text-xs space-y-2">
+                    <div className="flex flex-wrap gap-3">
+                      <span className="text-emerald-600">✅ {conc.conciliados_qtd} casado(s)</span>
+                      <span className="text-amber-600">⚠ {conc.extrato_sem_par.length} no extrato sem lançamento</span>
+                      <span className="text-blue-600">ℹ {conc.compras_sem_par.length} lançado(s) fora do extrato</span>
+                    </div>
+                    <div className="flex flex-wrap gap-3 text-muted-foreground">
+                      <span>Extrato: <strong>{money(conc.total_extrato)}</strong></span>
+                      <span>Fatura: <strong>{money(conc.total_fatura)}</strong></span>
+                      <span>Diferença: <strong className={Math.abs(conc.diferenca) > 0.005 ? "text-rose-500" : "text-emerald-600"}>{money(conc.diferenca)}</strong></span>
+                    </div>
+                    {conc.extrato_sem_par.length > 0 && (
+                      <div className="border-t pt-2">
+                        <div className="text-muted-foreground mb-1">No extrato, mas não lançado (clique para lançar):</div>
+                        {conc.extrato_sem_par.slice(0, 20).map((l: any, i: number) => (
+                          <button key={i} onClick={() => lancarDoExtrato(l)} className="flex w-full items-center justify-between px-2 py-1 rounded hover:bg-muted text-left">
+                            <span className="truncate">{fmt(l.data)} · {l.descricao}</span>
+                            <span className="font-medium shrink-0">{money(Math.abs(l.valor))} ＋</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
               <div className="flex justify-end gap-2">
                 {detalhe.fatura.status === "aberta" && <Button variant="outline" onClick={() => fecharF.mutate(detalhe.fatura.id)} disabled={fecharF.isPending}><Lock className="h-4 w-4 mr-1" /> Fechar</Button>}
                 {detalhe.fatura.status !== "paga" && <Button onClick={() => openPagar({ ...detalhe.fatura, total: detalhe.total })} disabled={detalhe.total <= 0}><CheckCircle2 className="h-4 w-4 mr-1" /> Pagar</Button>}

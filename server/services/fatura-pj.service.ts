@@ -126,6 +126,52 @@ export async function detalheFatura(faturaId: number): Promise<any> {
   return { fatura, compras: compras as any[], total: await getFaturaTotal(faturaId) };
 }
 
+// Concilia o extrato do cartão (linhas do banco) com as compras registradas na
+// fatura. Casa por valor + data (±3 dias) e marca as compras casadas como
+// conciliado=true. Retorna o comparativo (casados, sem-par dos dois lados, totais).
+export async function conciliarFatura(fatura: any, movimentos: Array<{ data: string; valor: number; descricao: string }>): Promise<any> {
+  const comprasRows = await db.execute(sql`
+    SELECT id, descricao, valor, data_transacao, COALESCE(conciliado, false) AS conciliado
+    FROM empresas_transacoes
+    WHERE fatura_id = ${fatura.id} AND COALESCE(movimenta_caixa, true) = false
+  `);
+  const compras = (comprasRows as any[]).map((c) => ({ id: Number(c.id), descricao: c.descricao, valor: Math.abs(num(c.valor)), data: String(c.data_transacao).slice(0, 10), conciliado: c.conciliado === true, usado: false }));
+
+  const conciliados: any[] = [];
+  const extratoSemPar: any[] = [];
+  const dias = (a: string, b: string) => Math.abs((new Date(a + "T00:00:00").getTime() - new Date(b + "T00:00:00").getTime()) / 86400000);
+
+  for (const mov of movimentos) {
+    const alvo = Math.abs(mov.valor);
+    let melhor: any = null, melhorDelta = Infinity;
+    for (const c of compras) {
+      if (c.usado) continue;
+      if (Math.abs(c.valor - alvo) > 0.005) continue;
+      const d = dias(c.data, mov.data);
+      if (d <= 3 && d < melhorDelta) { melhor = c; melhorDelta = d; }
+    }
+    if (melhor) {
+      melhor.usado = true;
+      conciliados.push({ extrato: { data: mov.data, valor: mov.valor, descricao: mov.descricao }, compra_id: melhor.id, compra_descricao: melhor.descricao });
+      await db.execute(sql`UPDATE empresas_transacoes SET conciliado = true WHERE id = ${melhor.id}`);
+    } else {
+      extratoSemPar.push({ data: mov.data, valor: mov.valor, descricao: mov.descricao });
+    }
+  }
+  const comprasSemPar = compras.filter((c) => !c.usado).map((c) => ({ id: c.id, descricao: c.descricao, valor: c.valor, data: c.data }));
+  const totalExtrato = movimentos.reduce((s, m) => s + Math.abs(m.valor), 0);
+  const totalFatura = compras.reduce((s, c) => s + c.valor, 0);
+  return {
+    conciliados_qtd: conciliados.length,
+    conciliados,
+    extrato_sem_par: extratoSemPar,
+    compras_sem_par: comprasSemPar,
+    total_extrato: totalExtrato,
+    total_fatura: totalFatura,
+    diferenca: totalExtrato - totalFatura,
+  };
+}
+
 export async function fecharFatura(faturaId: number): Promise<any> {
   const r = await db.execute(sql`UPDATE empresas_faturas SET status = 'fechada' WHERE id = ${faturaId} AND status <> 'paga' RETURNING *`);
   return (r as any[])[0];

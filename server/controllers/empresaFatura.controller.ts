@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import * as fatura from "../services/fatura-pj.service";
+import { parseArquivoExtrato } from "../services/conciliacao.service";
 
 /**
  * Fatura de cartão PJ (competência × caixa).
@@ -83,6 +84,24 @@ export async function fecharFatura(req: Request, res: Response) {
   if (!f || f.empresa_id !== empresaId) return res.status(404).json({ error: "Fatura não encontrada" });
   if (f.status === "paga") return res.status(409).json({ error: "Fatura já paga" });
   return res.json(await fatura.fecharFatura(f.id));
+}
+
+// POST /api/empresas/:id/faturas/:faturaId/conciliar  (multipart: arquivo OFX/CSV/XLSX)
+export async function conciliarFatura(req: Request, res: Response) {
+  try {
+    const empresaId = await guardEmpresa(req, res); if (!empresaId) return;
+    const f = await fatura.getFaturaById(Number(req.params.faturaId));
+    if (!f || f.empresa_id !== empresaId) return res.status(404).json({ error: "Fatura não encontrada" });
+    const file = (req as any).file;
+    if (!file) return res.status(400).json({ error: "Envie o extrato do cartão (OFX, CSV ou XLSX) no campo 'arquivo'." });
+    const movimentos = parseArquivoExtrato(file.buffer, file.originalname || "");
+    if (!movimentos.length) return res.status(400).json({ error: "Nenhum lançamento reconhecido no arquivo." });
+    const resultado = await fatura.conciliarFatura(f, movimentos.map((m: any) => ({ data: m.data, valor: m.valor, descricao: m.descricao })));
+    return res.json(resultado);
+  } catch (e: any) {
+    console.error("conciliarFatura PJ:", e);
+    return res.status(500).json({ error: e?.message || "Erro ao conciliar fatura" });
+  }
 }
 
 // POST /api/empresas/:id/faturas/:faturaId/pagar  { conta_contabil_id, conta_bancaria_id?, data_pagamento? }
