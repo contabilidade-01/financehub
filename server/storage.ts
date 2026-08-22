@@ -1541,20 +1541,20 @@ export class DbStorage implements IStorage {
   async getWhatsAppOnboardingState(remoteJid: string): Promise<WhatsAppOnboardingState | null> {
     const [state] = await db.select().from(whatsappOnboardingStates).where(eq(whatsappOnboardingStates.remoteJid, remoteJid));
     return state || null;
-  },
+  }
 
   async createWhatsAppOnboardingState(state: InsertWhatsAppOnboardingState): Promise<WhatsAppOnboardingState> {
     const [inserted] = await db.insert(whatsappOnboardingStates).values(state).returning();
     return inserted;
-  },
+  }
 
   async updateWhatsAppOnboardingState(remoteJid: string, updates: Partial<InsertWhatsAppOnboardingState>): Promise<void> {
     await db.update(whatsappOnboardingStates).set(updates).where(eq(whatsappOnboardingStates.remoteJid, remoteJid));
-  },
+  }
 
   async deleteWhatsAppOnboardingState(remoteJid: string): Promise<void> {
     await db.delete(whatsappOnboardingStates).where(eq(whatsappOnboardingStates.remoteJid, remoteJid));
-  },
+  }
 
   // ============================================
   // PJ — EMPRESAS METHODS (convive com PF; nada acima é alterado)
