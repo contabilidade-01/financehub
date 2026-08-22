@@ -228,6 +228,21 @@ app.use((req, res, next) => {
 
   server.listen(port);
 
+  // Encerramento gracioso: no redeploy o container manda SIGTERM. Sem tratar,
+  // o Node é morto pelo sinal e o `npm start` acusa "signal SIGTERM". Aqui
+  // fechamos o servidor e saímos com código 0 (encerramento limpo).
+  let encerrando = false;
+  const shutdown = (sinal: string) => {
+    if (encerrando) return;
+    encerrando = true;
+    log(`↩️ Recebido ${sinal} — encerrando graciosamente...`);
+    server.close(() => process.exit(0));
+    // Garante saída mesmo se alguma conexão travar.
+    setTimeout(() => process.exit(0), 8000).unref();
+  };
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
+
   // Inicializar alertas proativos (WhatsApp) — roda a cada 1h
   import("./jobs/proactive-alerts.job").then(({ initializeAlerts }) => {
     initializeAlerts();
