@@ -15,6 +15,7 @@
 import { db } from "../db";
 import { sql } from "drizzle-orm";
 import { uazapiService } from "../services/uazapi.service";
+import { notificarAdmin } from "../services/admin-notify";
 
 // Config
 const CHECK_INTERVAL = 60 * 60 * 1000; // 1 hora
@@ -257,6 +258,57 @@ async function checkSpendingAnomalies(): Promise<void> {
 }
 
 // ============================================
+// 5. DEGUSTAÇÃO EXPIRADA (proativo — não espera o cliente mandar mensagem)
+// ============================================
+async function checkDegustacaoExpirada(): Promise<void> {
+  console.log("[Alerts] Verificando degustações expiradas...");
+  const rows = await db.execute(sql`
+    SELECT id, nome, remotejid, telefone
+    FROM usuarios
+    WHERE status_assinatura = 'degustacao'
+      AND ativo = true
+      AND data_expiracao_assinatura IS NOT NULL
+      AND data_expiracao_assinatura < NOW()
+  `);
+  for (const u of rows as any[]) {
+    try {
+      await db.execute(sql`UPDATE usuarios SET ativo = false, status_assinatura = 'degustacao_expirada' WHERE id = ${u.id}`);
+      if (u.remotejid && !String(u.remotejid).includes("@g.us")) {
+        const nome = String(u.nome || "").split(" ")[0];
+        await uazapiService.sendText(UAZAPI_BASE_URL, UAZAPI_TOKEN, u.remotejid,
+          `Oi ${nome}! Seus *15 dias* de degustação chegaram ao fim. 🙌\n\nNossa equipe vai entrar em contato para você continuar. Qualquer coisa, estou por aqui!`);
+      }
+      await notificarAdmin(`⏰ Degustação EXPIRADA — validar/contatar: ${u.nome} (${u.telefone || u.remotejid}) id=${u.id}`);
+    } catch (err: any) {
+      console.error(`[Alerts] Erro degustação expirada (user ${u.id}):`, err.message);
+    }
+  }
+}
+
+// ============================================
+// 6. ASSINATURAS VENCIDAS (proativo — marca e avisa o admin uma única vez)
+// ============================================
+async function checkAssinaturasVencidas(): Promise<void> {
+  console.log("[Alerts] Verificando assinaturas vencidas...");
+  const rows = await db.execute(sql`
+    SELECT id, nome, telefone, ciclo_assinatura
+    FROM usuarios
+    WHERE status_assinatura = 'ativa'
+      AND ciclo_assinatura IS NOT NULL
+      AND data_expiracao_assinatura IS NOT NULL
+      AND data_expiracao_assinatura < NOW()
+  `);
+  for (const u of rows as any[]) {
+    try {
+      await db.execute(sql`UPDATE usuarios SET status_assinatura = 'vencida' WHERE id = ${u.id}`);
+      await notificarAdmin(`💳 Assinatura VENCIDA (${u.ciclo_assinatura}) — cobrar/renovar: ${u.nome} (${u.telefone}) id=${u.id}`);
+    } catch (err: any) {
+      console.error(`[Alerts] Erro assinatura vencida (user ${u.id}):`, err.message);
+    }
+  }
+}
+
+// ============================================
 // MAIN — inicializa o loop de alertas
 // ============================================
 let alertInterval: NodeJS.Timeout | null = null;
@@ -283,6 +335,8 @@ async function runAllChecks(): Promise<void> {
     await sendWeeklySummary();
     await checkUpcomingReminders();
     await checkSpendingAnomalies();
+    await checkDegustacaoExpirada();
+    await checkAssinaturasVencidas();
     console.log("[Alerts] ✅ Verificações concluídas.");
   } catch (err: any) {
     console.error("[Alerts] ❌ Erro nas verificações:", err.message);

@@ -4,6 +4,7 @@ import { seedPlanoContasPessoal, createIngestionEvent, getConversaRecente, appen
 import { uazapiService } from "../services/uazapi.service";
 import { transcribeAudio, analyzeWithGemini, runAgent } from "../services/ai-agent.service";
 import { classifyAiError } from "../utils/ai-errors";
+import { notificarAdmin } from "../services/admin-notify";
 import bcrypt from "bcryptjs";
 
 /**
@@ -79,7 +80,7 @@ async function tratarOnboarding(user: any, text: string, chatid: string, BaseUrl
     if (fim && fim.getTime() < Date.now()) {
       await storage.updateUser(user.id, { ativo: false, status_assinatura: "degustacao_expirada" } as any);
       await uazapiService.sendText(BaseUrl, token, chatid, msgExpirado(user.nome));
-      console.log(`[ALERTA-ADMIN] ⏰ Degustação EXPIRADA — validar/contatar cliente: ${user.nome} (${user.telefone}) id=${user.id}`);
+      await notificarAdmin(`⏰ Degustação EXPIRADA — validar/contatar cliente: ${user.nome} (${user.telefone}) id=${user.id}`);
       return true;
     }
     return false; // dentro do prazo → segue fluxo normal
@@ -118,11 +119,11 @@ async function tratarOnboarding(user: any, text: string, chatid: string, BaseUrl
       }
       await storage.updateUser(user.id, { ativo: true, tipo_pessoa: "juridica", status_assinatura: "degustacao", data_expiracao_assinatura: fim } as any);
       await uazapiService.sendText(BaseUrl, token, chatid, msgAtivadoPJ(user.nome, fim));
-      console.log(`[ALERTA-ADMIN] 🆕 Nova degustação PJ: ${user.nome} (${user.telefone}) id=${user.id} — expira ${fmtData(fim)}`);
+      await notificarAdmin(`🆕 Nova degustação PJ: ${user.nome} (${user.telefone}) id=${user.id} — expira ${fmtData(fim)}`);
     } else {
       await storage.updateUser(user.id, { ativo: true, tipo_pessoa: "fisica", status_assinatura: "degustacao", data_expiracao_assinatura: fim } as any);
       await uazapiService.sendText(BaseUrl, token, chatid, msgAtivadoPF(user.nome, fim));
-      console.log(`[ALERTA-ADMIN] 🆕 Nova degustação PF: ${user.nome} (${user.telefone}) id=${user.id} — expira ${fmtData(fim)}`);
+      await notificarAdmin(`🆕 Nova degustação PF: ${user.nome} (${user.telefone}) id=${user.id} — expira ${fmtData(fim)}`);
     }
     return true;
   }
