@@ -1,4 +1,4 @@
-import { Switch, Route, useLocation } from "wouter";
+import { Switch, Route, useLocation, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -146,9 +146,9 @@ function Router() {
             )}
             
             <Route path="/">
-              <MainLayout>
-                <Dashboard />
-              </MainLayout>
+              {(userData as any)?.tipo_pessoa === 'juridica'
+                ? <Redirect to="/p/dashboard" />
+                : <MainLayout><Dashboard /></MainLayout>}
             </Route>
             <Route path="/transactions">
               <MainLayout>

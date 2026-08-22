@@ -21,7 +21,8 @@ import {
   Search,
   Wrench,
   Building2,
-  TrendingUp
+  TrendingUp,
+  FileUp
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { VersionDisplay } from "@/components/shared/VersionDisplay";
@@ -93,38 +94,45 @@ function Sidebar() {
   const shouldApplyAdminOffset = isDirectAdmin || isImpersonating;
 
   // Verificar se usuário tem empresa PJ
-  const temEmpresa = userData?.tipo_pessoa === 'juridica';
+  const isPJ = userData?.tipo_pessoa === 'juridica';
 
-  // Menu items do usuário
+  // Seção principal PF (pessoa física)
+  const secaoPF: MenuGroup = {
+    label: t('navigation.sections.main', 'PRINCIPAL'),
+    items: [
+      { icon: <LayoutDashboard className="mr-3 h-4 w-4" />, text: t('navigation.dashboard', 'Dashboard'), path: "/" },
+      { icon: <PlusCircle className="mr-3 h-4 w-4" />, text: t('navigation.transactions', 'Transações'), path: "/transactions" },
+      { icon: <TrendingUp className="mr-3 h-4 w-4" />, text: 'Contas a Pagar', path: "/contas-pagar" },
+      { icon: <Building2 className="mr-3 h-4 w-4" />, text: 'Metas e Sonhos', path: "/metas" },
+      { icon: <BarChart3 className="mr-3 h-4 w-4" />, text: t('navigation.reports', 'Relatórios'), path: "/reports" },
+      { icon: <CreditCard className="mr-3 h-4 w-4" />, text: t('navigation.payment_methods', 'Cartões e Pagamentos'), path: "/payment-methods" },
+      { icon: <CalendarDays className="mr-3 h-4 w-4" />, text: t('navigation.reminders', 'Lembretes'), path: "/reminders" },
+    ]
+  };
+
+  // Seção principal PJ (pessoa jurídica) — vira o menu principal do usuário PJ,
+  // sem duplicar Dashboard/Transações/Relatórios do PF.
+  const secaoPJ: MenuGroup = {
+    label: t('navigation.sections.main', 'PRINCIPAL'),
+    items: [
+      { icon: <LayoutDashboard className="mr-3 h-4 w-4" />, text: 'Dashboard', path: "/p/dashboard" },
+      { icon: <PlusCircle className="mr-3 h-4 w-4" />, text: 'Transações', path: "/p/transacoes" },
+      { icon: <BarChart3 className="mr-3 h-4 w-4" />, text: 'Relatórios', path: "/p/relatorios" },
+      { icon: <Tag className="mr-3 h-4 w-4" />, text: 'Plano de Contas', path: "/p/categorias" },
+      { icon: <CreditCard className="mr-3 h-4 w-4" />, text: 'Faturas de Cartão', path: "/p/faturas" },
+      { icon: <FileUp className="mr-3 h-4 w-4" />, text: 'Conciliação', path: "/p/conciliacao" },
+      { icon: <Building2 className="mr-3 h-4 w-4" />, text: 'Minhas Empresas', path: "/p/empresas" },
+    ]
+  };
+
+  // PJ vê só o ambiente PJ; PF vê só o PF. Sem itens repetidos.
   const userMenuItems: MenuGroup[] = [
-    {
-      label: t('navigation.sections.main', 'PRINCIPAL'),
-      items: [
-        { icon: <LayoutDashboard className="mr-3 h-4 w-4" />, text: t('navigation.dashboard', 'Dashboard'), path: "/" },
-        { icon: <PlusCircle className="mr-3 h-4 w-4" />, text: t('navigation.transactions', 'Transações'), path: "/transactions" },
-        { icon: <TrendingUp className="mr-3 h-4 w-4" />, text: 'Contas a Pagar', path: "/contas-pagar" },
-        { icon: <Building2 className="mr-3 h-4 w-4" />, text: 'Metas e Sonhos', path: "/metas" },
-        { icon: <BarChart3 className="mr-3 h-4 w-4" />, text: t('navigation.reports', 'Relatórios'), path: "/reports" },
-        { icon: <CreditCard className="mr-3 h-4 w-4" />, text: t('navigation.payment_methods', 'Cartões e Pagamentos'), path: "/payment-methods" },
-        { icon: <CalendarDays className="mr-3 h-4 w-4" />, text: t('navigation.reminders', 'Lembretes'), path: "/reminders" },
-      ]
-    },
-    ...(temEmpresa ? [{
-      label: 'PJ / EMPRESARIAL',
-      items: [
-        { icon: <Building2 className="mr-3 h-4 w-4" />, text: 'Dashboard PJ', path: "/p/dashboard" },
-        { icon: <PlusCircle className="mr-3 h-4 w-4" />, text: 'Transações PJ', path: "/p/transacoes" },
-        { icon: <TrendingUp className="mr-3 h-4 w-4" />, text: 'Relatórios', path: "/p/relatorios" },
-        { icon: <Tag className="mr-3 h-4 w-4" />, text: 'Plano de Contas', path: "/p/categorias" },
-        { icon: <Building2 className="mr-3 h-4 w-4" />, text: 'Minhas Empresas', path: "/p/empresas" },
-        { icon: <CreditCard className="mr-3 h-4 w-4" />, text: 'Faturas de Cartão', path: "/p/faturas" },
-        { icon: <CreditCard className="mr-3 h-4 w-4" />, text: 'Conciliação', path: "/p/conciliacao" },
-      ]
-    }] : []),
+    isPJ ? secaoPJ : secaoPF,
     {
       label: t('navigation.sections.settings', 'CONFIGURAÇÕES'),
       items: [
-        { icon: <Tag className="mr-3 h-4 w-4" />, text: t('navigation.categories', 'Categorias'), path: "/categories" },
+        // "Categorias" é do PF; no PJ o equivalente é "Plano de Contas".
+        ...(!isPJ ? [{ icon: <Tag className="mr-3 h-4 w-4" />, text: t('navigation.categories', 'Categorias'), path: "/categories" }] : []),
         { icon: <Settings className="mr-3 h-4 w-4" />, text: t('navigation.settings', 'Configurações'), path: "/settings" },
       ]
     },
