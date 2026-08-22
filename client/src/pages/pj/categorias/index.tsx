@@ -49,14 +49,31 @@ export default function PjCategorias({ empresaId }: { empresaId: number }) {
     onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
   });
 
+  const updateMut = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: any }) => {
+      const res = await fetch(`/api/empresas/${empresaId}/contas/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      return res.json();
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: [`/api/empresas/${empresaId}/contas`] }); },
+    onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
+  });
+
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
+    const grupo = fd.get("grupo_gerencial");
     createMut.mutate({
       codigo: fd.get("codigo"),
       nome: fd.get("nome"),
       tipo: fd.get("tipo"),
       classificacao: fd.get("classificacao"),
+      grupo_gerencial: grupo && grupo !== "auto" ? grupo : null,
+      is_cmv: fd.get("is_cmv") === "on",
     });
   };
 
@@ -65,6 +82,17 @@ export default function PjCategorias({ empresaId }: { empresaId: number }) {
     VARIAVEL: "Variável",
     OUTRA: "Outra",
   };
+
+  // Grupo gerencial usado no Fluxo de Caixa (Relatórios). "auto" = derivado.
+  const GRUPOS = [
+    { value: "auto", label: "Automático" },
+    { value: "receita", label: "Receita" },
+    { value: "custo_variavel", label: "Custo Variável" },
+    { value: "despesa_fixa", label: "Despesa Fixa" },
+    { value: "investimento", label: "Investimento" },
+    { value: "nao_operacional", label: "Não Operacional" },
+    { value: "outras", label: "Outras" },
+  ];
 
   return (
     <div className="space-y-4 p-4">
@@ -96,6 +124,15 @@ export default function PjCategorias({ empresaId }: { empresaId: number }) {
                   <SelectItem value="OUTRA">Outra</SelectItem>
                 </SelectContent>
               </Select>
+              <Select name="grupo_gerencial" defaultValue="auto">
+                <SelectTrigger><SelectValue placeholder="Grupo (Fluxo)" /></SelectTrigger>
+                <SelectContent>
+                  {GRUPOS.map((g) => <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <label className="flex items-center gap-2 text-sm px-1">
+                <input type="checkbox" name="is_cmv" className="h-4 w-4" /> É CMV (comércio)
+              </label>
               <Button type="submit" disabled={createMut.isPending}>Salvar</Button>
             </form>
           </CardContent>
@@ -111,14 +148,15 @@ export default function PjCategorias({ empresaId }: { empresaId: number }) {
                 <th className="text-left p-3">Nome</th>
                 <th className="text-center p-3">Tipo</th>
                 <th className="text-center p-3">Classificação</th>
+                <th className="text-center p-3">Grupo (Fluxo de Caixa)</th>
                 <th className="text-center p-3">Ações</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
-                <tr><td colSpan={5} className="text-center p-4">Carregando...</td></tr>
+                <tr><td colSpan={6} className="text-center p-4">Carregando...</td></tr>
               ) : contas.length === 0 ? (
-                <tr><td colSpan={5} className="text-center p-4 text-muted-foreground">Nenhuma conta cadastrada.</td></tr>
+                <tr><td colSpan={6} className="text-center p-4 text-muted-foreground">Nenhuma conta cadastrada.</td></tr>
               ) : (
                 contas.map((c) => (
                   <tr key={c.id} className="border-b hover:bg-muted/30">
@@ -131,6 +169,27 @@ export default function PjCategorias({ empresaId }: { empresaId: number }) {
                     </td>
                     <td className="p-3 text-center">
                       <Badge variant="outline" className="text-xs">{classLabel[c.classificacao] ?? c.classificacao}</Badge>
+                    </td>
+                    <td className="p-3 text-center">
+                      <div className="flex items-center justify-center gap-2">
+                        <Select
+                          value={(c as any).grupo_gerencial || "auto"}
+                          onValueChange={(v) => updateMut.mutate({ id: c.id, data: { grupo_gerencial: v === "auto" ? null : v } })}
+                        >
+                          <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {GRUPOS.map((g) => <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                        <label className="flex items-center gap-1 text-xs text-muted-foreground" title="Custo da Mercadoria Vendida (habilita Margem Bruta/Markup)">
+                          <input
+                            type="checkbox"
+                            className="h-3.5 w-3.5"
+                            checked={(c as any).is_cmv === true}
+                            onChange={(e) => updateMut.mutate({ id: c.id, data: { is_cmv: e.target.checked } })}
+                          /> CMV
+                        </label>
+                      </div>
                     </td>
                     <td className="p-3 text-center">
                       <Button variant="ghost" size="icon" onClick={() => deleteMut.mutate(c.id)}>
