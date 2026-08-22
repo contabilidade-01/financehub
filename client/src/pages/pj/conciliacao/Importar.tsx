@@ -73,7 +73,7 @@ export default function Importar({ empresaId }: { empresaId: number }) {
 
   const handleImport = async () => {
     if (!file || !selectedContaId) {
-      alert("Selecione uma conta e um arquivo OFX");
+      alert("Selecione uma conta e um arquivo (OFX, CSV ou Excel)");
       return;
     }
     const formData = new FormData();
@@ -121,12 +121,12 @@ export default function Importar({ empresaId }: { empresaId: number }) {
           >
             <Upload className="h-10 w-10 mx-auto mb-2 text-muted-foreground" />
             <p className="font-medium">
-              Arraste um arquivo OFX ou <span className="text-primary">clique para selecionar</span>
+              Arraste um arquivo OFX, CSV ou Excel ou <span className="text-primary">clique para selecionar</span>
             </p>
-            <p className="text-sm text-muted-foreground mt-1">Apenas arquivos .ofx (OFX 1.x ou 2.x)</p>
+            <p className="text-sm text-muted-foreground mt-1">.ofx (1.x/2.x), .csv ou .xlsx — a planilha precisa ter colunas de data, descrição e valor</p>
             <input
               type="file"
-              accept=".ofx"
+              accept=".ofx,.csv,.xlsx,.xls"
               onChange={(e) => e.target.files && setFile(e.target.files[0])}
               className="hidden"
               id="file-input"

@@ -15,7 +15,7 @@ import {
   aprenderMemoriaContaPJ,
   getUltimoSaldoInformado,
 } from "../storage";
-import { processarImportacaoOfx } from "../services/conciliacao.service";
+import { processarImportacaoOfx, processarImportacaoPlanilha } from "../services/conciliacao.service";
 
 // Garante que a empresa é do usuário logado (isolamento).
 async function empresaDoUsuario(req: Request, res: Response): Promise<any | null> {
@@ -65,21 +65,34 @@ export class ConciliacaoController {
     res.json({ success: true });
   }
 
-  // ---- Importação OFX ----
+  // ---- Importação de extrato (OFX, CSV ou XLSX) ----
   static async importar(req: Request, res: Response) {
     const emp = await empresaDoUsuario(req, res); if (!emp) return;
     const contaBancariaId = Number(req.body?.conta_bancaria_id);
     const conta = await contaDaEmpresa(contaBancariaId, emp.id, res); if (!conta) return;
     const file = (req as any).file;
-    if (!file) return res.status(400).json({ error: "Envie o arquivo OFX no campo 'arquivo'." });
-    // OFX pode vir em latin1; tenta utf8 e cai para latin1 se houver caractere inválido.
-    let conteudo = file.buffer.toString("utf8");
-    if (/�/.test(conteudo)) conteudo = file.buffer.toString("latin1");
+    if (!file) return res.status(400).json({ error: "Envie o arquivo (OFX, CSV ou XLSX) no campo 'arquivo'." });
+
+    const nome = (file.originalname || "").toLowerCase();
+    // Detecta o formato pelo conteúdo/extensão. OFX é texto com <OFX>/<STMTTRN>.
+    const amostra = file.buffer.slice(0, 512).toString("utf8");
+    const ehOfx = nome.endsWith(".ofx") || /<ofx|<stmttrn/i.test(amostra);
     try {
-      const resultado = await processarImportacaoOfx({
-        empresaId: emp.id, contaBancariaId, usuarioId: (req as any).user.id,
-        arquivoNome: file.originalname, conteudo,
-      });
+      let resultado;
+      if (ehOfx) {
+        let conteudo = file.buffer.toString("utf8");
+        if (/�/.test(conteudo)) conteudo = file.buffer.toString("latin1");
+        resultado = await processarImportacaoOfx({
+          empresaId: emp.id, contaBancariaId, usuarioId: (req as any).user.id,
+          arquivoNome: file.originalname, conteudo,
+        });
+      } else {
+        const formato = nome.endsWith(".csv") ? "csv" : "xlsx";
+        resultado = await processarImportacaoPlanilha({
+          empresaId: emp.id, contaBancariaId, usuarioId: (req as any).user.id,
+          arquivoNome: file.originalname, buffer: file.buffer, formato,
+        });
+      }
       res.json(resultado);
     } catch (e: any) {
       console.error("[Conciliação] erro ao importar:", e?.message);
