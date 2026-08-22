@@ -414,6 +414,8 @@ export async function getCurrentSubscription(req: Request, res: Response) {
         status: subscription.status,
         currentPeriodStart: subscription.currentPeriodStart,
         currentPeriodEnd: subscription.currentPeriodEnd,
+        gracePeriodEndsAt: subscription.gracePeriodEndsAt,
+        cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
         plan: plan
       }
     });
