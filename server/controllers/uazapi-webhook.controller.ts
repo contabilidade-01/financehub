@@ -232,6 +232,19 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
     // expiração de trial ou conta inativa, o fluxo é tratado aqui e retornamos.
     if (await tratarOnboarding(user, text || "", chatid, BaseUrl, token)) return;
 
+    // Verificar se o usuário é PJ e não tem empresa cadastrada para iniciar o onboarding guiado
+    if (user.tipo_pessoa === 'juridica') {
+      const empresas = await storage.getEmpresasByUsuarioId(user.id);
+      if (empresas.length === 0) {
+        const onboardingService = new WhatsAppOnboardingService();
+        const { handled, response } = await onboardingService.handleMessage(chatid, text, user.id, BaseUrl, token);
+        if (handled) {
+          await uazapiService.sendText(BaseUrl, token, chatid, response || "");
+          return;
+        }
+      }
+    }
+
     // ============================================
     // 2. RESOLVER CONTEÚDO (texto/áudio/imagem/pdf)
     // ============================================

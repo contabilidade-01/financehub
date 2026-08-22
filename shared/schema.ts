@@ -873,9 +873,18 @@ export interface EmpresaFluxoCaixaMensal {
   saldoAntesAno: { conta_bancaria_id: number; total: number }[];            // movimento acumulado antes do ano
 }
 
-// ============================================
-// METAS FINANCEIRAS — caixinhas, sonhos, orçamentos
-// ============================================
+// Tabela para rastrear o estado do onboarding guiado via WhatsApp para usuários PJ
+export const whatsappOnboardingStates = pgTable("whatsapp_onboarding_states", {
+  id: serial("id").primaryKey(),
+  remoteJid: varchar("remote_jid", { length: 255 }).notNull().unique(),
+  usuarioId: integer("usuario_id").references(() => users.id, { onDelete: 'cascade' }),
+  currentStep: varchar("current_step", { length: 50 }).notNull(), // 'INITIAL_CHOICE' | 'ASKING_RESPONSIBLE' | 'ASKING_CNPJ' | 'ASKING_RAZAO_SOCIAL' | 'ASKING_EMAIL' | 'ASKING_PHONE' | 'COMPLETED'
+  collectedData: text("collected_data").notNull().default("{}"), // Armazena JSON com os dados coletados
+  updatedAt: timestamp("updated_at", { withTimezone: true }).default(sql`(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')`),
+});
+
+export type WhatsAppOnboardingState = typeof whatsappOnboardingStates.$inferSelect;
+export type InsertWhatsAppOnboardingState = typeof whatsappOnboardingStates.$inferInsert;
 
 export const metasFinanceiras = pgTable("metas_financeiras", {
   id: serial("id").primaryKey(),
