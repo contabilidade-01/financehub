@@ -117,6 +117,7 @@ function Sidebar() {
         { icon: <TrendingUp className="mr-3 h-4 w-4" />, text: 'Relatórios', path: "/p/relatorios" },
         { icon: <Tag className="mr-3 h-4 w-4" />, text: 'Plano de Contas', path: "/p/categorias" },
         { icon: <Building2 className="mr-3 h-4 w-4" />, text: 'Minhas Empresas', path: "/p/empresas" },
+        { icon: <CreditCard className="mr-3 h-4 w-4" />, text: 'Faturas de Cartão', path: "/p/faturas" },
         { icon: <CreditCard className="mr-3 h-4 w-4" />, text: 'Conciliação', path: "/p/conciliacao" },
       ]
     }] : []),

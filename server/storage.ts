@@ -1874,6 +1874,7 @@ export class DbStorage implements IStorage {
              SUM(CASE WHEN t.tipo = 'Receita' THEN t.valor::numeric ELSE -t.valor::numeric END) AS total
       FROM empresas_transacoes t
       WHERE t.empresa_id = ${empresaId}
+        AND COALESCE(t.movimenta_caixa, true) = true
         AND EXTRACT(YEAR FROM t.data_transacao) = ${ano}
       GROUP BY t.categoria_id, mes
     `);
@@ -1903,6 +1904,7 @@ export class DbStorage implements IStorage {
       FROM empresas_transacoes t
       WHERE t.empresa_id = ${empresaId}
         AND t.conta_bancaria_id IS NOT NULL
+        AND COALESCE(t.movimenta_caixa, true) = true
         AND EXTRACT(YEAR FROM t.data_transacao) = ${ano}
       GROUP BY t.conta_bancaria_id, mes
     `);
@@ -1917,6 +1919,7 @@ export class DbStorage implements IStorage {
       FROM empresas_transacoes t
       WHERE t.empresa_id = ${empresaId}
         AND t.conta_bancaria_id IS NOT NULL
+        AND COALESCE(t.movimenta_caixa, true) = true
         AND EXTRACT(YEAR FROM t.data_transacao) < ${ano}
       GROUP BY t.conta_bancaria_id
     `);

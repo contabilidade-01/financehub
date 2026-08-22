@@ -1256,6 +1256,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/empresas/:id/dashboard/resumo", combinedAuth, empresaTransacaoCtrl.getEmpresaResumo);
   app.get("/api/empresas/:id/relatorios/dre", combinedAuth, empresaTransacaoCtrl.getEmpresaDRE);
   app.get("/api/empresas/:id/relatorios/fluxo-caixa", combinedAuth, empresaTransacaoCtrl.getEmpresaFluxoCaixa);
+  // Fatura de cartão PJ (competência × caixa)
+  const empresaFaturaCtrl = await import("./controllers/empresaFatura.controller");
+  app.get("/api/empresas/:id/cartoes", combinedAuth, empresaFaturaCtrl.listarCartoes);
+  app.post("/api/empresas/:id/cartoes", combinedAuth, empresaFaturaCtrl.criarCartao);
+  app.delete("/api/empresas/:id/cartoes/:cartaoId", combinedAuth, empresaFaturaCtrl.excluirCartao);
+  app.post("/api/empresas/:id/cartoes/:cartaoId/compras", combinedAuth, empresaFaturaCtrl.registrarCompra);
+  app.get("/api/empresas/:id/cartoes/:cartaoId/faturas", combinedAuth, empresaFaturaCtrl.listarFaturas);
+  app.get("/api/empresas/:id/faturas/:faturaId", combinedAuth, empresaFaturaCtrl.detalheFatura);
+  app.post("/api/empresas/:id/faturas/:faturaId/fechar", combinedAuth, empresaFaturaCtrl.fecharFatura);
+  app.post("/api/empresas/:id/faturas/:faturaId/pagar", combinedAuth, empresaFaturaCtrl.pagarFatura);
 
   // Lixeira PJ (soft-delete/undo)
   const { restaurarUltimaExcluidaPJ, listarLixeiraPJ } = await import("./storage");

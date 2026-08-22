@@ -8,6 +8,7 @@ import PjTransactions from "@/pages/pj/transactions";
 import PjCategorias from "@/pages/pj/categorias";
 import PjEmpresas from "@/pages/pj/empresas";
 import PjRelatorios from "@/pages/pj/relatorios";
+import PjFaturas from "@/pages/pj/faturas";
 import ConciliacaoPage from "@/pages/pj/conciliacao";
 
 /**
@@ -74,6 +75,8 @@ export default function PjRouter() {
         return <PjEmpresas />;
       case "relatorios":
         return <PjRelatorios empresaId={empresaAtiva} />;
+      case "faturas":
+        return <PjFaturas empresaId={empresaAtiva} />;
       case "conciliacao":
         return <ConciliacaoPage empresaId={empresaAtiva} />;
       default:

@@ -296,6 +296,48 @@ const STEPS: Step[] = [
     },
   },
   {
+    name: "fatura PJ (empresas_cartoes, empresas_faturas + competência em empresas_transacoes)",
+    run: async () => {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS empresas_cartoes (
+          id             SERIAL PRIMARY KEY,
+          empresa_id     INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+          nome           VARCHAR(100) NOT NULL,
+          bandeira       VARCHAR(40),
+          limite         NUMERIC(12,2),
+          dia_fechamento INTEGER NOT NULL,
+          dia_vencimento INTEGER NOT NULL,
+          ativo          BOOLEAN NOT NULL DEFAULT true,
+          criado_em      TIMESTAMPTZ DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')
+        )
+      `);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_emp_cartoes_empresa ON empresas_cartoes(empresa_id)`);
+
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS empresas_faturas (
+          id                     SERIAL PRIMARY KEY,
+          empresa_id             INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+          cartao_id              INTEGER NOT NULL REFERENCES empresas_cartoes(id) ON DELETE CASCADE,
+          competencia            VARCHAR(7) NOT NULL,
+          data_fechamento        DATE NOT NULL,
+          data_vencimento        DATE NOT NULL,
+          status                 VARCHAR(10) NOT NULL DEFAULT 'aberta',
+          transacao_pagamento_id INTEGER,
+          data_pagamento         TIMESTAMPTZ,
+          criado_em              TIMESTAMPTZ DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')
+        )
+      `);
+      await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS emp_fatura_uq ON empresas_faturas(cartao_id, competencia)`);
+
+      // Competência × caixa nas transações PJ: compra no cartão é competência
+      // (movimenta_caixa=false); só o pagamento da fatura move o caixa.
+      await db.execute(sql`ALTER TABLE empresas_transacoes ADD COLUMN IF NOT EXISTS movimenta_caixa BOOLEAN NOT NULL DEFAULT true`);
+      await db.execute(sql`ALTER TABLE empresas_transacoes ADD COLUMN IF NOT EXISTS cartao_id INTEGER`);
+      await db.execute(sql`ALTER TABLE empresas_transacoes ADD COLUMN IF NOT EXISTS fatura_id INTEGER`);
+      await db.execute(sql`ALTER TABLE empresas_transacoes ADD COLUMN IF NOT EXISTS competencia VARCHAR(7)`);
+    },
+  },
+  {
     name: "empresas_contas: grupo_gerencial + is_cmv (fluxo de caixa gerencial)",
     run: async () => {
       await db.execute(sql`ALTER TABLE empresas_contas ADD COLUMN IF NOT EXISTS grupo_gerencial VARCHAR(30)`);
