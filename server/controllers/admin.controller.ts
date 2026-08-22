@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import "../types/session.types";
+import { generateCheckoutToken } from "../utils/checkout-token.utils";
 import { getNotificationService } from "../services/notification.service";
 import { generateRandomPassword } from "../utils/password-generator";
 
@@ -1390,5 +1391,25 @@ export async function renovarAssinatura(req: Request, res: Response) {
   } catch (err) {
     console.error("renovarAssinatura:", err);
     return res.status(500).json({ error: "Erro ao renovar assinatura" });
+  }
+}
+
+// POST /api/admin/assinaturas/:id/gerar-link  { ciclo }
+// Gera um link de checkout (Asaas) já com o ciclo — o cliente preenche
+// CPF/CNPJ + cartão e a assinatura recorrente é criada com o ciclo escolhido.
+export async function gerarLinkCobranca(req: Request, res: Response) {
+  try {
+    const userId = parseInt(req.params.id);
+    const { ciclo } = req.body || {};
+    if (!MESES_CICLO[ciclo]) return res.status(400).json({ error: "ciclo inválido (mensal | trimestral | anual)" });
+    const user = await storage.getUserById(userId);
+    if (!user) return res.status(404).json({ error: "Usuário não encontrado" });
+    const token = generateCheckoutToken(user.id, user.email, ciclo);
+    const baseUrl = process.env.BASE_URL || "https://financehub.xpiria.com.br";
+    const url = `${baseUrl}/checkout/plans?tokenaccess=${encodeURIComponent(token)}`;
+    return res.json({ url, ciclo });
+  } catch (err) {
+    console.error("gerarLinkCobranca:", err);
+    return res.status(500).json({ error: "Erro ao gerar link de cobrança" });
   }
 }

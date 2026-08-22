@@ -45,6 +45,7 @@ export default function AdminAssinaturas() {
   const [filtro, setFiltro] = useState<string>("todos");
   const [definindo, setDefinindo] = useState<Assinatura | null>(null);
   const [form, setForm] = useState({ ciclo: "mensal", inicio: hoje() });
+  const [linkCobranca, setLinkCobranca] = useState<string>("");
 
   const { data: lista = [], isLoading } = useQuery<Assinatura[]>({
     queryKey: ["/api/admin/assinaturas"],
@@ -63,6 +64,11 @@ export default function AdminAssinaturas() {
     onSuccess: () => { invalidate(); toast({ title: "Assinatura renovada" }); },
     onError: (err: any) => toast({ title: "Erro", description: err?.error || err?.message || "Defina o ciclo antes de renovar", variant: "destructive" }),
   });
+  const linkMut = useMutation({
+    mutationFn: ({ id, ciclo }: { id: number; ciclo: string }) => apiRequest(`/api/admin/assinaturas/${id}/gerar-link`, { method: "POST", data: { ciclo } }),
+    onSuccess: (r: any) => { setLinkCobranca(r?.url || ""); toast({ title: "Link gerado", description: "Copie e envie ao cliente." }); },
+    onError: (err: any) => toast({ title: "Erro", description: err?.error || err?.message || "Falha ao gerar link", variant: "destructive" }),
+  });
 
   const resumo = useMemo(() => {
     const r = { total: lista.length, em_dia: 0, vence_breve: 0, vencido: 0, degustacao: 0 };
@@ -72,7 +78,7 @@ export default function AdminAssinaturas() {
 
   const filtrada = filtro === "todos" ? lista : lista.filter((a) => a.situacao === filtro);
 
-  const openDefinir = (a: Assinatura) => { setDefinindo(a); setForm({ ciclo: a.ciclo_assinatura || "mensal", inicio: hoje() }); };
+  const openDefinir = (a: Assinatura) => { setDefinindo(a); setForm({ ciclo: a.ciclo_assinatura || "mensal", inicio: hoje() }); setLinkCobranca(""); };
   const cicloMeses = CICLOS.find((c) => c.value === form.ciclo)?.meses ?? 1;
 
   return (
@@ -176,11 +182,27 @@ export default function AdminAssinaturas() {
             <div className="text-sm text-muted-foreground">
               Vencimento calculado: <strong className="text-foreground">{addMesesISO(form.inicio, cicloMeses)}</strong> ({cicloMeses} {cicloMeses === 1 ? "mês" : "meses"}).
             </div>
+
+            {/* Cobrança automática (Asaas) — gera link para o cliente pagar */}
+            <div className="rounded-md border p-3 space-y-2 bg-muted/30">
+              <div className="text-xs text-muted-foreground">
+                <strong>Cobrança automática (Asaas):</strong> gera um link para o cliente preencher CPF/CNPJ e pagar — a assinatura recorrente é criada com o ciclo <strong>{form.ciclo}</strong>.
+              </div>
+              <Button size="sm" variant="secondary" className="w-full" onClick={() => definindo && linkMut.mutate({ id: definindo.id, ciclo: form.ciclo })} disabled={linkMut.isPending}>
+                {linkMut.isPending ? "Gerando…" : "Gerar link de cobrança"}
+              </Button>
+              {linkCobranca && (
+                <div className="flex items-center gap-2">
+                  <Input readOnly value={linkCobranca} className="text-xs" onFocus={(e) => e.currentTarget.select()} />
+                  <Button size="sm" variant="outline" onClick={() => { navigator.clipboard?.writeText(linkCobranca); toast({ title: "Link copiado" }); }}>Copiar</Button>
+                </div>
+              )}
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDefinindo(null)}>Cancelar</Button>
             <Button onClick={() => definindo && definirMut.mutate({ id: definindo.id, data: { ciclo: form.ciclo, inicio: form.inicio } })} disabled={definirMut.isPending}>
-              {definirMut.isPending ? "Salvando…" : "Ativar assinatura"}
+              {definirMut.isPending ? "Salvando…" : "Ativar manual"}
             </Button>
           </DialogFooter>
         </DialogContent>

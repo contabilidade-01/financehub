@@ -39,7 +39,8 @@ const checkoutSchema = z.object({
     mobilePhone: z.string().optional()
   }),
   remoteIp: z.string().optional(),
-  checkoutToken: z.string().optional() // Token para checkout externo
+  checkoutToken: z.string().optional(), // Token para checkout externo
+  ciclo: z.enum(['mensal', 'trimestral', 'anual']).optional() // ciclo da assinatura
 });
 
 /**
@@ -159,6 +160,7 @@ export async function checkout(req: Request, res: Response) {
 
     let userId: number;
     let isExternalCheckout = false;
+    let ciclo: string | undefined = (validatedData as any).ciclo;
 
     // Verificar se é checkout externo (com token) ou normal (autenticado)
     if (validatedData.checkoutToken) {
@@ -192,6 +194,7 @@ export async function checkout(req: Request, res: Response) {
       }
 
       userId = user.id;
+      if (decoded.ciclo) ciclo = decoded.ciclo; // ciclo veio no link gerado pelo admin
     } else {
       // Checkout normal: requer autenticação
       const user = (req as any).user;
@@ -212,7 +215,8 @@ export async function checkout(req: Request, res: Response) {
       creditCard: validatedData.creditCard,
       creditCardHolderInfo: validatedData.creditCardHolderInfo,
       cpfCnpj: validatedData.cpfCnpj,
-      remoteIp: validatedData.remoteIp || remoteIp
+      remoteIp: validatedData.remoteIp || remoteIp,
+      ciclo: (ciclo as any) || undefined
     });
 
     // Determinar se deve aguardar webhook

@@ -69,7 +69,15 @@ export interface CreateSubscriptionData {
   creditCardHolderInfo: AsaasCreditCardHolderInfo;
   cpfCnpj: string;
   remoteIp?: string;
+  ciclo?: 'mensal' | 'trimestral' | 'anual'; // define o ciclo Asaas e o valor (× meses)
 }
+
+// Mapa ciclo → { cycle Asaas, meses } (preço = priceMonthly × meses)
+export const CICLO_ASAAS: Record<string, { cycle: 'MONTHLY' | 'QUARTERLY' | 'YEARLY'; meses: number }> = {
+  mensal: { cycle: 'MONTHLY', meses: 1 },
+  trimestral: { cycle: 'QUARTERLY', meses: 3 },
+  anual: { cycle: 'YEARLY', meses: 12 },
+};
 
 export interface SubscriptionWithPlan extends UserSubscription {
   plan: SubscriptionPlan;
@@ -159,14 +167,17 @@ export class SubscriptionService {
       // 5. Buscar nome do sistema para descrição
       const systemName = await getSystemName();
 
-      // 6. Criar assinatura no Asaas
+      // 6. Criar assinatura no Asaas — ciclo (mensal/trimestral/anual) define o
+      //    cycle Asaas e o valor (priceMonthly × meses).
+      const cfgCiclo = CICLO_ASAAS[data.ciclo || 'mensal'] || CICLO_ASAAS.mensal;
+      const valorCiclo = parseFloat(plan.priceMonthly.toString()) * cfgCiclo.meses;
       const asaasSubscription = await (await this.getAsaas()).createSubscription({
         customer: asaasCustomer.asaasCustomerId,
         billingType: 'CREDIT_CARD',
-        cycle: 'MONTHLY',
-        value: parseFloat(plan.priceMonthly.toString()),
+        cycle: cfgCiclo.cycle,
+        value: valorCiclo,
         nextDueDate: nextDueDate,
-        description: `Assinatura ${plan.name} - ${systemName}`,
+        description: `Assinatura ${plan.name} (${data.ciclo || 'mensal'}) - ${systemName}`,
         creditCard: data.creditCard,
         creditCardHolderInfo: data.creditCardHolderInfo,
         remoteIp: data.remoteIp
