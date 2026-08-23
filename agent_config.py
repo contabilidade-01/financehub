@@ -7,7 +7,7 @@ class AgentConfig:
 
         # Mapeamento robusto de intenções
         self.intent_map = {
-            "AJUSTAR": ["atualizar", "ajustar", "mudar para", "ficar com", "definir como", "setar", "valor atual para"],
+            "AJUSTAR": ["atualizar", "ajustar", "mudar para", "ficar com", "definir como", "setar", "valor atual para", "atualize"],
             "DEPOSITAR": ["depositar", "colocar", "adicionar", "somar", "estou colocando", "aporte"],
             "SACAR": ["sacar", "tirar", "remover", "subtrair", "retirar"],
             "PROGRESSO": ["progresso", "valor atual", "quanto tenho", "saldo", "como está", "extrato"],
