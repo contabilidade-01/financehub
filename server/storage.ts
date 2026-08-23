@@ -2511,6 +2511,40 @@ export async function getCategoryBreakdown(walletId: number, de: string, ate: st
   });
 }
 
+// ============================================
+// AUDITORIA ADMINISTRATIVA
+// ============================================
+export async function createAuditLog(data: InsertAuditoriaAdmin): Promise<AuditoriaAdmin> {
+  const result = await db.insert(auditoriaAdmin)
+    .values({
+      ...data,
+      created_at: new Date()
+    })
+    .returning();
+  return result[0];
+}
+
+export async function getAuditLogs(opts: {
+  adminId?: number;
+  acao?: string;
+  limit?: number;
+  offset?: number;
+} = {}): Promise<AuditoriaAdmin[]> {
+  const limit = Math.min(opts.limit ?? 100, 500);
+  const offset = opts.offset ?? 0;
+
+  let query = db.select().from(auditoriaAdmin).orderBy(desc(auditoriaAdmin.created_at)).limit(limit).offset(offset);
+
+  if (opts.adminId) {
+    query = query.where(eq(auditoriaAdmin.admin_id, opts.adminId)) as any;
+  }
+  if (opts.acao) {
+    query = query.where(eq(auditoriaAdmin.acao, opts.acao)) as any;
+  }
+
+  return query;
+}
+
 export async function comparePeriods(walletId: number, p1Start: string, p1End: string, p2Start: string, p2End: string): Promise<{
   periodo1: { de: string; ate: string; receita: number; despesa: number; saldo: number };
   periodo2: { de: string; ate: string; receita: number; despesa: number; saldo: number };

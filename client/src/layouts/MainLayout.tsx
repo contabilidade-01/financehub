@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { User } from "@shared/schema";
 import AdminStickyHeader from "@/components/admin/AdminStickyHeader";
+import { GuidedTourModal } from "@/components/shared/GuidedTourModal";
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -30,7 +31,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
       
       <Sidebar />
       
-      <motion.main 
+      <motion.main
         className={`flex-1 lg:ml-64 p-4 md:p-6 ${shouldShowAdminHeader ? 'pt-6 lg:pt-24' : 'pt-4 lg:pt-6'}`}
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -41,6 +42,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
           {children}
         </div>
       </motion.main>
+      <GuidedTourModal />
     </div>
   );
 }

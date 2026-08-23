@@ -927,3 +927,16 @@ export interface MetaComProgresso extends MetaFinanceira {
   falta: number;
   meses_restantes: number | null;
 }
+
+// Tabela para auditoria de ações administrativas sensíveis
+export const auditoriaAdmin = pgTable("auditoria_admin", {
+  id: serial("id").primaryKey(),
+  admin_id: integer("admin_id").references(() => users.id, { onDelete: 'set null' }),
+  acao: varchar("acao", { length: 100 }).notNull(),
+  detalhes: text("detalhes"),
+  ip: varchar("ip", { length: 50 }),
+  created_at: timestamp("created_at", { withTimezone: true }).default(sql`(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')`),
+});
+
+export type AuditoriaAdmin = typeof auditoriaAdmin.$inferSelect;
+export type InsertAuditoriaAdmin = typeof auditoriaAdmin.$inferInsert;

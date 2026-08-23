@@ -1413,3 +1413,49 @@ export async function gerarLinkCobranca(req: Request, res: Response) {
     return res.status(500).json({ error: "Erro ao gerar link de cobrança" });
   }
 }
+
+// GET /api/admin/export/users-csv — Exportar usuários em formato CSV
+export async function exportUsersCsv(req: Request, res: Response) {
+  try {
+    if (!req.user || req.user.tipo_usuario !== 'super_admin') {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
+    const users = await storage.getAllUsers();
+    let csv = "ID,Nome,Email,Telefone,Tipo Usuario,Tipo Pessoa,Ativo,Status Assinatura,Data Cadastro\n";
+    for (const u of users) {
+      csv += `"${u.id}","${u.nome || ''}","${u.email || ''}","${u.telefone || ''}","${u.tipo_usuario}","${(u as any).tipo_pessoa || 'fisica'}","${u.ativo}","${u.status_assinatura || ''}","${u.data_cadastro || ''}"\n`;
+    }
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="usuarios_financehub.csv"');
+    return res.send(csv);
+  } catch (err) {
+    console.error("exportUsersCsv:", err);
+    return res.status(500).json({ error: "Erro ao exportar usuários" });
+  }
+}
+
+// GET /api/admin/export/transactions-csv — Exportar transações em formato CSV
+export async function exportTransactionsCsv(req: Request, res: Response) {
+  try {
+    if (!req.user || req.user.tipo_usuario !== 'super_admin') {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
+    const allUsers = await storage.getAllUsers();
+    let csv = "ID Usuario,Nome Usuario,ID Transacao,Descricao,Valor,Tipo,Data,Status\n";
+    for (const u of allUsers) {
+      const wallet = await storage.getWalletByUserId(u.id);
+      if (wallet) {
+        const txs = await storage.getTransactionsByWalletId(wallet.id);
+        for (const tx of txs) {
+          csv += `"${u.id}","${u.nome}","${tx.id}","${tx.descricao.replace(/"/g, '""')}","${tx.valor}","${tx.tipo}","${tx.data_transacao}","${tx.status || 'Efetivada'}"\n`;
+        }
+      }
+    }
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="transacoes_financehub.csv"');
+    return res.send(csv);
+  } catch (err) {
+    console.error("exportTransactionsCsv:", err);
+    return res.status(500).json({ error: "Erro ao exportar transações" });
+  }
+}

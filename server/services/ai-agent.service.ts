@@ -335,20 +335,49 @@ function buildTools() {
     {
       type: "function" as const,
       function: {
-        name: "criar_meta",
-        description: "Cria uma meta financeira (caixinha para guardar dinheiro, sonho, reserva de emergência, ou limite de gastos por categoria). Exemplos: 'quero guardar R$1000/mês pra viajar', 'limite R$500 em alimentação'.",
+        name: "simular_meta_financeira",
+        description: "Simula em quanto tempo o usuário atinge uma meta financeira guardando um valor mensal, considerando opcionalmente uma taxa de rentabilidade (juros compostos). Use para perguntas como 'em quanto tempo consigo R$ 100 mil guardando 5 mil por mês', 'simula x reais com juros de y%', etc.",
         parameters: {
           type: "object",
           properties: {
-            titulo: { type: "string", description: "Nome da meta (ex: 'Viagem Europa', 'Reserva Emergência', 'Limite Alimentação')" },
-            tipo: { type: "string", enum: ["caixinha", "sonho", "reserva", "limite_categoria"], description: "Tipo: caixinha (guardar dinheiro), sonho (objetivo de longo prazo), reserva (emergência), limite_categoria (orçamento por categoria)" },
-            valor_alvo: { type: "number", description: "Valor total da meta em R$ (ex: 10000 para R$10.000)" },
-            prazo: { type: "string", description: "Data limite YYYY-MM-DD (opcional)" },
-            categoria: { type: "string", description: "Nome da categoria (obrigatório se tipo=limite_categoria, ex: 'Alimentação')" },
-            recorrencia: { type: "string", enum: ["diario", "semanal", "mensal"], description: "Frequência para guardar (opcional)" },
-            valor_recorrencia: { type: "number", description: "Quanto guardar por período (ex: 500 = R$500/mês)" },
+            valor_alvo: { type: "number", description: "Valor total desejado (ex: 100000)" },
+            valor_atual: { type: "number", description: "Valor já guardado/atual (default 0)" },
+            valor_mensal: { type: "number", description: "Quanto guarda por mês (ex: 5000)" },
+            taxa_anual_pct: { type: "number", description: "Taxa de juros anual percentual estimada, ex: 10 para 10% a.a. (default 0 para sem juros)" }
+          },
+          required: ["valor_alvo", "valor_mensal"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "criar_meta",
+        description: "Cria uma nova meta, caixinha, sonho ou limite de orçamento. Use quando o usuário quiser criar um objetivo financeiro.",
+        parameters: {
+          type: "object",
+          properties: {
+            titulo: { type: "string", description: "Nome/título da meta (ex: 'Presente para esposa', 'Reserva de Emergência')" },
+            tipo: { type: "string", enum: ["caixinha", "sonho", "reserva", "limite_categoria"], description: "Tipo da meta" },
+            valor_alvo: { type: "number", description: "Valor alvo em R$" },
+            prazo: { type: "string", description: "Data de prazo opcional YYYY-MM-DD" },
+            categoria: { type: "string", description: "Nome da categoria (obrigatório se tipo for limite_categoria)" }
           },
           required: ["titulo", "tipo", "valor_alvo"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "deletar_meta",
+        description: "Exclui ou desativa uma meta/caixinha existente. Use quando o usuário quiser apagar ou remover uma meta.",
+        parameters: {
+          type: "object",
+          properties: {
+            meta_id: { type: "number", description: "ID da meta a excluir" },
+            titulo: { type: "string", description: "Título ou parte do título da meta caso não saiba o ID" }
+          },
         },
       },
     },
@@ -360,10 +389,11 @@ function buildTools() {
         parameters: {
           type: "object",
           properties: {
-            meta_id: { type: "number", description: "ID da meta (pergunte qual se houver mais de uma)" },
+            meta_id: { type: "number", description: "ID da meta (opcional se fornecer titulo)" },
+            titulo: { type: "string", description: "Título ou parte do nome da meta (opcional se fornecer meta_id)" },
             valor: { type: "number", description: "Valor a depositar em R$" },
           },
-          required: ["meta_id", "valor"],
+          required: ["valor"],
         },
       },
     },
@@ -847,6 +877,54 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         return JSON.stringify({ chart_url: chartUrl, tipo, data, instrucao: "Envie esta URL como imagem para o usuário." });
       }
 
+      case "simular_meta_financeira": {
+        const alvo = Number(args.valor_alvo) || 0;
+        const atual = Number(args.valor_atual) || 0;
+        const mensal = Number(args.valor_mensal) || 0;
+        const taxaAnual = Number(args.taxa_anual_pct) || 0;
+
+        if (alvo <= 0 || mensal <= 0) {
+          return JSON.stringify({ error: "Informe um valor alvo e um valor mensal válidos." });
+        }
+
+        const falta = alvo - atual;
+        if (falta <= 0) {
+          return JSON.stringify({ mensagem: "Parabéns! O valor atual já atinge ou supera o valor alvo da meta! 🎉" });
+        }
+
+        let meses = 0;
+        let montante = atual;
+        const taxaMensal = taxaAnual > 0 ? Math.pow(1 + taxaAnual / 100, 1 / 12) - 1 : 0;
+
+        if (taxaMensal === 0) {
+          meses = Math.ceil(falta / mensal);
+        } else {
+          // Simulação mês a mês (máximo 600 meses / 50 anos para evitar loop infinito)
+          while (montante < alvo && meses < 600) {
+            montante = montante * (1 + taxaMensal) + mensal;
+            meses++;
+          }
+        }
+
+        const anos = Math.floor(meses / 12);
+        const mRestantes = meses % 12;
+        let tempoFormatado = "";
+        if (anos > 0) tempoFormatado += `${anos} ano(s) `;
+        if (mRestantes > 0 || anos === 0) tempoFormatado += `${mRestantes} mes(es)`;
+
+        return JSON.stringify({
+          sucesso: true,
+          valor_alvo: alvo,
+          valor_atual: atual,
+          valor_mensal: mensal,
+          taxa_anual_pct: taxaAnual,
+          meses_necessarios: meses,
+          tempo_formatado: tempoFormatado.trim(),
+          montante_final: Math.round(montante * 100) / 100,
+          rendimento_total: taxaAnual > 0 ? Math.round((montante - (atual + mensal * meses)) * 100) / 100 : 0
+        });
+      }
+
       case "criar_meta": {
         // Resolver categoria_id se tipo = limite_categoria
         let categoriaId: number | null = null;
@@ -868,12 +946,50 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       }
 
       case "depositar_meta": {
-        const meta = await depositarMeta(args.meta_id, args.valor);
+        const metas = await getMetasByUsuarioId(ctx.userId);
+        let targetId = args.meta_id;
+
+        if (args.titulo) {
+          const found = metas.find(m => m.titulo.toLowerCase().includes(args.titulo.toLowerCase()) || args.titulo.toLowerCase().includes(m.titulo.toLowerCase()));
+          if (found) targetId = found.id;
+        } else {
+          const textoUsuario = (ctx.userMessage || "").toLowerCase();
+          const matchContexto = metas.find(m => {
+            const palavras = m.titulo.toLowerCase().split(/\s+/);
+            return palavras.some(p => p.length > 3 && textoUsuario.includes(p));
+          });
+          if (matchContexto && (!targetId || matchContexto.id !== targetId)) {
+            console.log(`[Meta Match] Corrigindo meta_id de ${targetId} para ${matchContexto.id} (${matchContexto.titulo}) com base no contexto do usuário.`);
+            targetId = matchContexto.id;
+          }
+        }
+
+        if (!targetId && metas.length === 1) {
+          targetId = metas[0].id;
+        }
+        if (!targetId) {
+          return JSON.stringify({ error: "Meta não encontrada. Especifique o ID ou o nome correto da meta." });
+        }
+        const meta = await depositarMeta(targetId, args.valor);
         if (!meta) return JSON.stringify({ error: "Meta não encontrada" });
         const alvo = parseFloat(meta.valor_alvo as string) || 0;
         const atual = parseFloat(meta.valor_atual as string) || 0;
         const pct = alvo > 0 ? Math.round((atual / alvo) * 100) : 0;
         return JSON.stringify({ success: true, id: meta.id, titulo: meta.titulo, valor_depositado: args.valor, valor_atual: atual, valor_alvo: alvo, progresso_pct: pct });
+      }
+
+      case "deletar_meta": {
+        let targetId = args.meta_id;
+        const metas = await getMetasByUsuarioId(ctx.userId);
+        if (!targetId && args.titulo) {
+          const found = metas.find(m => m.titulo.toLowerCase().includes(args.titulo.toLowerCase()));
+          if (found) targetId = found.id;
+        }
+        if (!targetId) {
+          return JSON.stringify({ error: "Meta não encontrada para exclusão." });
+        }
+        const ok = await deleteMeta(targetId);
+        return JSON.stringify({ success: ok, id: targetId });
       }
 
       case "listar_metas": {
@@ -1234,7 +1350,17 @@ export async function runAgent(
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY não configurada");
 
-  const systemPrompt = FINANCIAL_AGENT_SYSTEM_PROMPT + buildDynamicContext() + `
+  let pjInstructions = "";
+  if (ctx.tipoPessoa === "juridica" && (ctx as any).empresaAtiva) {
+    const emp = (ctx as any).empresaAtiva;
+    pjInstructions = `
+## MODO EMPRESA (PJ) ATIVO
+- Este usuário é PJ (Empresa: ${emp.nome}).
+- TODAS as transações financeiras (receitas e despesas) enviadas por ele DEVEM ser lançadas na empresa utilizando a ferramenta 'lancar_empresa' (informando empresa: "${emp.nome}"). NUNCA use 'insere_transacao' (pessoal) para este usuário, a menos que ele especifique explicitamente que é uma transação pessoal.
+`;
+  }
+
+  const systemPrompt = FINANCIAL_AGENT_SYSTEM_PROMPT + buildDynamicContext() + pjInstructions + `
 
 ## Categorias Disponíveis
 ${ctx.categories.map(c => `- ${c.nome} (${c.tipo})`).join("\n")}`;

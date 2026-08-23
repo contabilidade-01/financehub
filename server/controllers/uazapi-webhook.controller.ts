@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { storage } from "../storage";
 import { seedPlanoContasPessoal, createIngestionEvent, getConversaRecente, appendConversa } from "../storage";
 import { uazapiService } from "../services/uazapi.service";
+import { WhatsAppOnboardingService } from "../services/whatsapp-onboarding.service";
 import { transcribeAudio, analyzeWithGemini, runAgent } from "../services/ai-agent.service";
 import { classifyAiError } from "../utils/ai-errors";
 import { notificarAdmin } from "../services/admin-notify";
@@ -106,20 +107,21 @@ async function tratarOnboarding(user: any, text: string, chatid: string, BaseUrl
     }
     const fim = dataTrialFim();
     if (tipo === "juridica") {
-      try {
-        const empresa = await storage.createEmpresa({
-          usuario_id: user.id,
-          razao_social: user.nome || "Minha Empresa",
-          nome_fantasia: user.nome || null,
-          segmento: "servicos",
-        } as any);
-        await storage.seedEmpresasContas(empresa.id);
-      } catch (e) {
-        console.error("[Onboarding] falha ao criar empresa PJ:", e);
-      }
       await storage.updateUser(user.id, { ativo: true, tipo_pessoa: "juridica", status_assinatura: "degustacao", data_expiracao_assinatura: fim } as any);
       await uazapiService.sendText(BaseUrl, token, chatid, msgAtivadoPJ(user.nome, fim));
       await notificarAdmin(`🆕 Nova degustação PJ: ${user.nome} (${user.telefone}) id=${user.id} — expira ${fmtData(fim)}`);
+
+      // Iniciar fluxo guiado de cadastro de CNPJ e dados da empresa
+      const onboarding = new WhatsAppOnboardingService();
+      // Força a criação do estado inicial de onboarding PJ
+      await storage.createWhatsAppOnboardingState({
+        remoteJid: chatid,
+        usuarioId: user.id,
+        currentStep: 'ASKING_RESPONSIBLE',
+        collectedData: JSON.stringify({}),
+        updatedAt: new Date()
+      });
+      await uazapiService.sendText(BaseUrl, token, chatid, "Para configurar sua empresa e começar a registrar as finanças PJ, preciso de alguns dados. 🏢\n\nQual o seu *nome completo* (responsável pela empresa)?");
     } else {
       await storage.updateUser(user.id, { ativo: true, tipo_pessoa: "fisica", status_assinatura: "degustacao", data_expiracao_assinatura: fim } as any);
       await uazapiService.sendText(BaseUrl, token, chatid, msgAtivadoPF(user.nome, fim));
@@ -232,17 +234,36 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
     // expiração de trial ou conta inativa, o fluxo é tratado aqui e retornamos.
     if (await tratarOnboarding(user, text || "", chatid, BaseUrl, token)) return;
 
-    // Verificar se o usuário é PJ e não tem empresa cadastrada para iniciar o onboarding guiado
-    if (user.tipo_pessoa === 'juridica') {
+    // Se o usuário é PJ mas não tem empresa com CNPJ cadastrado, iniciar/continuar onboarding para pedir CNPJ
+    if (user.tipo_pessoa === "juridica" && user.ativo) {
       const empresas = await storage.getEmpresasByUsuarioId(user.id);
-      if (empresas.length === 0) {
-        const onboardingService = new WhatsAppOnboardingService();
-        const { handled, response } = await onboardingService.handleMessage(chatid, text, user.id, BaseUrl, token);
-        if (handled) {
-          await uazapiService.sendText(BaseUrl, token, chatid, response || "");
+      const temCnpj = empresas.some(e => e.cnpj && e.cnpj.trim().length > 0);
+      if (!temCnpj) {
+        const onboardingState = await storage.getWhatsAppOnboardingState(chatid);
+        if (!onboardingState) {
+          await storage.createWhatsAppOnboardingState({
+            remoteJid: chatid,
+            usuarioId: user.id,
+            currentStep: 'ASKING_RESPONSIBLE',
+            collectedData: JSON.stringify({}),
+            updatedAt: new Date()
+          });
+          await uazapiService.sendText(BaseUrl, token, chatid, "Olá! Para continuar utilizando o ambiente PJ, precisamos cadastrar o CNPJ da sua empresa. 🏢\n\nQual o seu *nome completo* (responsável pela empresa)?");
           return;
         }
       }
+    }
+
+    // -------------------------------------------------------------------------
+    // FLUXO DE ONBOARDING PJ/PF (Intercepta a mensagem antes da IA)
+    // -------------------------------------------------------------------------
+    const onboarding = new WhatsAppOnboardingService();
+    const { handled, response } = await onboarding.handleMessage(chatid, resolvedText, user.id, BaseUrl, token);
+
+    if (handled) {
+      console.log(`[UazAPI Webhook] 📘 Onboarding interceptou a mensagem para ${chatid}`);
+      await uazapiService.sendText(BaseUrl, token, chatid, response || "");
+      return;
     }
 
     // ============================================
@@ -358,10 +379,25 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
 
     const categories = await storage.getCategoriesByUserId(user.id);
 
+    // Buscar empresa ativa se for usuário PJ
+    let empresaAtiva = null;
+    if (user.tipo_pessoa === "juridica" && user.ativo) {
+      const empresas = await storage.getEmpresasByUsuarioId(user.id);
+      const comCnpj = empresas.find(e => e.cnpj && e.cnpj.trim().length > 0);
+      if (comCnpj) {
+        empresaAtiva = { id: comCnpj.id, nome: comCnpj.nome_fantasia || comCnpj.razao_social, cnpj: comCnpj.cnpj };
+      } else if (empresas.length > 0) {
+        // Fallback: usa a primeira empresa mesmo sem CNPJ (onboarding em andamento)
+        empresaAtiva = { id: empresas[0].id, nome: empresas[0].nome_fantasia || empresas[0].razao_social, cnpj: null };
+      }
+    }
+
     const agentContext = {
       userId: user.id,
       walletId: wallet.id,
       categories: categories.map((c) => ({ id: c.id, nome: c.nome, tipo: c.tipo })),
+      tipoPessoa: user.tipo_pessoa || "fisica",
+      empresaAtiva,
     };
 
     // ============================================
