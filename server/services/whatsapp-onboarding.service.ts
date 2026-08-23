@@ -31,16 +31,13 @@ export class WhatsAppOnboardingService {
   };
 
   private static validateCNPJ(cnpj: string): boolean {
-    const cleanCnpj = cnpj.replace(/\\D/g, '');
+    const cleanCnpj = cnpj.replace(/\D/g, '');
     if (cleanCnpj.length !== 14) return false;
-
-    // Implementação simplificada de validação de dígito para brevidade,
-    // em produção idealmente usa-se uma lib como 'cpf-cnpj-validator'
-    return /\\d{14}\\/.test(cleanCnpj);
+    return /^\d{14}$/.test(cleanCnpj);
   }
 
   private static validateEmail(email: string): boolean {
-    return /^[\\w-\\.]+@([\\w-]+\\.)+[\\w-]{2,4}$/.test(email);
+    return /^[\w.-]+@([\w-]+\.)+[\w-]{2,4}$/.test(email);
   }
 
   public async handleMessage(remoteJid: string, text: string, userId: number, BaseUrl: string, token: string): Promise<{ handled: boolean, response?: string }> {
