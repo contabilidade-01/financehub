@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { PeriodFilter } from "@/components/period-filter";
 import type { EmpresaFluxoCaixaMensal, EmpresaConta } from "@shared/schema";
 
 /**
@@ -24,10 +25,21 @@ export default function PjFluxoCaixa({ empresaId }: { empresaId: number }) {
   const anoAtual = new Date().getFullYear();
   const [ano, setAno] = useState(anoAtual);
   const [mes, setMes] = useState(new Date().getMonth());
+  const [periodo, setPeriodo] = useState({
+    inicio: new Date(anoAtual, 0, 1),
+    fim: new Date(anoAtual, 11, 31),
+  });
 
   const { data, isLoading } = useQuery<EmpresaFluxoCaixaMensal>({
-    queryKey: [`/api/empresas/${empresaId}/relatorios/fluxo-caixa`, ano],
-    queryFn: () => fetch(`/api/empresas/${empresaId}/relatorios/fluxo-caixa?ano=${ano}`, { credentials: "include" }).then((r) => r.json()),
+    queryKey: [`/api/empresas/${empresaId}/relatorios/fluxo-caixa`, ano, periodo],
+    queryFn: () => {
+      const params = new URLSearchParams({
+        ano: String(ano),
+        inicio: periodo.inicio.toISOString(),
+        fim: periodo.fim.toISOString(),
+      });
+      return fetch(`/api/empresas/${empresaId}/relatorios/fluxo-caixa?${params}`, { credentials: "include" }).then((r) => r.json());
+    },
     enabled: !!empresaId,
   });
 
@@ -55,16 +67,22 @@ const model = useMemo(() => (data ? buildModel(data, empresaData) : null), [data
   return (
     <div className="space-y-4 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
+        <div className="space-y-1">
           <h1 className="text-2xl font-bold">Fluxo de Caixa Gerencial</h1>
           <p className="text-sm text-muted-foreground">Contas nas linhas, meses nas colunas · linhas azuis são calculadas.</p>
         </div>
-        <Select value={String(ano)} onValueChange={(v) => setAno(Number(v))}>
-          <SelectTrigger className="w-[110px]"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {[anoAtual + 1, anoAtual, anoAtual - 1, anoAtual - 2].map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
-          </SelectContent>
-        </Select>
+        <div className="flex flex-wrap items-center gap-3">
+          <PeriodFilter
+            onPeriodChange={(inicio, fim) => setPeriodo({ inicio, fim })}
+            className="hidden md:flex"
+          />
+          <Select value={String(ano)} onValueChange={(v) => setAno(Number(v))}>
+            <SelectTrigger className="w-[110px] h-9"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {[anoAtual + 1, anoAtual, anoAtual - 1, anoAtual - 2].map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* KPIs */}
