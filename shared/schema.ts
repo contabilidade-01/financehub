@@ -503,7 +503,7 @@ export const asaasWebhooks = pgTable("asaas_webhooks", {
 // Payment Settings table - Configurações de gateway de pagamento
 export const paymentSettings = pgTable("payment_settings", {
   id: serial("id").primaryKey(),
-  provider: varchar("provider", { length: 50 }).notNull().default("asaas"),
+  provider: varchar("provider", { length: 50 }).notNull().default("sandbox"),
   environment: varchar("environment", { length: 20 }).notNull().default("sandbox"),
   apiKey: text("api_key").notNull(),
   webhookSecret: text("webhook_secret"),
@@ -624,6 +624,9 @@ export type InsertAsaasWebhook = z.infer<typeof insertAsaasWebhookSchema>;
 export type PaymentSettings = typeof paymentSettings.$inferSelect;
 export type InsertPaymentSettings = z.infer<typeof insertPaymentSettingsSchema>;
 export type UpdatePaymentSettings = z.infer<typeof updatePaymentSettingsSchema>;
+
+export type WhatsappOnboardingState = typeof whatsappOnboardingStates.$inferSelect;
+export type InsertWhatsappOnboardingState = typeof whatsappOnboardingStates.$inferInsert;
 
 // ============================================
 // ENUMS - ASAAS

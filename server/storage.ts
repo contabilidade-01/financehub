@@ -68,6 +68,7 @@ import {
   type EmpresaDRE,
   type EmpresaFluxoCaixaMensal,
   metasFinanceiras,
+  whatsappOnboardingStates,
   type MetaFinanceira,
   type InsertMeta,
   type UpdateMeta,
@@ -269,6 +270,12 @@ export interface IStorage {
   getEmpresaResumo(empresaId: number, opts?: { de?: string; ate?: string }): Promise<EmpresaResumo>;
   getEmpresaDRE(empresaId: number, opts?: { de?: string; ate?: string }): Promise<EmpresaDRE>;
   getEmpresaFluxoCaixaMensal(empresaId: number, ano: number): Promise<EmpresaFluxoCaixaMensal>;
+
+  // WhatsApp Onboarding methods
+  getWhatsAppOnboardingState(remoteJid: string): Promise<any | undefined>;
+  createWhatsAppOnboardingState(data: any): Promise<any>;
+  updateWhatsAppOnboardingState(remoteJid: string, data: any): Promise<any | undefined>;
+  deleteWhatsAppOnboardingState(remoteJid: string): Promise<boolean>;
 }
 
 export class DbStorage implements IStorage {

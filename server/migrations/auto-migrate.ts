@@ -208,6 +208,22 @@ const STEPS: Step[] = [
     },
   },
   {
+    name: "whatsapp_onboarding_states (estado de onboarding PJ/PF via WhatsApp)",
+    run: async () => {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS whatsapp_onboarding_states (
+          id             SERIAL PRIMARY KEY,
+          remote_jid     VARCHAR(255) NOT NULL UNIQUE,
+          usuario_id     INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+          current_step   VARCHAR(50) NOT NULL,
+          collected_data TEXT NOT NULL,
+          updated_at     TIMESTAMPTZ DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')
+        )
+      `);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_whatsapp_onboarding_jid ON whatsapp_onboarding_states(remote_jid)`);
+    },
+  },
+  {
     name: "consentimentos_lgpd (registro de aceite p/ prova legal)",
     run: async () => {
       await db.execute(sql`
