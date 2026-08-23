@@ -1602,6 +1602,44 @@ ${ctx.categories.map(c => `- ${c.nome} (${c.tipo})`).join("\n")}`;
       const fnArgs = JSON.parse(toolCall.function.arguments || "{}");
 
       console.log(`[AI Agent] Tool call: ${fnName}(${JSON.stringify(fnArgs)})`);
+      // Mapeamento de aliases para evitar erros de "function not defined"
+      const toolAliases: Record<string, string> = {
+        "deletar_meta": "deleteMeta",
+        "excluir_meta": "deleteMeta",
+        "atualizar_saldo_meta": "ajustarSaldoMeta",
+        "ajustar_saldo_meta": "ajustarSaldoMeta",
+        "depositar_valor_meta": "depositarMeta",
+        "depositar_meta": "depositarMeta"
+      };
+
+      const finalFnName = toolAliases[fnName] || fnName;
+
+      if (finalFnName === "deleteMeta") {
+        const { id, titulo } = fnArgs;
+        let metaId = id;
+        if (titulo) {
+           const metas = await getMetasByUsuarioId(ctx.userId);
+           const meta = metas.find(m => m.titulo.toLowerCase() === titulo.toLowerCase());
+           if (meta) metaId = meta.id;
+        }
+        return await deleteMeta(metaId);
+      }
+      if (finalFnName === "ajustarSaldoMeta") {
+        const { titulo, valor } = fnArgs;
+        const metas = await getMetasByUsuarioId(ctx.userId);
+        const meta = metas.find(m => m.titulo.toLowerCase() === titulo?.toLowerCase());
+        if (!meta) return `Meta '${titulo}' não encontrada.`;
+        return await ajustarSaldoMeta(meta.id, valor);
+      }
+      if (finalFnName === "depositarMeta") {
+        const { titulo, valor } = fnArgs;
+        const metas = await getMetasByUsuarioId(ctx.userId);
+        const meta = metas.find(m => m.titulo.toLowerCase() === titulo?.toLowerCase());
+        if (!meta) return `Meta '${titulo}' não encontrada.`;
+        return await depositarMeta(meta.id, valor);
+      }
+
+
       const result = await executeTool(fnName, fnArgs, ctx);
       ultimaToolExecutada = fnName;
       ultimoResultadoTool = result;
