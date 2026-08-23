@@ -43,19 +43,11 @@ export class WhatsAppOnboardingService {
   public async handleMessage(remoteJid: string, text: string, userId: number, BaseUrl: string, token: string): Promise<{ handled: boolean, response?: string }> {
     let state = await storage.getWhatsAppOnboardingState(remoteJid);
 
-    // 1. Se não existe estado, iniciamos o fluxo
+    // 1. Se não existe estado, NÃO iniciamos o fluxo automaticamente.
+    // O fluxo de onboarding deve ser disparado por um gatilho específico no Controller.
     if (!state) {
-      await storage.createWhatsAppOnboardingState({
-        remoteJid,
-        usuarioId: userId,
-        currentStep: 'INITIAL_CHOICE',
-        collectedData: JSON.stringify({}),
-        updatedAt: new Date()
-      });
-
       return {
-        handled: true,
-        response: WhatsAppOnboardingService.STEPS.INITIAL_CHOICE
+        handled: false
       };
     }
 
