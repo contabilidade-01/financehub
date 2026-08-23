@@ -254,18 +254,6 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
       }
     }
 
-    // -------------------------------------------------------------------------
-    // FLUXO DE ONBOARDING PJ/PF (Intercepta a mensagem antes da IA)
-    // -------------------------------------------------------------------------
-    const onboarding = new WhatsAppOnboardingService();
-    const { handled, response } = await onboarding.handleMessage(chatid, resolvedText, user.id, BaseUrl, token);
-
-    if (handled) {
-      console.log(`[UazAPI Webhook] 📘 Onboarding interceptou a mensagem para ${chatid}`);
-      await uazapiService.sendText(BaseUrl, token, chatid, response || "");
-      return;
-    }
-
     // ============================================
     // 2. RESOLVER CONTEÚDO (texto/áudio/imagem/pdf)
     // ============================================
@@ -293,7 +281,6 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
             usuario_id: user.id, remote_jid: chatid, tipo_mensagem: messageType,
             resultado: c.kind, etapa: "transcricao", detalhe: c.detail, provider: c.provider,
           });
-          // Se for falta de crédito/config, avisa; senão mantém a dica de áudio.
           await uazapiService.sendText(BaseUrl, token, chatid,
             c.kind === "sem_credito" || c.kind === "auth"
               ? c.userMessage
@@ -357,6 +344,25 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
       default:
         console.log(`[UazAPI Webhook] Tipo de mensagem não suportado: ${messageType}`);
         return;
+    }
+
+    if (!resolvedText.trim()) {
+      console.log(`[UazAPI Webhook] Mensagem vazia após resolução`);
+      await uazapiService.sendText(BaseUrl, token, chatid,
+        "🤔 Recebi sua mensagem mas não consegui identificar nenhum conteúdo. Pode repetir?\n\nVocê pode:\n• Enviar texto (ex: _gastei 50 no mercado_)\n• Enviar áudio descrevendo o gasto\n• Enviar foto de nota fiscal/cupom");
+      return;
+    }
+
+    // -------------------------------------------------------------------------
+    // FLUXO DE ONBOARDING PJ/PF (Intercepta a mensagem antes da IA)
+    // -------------------------------------------------------------------------
+    const onboarding = new WhatsAppOnboardingService();
+    const { handled, response } = await onboarding.handleMessage(chatid, resolvedText, user.id, BaseUrl, token);
+
+    if (handled) {
+      console.log(`[UazAPI Webhook] 📘 Onboarding interceptou a mensagem para ${chatid}`);
+      await uazapiService.sendText(BaseUrl, token, chatid, response || "");
+      return;
     }
 
     if (!resolvedText.trim()) {
