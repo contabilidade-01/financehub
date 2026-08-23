@@ -1016,30 +1016,43 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         if (args.titulo) {
           const found = metas.find(m => m.titulo.toLowerCase().includes(args.titulo.toLowerCase()) || args.titulo.toLowerCase().includes(m.titulo.toLowerCase()));
           if (found) targetId = found.id;
-        } else {
+        } else if (!targetId) {
           const textoUsuario = (ctx.userMessage || "").toLowerCase();
           const matchContexto = metas.find(m => {
             const palavras = m.titulo.toLowerCase().split(/\s+/);
             return palavras.some(p => p.length > 3 && textoUsuario.includes(p));
           });
-          if (matchContexto && (!targetId || matchContexto.id !== targetId)) {
-            console.log(`[Meta Match] Corrigindo meta_id de ${targetId} para ${matchContexto.id} (${matchContexto.titulo}) com base no contexto do usuário.`);
-            targetId = matchContexto.id;
-          }
+          if (matchContexto) targetId = matchContexto.id;
         }
 
         if (!targetId && metas.length === 1) {
           targetId = metas[0].id;
         }
+
         if (!targetId) {
-          return JSON.stringify({ error: "Meta não encontrada. Especifique o ID ou o nome correto da meta." });
+          return JSON.stringify({
+            error: "Meta não encontrada. Por favor, forneça o nome exato ou o ID da meta.",
+            metas_disponiveis: metas.map(m => ({ id: m.id, titulo: m.titulo }))
+          });
         }
+
         const meta = await depositarMeta(targetId, args.valor);
-        if (!meta) return JSON.stringify({ error: "Meta não encontrada" });
+        if (!meta) return JSON.stringify({ error: "Erro ao processar depósito: Meta não encontrada no banco de dados." });
+
         const alvo = parseFloat(meta.valor_alvo as string) || 0;
         const atual = parseFloat(meta.valor_atual as string) || 0;
         const pct = alvo > 0 ? Math.round((atual / alvo) * 100) : 0;
-        return JSON.stringify({ success: true, id: meta.id, titulo: meta.titulo, valor_depositado: args.valor, valor_atual: atual, valor_alvo: alvo, progresso_pct: pct });
+
+        return JSON.stringify({
+          success: true,
+          id: meta.id,
+          titulo: meta.titulo,
+          valor_depositado: args.valor,
+          valor_atual: atual,
+          valor_alvo: alvo,
+          progresso_pct: pct,
+          msg: `Depósito de R$ ${args.valor} realizado com sucesso na meta ${meta.titulo}.`
+        });
       }
 
       case "deletar_meta": {
