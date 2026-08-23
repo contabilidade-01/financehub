@@ -137,6 +137,23 @@ function buildTools() {
     {
       type: "function" as const,
       function: {
+        name: "excluir_transacao_por_filtro",
+        description: "Exclui transações que correspondem aos filtros fornecidos (valor, descrição, data). Use quando o usuário quiser excluir transações sem fornecer o ID.",
+        parameters: {
+          type: "object",
+          properties: {
+            valor: { type: "number", description: "Valor da transação a ser excluída" },
+            descricao: { type: "string", description: "Parte da descrição da transação a ser excluída" },
+            data_transacao: { type: "string", description: "Data da transação no formato YYYY-MM-DD" },
+            tipo: { type: "string", enum: ["Receita", "Despesa"], description: "Tipo da transação" }
+          },
+          required: ["valor"]
+        }
+      }
+    },
+    {
+      type: "function" as const,
+      function: {
         name: "insere_transacao",
         description: "Insere uma nova transação (receita ou despesa) para o usuário.",
         parameters: {
@@ -807,6 +824,38 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         const ok = await softDeleteTransacao(args.id_transacao, ctx.walletId, ctx.userId);
         if (!ok) return JSON.stringify({ success: false, error: "Transação não encontrada nas suas transações." });
         return JSON.stringify({ success: true, recuperavel: true, msg: "Excluída (dá pra restaurar por 30 dias)." });
+      }
+
+      case "excluir_transacao_por_filtro": {
+        const transacoes = await storage.getTransactionsByWalletId(ctx.walletId);
+
+        const transacoesFiltradas = transacoes.filter(t => {
+          const valorMatch = args.valor ? Number(t.valor) === args.valor : true;
+          const descricaoMatch = args.descricao ? t.descricao.toLowerCase().includes(args.descricao.toLowerCase()) : true;
+          const dataMatch = args.data_transacao ? t.data_transacao === args.data_transacao : true;
+          const tipoMatch = args.tipo ? t.tipo === args.tipo : true;
+
+          return valorMatch && descricaoMatch && dataMatch && tipoMatch;
+        });
+
+        if (transacoesFiltradas.length === 0) {
+          return JSON.stringify({ error: "Nenhuma transação encontrada com os filtros fornecidos." });
+        }
+
+        for (const transacao of transacoesFiltradas) {
+          await storage.deleteTransaction(transacao.id);
+        }
+
+        return JSON.stringify({
+          success: true,
+          excluidos: transacoesFiltradas.length,
+          transacoes: transacoesFiltradas.map(t => ({
+            id: t.id,
+            descricao: t.descricao,
+            valor: t.valor,
+            data: t.data_transacao
+          }))
+        });
       }
 
       case "excluir_todas": {
