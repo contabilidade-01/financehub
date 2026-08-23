@@ -66,4 +66,13 @@ const tools = {
   },
 };
 
-export default tools;
+// Função para construir o contexto dinâmico
+const buildDynamicContext = (userInput: string) => {
+  // Lógica para construir o contexto dinâmico
+  return `Contexto dinâmico construído para: ${userInput}`;
+};
+
+// Prompt do sistema para o agente financeiro
+const FINANCIAL_AGENT_SYSTEM_PROMPT = `Você é um assistente financeiro. Ajude os usuários a gerenciar suas metas financeiras.`;
+
+export { tools, buildDynamicContext, FINANCIAL_AGENT_SYSTEM_PROMPT };
