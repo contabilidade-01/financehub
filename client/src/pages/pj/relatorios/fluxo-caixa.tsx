@@ -31,7 +31,13 @@ export default function PjFluxoCaixa({ empresaId }: { empresaId: number }) {
     enabled: !!empresaId,
   });
 
-  const model = useMemo(() => (data ? buildModel(data) : null), [data]);
+  const { data: empresaData } = useQuery({
+  queryKey: [`/api/empresas/${empresaId}`, "empresa-detalhes"],
+  queryFn: () => fetch(`/api/empresas/${empresaId}`, { credentials: "include" }).then((r) => r.json()),
+  enabled: !!empresaId,
+});
+
+const model = useMemo(() => (data ? buildModel(data, empresaData) : null), [data, empresaData]);
 
   if (isLoading || !model) {
     return <div className="p-4"><Skeleton className="h-[480px] w-full" /></div>;
@@ -215,7 +221,10 @@ function derivarGrupo(c: EmpresaConta): string {
 }
 const ehCmv = (c: EmpresaConta) => (c as any).is_cmv === true || /cmv|mercadoria vendida/i.test(c.nome || "");
 
-function buildModel(data: EmpresaFluxoCaixaMensal) {
+function buildModel(data: EmpresaFluxoCaixaMensal, empresaData: any) {
+  const segmento = empresaData?.segmento || "servico";
+  const custoLabel = segmento.includes("comercio") ? "CMV — Custo da Mercadoria Vendida" : "CSV — Custo dos Serviços Vendidos";
+  const custoSigla = segmento.includes("comercio") ? "CMV" : "CSV";
   const rows: Row[] = [];
   const contas = data.contas || [];
   if (contas.length === 0) return { rows, kpis: [] as any[] };
@@ -261,7 +270,7 @@ function buildModel(data: EmpresaFluxoCaixaMensal) {
   };
 
   pushGrupo("Receita Bruta", receita, receitaContas, true);
-  if (temCmv) pushGrupo("(–) CMV — Custo da Mercadoria Vendida", cmv, cmvContas);
+  if (temCmv) pushGrupo(`(–) ${custoLabel}`, cmv, cmvContas);
   pushGrupo("(–) Custos / Despesas Variáveis", variaveis, varContas);
   rows.push({ kind: "calc", label: "= Margem de Contribuição", values: margem });
   pushGrupo("(–) Despesas Fixas", fixas, fixaContas);
@@ -308,8 +317,8 @@ function buildModel(data: EmpresaFluxoCaixaMensal) {
   const kpis: { label: string; value: string; tone?: "pos" | "neg"; hint?: string }[] = [];
   kpis.push({ label: "Faturamento", value: money0(R), hint: "ano" });
   if (temCmv) {
-    kpis.push({ label: "Margem Bruta", value: R ? pct(R - CMV, R) : "—", tone: "pos", hint: "(Rec−CMV)/Rec" });
-    kpis.push({ label: "Markup", value: CMV ? (((R - CMV) / CMV) * 100).toFixed(0) + "%" : "—", hint: "sobre o custo" });
+    kpis.push({ label: "Margem Bruta", value: R ? pct(R - Math.abs(sumArr(cmv)), R) : "—", tone: "pos", hint: `(Rec−${custoSigla})/Rec` });
+    kpis.push({ label: "Markup", value: Math.abs(sumArr(cmv)) ? (((R - Math.abs(sumArr(cmv))) / Math.abs(sumArr(cmv))) * 100).toFixed(0) + "%" : "—", hint: "sobre o custo" });
   }
   kpis.push({ label: "Margem Contrib.", value: pct(MC, R), tone: "pos", hint: money0(MC) });
   kpis.push({ label: "Ponto Equilíbrio", value: money0(pe), hint: "p/ zerar" });
