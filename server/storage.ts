@@ -2030,6 +2030,26 @@ export async function depositarMeta(id: number, valor: number): Promise<MetaFina
   return result[0];
 }
 
+export async function sacarMeta(id: number, valor: number): Promise<MetaFinanceira | undefined> {
+  const meta = await getMetaById(id);
+  if (!meta) return undefined;
+  const atual = parseFloat(meta.valor_atual as string) || 0;
+  const novoValor = Math.max(0, atual - valor);
+  const result = await db.update(metasFinanceiras)
+    .set({ valor_atual: novoValor.toString() } as any)
+    .where(eq(metasFinanceiras.id, id))
+    .returning();
+  return result[0];
+}
+
+export async function ajustarSaldoMeta(id: number, novoSaldo: number): Promise<MetaFinanceira | undefined> {
+  const result = await db.update(metasFinanceiras)
+    .set({ valor_atual: novoSaldo.toString() } as any)
+    .where(eq(metasFinanceiras.id, id))
+    .returning();
+  return result[0];
+}
+
 export async function updateMeta(id: number, data: UpdateMeta): Promise<MetaFinanceira | undefined> {
   const updateValues: any = { ...data };
   if (data.valor_alvo) updateValues.valor_alvo = data.valor_alvo.toString();

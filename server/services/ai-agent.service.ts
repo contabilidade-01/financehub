@@ -1055,6 +1055,98 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         });
       }
 
+      case "sacar_meta": {
+        const metas = await getMetasByUsuarioId(ctx.userId);
+        let targetId = args.meta_id;
+
+        if (args.titulo) {
+          const found = metas.find(m => m.titulo.toLowerCase().includes(args.titulo.toLowerCase()) || args.titulo.toLowerCase().includes(m.titulo.toLowerCase()));
+          if (found) targetId = found.id;
+        } else if (!targetId) {
+          const textoUsuario = (ctx.userMessage || "").toLowerCase();
+          const matchContexto = metas.find(m => {
+            const palavras = m.titulo.toLowerCase().split(/\s+/);
+            return palavras.some(p => p.length > 3 && textoUsuario.includes(p));
+          });
+          if (matchContexto) targetId = matchContexto.id;
+        }
+
+        if (!targetId && metas.length === 1) {
+          targetId = metas[0].id;
+        }
+
+        if (!targetId) {
+          return JSON.stringify({
+            error: "Meta não encontrada. Por favor, forneça o nome exato ou o ID da meta.",
+            metas_disponiveis: metas.map(m => ({ id: m.id, titulo: m.titulo }))
+          });
+        }
+
+        const meta = await sacarMeta(targetId, args.valor);
+        if (!meta) return JSON.stringify({ error: "Erro ao processar saque: Meta não encontrada no banco de dados." });
+
+        const alvo = parseFloat(meta.valor_alvo as string) || 0;
+        const atual = parseFloat(meta.valor_atual as string) || 0;
+        const pct = alvo > 0 ? Math.round((atual / alvo) * 100) : 0;
+
+        return JSON.stringify({
+          success: true,
+          id: meta.id,
+          titulo: meta.titulo,
+          valor_sacado: args.valor,
+          valor_atual: atual,
+          valor_alvo: alvo,
+          progresso_pct: pct,
+          msg: `Saque de R$ ${args.valor} realizado com sucesso da meta ${meta.titulo}.`
+        });
+      }
+
+      case "ajustar_saldo_meta": {
+        const metas = await getMetasByUsuarioId(ctx.userId);
+        let targetId = args.meta_id;
+
+        if (args.titulo) {
+          const found = metas.find(m => m.titulo.toLowerCase().includes(args.titulo.toLowerCase()) || args.titulo.toLowerCase().includes(m.titulo.toLowerCase()));
+          if (found) targetId = found.id;
+        } else if (!targetId) {
+          const textoUsuario = (ctx.userMessage || "").toLowerCase();
+          const matchContexto = metas.find(m => {
+            const palavras = m.titulo.toLowerCase().split(/\s+/);
+            return palavras.some(p => p.length > 3 && textoUsuario.includes(p));
+          });
+          if (matchContexto) targetId = matchContexto.id;
+        }
+
+        if (!targetId && metas.length === 1) {
+          targetId = metas[0].id;
+        }
+
+        if (!targetId) {
+          return JSON.stringify({
+            error: "Meta não encontrada. Por favor, forneça o nome exato ou o ID da meta.",
+            metas_disponiveis: metas.map(m => ({ id: m.id, titulo: m.titulo }))
+          });
+        }
+
+        const meta = await ajustarSaldoMeta(targetId, args.valor);
+        if (!meta) return JSON.stringify({ error: "Erro ao ajustar saldo: Meta não encontrada no banco de dados." });
+
+        const alvo = parseFloat(meta.valor_alvo as string) || 0;
+        const atual = parseFloat(meta.valor_atual as string) || 0;
+        const pct = alvo > 0 ? Math.round((atual / alvo) * 100) : 0;
+
+        return JSON.stringify({
+          success: true,
+          id: meta.id,
+          titulo: meta.titulo,
+          valor_ajustado: args.valor,
+          valor_atual: atual,
+          valor_alvo: alvo,
+          progresso_pct: pct,
+          msg: `Saldo da meta ${meta.titulo} ajustado para R$ ${args.valor}.`
+        });
+      }
+
       case "deletar_meta": {
         let targetId = args.meta_id;
         const metas = await getMetasByUsuarioId(ctx.userId);
