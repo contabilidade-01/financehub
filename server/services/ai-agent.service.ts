@@ -1377,11 +1377,12 @@ async function resolverEmpresa(
 // OpenRouter, ou outro modelo). Configurar via env:
 //   AI_FALLBACK_API_KEY, AI_FALLBACK_BASE_URL (default OpenAI), AI_MODEL_FALLBACK
 async function callChatCompletion(messages: any[], tools: any[]): Promise<any> {
-  const payload = { messages, tools, tool_choice: "auto", temperature: 0.3 };
   const primaryKey = process.env.OPENAI_API_KEY;
   const primaryModel = process.env.AI_MODEL || "gpt-4o-mini";
+
   try {
     if (!primaryKey) throw new Error("OPENAI_API_KEY não configurada");
+    const payload = { messages, tools, tool_choice: "auto", temperature: 0.3 };
     return await withRetry(
       () => axios.post(
         "https://api.openai.com/v1/chat/completions",
@@ -1400,10 +1401,17 @@ async function callChatCompletion(messages: any[], tools: any[]): Promise<any> {
     const fbModel = isGroq ? "llama-3.3-70b-versatile" : (process.env.AI_MODEL_FALLBACK || "gpt-4o-mini");
 
     console.warn(`[AI] modelo principal falhou — usando reserva (${fbModel} em ${fbUrl})`);
+
+    // LIMPEZA PARA FALLBACK: Modelos como Llama/Groq não suportam campos extras como 'annotations' em mensagens do assistant
+    const cleanMessages = messages.map(m => {
+      const { annotations, ...rest } = m;
+      return rest;
+    });
+
     return await withRetry(
       () => axios.post(
         fbUrl,
-        { model: fbModel, ...payload },
+        { messages: cleanMessages, tools, tool_choice: "auto", temperature: 0.3, model: fbModel },
         { headers: { Authorization: `Bearer ${fbKey}`, "Content-Type": "application/json" }, timeout: 60000 },
       ),
       { provider: isGroq ? "groq-fallback" : "ai-fallback" },
