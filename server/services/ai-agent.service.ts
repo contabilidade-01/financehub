@@ -1,5 +1,5 @@
 import axios from "axios";
-import { storage, getDailySummary, getPeriodSummary, getWeeklySummary, getCategoryBreakdown, comparePeriods, createMeta, getMetasByUsuarioId, depositarMeta, verificarOrcamentos, getContasAPagar, marcarComoPaga, marcarRecorrente, getFluxoCaixaResumo, getSaldoCartao, getCartoesComSaldo, getFaturaCartao, resolveMemoriaCategoria, aprenderMemoriaCategoria, resolveOuCriaFormaPagamento, criarCompraParcelada, getUltimaCompra, editarTransacoesPorIds, getStatusOrcamentoCategoria, softDeleteTransacao, softDeleteTodasTransacoes, restaurarUltimaExcluida, transacaoPertenceAoWallet, cadastrarOuAtualizarCartao, resolveMemoriaGlobal } from "../storage";
+import { storage, getDailySummary, getPeriodSummary, getWeeklySummary, getCategoryBreakdown, comparePeriods, createMeta, getMetasByUsuarioId, depositarMeta, deleteMeta, ajustarSaldoMeta, verificarOrcamentos, getContasAPagar, marcarComoPaga, marcarRecorrente, getFluxoCaixaResumo, getSaldoCartao, getCartoesComSaldo, getFaturaCartao, resolveMemoriaCategoria, aprenderMemoriaCategoria, resolveOuCriaFormaPagamento, criarCompraParcelada, getUltimaCompra, editarTransacoesPorIds, getStatusOrcamentoCategoria, softDeleteTransacao, softDeleteTodasTransacoes, restaurarUltimaExcluida, transacaoPertenceAoWallet, cadastrarOuAtualizarCartao, resolveMemoriaGlobal } from "../storage";
 import { FINANCIAL_AGENT_SYSTEM_PROMPT, buildDynamicContext } from "../prompts/financial-agent";
 import { insertTransactionSchema } from "@shared/schema";
 import { withRetry } from "../utils/ai-errors";
@@ -1617,26 +1617,70 @@ ${ctx.categories.map(c => `- ${c.nome} (${c.tipo})`).join("\n")}`;
       if (finalFnName === "deleteMeta") {
         const { id, titulo } = fnArgs;
         let metaId = id;
-        if (titulo) {
+        if (titulo && !metaId) {
            const metas = await getMetasByUsuarioId(ctx.userId);
-           const meta = metas.find(m => m.titulo.toLowerCase() === titulo.toLowerCase());
+           const meta = metas.find(m => m.titulo.toLowerCase().includes(titulo.toLowerCase()));
            if (meta) metaId = meta.id;
         }
-        return await deleteMeta(metaId);
+        if (!metaId) {
+          const resStr = JSON.stringify({ error: "Meta não encontrada para exclusão." });
+          ultimaToolExecutada = fnName;
+          ultimoResultadoTool = resStr;
+          messages.push({ role: "tool", tool_call_id: toolCall.id, content: resStr });
+          continue;
+        }
+        const ok = await deleteMeta(metaId);
+        const resStr = JSON.stringify({ success: ok, id: metaId });
+        ultimaToolExecutada = fnName;
+        ultimoResultadoTool = resStr;
+        messages.push({ role: "tool", tool_call_id: toolCall.id, content: resStr });
+        continue;
       }
       if (finalFnName === "ajustarSaldoMeta") {
-        const { titulo, valor } = fnArgs;
+        const { titulo, valor, meta_id } = fnArgs;
+        let targetId = meta_id;
         const metas = await getMetasByUsuarioId(ctx.userId);
-        const meta = metas.find(m => m.titulo.toLowerCase() === titulo?.toLowerCase());
-        if (!meta) return `Meta '${titulo}' não encontrada.`;
-        return await ajustarSaldoMeta(meta.id, valor);
+        if (titulo && !targetId) {
+          const meta = metas.find(m => m.titulo.toLowerCase().includes(titulo.toLowerCase()));
+          if (meta) targetId = meta.id;
+        }
+        if (!targetId && metas.length === 1) targetId = metas[0].id;
+        if (!targetId) {
+          const resStr = JSON.stringify({ error: `Meta '${titulo}' não encontrada.` });
+          ultimaToolExecutada = fnName;
+          ultimoResultadoTool = resStr;
+          messages.push({ role: "tool", tool_call_id: toolCall.id, content: resStr });
+          continue;
+        }
+        const updated = await ajustarSaldoMeta(targetId, valor);
+        const resStr = JSON.stringify({ success: true, meta: updated });
+        ultimaToolExecutada = fnName;
+        ultimoResultadoTool = resStr;
+        messages.push({ role: "tool", tool_call_id: toolCall.id, content: resStr });
+        continue;
       }
       if (finalFnName === "depositarMeta") {
-        const { titulo, valor } = fnArgs;
+        const { titulo, valor, meta_id } = fnArgs;
+        let targetId = meta_id;
         const metas = await getMetasByUsuarioId(ctx.userId);
-        const meta = metas.find(m => m.titulo.toLowerCase() === titulo?.toLowerCase());
-        if (!meta) return `Meta '${titulo}' não encontrada.`;
-        return await depositarMeta(meta.id, valor);
+        if (titulo && !targetId) {
+          const meta = metas.find(m => m.titulo.toLowerCase().includes(titulo.toLowerCase()));
+          if (meta) targetId = meta.id;
+        }
+        if (!targetId && metas.length === 1) targetId = metas[0].id;
+        if (!targetId) {
+          const resStr = JSON.stringify({ error: `Meta '${titulo}' não encontrada.` });
+          ultimaToolExecutada = fnName;
+          ultimoResultadoTool = resStr;
+          messages.push({ role: "tool", tool_call_id: toolCall.id, content: resStr });
+          continue;
+        }
+        const updated = await depositarMeta(targetId, valor);
+        const resStr = JSON.stringify({ success: true, meta: updated });
+        ultimaToolExecutada = fnName;
+        ultimoResultadoTool = resStr;
+        messages.push({ role: "tool", tool_call_id: toolCall.id, content: resStr });
+        continue;
       }
 
 
