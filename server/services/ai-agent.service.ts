@@ -22,10 +22,11 @@ import { withRetry } from "../utils/ai-errors";
  * Transcreve áudio usando OpenAI Whisper (gpt-4o-transcribe)
  */
 export async function transcribeAudio(base64Data: string, mimetype?: string): Promise<string> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error("OPENAI_API_KEY não configurada");
+  const openAiKey = process.env.OPENAI_API_KEY;
+  const groqKey = process.env.GROQ_API_KEY;
 
-  // Determinar extensão pelo mimetype
+  if (!openAiKey && !groqKey) throw new Error("OPENAI_API_KEY ou GROQ_API_KEY não configurada");
+
   const mimeToExt: Record<string, string> = {
     "audio/ogg": "ogg",
     "audio/mpeg": "mp3",
@@ -38,32 +39,46 @@ export async function transcribeAudio(base64Data: string, mimetype?: string): Pr
   };
   const ext = mimeToExt[mimetype || ""] || "ogg";
   const contentType = mimetype || "audio/ogg";
-
-  // Converte base64 para Buffer
   const buffer = Buffer.from(base64Data, "base64");
-
-  // Cria FormData com o arquivo
   const FormData = (await import("form-data")).default;
-  const form = new FormData();
-  form.append("file", buffer, { filename: `audio.${ext}`, contentType });
-  form.append("model", "gpt-4o-transcribe");
 
-  const response = await withRetry(
-    () => axios.post(
-      "https://api.openai.com/v1/audio/transcriptions",
+  if (openAiKey) {
+    try {
+      const form = new FormData();
+      form.append("file", buffer, { filename: `audio.${ext}`, contentType });
+      form.append("model", "gpt-4o-transcribe");
+
+      const response = await axios.post(
+        "https://api.openai.com/v1/audio/transcriptions",
+        form,
+        {
+          headers: { Authorization: `Bearer ${openAiKey}`, ...form.getHeaders() },
+          timeout: 60000,
+        }
+      );
+      if (response.data?.text) return response.data.text;
+    } catch (openaiErr: any) {
+      console.warn(`[Whisper] OpenAI falhou (${openaiErr.message}), tentando Groq Whisper...`);
+    }
+  }
+
+  if (groqKey) {
+    const form = new FormData();
+    form.append("file", buffer, { filename: `audio.${ext}`, contentType });
+    form.append("model", "whisper-large-v3");
+
+    const response = await axios.post(
+      "https://api.groq.com/openai/v1/audio/transcriptions",
       form,
       {
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          ...form.getHeaders(),
-        },
+        headers: { Authorization: `Bearer ${groqKey}`, ...form.getHeaders() },
         timeout: 60000,
       }
-    ),
-    { provider: "openai-whisper" }
-  );
+    );
+    return response.data.text || "";
+  }
 
-  return response.data.text || "";
+  throw new Error("Falha na transcrição de áudio em todos os provedores.");
 }
 
 /**
@@ -1317,6 +1332,7 @@ async function callChatCompletion(messages: any[], tools: any[]): Promise<any> {
   const primaryKey = process.env.OPENAI_API_KEY;
   const primaryModel = process.env.AI_MODEL || "gpt-4o-mini";
   try {
+    if (!primaryKey) throw new Error("OPENAI_API_KEY não configurada");
     return await withRetry(
       () => axios.post(
         "https://api.openai.com/v1/chat/completions",
@@ -1326,10 +1342,14 @@ async function callChatCompletion(messages: any[], tools: any[]): Promise<any> {
       { provider: "openai-chat" },
     );
   } catch (primaryErr) {
-    const fbKey = process.env.AI_FALLBACK_API_KEY;
+    const fbKey = process.env.AI_FALLBACK_API_KEY || process.env.GROQ_API_KEY;
     if (!fbKey) throw primaryErr; // sem reserva configurado
-    const fbUrl = (process.env.AI_FALLBACK_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "") + "/chat/completions";
-    const fbModel = process.env.AI_MODEL_FALLBACK || "gpt-4o-mini";
+    const isGroq = !process.env.AI_FALLBACK_API_KEY && !!process.env.GROQ_API_KEY;
+    const fbUrl = isGroq
+      ? "https://api.groq.com/openai/v1/chat/completions"
+      : (process.env.AI_FALLBACK_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "") + "/chat/completions";
+    const fbModel = isGroq ? "llama-3.3-70b-versatile" : (process.env.AI_MODEL_FALLBACK || "gpt-4o-mini");
+
     console.warn(`[AI] modelo principal falhou — usando reserva (${fbModel} em ${fbUrl})`);
     return await withRetry(
       () => axios.post(
@@ -1337,7 +1357,7 @@ async function callChatCompletion(messages: any[], tools: any[]): Promise<any> {
         { model: fbModel, ...payload },
         { headers: { Authorization: `Bearer ${fbKey}`, "Content-Type": "application/json" }, timeout: 60000 },
       ),
-      { provider: "ai-fallback" },
+      { provider: isGroq ? "groq-fallback" : "ai-fallback" },
     );
   }
 }
@@ -1379,9 +1399,31 @@ ${ctx.categories.map(c => `- ${c.nome} (${c.tipo})`).join("\n")}`;
 
   const tools = buildTools();
   const maxIterations = 8; // safety net
+  let ultimaToolExecutada: string | null = null;
+  let ultimoResultadoTool: string | null = null;
 
   for (let i = 0; i < maxIterations; i++) {
-    const response = await callChatCompletion(messages, tools);
+    let response;
+    try {
+      response = await callChatCompletion(messages, tools);
+    } catch (chatErr: any) {
+      console.error(`[AI Agent] Erro em callChatCompletion na iteração ${i}:`, chatErr?.message);
+      if (ultimoResultadoTool) {
+        try {
+          const parsed = JSON.parse(ultimoResultadoTool);
+          if (ultimaToolExecutada === "listar_metas" && parsed.metas) {
+            if (parsed.metas.length === 0) return "Nenhuma meta cadastrada no momento.";
+            let txt = "🎯 *Suas Metas e Caixinhas:*\n\n";
+            for (const m of parsed.metas) {
+              const pct = m.progresso_pct || 0;
+              txt += `• *${m.titulo}* (${m.tipo})\n  💰 R$ ${m.valor_atual} / R$ ${m.valor_alvo} (${pct}%)\n  Falta: R$ ${m.falta}\n\n`;
+            }
+            return txt.trim();
+          }
+        } catch {}
+      }
+      throw chatErr;
+    }
 
     const choice = response.data.choices[0];
     const assistantMessage = choice.message;
@@ -1399,6 +1441,8 @@ ${ctx.categories.map(c => `- ${c.nome} (${c.tipo})`).join("\n")}`;
 
       console.log(`[AI Agent] Tool call: ${fnName}(${JSON.stringify(fnArgs)})`);
       const result = await executeTool(fnName, fnArgs, ctx);
+      ultimaToolExecutada = fnName;
+      ultimoResultadoTool = result;
 
       messages.push({
         role: "tool",
@@ -1406,6 +1450,19 @@ ${ctx.categories.map(c => `- ${c.nome} (${c.tipo})`).join("\n")}`;
         content: result,
       });
     }
+  }
+
+  if (ultimoResultadoTool && ultimaToolExecutada === "listar_metas") {
+    try {
+      const parsed = JSON.parse(ultimoResultadoTool);
+      if (parsed.metas) {
+        let txt = "🎯 *Suas Metas e Caixinhas:*\n\n";
+        for (const m of parsed.metas) {
+          txt += `• *${m.titulo}* — R$ ${m.valor_atual} / R$ ${m.valor_alvo} (${m.progresso_pct}%)\n`;
+        }
+        return txt.trim();
+      }
+    } catch {}
   }
 
   return "Desculpe, não consegui processar sua solicitação. Tente novamente.";
