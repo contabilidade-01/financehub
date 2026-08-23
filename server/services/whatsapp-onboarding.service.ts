@@ -40,7 +40,12 @@ export class WhatsAppOnboardingService {
     return /^[\w.-]+@([\w-]+\.)+[\w-]{2,4}$/.test(email);
   }
 
-  public async handleMessage(remoteJid: string, text: string, userId: number, BaseUrl: string, token: string): Promise<{ handled: boolean, response?: string }> {
+  public async handleMessage(remoteJid: string, text: string, userId: number, BaseUrl: string, token: string, tipoPessoa?: string): Promise<{ handled: boolean, response?: string }> {
+    if (tipoPessoa === 'fisica') {
+      await storage.deleteWhatsAppOnboardingState(remoteJid);
+      return { handled: false };
+    }
+
     let state = await storage.getWhatsAppOnboardingState(remoteJid);
 
     // 1. Se não existe estado, NÃO iniciamos o fluxo automaticamente.

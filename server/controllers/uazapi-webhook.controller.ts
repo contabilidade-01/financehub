@@ -357,7 +357,7 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
     // FLUXO DE ONBOARDING PJ/PF (Intercepta a mensagem antes da IA)
     // -------------------------------------------------------------------------
     const onboarding = new WhatsAppOnboardingService();
-    const { handled, response } = await onboarding.handleMessage(chatid, resolvedText, user.id, BaseUrl, token);
+    const { handled, response } = await onboarding.handleMessage(chatid, resolvedText, user.id, BaseUrl, token, user.tipo_pessoa);
 
     if (handled) {
       console.log(`[UazAPI Webhook] 📘 Onboarding interceptou a mensagem para ${chatid}`);
