@@ -214,6 +214,14 @@ function buildTools() {
     {
       type: "function" as const,
       function: {
+        name: "listar_todas_transacoes",
+        description: "Retorna TODAS as transações e despesas cadastradas na carteira, sem limite de quantidade. Use quando o usuário pedir o histórico completo, extrato completo ou 'todas as transações/despesas'.",
+        parameters: { type: "object", properties: {} },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
         name: "deleta_transacao",
         description: "Remove uma transação pelo ID (vai para a lixeira, recuperável por 30 dias).",
         parameters: {
@@ -848,6 +856,11 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
 
       case "transacoes_recentes": {
         const txs = await storage.getRecentTransactionsByWalletId(ctx.walletId, 5);
+        return JSON.stringify(txs);
+      }
+
+      case "listar_todas_transacoes": {
+        const txs = await storage.getTransactionsByWalletId(ctx.walletId);
         return JSON.stringify(txs);
       }
 
