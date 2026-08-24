@@ -130,6 +130,8 @@ interface ToolContext {
   userId: number;
   walletId: number;
   categories: { id: number; nome: string; tipo: string }[];
+  tipoPessoa?: string;
+  empresaAtiva?: { id: number; nome: string; cnpj: string | null } | null;
 }
 
 function buildTools() {
@@ -216,6 +218,14 @@ function buildTools() {
       function: {
         name: "listar_todas_transacoes",
         description: "Retorna TODAS as transações e despesas cadastradas na carteira, sem limite de quantidade. Use quando o usuário pedir o histórico completo, extrato completo ou 'todas as transações/despesas'.",
+        parameters: { type: "object", properties: {} },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "listar_todas_transacoes_empresa",
+        description: "Retorna TODAS as transações e despesas da EMPRESA ativa, sem limite de quantidade. Use quando o usuário PJ pedir o histórico completo, extrato ou todas as transações da empresa.",
         parameters: { type: "object", properties: {} },
       },
     },
@@ -861,6 +871,14 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
 
       case "listar_todas_transacoes": {
         const txs = await storage.getTransactionsByWalletId(ctx.walletId);
+        return JSON.stringify(txs);
+      }
+
+      case "listar_todas_transacoes_empresa": {
+        if (!ctx.empresaAtiva) {
+          return JSON.stringify({ error: "Nenhuma empresa ativa selecionada para este usuário PJ." });
+        }
+        const txs = await storage.getEmpresaTransacoesByEmpresaId(ctx.empresaAtiva.id);
         return JSON.stringify(txs);
       }
 
