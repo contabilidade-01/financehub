@@ -7,7 +7,7 @@
  * Princípio DRY: Centraliza toda lógica de notificações
  */
 
-import type { User, SubscriptionPlan } from '@shared/schema';
+import type { User, SubscriptionPlan } from '../shared/schema';
 import { generateCheckoutToken } from '../utils/checkout-token.utils';
 import postgres from 'postgres';
 

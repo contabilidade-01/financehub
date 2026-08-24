@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { storage } from "../storage";
 import { db } from "../db";
-import { transactions, wallets, users } from "@shared/schema";
+import { transactions, wallets, users } from "../shared/schema";
 import { eq, sql, and, gte, lte } from "drizzle-orm";
 
 interface AnalyticsData {

@@ -1,7 +1,7 @@
 // server/middleware/localization.middleware.ts
 import { Request, Response, NextFunction } from 'express';
 import { db } from '../db';
-import { systemLocalization } from '@shared/schema';
+import { systemLocalization } from '../shared/schema';
 import { eq, and } from 'drizzle-orm';
 
 // Adicionar ao Request

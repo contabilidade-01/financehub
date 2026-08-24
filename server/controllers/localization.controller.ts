@@ -1,7 +1,7 @@
 // server/controllers/localization.controller.ts
 import { Request, Response } from 'express';
 import { db } from '../db';
-import { systemLocalization, localizationStrings, users, insertLocalizationSchema, updateLocalizationSchema, insertStringSchema, updateStringSchema } from '@shared/schema';
+import { systemLocalization, localizationStrings, users, insertLocalizationSchema, updateLocalizationSchema, insertStringSchema, updateStringSchema } from '../shared/schema';
 import { eq, and, desc, asc, ne, sql } from 'drizzle-orm';
 import fs from 'fs';
 import path from 'path';

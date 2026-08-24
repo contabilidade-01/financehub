@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { storage } from "../storage";
-import { insertEmpresaSchema, updateEmpresaSchema } from "@shared/schema";
+import { insertEmpresaSchema, updateEmpresaSchema } from "../shared/schema";
 
 /**
  * Controller: empresa

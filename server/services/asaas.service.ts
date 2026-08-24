@@ -444,7 +444,7 @@ export class AsaasService {
     // Tentar buscar webhook secret do banco de dados primeiro
     try {
       const { db } = await import('../db');
-      const { paymentSettings } = await import('@shared/schema');
+      const { paymentSettings } = await import('../shared/schema');
       const { eq } = await import('drizzle-orm');
 
       const settings = await db
@@ -566,7 +566,7 @@ let asaasServiceInstance: AsaasService | null = null;
 async function loadConfigFromDatabase(): Promise<{ apiKey: string; environment: 'sandbox' | 'production' } | null> {
   try {
     const { db } = await import('../db');
-    const { paymentSettings } = await import('@shared/schema');
+    const { paymentSettings } = await import('../shared/schema');
     const { eq } = await import('drizzle-orm');
 
     const settings = await db

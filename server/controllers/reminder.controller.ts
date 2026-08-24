@@ -4,7 +4,7 @@ import {
   insertReminderSchema,
   updateReminderSchema,
   type Reminder,
-} from "@shared/schema";
+} from "../shared/schema";
 import { z } from "zod";
 
 // Helper para converter datas de entrada para UTC (ao salvar)

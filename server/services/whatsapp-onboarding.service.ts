@@ -1,6 +1,6 @@
 import { storage } from "../storage";
 import { uazapiService } from "../services/uazapi.service";
-import { InsertEmpresa } from "@shared/schema";
+import { InsertEmpresa } from "../shared/schema";
 
 export type OnboardingStep =
   | 'INITIAL_CHOICE'

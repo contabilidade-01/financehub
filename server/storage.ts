@@ -73,7 +73,7 @@ import {
   type InsertMeta,
   type UpdateMeta,
   type MetaComProgresso
-} from "@shared/schema";
+} from "../shared/schema";
 import { eq, and, desc, gte, lte, isNull, count, sum, sql, ne } from "drizzle-orm";
 
 /**

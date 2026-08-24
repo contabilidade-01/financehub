@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { storage } from "../storage";
 import { softDeleteEmpresaTransacao, restaurarUltimaExcluidaPJ, listarLixeiraPJ } from "../storage";
-import { insertEmpresaTransacaoSchema, updateEmpresaTransacaoSchema } from "@shared/schema";
+import { insertEmpresaTransacaoSchema, updateEmpresaTransacaoSchema } from "../shared/schema";
 
 /**
  * Controller: empresaTransacao

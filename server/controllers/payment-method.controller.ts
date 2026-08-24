@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { storage } from "../storage";
-import { insertPaymentMethodSchema, type PaymentMethod } from "@shared/schema";
+import { insertPaymentMethodSchema, type PaymentMethod } from "../shared/schema";
 import { z } from "zod";
 
 /**
