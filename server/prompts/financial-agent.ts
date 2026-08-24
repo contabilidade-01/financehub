@@ -64,6 +64,26 @@ const tools = {
       return `Progresso da meta '${titulo}': R$ 500`; // Valor de exemplo
     },
   },
+
+  // Ferramenta para atualizar uma meta existente
+  atualizar_meta: {
+    description: "Atualiza os atributos de uma meta existente (valor alvo, prazo, título)",
+    parameters: z.object({
+      id: z.number().optional().describe("ID da meta a atualizar (opcional se fornecer titulo)"),
+      titulo: z.string().optional().describe("Título da meta (opcional se fornecer ID)"),
+      valor_alvo: z.number().optional().describe("Novo valor alvo em R$"),
+      prazo: z.string().optional().describe("Nova data de prazo YYYY-MM-DD"),
+    }),
+    func: async (params: {
+      id?: number;
+      titulo?: string;
+      valor_alvo?: number;
+      prazo?: string;
+    }) => {
+      // Lógica para atualizar uma meta
+      return `Meta atualizada com sucesso`;
+    },
+  },
 };
 
 // Função para construir o contexto dinâmico

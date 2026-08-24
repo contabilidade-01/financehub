@@ -679,6 +679,38 @@ function buildTools() {
         },
       },
     },
+    {
+      type: "function" as const,
+      function: {
+        name: "sacar_meta",
+        description: "Retira um valor de uma meta/sonho/caixinha. Use quando o usuário disser 'tirei X da meta Y', 'usei R$ Z da poupança'.",
+        parameters: {
+          type: "object",
+          properties: {
+            titulo: { type: "string", description: "Título da meta (ex: 'Juntar 100 mil', 'Viagem para a Disney')" },
+            meta_id: { type: "number", description: "ID da meta (se conhecido)" },
+            valor: { type: "number", description: "Valor a sacar em R$" },
+          },
+          required: ["valor"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "ajustar_saldo_meta",
+        description: "Ajusta o saldo atual de uma meta para um valor específico. Use quando o usuário disser 'corrige o saldo da meta X para Y', 'atualiza o valor da poupança para Z'.",
+        parameters: {
+          type: "object",
+          properties: {
+            titulo: { type: "string", description: "Título da meta (ex: 'Juntar 100 mil', 'Viagem para a Disney')" },
+            meta_id: { type: "number", description: "ID da meta (se conhecido)" },
+            valor: { type: "number", description: "Novo valor do saldo em R$" },
+          },
+          required: ["valor"],
+        },
+      },
+    },
   ];
 }
 
