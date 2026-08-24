@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { storage } from "../storage";
 import { db } from "../db";
-import { wallets, users } from "../shared/schema";
+import { wallets, users } from "../../shared/schema";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import bcrypt from "bcryptjs";

@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { storage } from "../storage";
-import { User } from "../shared/schema";
+import { User } from "../../shared/schema";
 
 // Declaração global para estender o tipo Request
 declare global {

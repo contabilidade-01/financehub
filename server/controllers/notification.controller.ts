@@ -2,7 +2,7 @@ import { Request, Response } from 'express'
 import { z } from 'zod'
 import { eq } from 'drizzle-orm'
 import { db } from '../db.js'
-import { users } from "../shared/schema"
+import { users } from "../../shared/schema"
 import { broadcastNotification } from '../websocket.js'
 
 // Schema para validação da notificação

@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { storage } from "../storage";
-import { insertSubscriptionPlanSchema, updateSubscriptionPlanSchema } from "../shared/schema";
+import { insertSubscriptionPlanSchema, updateSubscriptionPlanSchema } from "../../shared/schema";
 import { z } from "zod";
 
 /**

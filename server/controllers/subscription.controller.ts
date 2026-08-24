@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { storage } from "../storage";
 import { z } from "zod";
-import { getSaoPauloTimestamp } from "../shared/schema";
+import { getSaoPauloTimestamp } from "../../shared/schema";
 
 const cancelSubscriptionSchema = z.object({
   motivo: z.string().min(1, "Motivo é obrigatório").max(500, "Motivo muito longo")

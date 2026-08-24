@@ -20,7 +20,7 @@ import type {
   AsaasCustomer,
   SubscriptionStatus,
   PaymentStatus
-} from '../shared/schema';
+} from "../../shared/schema";
 import { generateRandomPassword } from '../utils/password-generator';
 import bcrypt from 'bcryptjs';
 import postgres from 'postgres';

@@ -3,7 +3,7 @@ import { storage } from "../storage";
 import { getSubscriptionService } from "../services/subscription.service";
 import { z } from "zod";
 import { db } from "../db";
-import { paymentTransactions, users, userSubscriptions, subscriptionPlans, paymentSettings } from "../shared/schema";
+import { paymentTransactions, users, userSubscriptions, subscriptionPlans, paymentSettings } from "../../shared/schema";
 import { eq } from "drizzle-orm";
 import { decodeCheckoutToken, validateCheckoutToken } from "../utils/checkout-token.utils";
 
@@ -714,7 +714,7 @@ export async function getBillingMetrics(req: Request, res: Response) {
 
     // Buscar todos os pagamentos confirmados
     const { db } = await import('../db');
-    const { paymentTransactions } = await import('../shared/schema');
+    const { paymentTransactions } = await import("../../shared/schema");
     const { sql } = await import('drizzle-orm');
 
     const payments = await db.select().from(paymentTransactions);
@@ -735,7 +735,7 @@ export async function getBillingMetrics(req: Request, res: Response) {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const { userSubscriptions } = await import('../shared/schema');
+    const { userSubscriptions } = await import("../../shared/schema");
     const canceledSubs = await db.select().from(userSubscriptions).where(
       sql`${userSubscriptions.status} = 'canceled'
           AND ${userSubscriptions.canceledAt} >= ${thirtyDaysAgo.toISOString()}`
@@ -751,7 +751,7 @@ export async function getBillingMetrics(req: Request, res: Response) {
       .slice(0, 10);
 
     // Buscar nomes dos usuários para os pagamentos
-    const { users } = await import('../shared/schema');
+    const { users } = await import("../../shared/schema");
     const recentPaymentsWithUsers = await Promise.all(
       recentPayments.map(async (payment) => {
         const user = await storage.getUserById(payment.usuarioId);
@@ -800,7 +800,7 @@ export async function getAllSubscriptions(req: Request, res: Response) {
 
     // Buscar todas as assinaturas
     const { db } = await import('../db');
-    const { userSubscriptions, users, subscriptionPlans } = await import('../shared/schema');
+    const { userSubscriptions, users, subscriptionPlans } = await import("../../shared/schema");
     const { eq } = await import('drizzle-orm');
 
     const subscriptions = await db

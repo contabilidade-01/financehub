@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { storage } from "../storage";
-import { insertCategorySchema } from "../shared/schema";
+import { insertCategorySchema } from "../../shared/schema";
 import { z } from "zod";
 
 // Get all categories for current user

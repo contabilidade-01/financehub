@@ -119,7 +119,7 @@ export async function handleAsaasWebhook(req: Request, res: Response) {
 async function getPaymentNotificationSettings() {
   try {
     const { db } = await import('../db');
-    const { paymentSettings } = await import('../shared/schema');
+    const { paymentSettings } = await import("../../shared/schema");
     const { eq } = await import('drizzle-orm');
 
     const settings = await db

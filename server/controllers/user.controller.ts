@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import { storage } from "../storage";
-import { insertUserSchema, loginUserSchema } from "../shared/schema";
+import { insertUserSchema, loginUserSchema } from "../../shared/schema";
 import { z } from "zod";
 import { getNotificationService } from "../services/notification.service";
 

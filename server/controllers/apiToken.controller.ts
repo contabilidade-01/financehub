@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { storage } from "../storage";
-import { insertApiTokenSchema, updateApiTokenSchema } from "../shared/schema";
+import { insertApiTokenSchema, updateApiTokenSchema } from "../../shared/schema";
 import bcrypt from 'bcryptjs';
 
 /**

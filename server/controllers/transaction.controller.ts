@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { storage } from "../storage";
-import { insertTransactionSchema, updateTransactionSchema, type TransactionWithDetails } from "../shared/schema";
+import { insertTransactionSchema, updateTransactionSchema, type TransactionWithDetails } from "../../shared/schema";
 import { z } from "zod";
 import { db } from "../db";
 import { sql } from "drizzle-orm";

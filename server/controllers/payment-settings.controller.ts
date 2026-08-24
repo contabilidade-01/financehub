@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { db } from "../db";
-import { paymentSettings } from "../shared/schema";
+import { paymentSettings } from "../../shared/schema";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 
