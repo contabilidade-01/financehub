@@ -398,12 +398,17 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
       }
     }
 
+    // Mídia (foto/áudio/documento) → o texto é extração automática; o agente
+    // deve confirmar antes de gravar lançamentos.
+    const origemMidia = ["AudioMessage", "ImageMessage", "DocumentMessage"].includes(messageType);
+
     const agentContext = {
       userId: user.id,
       walletId: wallet.id,
       categories: categories.map((c) => ({ id: c.id, nome: c.nome, tipo: c.tipo })),
       tipoPessoa: user.tipo_pessoa || "fisica",
       empresaAtiva,
+      origemMidia,
     };
 
     // ============================================

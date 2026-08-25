@@ -7,10 +7,10 @@ import { jsPDF } from "jspdf";
 export async function generateSimpleReportPDF(req: Request, res: Response) {
   try {
     console.log("=== PDF GENERATION - SIMPLE VERSION ===");
-    console.log("PDF Generation: User ID", req.user.id);
+    console.log("PDF Generation: User ID", req.user!.id);
 
     // Get wallet data
-    const wallet = await storage.getWalletByUserId(req.user.id);
+    const wallet = await storage.getWalletByUserId(req.user!.id);
     if (!wallet) {
       return res.status(404).json({ message: "Carteira não encontrada" });
     }
@@ -478,7 +478,7 @@ export async function generateSimpleReportPDF(req: Request, res: Response) {
     const now = new Date();
     const dateStr = now.toISOString().split("T")[0];
     const timeStr = now.getTime().toString();
-    const hash = Buffer.from(`${req.user.id}-${timeStr}`)
+    const hash = Buffer.from(`${req.user!.id}-${timeStr}`)
       .toString("base64")
       .substring(0, 8);
     const filename = `relatorio-${dateStr}-${hash}.pdf`;

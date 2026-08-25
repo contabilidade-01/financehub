@@ -1,13 +1,14 @@
 import { Request, Response, NextFunction } from "express";
 import { storage } from "../storage";
-import { User } from "../../shared/schema";
+import { User as SchemaUser } from "../../shared/schema";
 
-// Declaração global para estender o tipo Request
+// Estende o Express.User (que o @types/passport declara vazio) para ter os
+// campos reais do usuário do schema. Assim req.user.id/tipo_pessoa/etc passam a
+// existir em toda a aplicação — passport tipa req.user como Express.User, então
+// aumentar Express.User é o que resolve (aumentar só Request.user era ignorado).
 declare global {
   namespace Express {
-    interface Request {
-      user?: User;
-    }
+    interface User extends SchemaUser {}
   }
 }
 

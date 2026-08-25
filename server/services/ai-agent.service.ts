@@ -132,6 +132,9 @@ interface ToolContext {
   categories: { id: number; nome: string; tipo: string }[];
   tipoPessoa?: string;
   empresaAtiva?: { id: number; nome: string; cnpj: string | null } | null;
+  // true quando a mensagem veio de imagem/áudio/documento (extração automática).
+  // Nesses casos o agente confirma antes de gravar (ver regra no runAgent).
+  origemMidia?: boolean;
 }
 
 function buildTools() {
@@ -1605,7 +1608,21 @@ export async function runAgent(
 `;
   }
 
-  const systemPrompt = FINANCIAL_AGENT_SYSTEM_PROMPT + buildDynamicContext() + pjInstructions + `
+  // Quando o conteúdo veio de imagem/áudio/documento, o texto é uma EXTRAÇÃO
+  // automática (pode ter erro de OCR/transcrição). Regra: confirmar antes de gravar.
+  let midiaInstructions = "";
+  if (ctx.origemMidia) {
+    midiaInstructions = `
+
+## ⚠️ CONTEÚDO EXTRAÍDO DE MÍDIA (foto/áudio/documento) — CONFIRME ANTES DE GRAVAR
+- Esta mensagem foi extraída automaticamente de uma mídia e PODE conter erros de leitura/transcrição.
+- NÃO registre lançamento(s) agora. Primeiro RESUMA o que entendeu: descrição, categoria provável, data e VALOR (e o total, se houver vários itens).
+- Termine perguntando: "Confirma o lançamento? Responda *SIM* para registrar, ou me diga o que corrigir."
+- Só use as ferramentas de lançamento (insere_transacao / lancar_empresa) DEPOIS que o usuário confirmar (ex.: responder "sim", "pode lançar", "confirmo") numa próxima mensagem.
+- Se o usuário já mandou a mídia junto com uma confirmação explícita no texto (ex.: "pode lançar essa nota"), aí sim pode registrar direto.`;
+  }
+
+  const systemPrompt = FINANCIAL_AGENT_SYSTEM_PROMPT + buildDynamicContext() + pjInstructions + midiaInstructions + `
 
 ## Categorias Disponíveis
 ${ctx.categories.map(c => `- ${c.nome} (${c.tipo})`).join("\n")}`;

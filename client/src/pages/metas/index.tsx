@@ -34,12 +34,52 @@ const tipoIcons: Record<string, any> = {
   limite_categoria: TrendingUp,
 };
 
-const tipoLabels: Record<string, string> = {
+// Rótulos por ambiente: PF fala de sonhos/caixinha; PJ fala de reservas/metas
+// do negócio. O valor interno do "tipo" é o mesmo — só a linguagem muda.
+const tipoLabelsPF: Record<string, string> = {
   caixinha: "Caixinha",
   sonho: "Sonho",
   reserva: "Reserva de Emergência",
   limite_categoria: "Limite por Categoria",
 };
+
+const tipoLabelsPJ: Record<string, string> = {
+  caixinha: "Reserva de Caixa",
+  sonho: "Meta de Investimento",
+  reserva: "Capital de Giro / Emergência",
+  limite_categoria: "Limite de Despesa",
+};
+
+type Variant = "pf" | "pj";
+
+const copyByVariant = {
+  pf: {
+    titulo: "🎯 Metas e Sonhos",
+    subtitulo: "Organize seus objetivos financeiros",
+    placeholderNome: "Nome da meta (ex: Viagem Europa)",
+    opcoes: [
+      { value: "caixinha", label: "🐷 Caixinha" },
+      { value: "sonho", label: "🎯 Sonho" },
+      { value: "reserva", label: "🛡️ Reserva de Emergência" },
+      { value: "limite_categoria", label: "📊 Limite por Categoria" },
+    ],
+    vazioDica: 'Crie pelo app ou mande no WhatsApp: "quero guardar R$500/mês pra viagem"',
+    labels: tipoLabelsPF,
+  },
+  pj: {
+    titulo: "🎯 Metas da Empresa",
+    subtitulo: "Objetivos financeiros do seu negócio",
+    placeholderNome: "Nome da meta (ex: Capital de giro, Reforma da loja)",
+    opcoes: [
+      { value: "caixinha", label: "🐷 Reserva de Caixa" },
+      { value: "sonho", label: "🎯 Meta de Investimento" },
+      { value: "reserva", label: "🛡️ Capital de Giro / Emergência" },
+      { value: "limite_categoria", label: "📊 Limite de Despesa" },
+    ],
+    vazioDica: 'Crie pelo app ou mande no WhatsApp: "quero reservar R$2.000/mês pro 13º"',
+    labels: tipoLabelsPJ,
+  },
+} as const;
 
 const tipoColors: Record<string, string> = {
   caixinha: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
@@ -48,7 +88,9 @@ const tipoColors: Record<string, string> = {
   limite_categoria: "bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300",
 };
 
-export default function MetasPage() {
+export default function MetasPage({ variant = "pf" }: { variant?: Variant }) {
+  const copy = copyByVariant[variant];
+  const tipoLabels = copy.labels;
   const qc = useQueryClient();
   const { toast } = useToast();
   const [showForm, setShowForm] = useState(false);
@@ -139,8 +181,8 @@ export default function MetasPage() {
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">🎯 Metas e Sonhos</h1>
-          <p className="text-muted-foreground">Organize seus objetivos financeiros</p>
+          <h1 className="text-3xl font-bold">{copy.titulo}</h1>
+          <p className="text-muted-foreground">{copy.subtitulo}</p>
         </div>
         <Button onClick={() => setShowForm(!showForm)}>
           <Plus className="h-4 w-4 mr-2" /> Nova Meta
@@ -152,14 +194,13 @@ export default function MetasPage() {
         <Card>
           <CardContent className="pt-6">
             <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              <Input name="titulo" placeholder="Nome da meta (ex: Viagem Europa)" required />
+              <Input name="titulo" placeholder={copy.placeholderNome} required />
               <Select name="tipo" defaultValue="caixinha">
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="caixinha">🐷 Caixinha</SelectItem>
-                  <SelectItem value="sonho">🎯 Sonho</SelectItem>
-                  <SelectItem value="reserva">🛡️ Reserva de Emergência</SelectItem>
-                  <SelectItem value="limite_categoria">📊 Limite por Categoria</SelectItem>
+                  {copy.opcoes.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <Input name="valor_alvo" type="number" step="0.01" placeholder="Valor alvo (R$)" required />
@@ -189,7 +230,7 @@ export default function MetasPage() {
           <CardContent className="flex flex-col items-center gap-4 py-12">
             <Target className="h-12 w-12 text-muted-foreground" />
             <p className="text-muted-foreground">Nenhuma meta criada ainda.</p>
-            <p className="text-sm text-muted-foreground">Crie pelo app ou mande no WhatsApp: "quero guardar R$500/mês pra viagem"</p>
+            <p className="text-sm text-muted-foreground">{copy.vazioDica}</p>
           </CardContent>
         </Card>
       ) : (
