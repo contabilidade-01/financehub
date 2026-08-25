@@ -1,5 +1,5 @@
 import axios from "axios";
-import { storage, getDailySummary, getPeriodSummary, getWeeklySummary, getCategoryBreakdown, comparePeriods, createMeta, getMetasByUsuarioId, depositarMeta, deleteMeta, ajustarSaldoMeta, verificarOrcamentos, getContasAPagar, marcarComoPaga, marcarRecorrente, getFluxoCaixaResumo, getSaldoCartao, getCartoesComSaldo, getFaturaCartao, resolveMemoriaCategoria, aprenderMemoriaCategoria, resolveOuCriaFormaPagamento, criarCompraParcelada, getUltimaCompra, editarTransacoesPorIds, getStatusOrcamentoCategoria, softDeleteTransacao, softDeleteTodasTransacoes, restaurarUltimaExcluida, transacaoPertenceAoWallet, cadastrarOuAtualizarCartao, resolveMemoriaGlobal } from "../storage";
+import { storage, getDailySummary, getPeriodSummary, getWeeklySummary, getCategoryBreakdown, comparePeriods, createMeta, getMetasByUsuarioId, depositarMeta, deleteMeta, ajustarSaldoMeta, sacarMeta, verificarOrcamentos, getContasAPagar, marcarComoPaga, marcarRecorrente, getFluxoCaixaResumo, getSaldoCartao, getCartoesComSaldo, getFaturaCartao, resolveMemoriaCategoria, aprenderMemoriaCategoria, resolveOuCriaFormaPagamento, criarCompraParcelada, getUltimaCompra, editarTransacoesPorIds, getStatusOrcamentoCategoria, softDeleteTransacao, softDeleteTodasTransacoes, restaurarUltimaExcluida, transacaoPertenceAoWallet, cadastrarOuAtualizarCartao, resolveMemoriaGlobal } from "../storage";
 import { FINANCIAL_AGENT_SYSTEM_PROMPT, buildDynamicContext } from "../prompts/financial-agent";
 import { insertTransactionSchema } from "../../shared/schema";
 import { withRetry } from "../utils/ai-errors";
@@ -89,17 +89,27 @@ export async function analyzeWithGemini(base64Data: string, mimetype: string, ty
   const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
   if (!apiKey) throw new Error("GEMINI_API_KEY não configurada");
 
-  const prompt = type === "image"
-    ? `Descreva todos os items da imagem (ela pode ser um cupom fiscal, nota fiscal ou apenas uma imagem com anotacoes de produtos que foram adquiridos ou comprados), retorne em um formato como no exemplo abaixo:
+  const alvo = type === "image"
+    ? "a imagem (cupom fiscal, nota fiscal, comprovante ou uma foto com anotações de produtos comprados)"
+    : "o documento (comprovante, extrato bancário, cupom/nota fiscal ou anotações de produtos comprados)";
+
+  const prompt = `Você extrai dados financeiros de ${alvo}.
+
+REGRA DE QUALIDADE (leia primeiro): se ${type === "image" ? "a imagem" : "o documento"} estiver ILEGÍVEL, muito apagada, desfocada, cortada, escura, ou se você NÃO tiver confiança razoável nos valores/itens, responda APENAS com uma linha começando por:
+ILEGIVEL: <motivo curto> (ex.: "ILEGIVEL: foto muito escura, não dá pra ler os valores")
+Não invente itens nem valores quando não tiver certeza.
+
+Se estiver legível, liste os itens neste formato (um por linha):
 Comprei DESCRICAO DO ITEM 1 por VALOR
 Comprei DESCRICAO DO ITEM 2 por VALOR
 
-Ao responder os números do valor devem usar a notação decimal americana`
-    : `Descreva todos os items do documento (ele pode ser um comprovante, extrato bancário, cupom fiscal, nota fiscal ou apenas um documento com anotacoes de produtos que foram adquiridos ou comprados), retorne em um formato como no exemplo abaixo:
-Comprei DESCRICAO DO ITEM 1 por VALOR
-Comprei DESCRICAO DO ITEM 2 por VALOR
+E, quando houver na imagem/documento, acrescente ao final (só o que existir):
+Total: VALOR
+Data: AAAA-MM-DD
+Estabelecimento: NOME
+Forma de pagamento: FORMA
 
-Ao responder os números do valor devem usar a notação decimal americana`;
+Os números de valor devem usar notação decimal americana (ponto como separador, ex.: 1234.56).`;
 
   const response = await withRetry(
     () => axios.post(
@@ -135,6 +145,9 @@ interface ToolContext {
   // true quando a mensagem veio de imagem/áudio/documento (extração automática).
   // Nesses casos o agente confirma antes de gravar (ver regra no runAgent).
   origemMidia?: boolean;
+  // Texto da mensagem atual do usuário. Usado por depositar_meta/sacar_meta para
+  // casar a meta pelo contexto quando o usuário não dá id/título exato.
+  userMessage?: string;
 }
 
 function buildTools() {
@@ -1071,7 +1084,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           categoria_id: categoriaId,
           recorrencia: args.recorrencia || null,
           valor_recorrencia: args.valor_recorrencia || null,
-        });
+        } as any);
         return JSON.stringify({ success: true, id: meta.id, titulo: meta.titulo, tipo: meta.tipo, valor_alvo: args.valor_alvo });
       }
 
@@ -1597,6 +1610,9 @@ export async function runAgent(
 ): Promise<string> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY não configurada");
+
+  // Disponibiliza o texto atual para os handlers (ex.: casar meta pelo contexto).
+  ctx.userMessage = userMessage;
 
   let pjInstructions = "";
   if (ctx.tipoPessoa === "juridica" && (ctx as any).empresaAtiva) {

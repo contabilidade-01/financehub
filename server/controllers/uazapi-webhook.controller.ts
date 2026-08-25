@@ -353,6 +353,23 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
       return;
     }
 
+    // Mídia ilegível (foto apagada/escura, documento borrado): a visão sinaliza
+    // com "ILEGIVEL: <motivo>". Nesse caso pedimos reenvio em vez de mandar
+    // conteúdo duvidoso para o agente registrar.
+    if (/^\s*ILEG[IÍ]VEL\s*:/i.test(resolvedText)) {
+      const motivo = resolvedText.replace(/^\s*ILEG[IÍ]VEL\s*:/i, "").trim();
+      console.log(`[UazAPI Webhook] Mídia ilegível: ${motivo}`);
+      await createIngestionEvent({
+        usuario_id: user.id, remote_jid: chatid, tipo_mensagem: messageType,
+        resultado: "ilegivel", etapa: "visao", detalhe: motivo || "ilegível", provider: "gemini",
+      });
+      const dica = messageType === "ImageMessage"
+        ? "📷 A foto ficou difícil de ler" + (motivo ? ` (${motivo})` : "") + ". Pode reenviar?\n\n_Dicas:_\n• Boa iluminação, sem sombra\n• Enquadre o cupom inteiro, de cima\n• Foco nos valores\n\nOu me diga os valores por texto/áudio."
+        : "📄 O documento ficou difícil de ler" + (motivo ? ` (${motivo})` : "") + ". Pode reenviar?\n\n_Dicas:_\n• Prefira o PDF original (não foto do papel)\n• Se for foto, capriche na nitidez\n\nOu me diga os valores por texto/áudio.";
+      await uazapiService.sendText(BaseUrl, token, chatid, dica);
+      return;
+    }
+
     // -------------------------------------------------------------------------
     // FLUXO DE ONBOARDING PJ/PF (Intercepta a mensagem antes da IA)
     // -------------------------------------------------------------------------
