@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useSubscription, useCancelSubscription } from '@/hooks/use-subscription';
+import { useSubscriptionStatus } from '@/hooks/use-subscription-status';
 import { useUpdateCard } from '@/hooks/use-billing';
 import { CreditCardForm } from '@/components/billing/CreditCardForm';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 
 export default function BillingSettingsPage() {
   const { data, isLoading } = useSubscription();
+  const { hasActiveAccess, expirationDate } = useSubscriptionStatus();
   const updateCard = useUpdateCard();
   const cancelSub = useCancelSubscription();
   const { toast } = useToast();
@@ -90,12 +92,27 @@ export default function BillingSettingsPage() {
   }
 
   if (!data?.hasSubscription) {
+    // Sem assinatura PAGA (Asaas). Mas o usuário pode estar em degustação/
+    // carência com acesso válido — nesse caso a mensagem é positiva, não "sem
+    // assinatura". Fonte única: hasActiveAccess (data_expiracao no futuro).
+    const vencFmt = expirationDate ? new Date(expirationDate).toLocaleDateString('pt-BR') : null;
     return (
       <div className="container max-w-4xl mx-auto py-8">
         <Card>
           <CardHeader>
-            <CardTitle>Sem Assinatura Ativa</CardTitle>
-            <CardDescription>Você não possui uma assinatura ativa</CardDescription>
+            {hasActiveAccess ? (
+              <>
+                <CardTitle>Acesso ativo — período de degustação</CardTitle>
+                <CardDescription>
+                  Você está com acesso liberado{vencFmt ? ` até ${vencFmt}` : ''}. Assine para continuar sem interrupção quando o período terminar.
+                </CardDescription>
+              </>
+            ) : (
+              <>
+                <CardTitle>Sem Assinatura Ativa</CardTitle>
+                <CardDescription>Seu período de acesso terminou. Assine para voltar a usar o sistema.</CardDescription>
+              </>
+            )}
           </CardHeader>
           <CardContent>
             <Button asChild>
