@@ -6,8 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Target, PiggyBank, Shield, TrendingUp, Trash2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Plus, Target, PiggyBank, Shield, TrendingUp, Trash2, Pencil } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -53,6 +54,8 @@ export default function MetasPage() {
   const [showForm, setShowForm] = useState(false);
   const [depositMeta, setDepositMeta] = useState<Meta | null>(null);
   const [depositValue, setDepositValue] = useState("");
+  const [editMeta, setEditMeta] = useState<Meta | null>(null);
+  const [toDelete, setToDelete] = useState<Meta | null>(null);
 
   const { data: metas = [], isLoading } = useQuery<Meta[]>({
     queryKey: ["/api/metas"],
@@ -80,13 +83,41 @@ export default function MetasPage() {
     onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
   });
 
+  const updateMut = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: any }) => apiRequest(`/api/metas/${id}`, { method: "PUT", data }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/metas"] });
+      toast({ title: "Meta atualizada! ✏️" });
+      setEditMeta(null);
+    },
+    onError: (err: any) => toast({ title: "Erro", description: err?.error || err.message, variant: "destructive" }),
+  });
+
   const deleteMut = useMutation({
     mutationFn: (id: number) => apiRequest(`/api/metas/${id}`, { method: "DELETE" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/metas"] });
       toast({ title: "Meta removida." });
+      setToDelete(null);
     },
+    onError: (err: any) => toast({ title: "Erro", description: err?.error || err.message, variant: "destructive" }),
   });
+
+  const handleEditSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!editMeta) return;
+    const fd = new FormData(e.currentTarget);
+    updateMut.mutate({
+      id: editMeta.id,
+      data: {
+        titulo: fd.get("titulo"),
+        valor_alvo: Number(fd.get("valor_alvo")),
+        prazo: fd.get("prazo") || null,
+        recorrencia: fd.get("recorrencia") || null,
+        valor_recorrencia: fd.get("valor_recorrencia") ? Number(fd.get("valor_recorrencia")) : null,
+      },
+    });
+  };
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -173,9 +204,14 @@ export default function MetasPage() {
                       <Icon className="h-5 w-5 text-primary" />
                       <CardTitle className="text-lg">{meta.titulo}</CardTitle>
                     </div>
-                    <Button variant="ghost" size="icon" onClick={() => deleteMut.mutate(meta.id)}>
-                      <Trash2 className="h-4 w-4 text-muted-foreground" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button variant="ghost" size="icon" onClick={() => setEditMeta(meta)} title="Editar">
+                        <Pencil className="h-4 w-4 text-muted-foreground" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => setToDelete(meta)} title="Excluir">
+                        <Trash2 className="h-4 w-4 text-muted-foreground" />
+                      </Button>
+                    </div>
                   </div>
                   <Badge className={`w-fit ${tipoColors[meta.tipo] || ''}`}>
                     {tipoLabels[meta.tipo] || meta.tipo}
@@ -234,6 +270,49 @@ export default function MetasPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Dialog editar meta */}
+      <Dialog open={!!editMeta} onOpenChange={(o) => !o && setEditMeta(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Editar meta</DialogTitle></DialogHeader>
+          {editMeta && (
+            <form onSubmit={handleEditSubmit} className="space-y-3">
+              <Input name="titulo" defaultValue={editMeta.titulo} placeholder="Nome da meta" required />
+              <Input name="valor_alvo" type="number" step="0.01" defaultValue={editMeta.valor_alvo} placeholder="Valor alvo (R$)" required />
+              <Input name="prazo" type="date" defaultValue={editMeta.prazo ? String(editMeta.prazo).slice(0, 10) : ""} />
+              <Select name="recorrencia" defaultValue={editMeta.recorrencia || undefined}>
+                <SelectTrigger><SelectValue placeholder="Recorrência (opcional)" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="mensal">Mensal</SelectItem>
+                  <SelectItem value="semanal">Semanal</SelectItem>
+                  <SelectItem value="diario">Diário</SelectItem>
+                </SelectContent>
+              </Select>
+              <Input name="valor_recorrencia" type="number" step="0.01" defaultValue={editMeta.valor_recorrencia || ""} placeholder="Guardar por período (R$)" />
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setEditMeta(null)}>Cancelar</Button>
+                <Button type="submit" disabled={updateMut.isPending}>{updateMut.isPending ? "Salvando…" : "Salvar"}</Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmar exclusão */}
+      <AlertDialog open={!!toDelete} onOpenChange={(o) => !o && setToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir meta?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A meta <strong>{toDelete?.titulo}</strong> será removida. Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => toDelete && deleteMut.mutate(toDelete.id)}>Excluir</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

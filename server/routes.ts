@@ -1163,19 +1163,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (err: any) { res.status(400).json({ error: err.message }); }
   });
 
+  // Garante que a meta existe E pertence ao usuário logado (evita IDOR).
+  const metaDoUsuario = async (metaId: number, userId: number) => {
+    if (!Number.isFinite(metaId)) return null;
+    const { getMetaById } = await import("./storage");
+    const meta = await getMetaById(metaId);
+    return meta && meta.usuario_id === userId ? meta : null;
+  };
+
+  // Editar meta (faltava — por isso "edição de meta" quebrava).
+  app.put("/api/metas/:id", combinedAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (!(await metaDoUsuario(id, req.user!.id))) return res.status(404).json({ error: "Meta não encontrada" });
+      const { updateMeta } = await import("./storage");
+      // Não deixa trocar o dono nem reativar via update.
+      const { usuario_id, ...patch } = req.body || {};
+      const meta = await updateMeta(id, patch);
+      res.json(meta);
+    } catch (err: any) { res.status(400).json({ error: err.message }); }
+  });
+
   app.post("/api/metas/:id/depositar", combinedAuth, async (req: Request, res: Response) => {
     try {
+      const id = parseInt(req.params.id);
+      if (!(await metaDoUsuario(id, req.user!.id))) return res.status(404).json({ error: "Meta não encontrada" });
+      const valor = Number(req.body?.valor);
+      if (!Number.isFinite(valor) || valor <= 0) return res.status(400).json({ error: "Valor de depósito inválido" });
       const { depositarMeta } = await import("./storage");
-      const result = await depositarMeta(parseInt(req.params.id), req.body.valor);
-      if (!result) return res.status(404).json({ error: "Meta não encontrada" });
+      const result = await depositarMeta(id, valor);
       res.json(result);
     } catch (err: any) { res.status(400).json({ error: err.message }); }
   });
 
   app.delete("/api/metas/:id", combinedAuth, async (req: Request, res: Response) => {
     try {
+      const id = parseInt(req.params.id);
+      if (!(await metaDoUsuario(id, req.user!.id))) return res.status(404).json({ error: "Meta não encontrada" });
       const { deleteMeta } = await import("./storage");
-      await deleteMeta(parseInt(req.params.id));
+      await deleteMeta(id);
       res.status(204).send();
     } catch (err: any) { res.status(400).json({ error: err.message }); }
   });
