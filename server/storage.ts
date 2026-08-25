@@ -69,12 +69,14 @@ import {
   type EmpresaFluxoCaixaMensal,
   metasFinanceiras,
   whatsappOnboardingStates,
+  type WhatsAppOnboardingState,
+  type InsertWhatsAppOnboardingState,
   type MetaFinanceira,
   type InsertMeta,
   type UpdateMeta,
   type MetaComProgresso
 } from "../shared/schema";
-import { eq, and, desc, gte, lte, isNull, count, sum, sql, ne } from "drizzle-orm";
+import { eq, and, or, desc, gte, lte, isNull, count, sum, sql, ne } from "drizzle-orm";
 
 /**
  * Calculate date range based on period type
@@ -1605,7 +1607,8 @@ export class DbStorage implements IStorage {
 
   // Plano de contas padrão (Yampa-like), criado quando a empresa é cadastrada.
   async seedEmpresasContas(empresaId: number): Promise<EmpresaConta[]> {
-    const seed: InsertEmpresaConta[] = [
+    // ativo/is_cmv têm default no banco; omitidos aqui de propósito (cast no insert).
+    const seed = [
       // Receitas
       { empresa_id: empresaId, codigo: '1.01', nome: 'Receita de Vendas',            tipo: 'Receita', classificacao: 'OUTRA',     icone: 'shopping-bag', cor: '#10B981', descricao: 'Vendas de mercadorias/produtos.' },
       { empresa_id: empresaId, codigo: '1.02', nome: 'Receita de Serviços',          tipo: 'Receita', classificacao: 'OUTRA',     icone: 'briefcase',    cor: '#10B981', descricao: 'Prestação de serviços.' },
@@ -1633,7 +1636,7 @@ export class DbStorage implements IStorage {
     ];
 
     if (seed.length === 0) return [];
-    const result = await db.insert(empresasContas).values(seed).returning();
+    const result = await db.insert(empresasContas).values(seed as any).returning();
     return result;
   }
 
@@ -2967,6 +2970,58 @@ export async function getStatusOrcamentoCategoria(
     };
   } catch (err: any) {
     console.error("[Orçamento] falha ao calcular status:", err?.message);
+    return null;
+  }
+}
+
+// Versão PJ do aviso de orçamento na hora: dado um lançamento de despesa numa
+// conta do plano de contas da empresa, verifica se existe meta 'limite_categoria'
+// (empresa_id + conta_id) e retorna o status do mês. conta_id null na meta =
+// limite do TOTAL de despesas da empresa (soma tudo).
+export async function getStatusOrcamentoContaPJ(
+  empresaId: number,
+  contaId: number,
+): Promise<{ categoria: string; limite: number; gasto: number; percentual: number; status: string } | null> {
+  try {
+    const metaRows = await db.execute(sql`
+      SELECT valor_alvo, conta_id FROM metas_financeiras
+      WHERE empresa_id = ${empresaId} AND tipo = 'limite_categoria' AND ativo = true
+        AND (conta_id = ${contaId} OR conta_id IS NULL)
+      ORDER BY conta_id NULLS LAST
+      LIMIT 1
+    `);
+    const meta = (metaRows as any[])[0];
+    if (!meta) return null;
+    const limite = parseFloat(meta.valor_alvo) || 0;
+    if (limite <= 0) return null;
+
+    const now = new Date();
+    const de = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+    const ate = now.toISOString().slice(0, 10);
+    // Se a meta é de uma conta específica, soma só ela; se é geral, soma tudo.
+    const metaContaId = meta.conta_id as number | null;
+    const gRows = await db.execute(sql`
+      SELECT COALESCE(SUM(valor::numeric), 0) AS total FROM empresas_transacoes
+      WHERE empresa_id = ${empresaId} AND tipo = 'Despesa' AND status = 'Efetivada'
+        AND (${metaContaId}::int IS NULL OR categoria_id = ${metaContaId})
+        AND data_transacao >= ${de} AND data_transacao <= ${ate}
+    `);
+    const gasto = parseFloat((gRows as any[])[0]?.total) || 0;
+    const pct = (gasto / limite) * 100;
+    const cRows = await db.execute(sql`SELECT nome FROM empresas_contas WHERE id = ${contaId} LIMIT 1`);
+    const contaNome = metaContaId ? ((cRows as any[])[0]?.nome || "") : "Despesas da empresa";
+    let status = "ok";
+    if (pct >= 100) status = "estourado";
+    else if (pct >= 80) status = "atencao";
+    return {
+      categoria: contaNome,
+      limite: Math.round(limite * 100) / 100,
+      gasto: Math.round(gasto * 100) / 100,
+      percentual: Math.round(pct * 10) / 10,
+      status,
+    };
+  } catch (err: any) {
+    console.error("[Orçamento PJ] falha ao calcular status:", err?.message);
     return null;
   }
 }

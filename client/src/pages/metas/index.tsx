@@ -88,7 +88,7 @@ const tipoColors: Record<string, string> = {
   limite_categoria: "bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300",
 };
 
-export default function MetasPage({ variant = "pf" }: { variant?: Variant }) {
+export default function MetasPage({ variant = "pf", empresaId }: { variant?: Variant; empresaId?: number }) {
   const copy = copyByVariant[variant];
   const tipoLabels = copy.labels;
   const qc = useQueryClient();
@@ -98,10 +98,21 @@ export default function MetasPage({ variant = "pf" }: { variant?: Variant }) {
   const [depositValue, setDepositValue] = useState("");
   const [editMeta, setEditMeta] = useState<Meta | null>(null);
   const [toDelete, setToDelete] = useState<Meta | null>(null);
+  // Tipo selecionado no form (para mostrar o seletor de conta no limite PJ).
+  const [formTipo, setFormTipo] = useState<string>("caixinha");
 
   const { data: metas = [], isLoading } = useQuery<Meta[]>({
     queryKey: ["/api/metas"],
   });
+
+  // Plano de contas PJ (só no ambiente PJ) — para vincular o limite de despesa
+  // a uma conta específica. Filtra as contas de Despesa.
+  const { data: contasPJ = [] } = useQuery<any[]>({
+    queryKey: [`/api/empresas/${empresaId}/contas`],
+    queryFn: () => apiRequest(`/api/empresas/${empresaId}/contas`),
+    enabled: variant === "pj" && !!empresaId,
+  });
+  const contasDespesa = contasPJ.filter((c: any) => c.tipo === "Despesa");
 
   const createMut = useMutation({
     mutationFn: (data: any) => apiRequest("/api/metas", { method: "POST", data }),
@@ -164,6 +175,7 @@ export default function MetasPage({ variant = "pf" }: { variant?: Variant }) {
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
+    const contaId = fd.get("conta_id");
     createMut.mutate({
       titulo: fd.get("titulo"),
       tipo: fd.get("tipo"),
@@ -171,6 +183,8 @@ export default function MetasPage({ variant = "pf" }: { variant?: Variant }) {
       prazo: fd.get("prazo") || null,
       recorrencia: fd.get("recorrencia") || null,
       valor_recorrencia: fd.get("valor_recorrencia") ? Number(fd.get("valor_recorrencia")) : null,
+      // Limite de despesa PJ: conta do plano de contas (opcional; null = total).
+      conta_id: contaId ? Number(contaId) : null,
     });
   };
 
@@ -195,7 +209,7 @@ export default function MetasPage({ variant = "pf" }: { variant?: Variant }) {
           <CardContent className="pt-6">
             <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <Input name="titulo" placeholder={copy.placeholderNome} required />
-              <Select name="tipo" defaultValue="caixinha">
+              <Select name="tipo" defaultValue="caixinha" onValueChange={setFormTipo}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {copy.opcoes.map((o) => (
@@ -203,6 +217,17 @@ export default function MetasPage({ variant = "pf" }: { variant?: Variant }) {
                   ))}
                 </SelectContent>
               </Select>
+              {/* Limite de despesa PJ: escolher a conta do plano de contas (ou o total). */}
+              {variant === "pj" && formTipo === "limite_categoria" && (
+                <Select name="conta_id">
+                  <SelectTrigger><SelectValue placeholder="Conta do limite (padrão: total de despesas)" /></SelectTrigger>
+                  <SelectContent>
+                    {contasDespesa.map((c: any) => (
+                      <SelectItem key={c.id} value={String(c.id)}>{c.codigo} — {c.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
               <Input name="valor_alvo" type="number" step="0.01" placeholder="Valor alvo (R$)" required />
               <Input name="prazo" type="date" placeholder="Prazo (opcional)" />
               <Select name="recorrencia">

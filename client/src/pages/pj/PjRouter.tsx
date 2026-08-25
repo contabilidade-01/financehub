@@ -82,7 +82,7 @@ export default function PjRouter() {
         return <ConciliacaoPage empresaId={empresaAtiva} />;
       case "metas":
         // Metas escopadas pelo login (backend define empresa_id da empresa do login).
-        return <MetasPage variant="pj" />;
+        return <MetasPage variant="pj" empresaId={empresaAtiva} />;
       default:
         return <PjDashboard empresaId={empresaAtiva} />;
     }
