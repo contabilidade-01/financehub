@@ -17,6 +17,12 @@ export const createEmpresa = async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Dados inválidos", details: parsed.error.errors });
     }
 
+    // Regra: um login = uma empresa. Impede cadastro de uma 2ª empresa.
+    const existentes = await storage.getEmpresasByUsuarioId(userId);
+    if (existentes.length > 0) {
+      return res.status(409).json({ error: "Este usuário já possui uma empresa cadastrada. Cada login gerencia apenas uma empresa." });
+    }
+
     const empresa = await storage.createEmpresa({ ...parsed.data, usuario_id: userId });
 
     // Seed automático do plano de contas Yampa-like

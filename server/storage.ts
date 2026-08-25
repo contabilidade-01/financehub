@@ -1975,9 +1975,21 @@ export class DbStorage implements IStorage {
 // ============================================
 
 export async function createMeta(userId: number, metaData: InsertMeta): Promise<MetaFinanceira> {
+  // Meta por ambiente: se o login é PJ (tem empresa), a meta pertence à empresa.
+  // Um login = um ambiente, então basta pegar a empresa do usuário (PF não tem).
+  let empresaId = (metaData as any).empresa_id ?? null;
+  if (empresaId == null) {
+    const empresasDoUser = await db.select({ id: empresas.id })
+      .from(empresas)
+      .where(eq(empresas.usuario_id, userId))
+      .orderBy(empresas.id)
+      .limit(1);
+    empresaId = empresasDoUser[0]?.id ?? null;
+  }
   const result = await db.insert(metasFinanceiras).values({
     ...metaData,
     usuario_id: userId,
+    empresa_id: empresaId,
     valor_alvo: metaData.valor_alvo.toString(),
     valor_atual: (metaData.valor_atual || 0).toString(),
     valor_recorrencia: metaData.valor_recorrencia ? metaData.valor_recorrencia.toString() : null,

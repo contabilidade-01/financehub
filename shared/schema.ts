@@ -892,6 +892,10 @@ export type InsertWhatsAppOnboardingState = typeof whatsappOnboardingStates.$inf
 export const metasFinanceiras = pgTable("metas_financeiras", {
   id: serial("id").primaryKey(),
   usuario_id: integer("usuario_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  // Ambiente da meta: NULL = ambiente PF; preenchido = a empresa (PJ) daquele login.
+  // Como um login é de um único ambiente (PF ou 1 empresa), isola por si só;
+  // o vínculo explícito permite relatórios e leitura pela empresa.
+  empresa_id: integer("empresa_id").references(() => empresas.id, { onDelete: 'cascade' }),
   titulo: varchar("titulo", { length: 255 }).notNull(),
   tipo: varchar("tipo", { length: 30 }).notNull(), // 'caixinha' | 'sonho' | 'reserva' | 'limite_categoria'
   valor_alvo: decimal("valor_alvo", { precision: 12, scale: 2 }).notNull(),
@@ -907,6 +911,7 @@ export const metasFinanceiras = pgTable("metas_financeiras", {
 // Schemas Zod
 export const insertMetaSchema = z.object({
   usuario_id: z.number().int().optional(),
+  empresa_id: z.number().int().optional().nullable(),
   titulo: z.string().min(1),
   tipo: z.enum(["caixinha", "sonho", "reserva", "limite_categoria"]),
   valor_alvo: z.number().positive(),

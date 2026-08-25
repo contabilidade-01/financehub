@@ -10,6 +10,7 @@ import PjEmpresas from "@/pages/pj/empresas";
 import PjRelatorios from "@/pages/pj/relatorios";
 import PjFaturas from "@/pages/pj/faturas";
 import ConciliacaoPage from "@/pages/pj/conciliacao";
+import MetasPage from "@/pages/metas";
 
 /**
  * PjRouter — resolve a empresa ativa e renderiza o componente PJ correto.
@@ -79,6 +80,9 @@ export default function PjRouter() {
         return <PjFaturas empresaId={empresaAtiva} />;
       case "conciliacao":
         return <ConciliacaoPage empresaId={empresaAtiva} />;
+      case "metas":
+        // Metas escopadas pelo login (backend define empresa_id da empresa do login).
+        return <MetasPage />;
       default:
         return <PjDashboard empresaId={empresaAtiva} />;
     }

@@ -420,6 +420,26 @@ const STEPS: Step[] = [
       `);
     },
   },
+  {
+    // Metas por ambiente: empresa_id NULL = PF; preenchido = a empresa (PJ) do login.
+    // Como cada login é de um único ambiente, isola por si; o vínculo é explícito.
+    name: "metas_financeiras: empresa_id (metas por ambiente PF/PJ)",
+    run: async () => {
+      await db.execute(sql`ALTER TABLE metas_financeiras ADD COLUMN IF NOT EXISTS empresa_id INTEGER REFERENCES empresas(id) ON DELETE CASCADE`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_metas_empresa_id ON metas_financeiras(empresa_id)`);
+      // Backfill: metas de usuários PJ passam a apontar para a empresa daquele login.
+      await db.execute(sql`
+        UPDATE metas_financeiras m
+        SET empresa_id = e.id
+        FROM empresas e
+        JOIN usuarios u ON u.id = e.usuario_id
+        WHERE m.usuario_id = u.id
+          AND u.tipo_pessoa = 'juridica'
+          AND m.empresa_id IS NULL
+          AND e.id = (SELECT MIN(e2.id) FROM empresas e2 WHERE e2.usuario_id = u.id)
+      `);
+    },
+  },
 ];
 
 export async function runAutoMigrations(): Promise<void> {

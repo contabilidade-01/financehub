@@ -22,7 +22,8 @@ import {
   Wrench,
   Building2,
   TrendingUp,
-  FileUp
+  FileUp,
+  Target
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { VersionDisplay } from "@/components/shared/VersionDisplay";
@@ -121,6 +122,7 @@ function Sidebar() {
       { icon: <Tag className="mr-3 h-4 w-4" />, text: 'Plano de Contas', path: "/p/categorias" },
       { icon: <CreditCard className="mr-3 h-4 w-4" />, text: 'Faturas de Cartão', path: "/p/faturas" },
       { icon: <FileUp className="mr-3 h-4 w-4" />, text: 'Conciliação', path: "/p/conciliacao" },
+      { icon: <Target className="mr-3 h-4 w-4" />, text: 'Metas', path: "/p/metas" },
       { icon: <Building2 className="mr-3 h-4 w-4" />, text: 'Minhas Empresas', path: "/p/empresas" },
     ]
   };
