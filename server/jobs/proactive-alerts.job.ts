@@ -71,6 +71,7 @@ async function checkBudgetAlerts(): Promise<void> {
       AND t.data_transacao <= CURRENT_DATE
     WHERE m.tipo = 'limite_categoria'
       AND m.ativo = true
+      AND m.empresa_id IS NULL
       AND u.ativo = true
       AND u.remotejid IS NOT NULL
       AND u.remotejid != ''
@@ -91,6 +92,59 @@ async function checkBudgetAlerts(): Promise<void> {
         console.log(`[Alerts] Orçamento: enviado para ${row.user_nome} (${row.categoria}: ${Math.round(pct)}%)`);
       } catch (err: any) {
         console.error(`[Alerts] Erro ao enviar alerta orçamento:`, err.message);
+      }
+    }
+  }
+}
+
+// ============================================
+// 1b. ALERTA DE ORÇAMENTO PJ (empresas_transacoes)
+// ============================================
+async function checkBudgetAlertsPJ(): Promise<void> {
+  console.log("[Alerts] Verificando orçamentos PJ...");
+
+  // Limites de despesa do ambiente PJ: meta 'limite_categoria' com empresa_id.
+  // conta_id preenchido = limite daquela conta; null = limite do TOTAL de despesas.
+  const rows = await db.execute(sql`
+    SELECT
+      m.id, m.usuario_id, m.titulo, m.valor_alvo, m.conta_id,
+      ec.nome AS conta_nome,
+      u.remotejid, u.nome AS user_nome,
+      COALESCE(SUM(et.valor::numeric), 0) AS gasto
+    FROM metas_financeiras m
+    JOIN empresas e ON e.id = m.empresa_id
+    JOIN usuarios u ON u.id = m.usuario_id
+    LEFT JOIN empresas_contas ec ON ec.id = m.conta_id
+    LEFT JOIN empresas_transacoes et ON et.empresa_id = m.empresa_id
+      AND et.tipo = 'Despesa'
+      AND et.status = 'Efetivada'
+      AND (m.conta_id IS NULL OR et.categoria_id = m.conta_id)
+      AND et.data_transacao >= date_trunc('month', CURRENT_DATE)::date
+      AND et.data_transacao <= CURRENT_DATE
+    WHERE m.tipo = 'limite_categoria'
+      AND m.ativo = true
+      AND m.empresa_id IS NOT NULL
+      AND u.ativo = true
+      AND u.remotejid IS NOT NULL
+      AND u.remotejid != ''
+    GROUP BY m.id, m.usuario_id, m.titulo, m.valor_alvo, m.conta_id, ec.nome, u.remotejid, u.nome
+  `);
+
+  for (const row of rows as any[]) {
+    const limite = parseFloat(row.valor_alvo) || 0;
+    const gasto = parseFloat(row.gasto) || 0;
+    const pct = limite > 0 ? (gasto / limite) * 100 : 0;
+
+    if (pct >= 80 && row.remotejid) {
+      const status = pct >= 100 ? "🚨 ESTOURADO" : "⚠️ ATENÇÃO";
+      const alvoNome = row.conta_nome || row.titulo || "Despesas da empresa";
+      const msg = `${status}\n\n*Limite de ${alvoNome}* (empresa)\n💸 Gasto no mês: R$ ${gasto.toFixed(2)} / R$ ${limite.toFixed(2)}\n📊 ${Math.round(pct)}% do limite\n\n${pct >= 100 ? "Você ultrapassou o limite definido!" : "Fique atento — está chegando no limite!"}`;
+
+      try {
+        await uazapiService.sendText(UAZAPI_BASE_URL, UAZAPI_TOKEN, row.remotejid, msg);
+        console.log(`[Alerts] Orçamento PJ: enviado para ${row.user_nome} (${alvoNome}: ${Math.round(pct)}%)`);
+      } catch (err: any) {
+        console.error(`[Alerts] Erro ao enviar alerta orçamento PJ:`, err.message);
       }
     }
   }
@@ -332,6 +386,7 @@ async function runAllChecks(): Promise<void> {
   console.log("[Alerts] Executando verificações...");
   try {
     await checkBudgetAlerts();
+    await checkBudgetAlertsPJ();
     await sendWeeklySummary();
     await checkUpcomingReminders();
     await checkSpendingAnomalies();

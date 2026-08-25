@@ -1069,11 +1069,22 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       }
 
       case "criar_meta": {
-        // Resolver categoria_id se tipo = limite_categoria
+        // Limite de despesa: PF liga a categoria (categorias); PJ liga a conta do
+        // plano de contas da empresa (empresas_contas). Se não achar a conta PJ,
+        // conta_id fica null = limite do TOTAL de despesas da empresa.
         let categoriaId: number | null = null;
+        let contaId: number | null = null;
         if (args.tipo === "limite_categoria" && args.categoria) {
-          const cat = ctx.categories.find(c => c.nome.toLowerCase() === args.categoria.toLowerCase());
-          categoriaId = cat?.id || null;
+          if (ctx.empresaAtiva) {
+            const contas = await storage.getEmpresasContasByEmpresaId(ctx.empresaAtiva.id);
+            const alvo = args.categoria.toLowerCase();
+            const conta = contas.find(c => c.nome.toLowerCase() === alvo)
+              || contas.find(c => c.nome.toLowerCase().includes(alvo) || alvo.includes(c.nome.toLowerCase()));
+            contaId = conta?.id ?? null;
+          } else {
+            const cat = ctx.categories.find(c => c.nome.toLowerCase() === args.categoria.toLowerCase());
+            categoriaId = cat?.id || null;
+          }
         }
 
         const meta = await createMeta(ctx.userId, {
@@ -1082,6 +1093,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           valor_alvo: args.valor_alvo,
           prazo: args.prazo || null,
           categoria_id: categoriaId,
+          conta_id: contaId,
           recorrencia: args.recorrencia || null,
           valor_recorrencia: args.valor_recorrencia || null,
         } as any);

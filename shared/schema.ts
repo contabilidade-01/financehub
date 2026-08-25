@@ -896,6 +896,10 @@ export const metasFinanceiras = pgTable("metas_financeiras", {
   // Como um login é de um único ambiente (PF ou 1 empresa), isola por si só;
   // o vínculo explícito permite relatórios e leitura pela empresa.
   empresa_id: integer("empresa_id").references(() => empresas.id, { onDelete: 'cascade' }),
+  // Para limites de despesa PJ: conta do plano de contas da empresa (empresas_contas).
+  // É o análogo PJ do categoria_id (que aponta para categorias PF). NULL = limite
+  // do total de despesas da empresa; preenchido = limite daquela conta.
+  conta_id: integer("conta_id").references(() => empresasContas.id, { onDelete: 'set null' }),
   titulo: varchar("titulo", { length: 255 }).notNull(),
   tipo: varchar("tipo", { length: 30 }).notNull(), // 'caixinha' | 'sonho' | 'reserva' | 'limite_categoria'
   valor_alvo: decimal("valor_alvo", { precision: 12, scale: 2 }).notNull(),
@@ -912,6 +916,7 @@ export const metasFinanceiras = pgTable("metas_financeiras", {
 export const insertMetaSchema = z.object({
   usuario_id: z.number().int().optional(),
   empresa_id: z.number().int().optional().nullable(),
+  conta_id: z.number().int().optional().nullable(),
   titulo: z.string().min(1),
   tipo: z.enum(["caixinha", "sonho", "reserva", "limite_categoria"]),
   valor_alvo: z.number().positive(),

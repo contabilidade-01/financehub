@@ -427,6 +427,8 @@ const STEPS: Step[] = [
     run: async () => {
       await db.execute(sql`ALTER TABLE metas_financeiras ADD COLUMN IF NOT EXISTS empresa_id INTEGER REFERENCES empresas(id) ON DELETE CASCADE`);
       await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_metas_empresa_id ON metas_financeiras(empresa_id)`);
+      // conta_id: liga um limite de despesa PJ a uma conta do plano de contas.
+      await db.execute(sql`ALTER TABLE metas_financeiras ADD COLUMN IF NOT EXISTS conta_id INTEGER REFERENCES empresas_contas(id) ON DELETE SET NULL`);
       // Backfill: metas de usuários PJ passam a apontar para a empresa daquele login.
       await db.execute(sql`
         UPDATE metas_financeiras m
