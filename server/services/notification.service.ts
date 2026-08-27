@@ -33,8 +33,8 @@ async function getSystemConfig(): Promise<SystemConfig> {
   }
 
   const defaults: SystemConfig = {
-    system_name: 'FinanceHub',
-    support_email: 'suporte@financehub.com'
+    system_name: 'Magen',
+    support_email: 'suporte@controledinheiro.com.br'
   };
 
   try {
@@ -95,7 +95,16 @@ export class NotificationService {
 
   constructor() {
     this.wahaEnabled = process.env.WAHA_ENABLED === 'true';
-    this.emailEnabled = process.env.EMAIL_ENABLED === 'true';
+    // Liga se EMAIL_ENABLED=true OU se SMTP estiver completo (padrão nescon-clientes)
+    const smtpReady = Boolean(
+      process.env.SMTP_HOST &&
+        process.env.SMTP_USER &&
+        (process.env.SMTP_PASS || process.env.SMTP_PASSWORD) &&
+        (process.env.SMTP_FROM || process.env.EMAIL_FROM)
+    );
+    this.emailEnabled =
+      process.env.EMAIL_ENABLED === 'true' ||
+      (process.env.EMAIL_ENABLED !== 'false' && smtpReady);
 
     // Nota: Inicialização do email será feita de forma lazy quando necessário
   }
@@ -145,14 +154,19 @@ export class NotificationService {
         });
         console.log('[NotificationService] Email transporter initialized: SendGrid');
       } else {
-        // SMTP configuration (Gmail, Outlook, etc.)
+        // SMTP — mesmas vars do nescon-clientes (SMTP_PASS); aceita SMTP_PASSWORD legado
+        const port = parseInt(process.env.SMTP_PORT || '587', 10);
+        const secure =
+          process.env.SMTP_SECURE === 'true' ||
+          process.env.SMTP_SECURE === '1' ||
+          port === 465;
         this.emailTransporter = nodemailer.createTransport({
           host: process.env.SMTP_HOST || 'smtp.gmail.com',
-          port: parseInt(process.env.SMTP_PORT || '587'),
-          secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
+          port,
+          secure,
           auth: {
             user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASSWORD
+            pass: process.env.SMTP_PASS || process.env.SMTP_PASSWORD
           }
         });
         console.log('[NotificationService] Email transporter initialized: SMTP');
@@ -181,8 +195,11 @@ export class NotificationService {
       // Converter mensagem de texto para HTML básico
       const htmlBody = config.html || this.textToHtml(config.body, systemConfig.system_name);
 
-      // Usar email de suporte configurado ou fallback
-      const defaultFrom = process.env.EMAIL_FROM || `noreply@${systemConfig.support_email.split('@')[1] || 'sistema.com'}`;
+      // Remetente: SMTP_FROM (nescon) ou EMAIL_FROM (legado)
+      const defaultFrom =
+        process.env.SMTP_FROM ||
+        process.env.EMAIL_FROM ||
+        `noreply@${systemConfig.support_email.split('@')[1] || 'sistema.com'}`;
 
       const mailOptions = {
         from: config.from || defaultFrom,
@@ -205,7 +222,7 @@ export class NotificationService {
   /**
    * Converter texto simples para HTML básico
    */
-  private textToHtml(text: string, systemName: string = 'FinanceHub'): string {
+  private textToHtml(text: string, systemName: string = 'Magen'): string {
     return `
 <!DOCTYPE html>
 <html>

@@ -25,3 +25,21 @@ export const authLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Muitas tentativas. Tente novamente em alguns minutos." },
 });
+
+/** Esqueci minha senha — mais restritivo (envia e-mail). */
+export const forgotPasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: Number(process.env.RATE_LIMIT_FORGOT_PASSWORD_MAX || 5),
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { message: "Muitas tentativas. Aguarde alguns minutos e tente novamente." },
+});
+
+/** Redefinir senha com token. */
+export const resetPasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: Number(process.env.RATE_LIMIT_RESET_PASSWORD_MAX || 20),
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { message: "Muitas tentativas. Aguarde alguns minutos e tente novamente." },
+});

@@ -28,6 +28,7 @@ export interface LinhaImport {
   formaDiaVencimento: number | null; // extraído de "· Venc. NN"
   valor: number;              // positivo
   tipo: "Despesa" | "Receita";
+  reembolsavel: boolean;      // compõe a fatura, mas fica fora das despesas/contas a pagar
 }
 
 export interface ErroLinha { linha: number; motivo: string; conteudo: string; }
@@ -88,6 +89,15 @@ function parseDescricao(v: any): string {
   const base = partes[0];
   const extras = partes.slice(1).filter((p) => p !== "—");
   return extras.length ? `${base} — ${extras.join(" · ")}` : base;
+}
+
+function detectarReembolsavel(descricao: string): boolean {
+  const texto = norm(descricao);
+  if (/\bdespesa\s+pai\b/.test(texto)) return false;
+  if (/\breembolso\s+pendente\b|\breembolsavel\b/.test(texto)) return true;
+  if (/\bnescon\b/.test(texto)) return true;
+  if (/\bigreja\b/.test(texto) && /\breembolso\b/.test(texto)) return true;
+  return false;
 }
 
 // "CC Inter PJ · Venc. 25" -> { nome: "CC Inter PJ", dia: 25, cartao: true }
@@ -194,6 +204,7 @@ export function parseLancamentos(buffer: Buffer): ParseResult {
       formaDiaVencimento: forma.dia,
       valor: val.valor,
       tipo: val.negativo ? "Despesa" : "Receita",
+      reembolsavel: val.negativo && detectarReembolsavel(descricao),
     });
   }
   return { linhas, erros };
@@ -204,12 +215,14 @@ export function parseLancamentos(buffer: Buffer): ParseResult {
 export interface PreviewResult {
   total: number;
   novasContasAPagar: number;
+  novosReembolsos: number;
+  totalReembolsavel: number;
   duplicadas: number;
   categoriasNovas: string[];
   formasNovas: { nome: string; cartao: boolean; diaVencimento: number | null }[];
   cartoesIncompletos: string[]; // cartões que ficarão sem limite/fechamento
   erros: ErroLinha[];
-  amostra: { vencimento: string; descricao: string; categoria: string; forma: string; valor: number }[];
+  amostra: { vencimento: string; descricao: string; categoria: string; forma: string; valor: number; reembolsavel: boolean }[];
 }
 
 export async function montarPreview(userId: number, walletId: number, parsed: ParseResult): Promise<PreviewResult> {
@@ -225,6 +238,9 @@ export async function montarPreview(userId: number, walletId: number, parsed: Pa
 
   const existentes = await chavesExistentes(walletId);
   let duplicadas = 0;
+  let novasContasAPagar = 0;
+  let novosReembolsos = 0;
+  let totalReembolsavel = 0;
 
   for (const l of linhas) {
     if (l.categoria && !categoriasExist.has(norm(l.categoria))) categoriasNovas.add(l.categoria);
@@ -237,12 +253,21 @@ export async function montarPreview(userId: number, walletId: number, parsed: Pa
         if (semDados) cartoesIncompletos.add(l.forma);
       }
     }
-    if (existentes.has(chave(l.vencimento, l.descricao, l.valor))) duplicadas++;
+    if (existentes.has(chave(l.vencimento, l.descricao, l.valor))) {
+      duplicadas++;
+    } else if (l.reembolsavel) {
+      novosReembolsos++;
+      totalReembolsavel += l.valor;
+    } else {
+      novasContasAPagar++;
+    }
   }
 
   return {
     total: linhas.length,
-    novasContasAPagar: linhas.length - duplicadas,
+    novasContasAPagar,
+    novosReembolsos,
+    totalReembolsavel: Math.round(totalReembolsavel * 100) / 100,
     duplicadas,
     categoriasNovas: [...categoriasNovas],
     formasNovas: [...formasNovas.values()],
@@ -250,7 +275,7 @@ export async function montarPreview(userId: number, walletId: number, parsed: Pa
     erros,
     amostra: linhas.slice(0, 20).map((l) => ({
       vencimento: l.vencimento, descricao: l.descricao, categoria: l.categoria || "Outros",
-      forma: l.forma || "—", valor: l.valor,
+      forma: l.forma || "—", valor: l.valor, reembolsavel: l.reembolsavel,
     })),
   };
 }
@@ -259,6 +284,7 @@ export async function montarPreview(userId: number, walletId: number, parsed: Pa
 
 export interface CommitResult {
   contasCriadas: number;
+  reembolsosCriados: number;
   duplicadasPuladas: number;
   categoriasCriadas: number;
   formasCriadas: number;
@@ -300,7 +326,7 @@ export async function commitImport(userId: number, walletId: number, parsed: Par
 
   // 3) Contas a pagar (transações Pendente + vencimento), com dedup.
   const existentes = await chavesExistentes(walletId);
-  let contasCriadas = 0, duplicadasPuladas = 0;
+  let contasCriadas = 0, reembolsosCriados = 0, duplicadasPuladas = 0;
   for (const l of linhas) {
     const k = chave(l.vencimento, l.descricao, l.valor);
     if (existentes.has(k)) { duplicadasPuladas++; continue; }
@@ -316,12 +342,14 @@ export async function commitImport(userId: number, walletId: number, parsed: Par
       data_vencimento: l.vencimento,
       descricao: l.descricao,
       status: "Pendente",
+      reembolsavel: l.reembolsavel,
     } as any);
     existentes.add(k); // evita duplicar dentro do próprio arquivo
-    contasCriadas++;
+    if (l.reembolsavel) reembolsosCriados++;
+    else contasCriadas++;
   }
 
-  return { contasCriadas, duplicadasPuladas, categoriasCriadas, formasCriadas, cartoesCriados, erros };
+  return { contasCriadas, reembolsosCriados, duplicadasPuladas, categoriasCriadas, formasCriadas, cartoesCriados, erros };
 }
 
 // -------- dedup helpers --------

@@ -51,8 +51,8 @@ async function addActivationMessage() {
       ) VALUES (
         'activated',
         'Sua conta foi ativada!',
-        'Olá {nome}! Temos uma ótima notícia: sua conta no FinanceHub foi ativada com sucesso! Agora você tem acesso completo a todos os recursos da plataforma. Aproveite para organizar suas finanças e alcançar seus objetivos financeiros.',
-        'Olá {nome}!\n\nSua conta no FinanceHub foi ativada com sucesso!\n\nAgora você tem acesso completo a todos os nossos recursos:\n• Controle total de receitas e despesas\n• Relatórios detalhados\n• Metas financeiras\n• E muito mais!\n\nAcesse agora mesmo e comece a transformar sua vida financeira: https://app.financehub.com.br\n\nQualquer dúvida, estamos à disposição.\n\nEquipe FinanceHub',
+        'Olá {nome}! Temos uma ótima notícia: sua conta no Magen foi ativada com sucesso! Agora você tem acesso completo a todos os recursos da plataforma. Aproveite para organizar suas finanças e alcançar seus objetivos financeiros.',
+        'Olá {nome}!\n\nSua conta no Magen foi ativada com sucesso!\n\nAgora você tem acesso completo a todos os nossos recursos:\n• Controle total de receitas e despesas\n• Relatórios detalhados\n• Metas financeiras\n• E muito mais!\n\nAcesse agora mesmo e comece a transformar sua vida financeira: https://app.controledinheiro.com.br\n\nQualquer dúvida, estamos à disposição.\n\nEquipe Magen',
         true,
         true
       ) ON CONFLICT (type) DO UPDATE SET

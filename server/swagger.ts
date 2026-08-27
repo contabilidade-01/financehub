@@ -5,11 +5,11 @@ import { Express, Request, Response } from 'express';
 const swaggerDocument = {
   openapi: '3.0.0',
   info: {
-    title: 'XPIRIA - API Completa de Controle Financeiro',
+    title: 'Magen - API Completa de Controle Financeiro',
     version: '2.0.0',
     description: 'API completa para gerenciamento de finanças pessoais com suporte a transações, categorias, métodos de pagamento, relatórios, gráficos e administração',
     contact: {
-      name: 'Suporte XPIRIA',
+      name: 'Suporte Magen',
       email: 'support@xpiria.com'
     }
   },

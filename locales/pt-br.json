@@ -730,7 +730,7 @@
         "theme_name_required": "Nome do tema é obrigatório"
       },
       "placeholders": {
-        "welcome_title": "Bem-vindo ao FinanceHub!",
+        "welcome_title": "Bem-vindo ao Magen!",
         "activation_title": "Ative sua conta para começar!",
         "activated_title": "Sua conta foi ativada!",
         "notification_title": "Digite o título da notificação",
@@ -858,7 +858,7 @@
     },
     "dashboard": {
       "header": {
-        "title": "Dashboard SaaS - FinanceHub",
+        "title": "Dashboard SaaS - Magen",
         "subtitle": "Visão geral administrativa da plataforma"
       },
       "toast": {
@@ -1293,7 +1293,7 @@
   "subscription": {
     "expired": {
       "title": "Assinatura Expirada",
-      "description": "Sua assinatura do FinanceHub expirou e o acesso foi suspenso",
+      "description": "Sua assinatura do Magen expirou e o acesso foi suspenso",
       "access_suspended": "Acesso Suspenso",
       "access_suspended_desc": "Sua conta foi automaticamente desativada devido ao vencimento da assinatura.",
       "how_to_renew": "Como Renovar",
@@ -1310,7 +1310,7 @@
       "access_blocked": "Sua assinatura expirou e o acesso aos recursos foi bloqueado",
       "expired_subscription": "Assinatura expirada",
       "date_label": "Data",
-      "renew_prompt": "Para continuar usando todos os recursos do FinanceHub Premium, renove sua assinatura ou entre em contato com o suporte.",
+      "renew_prompt": "Para continuar usando todos os recursos do Magen Premium, renove sua assinatura ou entre em contato com o suporte.",
       "renew_button": "Renovar Assinatura",
       "logout_button": "Sair da Conta"
     },
@@ -1345,7 +1345,7 @@
         "status_label": "Status",
         "status_value": "Ativa",
         "plan_label": "Plano",
-        "plan_value": "FinanceHub Premium",
+        "plan_value": "Magen Premium",
         "renewal_label": "Renovação",
         "renewal_value": "Mensal",
         "losses_title": "O que você perderá:",
@@ -1528,7 +1528,7 @@
   "billing": {
     "title": "Pagamentos",
     "checkout": {
-      "title": "Assinar FinanceHub",
+      "title": "Assinar Magen",
       "subtitle": "Complete seu cadastro e comece a usar",
       "select_plan": "Escolha seu plano",
       "personal_info": "Informações Pessoais",

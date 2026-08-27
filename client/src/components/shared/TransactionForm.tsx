@@ -48,6 +48,7 @@ const createTransactionFormSchema = (t: (key: string, fallback: string) => strin
   }),
   tipo: z.string().min(1, t('validation.type_required', 'Type is required')),
   data_transacao: z.string().min(1, t('validation.date_required', 'Date is required')),
+  reembolsavel: z.boolean().default(false),
 });
 
 type TransactionFormValues = z.infer<ReturnType<typeof createTransactionFormSchema>>;
@@ -93,6 +94,7 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
       forma_pagamento_id: pixPaymentMethod?.id || undefined,
       tipo: TransactionType.EXPENSE,
       data_transacao: formatDate(new Date(), "yyyy-MM-dd"),
+      reembolsavel: false,
     },
   });
   
@@ -105,6 +107,7 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
         categoria_id: transaction.categoria_id,
         forma_pagamento_id: transaction.forma_pagamento_id || pixPaymentMethod?.id || undefined,
         tipo: transaction.tipo,
+        reembolsavel: transaction.reembolsavel ?? false,
         data_transacao: typeof transaction.data_transacao === 'string' 
           ? transaction.data_transacao.split('T')[0]
           : formatDate(transaction.data_transacao, "yyyy-MM-dd"),
@@ -142,10 +145,15 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
       
       const transactionData = {
         ...data,
+        reembolsavel: data.tipo === TransactionType.EXPENSE && data.reembolsavel,
         valor: data.valor, // Manter como string como esperado pelo schema
         carteira_id: wallet.id,
         metodo_pagamento: selectedPaymentMethod?.nome || "PIX", // Use selected payment method name
-        status: TransactionStatus.COMPLETED // Valor padrão
+        status: transaction
+          ? transaction.status
+          : data.reembolsavel
+            ? TransactionStatus.PENDING
+            : TransactionStatus.COMPLETED
       };
       
       console.log("Dados enviados:", transactionData);
@@ -483,6 +491,33 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
               );
             }}
           />
+
+          {form.watch("tipo") === TransactionType.EXPENSE && (
+            <FormField
+              control={form.control}
+              name="reembolsavel"
+              render={({ field }) => (
+                <FormItem className="rounded-lg border border-blue-200 bg-blue-50/60 p-3 dark:border-blue-900 dark:bg-blue-950/30">
+                  <label className="flex cursor-pointer items-start gap-3">
+                    <FormControl>
+                      <input
+                        type="checkbox"
+                        checked={field.value}
+                        onChange={field.onChange}
+                        className="mt-1 h-4 w-4 rounded border-input accent-primary"
+                      />
+                    </FormControl>
+                    <span>
+                      <span className="block text-sm font-medium">Despesa reembolsável</span>
+                      <span className="block text-xs text-muted-foreground">
+                        Continua na fatura do cartão, mas vai para A Receber e não reduz seu saldo nem entra nos relatórios de despesas.
+                      </span>
+                    </span>
+                  </label>
+                </FormItem>
+              )}
+            />
+          )}
 
           <div className="flex justify-end pt-4">
             <Button type="submit" disabled={isSubmitting} className="w-full md:w-auto">

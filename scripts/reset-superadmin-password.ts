@@ -5,7 +5,7 @@
  * ============================================================
  *
  * Este script permite listar e alterar senhas de super admins
- * do sistema FinanceHub de forma segura via console.
+ * do sistema Magen de forma segura via console.
  *
  * @author Bruno D. Afonso
  * @website https://brunoafonso.dev
@@ -61,7 +61,7 @@ function printBanner() {
   print('║                                                            ║', 'cyan');
   print('║       🔐 RESET DE SENHA - SUPER ADMIN                      ║', 'cyan');
   print('║                                                            ║', 'cyan');
-  print('║       FinanceHub - Sistema de Gestão Financeira            ║', 'cyan');
+  print('║       Magen - Sistema de Gestão Financeira            ║', 'cyan');
   print('║                                                            ║', 'cyan');
   print('╠════════════════════════════════════════════════════════════╣', 'cyan');
   print('║  Autor: Bruno D. Afonso                                    ║', 'dim');

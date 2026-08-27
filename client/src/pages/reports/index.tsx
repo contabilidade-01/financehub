@@ -279,6 +279,7 @@ export default function ReportsPage() {
     const currentYear = now.getFullYear();
     
     return transactions.filter((transaction) => {
+      if (isExpenseType(transaction.tipo) && transaction.reembolsavel) return false;
       const transactionDate = new Date(transaction.data_transacao);
       const transMonth = transactionDate.getMonth();
       const transYear = transactionDate.getFullYear();

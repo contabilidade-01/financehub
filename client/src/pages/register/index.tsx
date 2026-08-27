@@ -180,7 +180,7 @@ export default function Register() {
                 <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-neon">
                   <i className="ri-line-chart-fill text-2xl text-white"></i>
                 </div>
-                <h1 className="text-3xl font-bold font-space mt-3">Finance<span className="text-secondary">Hub</span></h1>
+                <h1 className="text-3xl font-bold font-space mt-3">Magen</h1>
               </>
             )}
           </div>

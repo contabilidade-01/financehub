@@ -442,6 +442,95 @@ const STEPS: Step[] = [
       `);
     },
   },
+  {
+    // Reembolsável: gasto no cartão que NÃO é passivo do usuário (fica na fatura,
+    // some do saldo a pagar/fluxo e dos relatórios de despesa; rastreado como "a receber").
+    name: "transacoes: reembolsavel (gasto no cartão que não é meu para pagar)",
+    run: async () => {
+      await db.execute(sql`ALTER TABLE transacoes ADD COLUMN IF NOT EXISTS reembolsavel BOOLEAN NOT NULL DEFAULT false`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_transacoes_reembolsavel ON transacoes(carteira_id, reembolsavel)`);
+    },
+  },
+  {
+    name: "password_reset_tokens (recuperação de senha)",
+    run: async () => {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS password_reset_tokens (
+          id          SERIAL PRIMARY KEY,
+          token_hash  TEXT NOT NULL,
+          usuario_id  INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+          expires_at  TIMESTAMPTZ NOT NULL,
+          used_at     TIMESTAMPTZ,
+          created_at  TIMESTAMPTZ DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')
+        )
+      `);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_hash ON password_reset_tokens(token_hash)`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_usuario ON password_reset_tokens(usuario_id)`);
+    },
+  },
+  {
+    name: "rebrand: FinanceHub → Magen (system_settings)",
+    run: async () => {
+      await db.execute(sql`
+        UPDATE system_settings
+        SET setting_value = 'Magen'
+        WHERE setting_key = 'system_name'
+          AND setting_value IN ('FinanceHub', 'financehub')
+      `);
+      await db.execute(sql`
+        UPDATE system_settings
+        SET setting_value = 'magen'
+        WHERE setting_key = 'system_name_short'
+          AND lower(setting_value) = 'financehub'
+      `);
+      await db.execute(sql`
+        UPDATE system_settings
+        SET setting_value = 'https://app.controledinheiro.com.br'
+        WHERE setting_key = 'system_url'
+          AND (
+            setting_value ILIKE '%financehub%'
+            OR setting_value ILIKE '%xpiria%'
+            OR setting_value IS NULL
+            OR setting_value = ''
+          )
+      `);
+      await db.execute(sql`
+        UPDATE system_settings
+        SET setting_value = replace(setting_value, 'FinanceHub', 'Magen')
+        WHERE setting_key = 'system_description'
+          AND setting_value LIKE '%FinanceHub%'
+      `);
+      await db.execute(sql`
+        UPDATE system_settings
+        SET setting_value = 'suporte@controledinheiro.com.br'
+        WHERE setting_key = 'support_email'
+          AND setting_value ILIKE '%financehub%'
+      `);
+      try {
+        await db.execute(sql`
+          UPDATE custom_themes
+          SET name = 'Padrão Magen'
+          WHERE name = 'Padrão FinanceHub'
+        `);
+      } catch {
+        // tabela pode não existir em alguns ambientes
+      }
+      try {
+        await db.execute(sql`
+          UPDATE welcome_messages
+          SET
+            title = replace(title, 'FinanceHub', 'Magen'),
+            message = replace(message, 'FinanceHub', 'Magen'),
+            email_content = replace(email_content, 'FinanceHub', 'Magen')
+          WHERE title LIKE '%FinanceHub%'
+             OR message LIKE '%FinanceHub%'
+             OR email_content LIKE '%FinanceHub%'
+        `);
+      } catch {
+        // tabela pode não existir
+      }
+    },
+  },
 ];
 
 export async function runAutoMigrations(): Promise<void> {

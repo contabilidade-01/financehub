@@ -25,6 +25,8 @@ import Dashboard from "@/pages/dashboard";
 import Transactions from "@/pages/transactions";
 import Categories from "@/pages/categories";
 import Settings from "@/pages/settings";
+import ForgotPassword from "@/pages/forgot-password";
+import ResetPassword from "@/pages/reset-password";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
 import NotFound from "@/pages/not-found";
@@ -61,6 +63,7 @@ import PjRouter from "@/pages/pj/PjRouter";
 import MetasPage from "@/pages/metas";
 import ContasPagarPage from "@/pages/contas-pagar";
 import ImportarLancamentos from "@/pages/importar";
+import ReembolsosPage from "@/pages/reembolsos";
 
 function Router() {
   const [location] = useLocation();
@@ -108,7 +111,13 @@ function Router() {
   }
 
   // Handle unauthenticated users
-  let isPublicRoute = location === "/" || location === "/register" || location === "/subscription-expired" || location.startsWith("/checkout/plans");
+  let isPublicRoute =
+    location === "/" ||
+    location === "/register" ||
+    location === "/forgot-password" ||
+    location === "/reset-password" ||
+    location === "/subscription-expired" ||
+    location.startsWith("/checkout/plans");
 
   // Adicionar /setup apenas se estiver em modo setup
   if (isSetupMode) {
@@ -133,6 +142,8 @@ function Router() {
           <>
             <Route path="/" component={Login} />
             <Route path="/register" component={Register} />
+            <Route path="/forgot-password" component={ForgotPassword} />
+            <Route path="/reset-password" component={ResetPassword} />
             <Route path="/subscription-expired" component={SubscriptionExpired} />
             <Route path="/checkout/plans" component={ExternalCheckout} />
             {isSetupMode && <Route path="/setup" component={SetupWizard} />}
@@ -194,6 +205,11 @@ function Router() {
             <Route path="/contas-pagar">
               <MainLayout>
                 <ContasPagarPage />
+              </MainLayout>
+            </Route>
+            <Route path="/reembolsos">
+              <MainLayout>
+                <ReembolsosPage />
               </MainLayout>
             </Route>
             <Route path="/importar">

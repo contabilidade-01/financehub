@@ -379,7 +379,7 @@ export class DbStorage implements IStorage {
       const result = await db.execute(sql`
         SELECT COALESCE(SUM(
           CASE WHEN tipo = 'Receita' THEN valor::numeric 
-               WHEN tipo = 'Despesa' THEN -valor::numeric 
+               WHEN tipo = 'Despesa' AND COALESCE(reembolsavel, false) = false THEN -valor::numeric
                ELSE 0 END
         ), 0) as balance
         FROM transacoes
@@ -661,6 +661,7 @@ export class DbStorage implements IStorage {
       descricao: transactions.descricao,
       metodo_pagamento: paymentMethods.nome,
       status: transactions.status,
+      reembolsavel: transactions.reembolsavel,
       categoria_name: categories.nome
     })
       .from(transactions)
@@ -685,6 +686,7 @@ export class DbStorage implements IStorage {
       descricao: transactions.descricao,
       metodo_pagamento: paymentMethods.nome,
       status: transactions.status,
+      reembolsavel: transactions.reembolsavel,
       categoria_name: categories.nome
     })
       .from(transactions)
@@ -710,6 +712,7 @@ export class DbStorage implements IStorage {
       descricao: transactions.descricao,
       metodo_pagamento: paymentMethods.nome,
       status: transactions.status,
+      reembolsavel: transactions.reembolsavel,
       categoria_name: categories.nome
     })
       .from(transactions)
@@ -764,7 +767,7 @@ export class DbStorage implements IStorage {
           EXTRACT(MONTH FROM data_transacao) as month_num,
           EXTRACT(YEAR FROM data_transacao) as year,
           SUM(CASE WHEN tipo = 'Receita' THEN valor ELSE 0 END) as income,
-          SUM(CASE WHEN tipo = 'Despesa' THEN valor ELSE 0 END) as expense
+          SUM(CASE WHEN tipo = 'Despesa' AND COALESCE(reembolsavel, false) = false THEN valor ELSE 0 END) as expense
         FROM transacoes
         WHERE
           carteira_id = ${walletId}
@@ -798,6 +801,7 @@ export class DbStorage implements IStorage {
         WHERE
           t.carteira_id = ${walletId}
           AND t.tipo = 'Despesa'
+          AND COALESCE(t.reembolsavel, false) = false
           AND t.data_transacao >= ${startDate.toISOString()}
           AND t.data_transacao <= ${endDate.toISOString()}
         GROUP BY c.id, c.nome, c.cor, c.icone
@@ -819,7 +823,7 @@ export class DbStorage implements IStorage {
       const result = await db.execute(sql`
         SELECT
           SUM(CASE WHEN tipo = 'Receita' THEN valor ELSE 0 END) as total_income,
-          SUM(CASE WHEN tipo = 'Despesa' THEN valor ELSE 0 END) as total_expenses
+          SUM(CASE WHEN tipo = 'Despesa' AND COALESCE(reembolsavel, false) = false THEN valor ELSE 0 END) as total_expenses
         FROM transacoes
         WHERE
           carteira_id = ${walletId}
@@ -849,7 +853,7 @@ export class DbStorage implements IStorage {
           w.usuario_id as user_id,
           COALESCE(SUM(
             CASE WHEN t.tipo = 'Receita' THEN t.valor::numeric 
-                 WHEN t.tipo = 'Despesa' THEN -t.valor::numeric 
+                 WHEN t.tipo = 'Despesa' AND COALESCE(t.reembolsavel, false) = false THEN -t.valor::numeric
                  ELSE 0 END
           ), 0) as balance,
           COUNT(t.id) as transaction_count
@@ -2112,6 +2116,7 @@ export async function verificarOrcamentos(userId: number, walletId: number): Pro
       WHERE carteira_id = ${walletId}
         AND categoria_id = ${limite.categoria_id}
         AND tipo = 'Despesa'
+        AND COALESCE(reembolsavel, false) = false
         AND data_transacao >= ${de}
         AND data_transacao <= ${ate}
     `);
@@ -2260,7 +2265,7 @@ export async function getFaturaCartao(cartaoId: number, walletId: number): Promi
   }
 
   const rows = await db.execute(sql`
-    SELECT t.id, t.descricao, t.valor, t.data_transacao, c.nome AS categoria
+    SELECT t.id, t.descricao, t.valor, t.data_transacao, t.reembolsavel, c.nome AS categoria
     FROM transacoes t
     LEFT JOIN categorias c ON t.categoria_id = c.id
     WHERE t.carteira_id = ${walletId}
@@ -2320,6 +2325,7 @@ export async function getContasAPagar(walletId: number, status?: 'pendente' | 'a
       LEFT JOIN categorias c ON t.categoria_id = c.id
       WHERE t.carteira_id = ${walletId}
         AND t.status = 'Pendente'
+        AND COALESCE(t.reembolsavel, false) = false
         AND t.data_vencimento IS NOT NULL
       ORDER BY t.data_vencimento ASC
     `);
@@ -2369,6 +2375,39 @@ export async function marcarRecorrente(transacaoId: number, recorrente: boolean)
   return (result as any[])[0];
 }
 
+/**
+ * Lista gastos de terceiros lançados no cartão e ainda não reembolsados.
+ * Eles continuam compondo a fatura, mas não são obrigação nem despesa pessoal.
+ */
+export async function getReembolsosAReceber(walletId: number): Promise<any[]> {
+  const rows = await db.execute(sql`
+    SELECT t.id, t.descricao, t.valor, t.data_transacao, t.data_vencimento,
+           t.status, t.data_pagamento AS recebido_em,
+           c.nome AS categoria, fp.nome AS forma_pagamento
+    FROM transacoes t
+    LEFT JOIN categorias c ON t.categoria_id = c.id
+    LEFT JOIN formas_pagamento fp ON t.forma_pagamento_id = fp.id
+    WHERE t.carteira_id = ${walletId}
+      AND COALESCE(t.reembolsavel, false) = true
+      AND t.status = 'Pendente'
+    ORDER BY COALESCE(t.data_vencimento, t.data_transacao) ASC, t.id ASC
+  `);
+  return rows as any[];
+}
+
+export async function marcarReembolsoRecebido(transacaoId: number, walletId: number): Promise<any> {
+  const today = new Date().toISOString().slice(0, 10);
+  const result = await db.execute(sql`
+    UPDATE transacoes
+    SET status = 'Efetivada', data_pagamento = ${today}
+    WHERE id = ${transacaoId}
+      AND carteira_id = ${walletId}
+      AND COALESCE(reembolsavel, false) = true
+    RETURNING *
+  `);
+  return (result as any[])[0];
+}
+
 export async function getFluxoCaixaResumo(walletId: number, mes?: number, ano?: number): Promise<{
   renda: number;
   dizimos: number;
@@ -2401,6 +2440,7 @@ export async function getFluxoCaixaResumo(walletId: number, mes?: number, ano?: 
     FROM transacoes t
     JOIN categorias c ON t.categoria_id = c.id
     WHERE t.carteira_id = ${walletId} AND t.tipo = 'Despesa'
+      AND COALESCE(t.reembolsavel, false) = false
       AND (c.nome ILIKE '%dízimo%' OR c.nome ILIKE '%dizimo%' OR c.nome ILIKE '%oferta%')
       AND t.data_transacao >= ${de} AND t.data_transacao <= ${ate}
   `);
@@ -2421,6 +2461,7 @@ export async function getFluxoCaixaResumo(walletId: number, mes?: number, ano?: 
   const fixasRows = await db.execute(sql`
     SELECT COALESCE(SUM(valor::numeric), 0) AS total
     FROM transacoes WHERE carteira_id = ${walletId} AND tipo = 'Despesa'
+      AND COALESCE(reembolsavel, false) = false
       AND (recorrente = true OR classificacao_despesa = 'fixa')
       AND data_transacao >= ${de} AND data_transacao <= ${ate}
   `);
@@ -2432,6 +2473,7 @@ export async function getFluxoCaixaResumo(walletId: number, mes?: number, ano?: 
     FROM transacoes t
     LEFT JOIN categorias c ON t.categoria_id = c.id
     WHERE t.carteira_id = ${walletId} AND t.tipo = 'Despesa'
+      AND COALESCE(t.reembolsavel, false) = false
       AND (t.recorrente = false OR t.recorrente IS NULL)
       AND (t.classificacao_despesa IS NULL OR t.classificacao_despesa = 'variavel')
       AND NOT (c.nome ILIKE '%dízimo%' OR c.nome ILIKE '%dizimo%' OR c.nome ILIKE '%oferta%')
@@ -2445,6 +2487,7 @@ export async function getFluxoCaixaResumo(walletId: number, mes?: number, ano?: 
       COUNT(*) FILTER (WHERE data_vencimento IS NOT NULL AND status = 'Pendente') AS pendentes,
       COUNT(*) FILTER (WHERE data_vencimento < ${today} AND status = 'Pendente') AS atrasadas
     FROM transacoes WHERE carteira_id = ${walletId}
+      AND COALESCE(reembolsavel, false) = false
   `);
   const pendentes = parseInt((pendentesRows as any[])[0]?.pendentes) || 0;
   const atrasadas = parseInt((pendentesRows as any[])[0]?.atrasadas) || 0;
@@ -2477,11 +2520,12 @@ export async function getDailySummary(walletId: number, date: string): Promise<{
   const rows = await db.execute(sql`
     SELECT
       COALESCE(SUM(CASE WHEN tipo = 'Receita' THEN valor::numeric ELSE 0 END), 0) AS receita,
-      COALESCE(SUM(CASE WHEN tipo = 'Despesa' THEN valor::numeric ELSE 0 END), 0) AS despesa,
+      COALESCE(SUM(CASE WHEN tipo = 'Despesa' AND COALESCE(reembolsavel, false) = false THEN valor::numeric ELSE 0 END), 0) AS despesa,
       COUNT(*) AS qtd
     FROM transacoes
     WHERE carteira_id = ${walletId}
       AND data_transacao = ${date}
+      AND (tipo <> 'Despesa' OR COALESCE(reembolsavel, false) = false)
   `);
   const row = (rows as any[])[0] || { receita: 0, despesa: 0, qtd: 0 };
   const receita = parseFloat(row.receita) || 0;
@@ -2493,12 +2537,13 @@ export async function getPeriodSummary(walletId: number, de: string, ate: string
   const rows = await db.execute(sql`
     SELECT
       COALESCE(SUM(CASE WHEN tipo = 'Receita' THEN valor::numeric ELSE 0 END), 0) AS receita,
-      COALESCE(SUM(CASE WHEN tipo = 'Despesa' THEN valor::numeric ELSE 0 END), 0) AS despesa,
+      COALESCE(SUM(CASE WHEN tipo = 'Despesa' AND COALESCE(reembolsavel, false) = false THEN valor::numeric ELSE 0 END), 0) AS despesa,
       COUNT(*) AS qtd
     FROM transacoes
     WHERE carteira_id = ${walletId}
       AND data_transacao >= ${de}
       AND data_transacao <= ${ate}
+      AND (tipo <> 'Despesa' OR COALESCE(reembolsavel, false) = false)
   `);
   const row = (rows as any[])[0] || { receita: 0, despesa: 0, qtd: 0 };
   const receita = parseFloat(row.receita) || 0;
@@ -2533,6 +2578,7 @@ export async function getCategoryBreakdown(walletId: number, de: string, ate: st
     WHERE t.carteira_id = ${walletId}
       AND t.data_transacao >= ${de}
       AND t.data_transacao <= ${ate}
+      AND (t.tipo <> 'Despesa' OR COALESCE(t.reembolsavel, false) = false)
     GROUP BY c.nome, t.tipo
     ORDER BY total DESC
   `);
@@ -2952,6 +2998,7 @@ export async function getStatusOrcamentoCategoria(
     const gRows = await db.execute(sql`
       SELECT COALESCE(SUM(valor::numeric), 0) AS total FROM transacoes
       WHERE carteira_id = ${walletId} AND categoria_id = ${categoriaId} AND tipo = 'Despesa'
+        AND COALESCE(reembolsavel, false) = false
         AND data_transacao >= ${de} AND data_transacao <= ${ate}
     `);
     const gasto = parseFloat((gRows as any[])[0]?.total) || 0;

@@ -246,7 +246,7 @@ export default function AdminDashboard() {
       <div>
         <h1 className={`text-3xl font-bold mb-2 flex items-center gap-2 ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}> 
           <Shield className="h-8 w-8 text-purple-500" />
-          {t("admin.dashboard.header.title", "Dashboard SaaS - FinanceHub")}
+          {t("admin.dashboard.header.title", "Dashboard SaaS - Magen")}
         </h1>
         <p className={`${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>
           {t("admin.dashboard.header.subtitle", "Visão geral administrativa da plataforma")}

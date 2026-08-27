@@ -7,16 +7,19 @@ import { Upload, CreditCard, Tag, FileWarning, CheckCircle2, AlertCircle } from 
 interface PreviewResult {
   total: number;
   novasContasAPagar: number;
+  novosReembolsos: number;
+  totalReembolsavel: number;
   duplicadas: number;
   categoriasNovas: string[];
   formasNovas: { nome: string; cartao: boolean; diaVencimento: number | null }[];
   cartoesIncompletos: string[];
   erros: { linha: number; motivo: string; conteudo: string }[];
-  amostra: { vencimento: string; descricao: string; categoria: string; forma: string; valor: number }[];
+  amostra: { vencimento: string; descricao: string; categoria: string; forma: string; valor: number; reembolsavel: boolean }[];
 }
 
 interface CommitResult {
   contasCriadas: number;
+  reembolsosCriados: number;
   duplicadasPuladas: number;
   categoriasCriadas: number;
   formasCriadas: number;
@@ -78,8 +81,8 @@ export default function ImportarLancamentos() {
       <div>
         <h1 className="text-3xl font-bold">📥 Importar Lançamentos</h1>
         <p className="text-muted-foreground">
-          Suba sua planilha de controle (.xlsx ou .csv). Cada linha vira uma <b>conta a pagar</b>;
-          formas de pagamento e <b>cartões são criados automaticamente</b> e vinculados.
+          Suba sua planilha de controle (.xlsx ou .csv). Despesas comuns viram <b>contas a pagar</b>;
+          linhas com “reembolso pendente” vão para <b>A Receber</b> e continuam compondo a fatura do cartão.
         </p>
       </div>
 
@@ -92,8 +95,9 @@ export default function ImportarLancamentos() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
               <Stat n={result.contasCriadas} label="Contas a pagar" tone="green" />
+              <Stat n={result.reembolsosCriados} label="A receber" tone="blue" />
               <Stat n={result.cartoesCriados} label="Cartões criados" tone="blue" />
               <Stat n={result.categoriasCriadas} label="Categorias novas" tone="amber" />
               <Stat n={result.duplicadasPuladas} label="Duplicadas (puladas)" tone="muted" />
@@ -103,7 +107,9 @@ export default function ImportarLancamentos() {
             )}
             <div className="flex gap-2">
               <Button variant="outline" className="flex-1" onClick={reset}>Importar outra</Button>
-              <Button className="flex-1" onClick={() => (window.location.href = "/contas-pagar")}>Ver Contas a Pagar</Button>
+              <Button className="flex-1" onClick={() => (window.location.href = result.reembolsosCriados ? "/reembolsos" : "/contas-pagar")}>
+                {result.reembolsosCriados ? "Ver A Receber" : "Ver Contas a Pagar"}
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -150,12 +156,22 @@ export default function ImportarLancamentos() {
                 <CardTitle>Pré-visualização</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                   <Stat n={preview.novasContasAPagar} label="Contas a pagar" tone="green" />
+                  <Stat n={preview.novosReembolsos} label="A receber" tone="blue" />
                   <Stat n={preview.formasNovas.length} label="Formas/cartões novos" tone="blue" />
                   <Stat n={preview.categoriasNovas.length} label="Categorias novas" tone="amber" />
                   <Stat n={preview.duplicadas} label="Duplicadas (pular)" tone="muted" />
                 </div>
+
+                {preview.novosReembolsos > 0 && (
+                  <div className="flex items-start gap-2 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-lg p-3 text-sm text-blue-800 dark:text-blue-300">
+                    <CreditCard className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                    <span>
+                      {preview.novosReembolsos} lançamento(s), total de {fmt(preview.totalReembolsavel)}, ficarão na fatura do cartão e em A Receber, sem afetar seu fluxo de caixa.
+                    </span>
+                  </div>
+                )}
 
                 {preview.formasNovas.length > 0 && (
                   <Bloco icon={<CreditCard className="h-4 w-4" />} titulo="Formas e cartões que serão criados">
@@ -203,7 +219,10 @@ export default function ImportarLancamentos() {
                       {preview.amostra.map((l, i) => (
                         <tr key={i} className="border-t">
                           <td className="p-2 whitespace-nowrap">{new Date(l.vencimento + "T00:00:00").toLocaleDateString("pt-BR")}</td>
-                          <td className="p-2">{l.descricao}</td>
+                          <td className="p-2">
+                            {l.descricao}
+                            {l.reembolsavel && <Badge variant="secondary" className="ml-2 text-[10px]">A receber</Badge>}
+                          </td>
                           <td className="p-2">{l.categoria}</td>
                           <td className="p-2">{l.forma}</td>
                           <td className="p-2 text-right whitespace-nowrap">{fmt(l.valor)}</td>
@@ -218,8 +237,8 @@ export default function ImportarLancamentos() {
 
                 <div className="flex gap-2">
                   <Button variant="outline" className="flex-1" onClick={reset}>Cancelar</Button>
-                  <Button className="flex-1" onClick={confirmar} disabled={loading || preview.novasContasAPagar === 0}>
-                    {loading ? "Importando..." : `Confirmar importação (${preview.novasContasAPagar})`}
+                  <Button className="flex-1" onClick={confirmar} disabled={loading || (preview.novasContasAPagar + preview.novosReembolsos) === 0}>
+                    {loading ? "Importando..." : `Confirmar importação (${preview.novasContasAPagar + preview.novosReembolsos})`}
                   </Button>
                 </div>
               </CardContent>

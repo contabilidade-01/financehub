@@ -39,7 +39,7 @@ INSERT INTO custom_themes (
   is_default
 ) 
 SELECT 
-  'Padrão FinanceHub',
+  'Padrão Magen',
   '{
     "background": "0 0% 98%",
     "foreground": "240 10% 3.9%", 

@@ -561,7 +561,7 @@ export async function updateUserStatus(req: Request, res: Response) {
         const webhookData = {
           evento: "usuario_ativado",
           timestamp: new Date().toISOString(),
-          dominio: process.env.BASE_URL || 'https://financehub.xpiria.com.br',
+          dominio: process.env.BASE_URL || 'https://app.controledinheiro.com.br',
           id: updatedUser.id,
           nome: updatedUser.nome,
           email: updatedUser.email,
@@ -1148,7 +1148,7 @@ export async function updateUser(req: Request, res: Response) {
         const webhookData = {
           evento: "usuario_ativado",
           timestamp: new Date().toISOString(),
-          dominio: process.env.BASE_URL || 'https://financehub.xpiria.com.br',
+          dominio: process.env.BASE_URL || 'https://app.controledinheiro.com.br',
           id: updatedUser.id,
           nome: updatedUser.nome,
           email: updatedUser.email,
@@ -1405,7 +1405,7 @@ export async function gerarLinkCobranca(req: Request, res: Response) {
     const user = await storage.getUserById(userId);
     if (!user) return res.status(404).json({ error: "Usuário não encontrado" });
     const token = generateCheckoutToken(user.id, user.email, ciclo);
-    const baseUrl = process.env.BASE_URL || "https://financehub.xpiria.com.br";
+    const baseUrl = process.env.BASE_URL || "https://app.controledinheiro.com.br";
     const url = `${baseUrl}/checkout/plans?tokenaccess=${encodeURIComponent(token)}`;
     return res.json({ url, ciclo });
   } catch (err) {
@@ -1426,7 +1426,7 @@ export async function exportUsersCsv(req: Request, res: Response) {
       csv += `"${u.id}","${u.nome || ''}","${u.email || ''}","${u.telefone || ''}","${u.tipo_usuario}","${(u as any).tipo_pessoa || 'fisica'}","${u.ativo}","${u.status_assinatura || ''}","${u.data_cadastro || ''}"\n`;
     }
     res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename="usuarios_financehub.csv"');
+    res.setHeader('Content-Disposition', 'attachment; filename="usuarios_magen.csv"');
     return res.send(csv);
   } catch (err) {
     console.error("exportUsersCsv:", err);
@@ -1452,7 +1452,7 @@ export async function exportTransactionsCsv(req: Request, res: Response) {
       }
     }
     res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename="transacoes_financehub.csv"');
+    res.setHeader('Content-Disposition', 'attachment; filename="transacoes_magen.csv"');
     return res.send(csv);
   } catch (err) {
     console.error("exportTransactionsCsv:", err);

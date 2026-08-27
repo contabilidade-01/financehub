@@ -157,7 +157,7 @@ function SystemConfigSection() {
             id="system_name"
             value={formData.system_name}
             onChange={(e) => handleChange('system_name', e.target.value)}
-            placeholder="FinanceHub"
+            placeholder="Magen"
             maxLength={100}
           />
           <p className="text-xs text-muted-foreground">
@@ -174,7 +174,7 @@ function SystemConfigSection() {
             id="system_name_short"
             value={formData.system_name_short}
             onChange={(e) => handleChange('system_name_short', e.target.value.toLowerCase())}
-            placeholder="financehub"
+            placeholder="magen"
             maxLength={50}
             pattern="[a-z0-9_-]+"
           />
@@ -193,7 +193,7 @@ function SystemConfigSection() {
             type="email"
             value={formData.support_email}
             onChange={(e) => handleChange('support_email', e.target.value)}
-            placeholder="suporte@financehub.com"
+            placeholder="suporte@controledinheiro.com.br"
           />
           <p className="text-xs text-muted-foreground">
             {t('admin.customize.support_email_help', 'Email de contato exibido aos usuários')}
@@ -210,7 +210,7 @@ function SystemConfigSection() {
             type="url"
             value={formData.system_url}
             onChange={(e) => handleChange('system_url', e.target.value)}
-            placeholder="https://financehub.com"
+            placeholder="https://app.controledinheiro.com.br"
           />
           <p className="text-xs text-muted-foreground">
             {t('admin.customize.system_url_help', 'URL principal do sistema')}
@@ -2360,7 +2360,7 @@ export default function CustomizePage() {
                           <label className="block text-sm font-medium mb-2 text-green-800 dark:text-green-200">{t('admin.customize.message_title', 'Título da Mensagem')}</label>
                           <input 
                             type="text" 
-                            placeholder={t('admin.customize.placeholders.welcome_title', 'Bem-vindo ao FinanceHub!')} 
+                            placeholder={t('admin.customize.placeholders.welcome_title', 'Bem-vindo ao Magen!')} 
                             className="w-full px-3 py-2 border border-green-300 rounded-md bg-white dark:bg-gray-800"
                             value={welcomeMessages.new_user?.title || ''}
                             onChange={(e) => setWelcomeMessages(prev => ({
@@ -2372,7 +2372,7 @@ export default function CustomizePage() {
                       <div>
                         <label className="block text-sm font-medium mb-2 text-green-800 dark:text-green-200">{t('admin.customize.message_content', 'Conteúdo da Mensagem')}</label>
                         <textarea 
-                          placeholder="Olá {nome}! Seja bem-vindo ao FinanceHub. Estamos felizes em tê-lo conosco. Aqui você encontrará todas as ferramentas necessárias para gerenciar suas finanças de forma eficiente e organizada."
+                          placeholder="Olá {nome}! Seja bem-vindo ao Magen. Estamos felizes em tê-lo conosco. Aqui você encontrará todas as ferramentas necessárias para gerenciar suas finanças de forma eficiente e organizada."
                           rows={6}
                           className="w-full px-3 py-2 border border-green-300 rounded-md bg-white dark:bg-gray-800"
                           value={welcomeMessages.new_user?.message || ''}
@@ -2388,7 +2388,7 @@ export default function CustomizePage() {
                       <div>
                         <label className="block text-sm font-medium mb-2 text-green-800 dark:text-green-200">{t('admin.customize.welcome_email', 'Email de Boas Vindas')}</label>
                         <textarea 
-                          placeholder="Olá {nome}, seja bem-vindo ao FinanceHub! Sua conta foi criada com sucesso. Acesse nossa plataforma para começar a gerenciar suas finanças de forma inteligente."
+                          placeholder="Olá {nome}, seja bem-vindo ao Magen! Sua conta foi criada com sucesso. Acesse nossa plataforma para começar a gerenciar suas finanças de forma inteligente."
                           rows={4}
                           className="w-full px-3 py-2 border border-green-300 rounded-md bg-white dark:bg-gray-800"
                           value={welcomeMessages.new_user?.email_content || ''}
@@ -2444,7 +2444,7 @@ export default function CustomizePage() {
                       <div>
                         <label className="block text-sm font-medium mb-2 text-orange-800 dark:text-orange-200">{t('admin.customize.message_content', 'Conteúdo da Mensagem')}</label>
                         <textarea 
-                          placeholder="Olá {nome}! Sua conta foi criada com sucesso, mas ainda não está ativa. Para acessar todos os recursos do FinanceHub, você precisa ativar sua assinatura. Clique no botão abaixo para efetuar o pagamento e começar a usar nossa plataforma."
+                          placeholder="Olá {nome}! Sua conta foi criada com sucesso, mas ainda não está ativa. Para acessar todos os recursos do Magen, você precisa ativar sua assinatura. Clique no botão abaixo para efetuar o pagamento e começar a usar nossa plataforma."
                           rows={6}
                           className="w-full px-3 py-2 border border-orange-300 rounded-md bg-white dark:bg-gray-800"
                           value={welcomeMessages.inactive_user?.message || ''}
@@ -2461,7 +2461,7 @@ export default function CustomizePage() {
                         <label className="block text-sm font-medium mb-2 text-orange-800 dark:text-orange-200">Link de Pagamento</label>
                         <input 
                           type="text" 
-                          placeholder="https://financehub.com.br/pagamento" 
+                          placeholder="https://controledinheiro.com.br/pagamento" 
                           className="w-full px-3 py-2 border border-orange-300 rounded-md bg-white dark:bg-gray-800"
                           value={welcomeMessages.inactive_user?.payment_link || ''}
                           onChange={(e) => setWelcomeMessages(prev => ({
@@ -2476,7 +2476,7 @@ export default function CustomizePage() {
                       <div>
                         <label className="block text-sm font-medium mb-2 text-orange-800 dark:text-orange-200">Email de Ativação</label>
                         <textarea 
-                          placeholder="Olá {nome}, sua conta no FinanceHub foi criada com sucesso! Para começar a usar todos os recursos, você precisa ativar sua assinatura. Acesse o link abaixo para efetuar o pagamento: {link_pagamento}"
+                          placeholder="Olá {nome}, sua conta no Magen foi criada com sucesso! Para começar a usar todos os recursos, você precisa ativar sua assinatura. Acesse o link abaixo para efetuar o pagamento: {link_pagamento}"
                           rows={4}
                           className="w-full px-3 py-2 border border-orange-300 rounded-md bg-white dark:bg-gray-800"
                           value={welcomeMessages.inactive_user?.email_content || ''}
@@ -2533,7 +2533,7 @@ export default function CustomizePage() {
                       <div>
                         <label className="block text-sm font-medium mb-2 text-blue-800 dark:text-blue-200">{t('admin.customize.message_content', 'Conteúdo da Mensagem')}</label>
                         <textarea 
-                          placeholder="Olá {nome}! Temos uma ótima notícia: sua conta no FinanceHub foi ativada com sucesso! Agora você tem acesso completo a todos os recursos da plataforma."
+                          placeholder="Olá {nome}! Temos uma ótima notícia: sua conta no Magen foi ativada com sucesso! Agora você tem acesso completo a todos os recursos da plataforma."
                           rows={6}
                           className="w-full px-3 py-2 border border-blue-300 rounded-md bg-white dark:bg-gray-800"
                           value={welcomeMessages.activated?.message || ''}
@@ -2549,7 +2549,7 @@ export default function CustomizePage() {
                       <div>
                         <label className="block text-sm font-medium mb-2 text-blue-800 dark:text-blue-200">Conteúdo do Email</label>
                         <textarea 
-                          placeholder="Olá {nome}!\n\nSua conta no FinanceHub foi ativada com sucesso!\n\nAgora você tem acesso completo a todos os nossos recursos."
+                          placeholder="Olá {nome}!\n\nSua conta no Magen foi ativada com sucesso!\n\nAgora você tem acesso completo a todos os nossos recursos."
                           rows={4}
                           className="w-full px-3 py-2 border border-blue-300 rounded-md bg-white dark:bg-gray-800"
                           value={welcomeMessages.activated?.email_content || ''}
@@ -2720,7 +2720,7 @@ export default function CustomizePage() {
                         <label className="block text-sm font-medium mb-2">Nome da Sessão</label>
                         <input
                           type="text"
-                          placeholder="financehub"
+                          placeholder="magen"
                           className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white dark:bg-gray-800"
                           value={wahaConfig.session_name || ''}
                           onChange={(e) => setWahaConfig(prev => ({ ...prev, session_name: e.target.value }))}

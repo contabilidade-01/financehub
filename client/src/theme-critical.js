@@ -205,7 +205,7 @@
         loadingDiv.innerHTML = `
           <div class="critical-loading-content">
             <div class="critical-spinner"></div>
-            <h2 style="margin: 0 0 8px 0; font-size: 18px; font-weight: 600;">FinanceHub</h2>
+            <h2 style="margin: 0 0 8px 0; font-size: 18px; font-weight: 600;">Magen</h2>
             <p style="margin: 0; font-size: 14px; opacity: 0.7;">${loadingText}</p>
           </div>
         `;
@@ -224,7 +224,7 @@
   loadingDiv.innerHTML = `
     <div class="critical-loading-content">
       <div class="critical-spinner"></div>
-      <h2 style="margin: 0 0 8px 0; font-size: 18px; font-weight: 600;">FinanceHub</h2>
+      <h2 style="margin: 0 0 8px 0; font-size: 18px; font-weight: 600;">Magen</h2>
       <p style="margin: 0; font-size: 14px; opacity: 0.7;">${loadingText}</p>
     </div>
   `;

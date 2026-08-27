@@ -514,7 +514,7 @@ router.get('/active/current', async (req, res) => {
     if (result.length === 0) {
       // Retornar tema padrão hardcoded
       const defaultTheme = {
-        name: 'Padrão FinanceHub',
+        name: 'Padrão Magen',
         lightConfig: {
           background: '0 0% 98%',
           foreground: '240 10% 3.9%',

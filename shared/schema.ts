@@ -32,6 +32,18 @@ export const users = pgTable("usuarios", {
   subscriptionActive: boolean("subscription_active").notNull().default(false)
 });
 
+/** Tokens de recuperação de senha (mesmo padrão do nescon-clientes). */
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: serial("id").primaryKey(),
+  token_hash: text("token_hash").notNull(),
+  usuario_id: integer("usuario_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  expires_at: timestamp("expires_at", { withTimezone: true }).notNull(),
+  used_at: timestamp("used_at", { withTimezone: true }),
+  created_at: timestamp("created_at", { withTimezone: true }).default(
+    sql`(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')`
+  ),
+});
+
 // Wallets table
 export const wallets = pgTable("carteiras", {
   id: serial("id").primaryKey(),
@@ -94,7 +106,11 @@ export const transactions = pgTable("transacoes", {
   data_vencimento: date("data_vencimento"),                                    // quando a conta vence
   data_pagamento: date("data_pagamento"),                                      // quando foi efetivamente paga
   recorrente: boolean("recorrente").notNull().default(false),                  // despesa fixa mensal
-  classificacao_despesa: varchar("classificacao_despesa", { length: 20 })      // 'fixa' | 'variavel' | null
+  classificacao_despesa: varchar("classificacao_despesa", { length: 20 }),     // 'fixa' | 'variavel' | null
+  // Reembolsável: está no cartão (compõe a fatura), mas NÃO é passivo do usuário
+  // — fica fora do "saldo a pagar"/fluxo e dos relatórios de despesa; é rastreada
+  // como "a receber" (ex.: gasto da Nescon que será reembolsado).
+  reembolsavel: boolean("reembolsavel").notNull().default(false)
 });
 
 // API Tokens table

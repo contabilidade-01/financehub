@@ -139,7 +139,7 @@ export default function Login() {
                 <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-neon">
                   <i className="ri-line-chart-fill text-2xl text-white"></i>
                 </div>
-                <h1 className="text-3xl font-bold font-space mt-3">Finance<span className="text-secondary">Hub</span></h1>
+                <h1 className="text-3xl font-bold font-space mt-3">Magen</h1>
               </>
             )}
           </div>
@@ -174,7 +174,17 @@ export default function Login() {
                   name="senha"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>{t('login.password_label', 'Senha')}</FormLabel>
+                      <div className="flex items-center justify-between">
+                        <FormLabel>{t('login.password_label', 'Senha')}</FormLabel>
+                        <Button
+                          type="button"
+                          variant="link"
+                          className="h-auto p-0 text-xs"
+                          onClick={() => navigate("/forgot-password")}
+                        >
+                          {t('login.forgot_password', 'Esqueci minha senha')}
+                        </Button>
+                      </div>
                       <FormControl>
                         <Input type="password" placeholder={t('login.password_placeholder', '******')} {...field} />
                       </FormControl>

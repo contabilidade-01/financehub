@@ -157,6 +157,9 @@ export async function createTransaction(req: Request, res: Response) {
     
     // Validate request body
     const transactionData = insertTransactionSchema.parse(req.body);
+    // Só despesas podem ser reembolsáveis.
+    transactionData.reembolsavel = transactionData.tipo === "Despesa" && transactionData.reembolsavel === true;
+    if (transactionData.reembolsavel) transactionData.status = "Pendente";
     
     // Automatically assign the user's wallet ID if not provided or is 0 (from empty string)
     if (!transactionData.carteira_id || transactionData.carteira_id === 0) {
@@ -355,6 +358,9 @@ export async function updateTransaction(req: Request, res: Response) {
       console.log('============================================\n');
       return res.status(403).json(errorResponse);
     }
+
+    const tipoFinal = transactionData.tipo ?? transaction.tipo;
+    if (tipoFinal !== "Despesa") transactionData.reembolsavel = false;
     
     // If changing category, check if it exists and matches transaction type
     if (transactionData.categoria_id) {

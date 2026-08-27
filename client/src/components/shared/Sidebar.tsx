@@ -23,7 +23,8 @@ import {
   Building2,
   TrendingUp,
   FileUp,
-  Target
+  Target,
+  HandCoins
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { VersionDisplay } from "@/components/shared/VersionDisplay";
@@ -104,6 +105,7 @@ function Sidebar() {
       { icon: <LayoutDashboard className="mr-3 h-4 w-4" />, text: t('navigation.dashboard', 'Dashboard'), path: "/" },
       { icon: <PlusCircle className="mr-3 h-4 w-4" />, text: t('navigation.transactions', 'Transações'), path: "/transactions" },
       { icon: <TrendingUp className="mr-3 h-4 w-4" />, text: 'Contas a Pagar', path: "/contas-pagar" },
+      { icon: <HandCoins className="mr-3 h-4 w-4" />, text: 'A Receber', path: "/reembolsos" },
       { icon: <FileUp className="mr-3 h-4 w-4" />, text: 'Importar Lançamentos', path: "/importar" },
       { icon: <Building2 className="mr-3 h-4 w-4" />, text: 'Metas e Sonhos', path: "/metas" },
       { icon: <BarChart3 className="mr-3 h-4 w-4" />, text: t('navigation.reports', 'Relatórios'), path: "/reports" },
@@ -221,7 +223,7 @@ function Sidebar() {
               {/* Texto padrão apenas quando confirmado que não há logo customizado */}
               {!isInitialLoad && hasCustomLogo === false && (
                 <h1 className="text-2xl font-space font-bold text-white tracking-wide">
-                  Finance<span className="text-secondary">Hub</span>
+                  Magen
                 </h1>
               )}
             </div>
@@ -290,7 +292,7 @@ function Sidebar() {
                   {/* Texto padrão apenas quando confirmado que não há logo customizado */}
                   {!isInitialLoad && hasCustomLogo === false && (
                     <h1 className="text-2xl font-space font-bold text-white tracking-wide">
-                      Finance<span className="text-secondary">Hub</span>
+                      Magen
                     </h1>
                   )}
                 </div>
@@ -387,7 +389,7 @@ function Sidebar() {
                top: '75px', 
                height: 'calc(100vh - 75px)'
              } : { minHeight: '100vh' }}>
-        {/* Header fixo do FinanceHub */}
+        {/* Header fixo do Magen */}
         <div className="p-5 pb-0 flex-shrink-0">
           <div className="flex items-center justify-start mb-8">
             <div className="flex items-center">
@@ -417,7 +419,7 @@ function Sidebar() {
                       <LayoutDashboard className="h-5 w-5 text-white" />
                     </span>
                     <h1 className="text-2xl font-space font-bold text-white tracking-wide ml-3">
-                      Finance<span className="text-secondary">Hub</span>
+                      Magen
                     </h1>
                   </div>
                 )}

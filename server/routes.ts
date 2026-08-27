@@ -5,7 +5,8 @@ import { storage, listIngestionEvents, jaConsentiuLgpd, registrarConsentimentoLg
 import { auth } from "./middleware/auth.middleware";
 import { apiKeyAuth } from "./middleware/apiKey.middleware";
 import { combinedAuth } from "./middleware/combinedAuth.middleware";
-import { authLimiter } from "./middleware/security.middleware";
+import { authLimiter, forgotPasswordLimiter, resetPasswordLimiter } from "./middleware/security.middleware";
+import * as passwordResetController from "./controllers/password-reset.controller";
 import {
   checkImpersonation,
   requireSuperAdmin,
@@ -138,6 +139,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/register", authLimiter, userController.register);
   app.post("/api/auth/login", authLimiter, userController.login);
   app.post("/api/auth/logout", userController.logout);
+  app.post("/api/auth/forgot-password", forgotPasswordLimiter, passwordResetController.forgotPassword);
+  app.get("/api/auth/reset-token", resetPasswordLimiter, passwordResetController.checkResetToken);
+  app.post("/api/auth/reset-password", resetPasswordLimiter, passwordResetController.resetPassword);
   
   // Endpoint para verificação de sessão (usado pelo WebSocket)
   app.get("/api/auth/verify", auth, (req: Request, res: Response) => {
@@ -1042,7 +1046,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (result.length === 0) {
         // Retornar tema padrão hardcoded
         const defaultTheme = {
-          name: 'Padrão FinanceHub',
+          name: 'Padrão Magen',
           lightConfig: {
             background: '0 0% 98%',
             foreground: '240 10% 3.9%',
@@ -1216,6 +1220,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const contas = await getContasAPagar(wallet.id, status as any);
       res.json(contas);
     } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  // Valores gastos no cartão em nome de terceiros, ainda a receber.
+  app.get("/api/reembolsos", combinedAuth, async (req: Request, res: Response) => {
+    try {
+      const { getReembolsosAReceber } = await import("./storage");
+      const wallet = await storage.getWalletByUserId(req.user!.id);
+      if (!wallet) return res.status(404).json({ error: "Carteira não encontrada" });
+      res.json(await getReembolsosAReceber(wallet.id));
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.put("/api/reembolsos/:id/receber", combinedAuth, async (req: Request, res: Response) => {
+    try {
+      const { marcarReembolsoRecebido } = await import("./storage");
+      const wallet = await storage.getWalletByUserId(req.user!.id);
+      if (!wallet) return res.status(404).json({ error: "Carteira não encontrada" });
+      const result = await marcarReembolsoRecebido(parseInt(req.params.id), wallet.id);
+      if (!result) return res.status(404).json({ error: "Reembolso não encontrado" });
+      res.json(result);
+    } catch (err: any) { res.status(400).json({ error: err.message }); }
   });
 
   // Marcar transação como paga

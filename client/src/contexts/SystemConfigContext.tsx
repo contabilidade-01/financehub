@@ -30,12 +30,12 @@ interface SystemSettingsResponse {
  * Valores padrão (fallback se API falhar)
  */
 const DEFAULT_CONFIG: SystemConfig = {
-  system_name: 'FinanceHub',
-  system_name_short: 'financehub',
+  system_name: 'Magen',
+  system_name_short: 'magen',
   system_tagline: 'Gestão financeira inteligente e moderna',
-  support_email: 'suporte@financehub.com',
-  system_url: 'https://financehub.com',
-  system_description: 'FinanceHub - Gerencie suas finanças pessoais com uma interface moderna e futurista. Acompanhe receitas, despesas e tenha controle total do seu dinheiro.'
+  support_email: 'suporte@controledinheiro.com.br',
+  system_url: 'https://app.controledinheiro.com.br',
+  system_description: 'Magen - Gerencie suas finanças pessoais com uma interface moderna e futurista. Acompanhe receitas, despesas e tenha controle total do seu dinheiro.'
 };
 
 /**

@@ -41,7 +41,7 @@ export interface CustomTheme {
 // Temas padrão do sistema
 export const defaultThemes: Record<string, CustomTheme> = {
   default: {
-    name: 'Padrão FinanceHub',
+    name: 'Padrão Magen',
     isDefault: true,
     lightConfig: {
       background: '0 0% 98%',

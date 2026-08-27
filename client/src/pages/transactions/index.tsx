@@ -844,7 +844,12 @@ export default function Transactions() {
                               )}
                             </div>
                             <div>
-                              <div className="font-medium">{transaction.descricao}</div>
+                              <div className="font-medium">
+                                {transaction.descricao}
+                                {transaction.reembolsavel && (
+                                  <span className="ml-2 rounded bg-blue-500/10 px-2 py-0.5 text-[10px] text-blue-500">A receber</span>
+                                )}
+                              </div>
                               <div className="text-xs text-gray-400">{getPaymentMethodDisplay(transaction)}</div>
                             </div>
                           </div>
@@ -917,7 +922,12 @@ export default function Transactions() {
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className={`font-medium truncate ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>{transaction.descricao}</div>
+                        <div className={`font-medium truncate ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>
+                          {transaction.descricao}
+                        </div>
+                        {transaction.reembolsavel && (
+                          <span className="inline-block rounded bg-blue-500/10 px-2 py-0.5 text-[10px] text-blue-500">A receber</span>
+                        )}
                         <div className={`text-sm ${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>{getPaymentMethodDisplay(transaction)}</div>
                       </div>
                     </div>

@@ -185,7 +185,7 @@ export default function NotFound() {
           {/* Logo Image */}
           <motion.img
             src={logoSrc}
-            alt="FinanceHub Logo"
+            alt="Magen Logo"
             className="relative w-32 h-32 md:w-40 md:h-40 object-contain drop-shadow-2xl"
             animate={{
               filter: [
