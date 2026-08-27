@@ -188,7 +188,10 @@ export default function AdminUsers() {
     onError: (error: any) => {
       toast({
         title: t("admin.users.toast.update_error.title", "Erro"),
-        description: error.message || t("admin.users.toast.update_error.description", "Erro ao atualizar usuário"),
+        description:
+          error?.error ||
+          error?.message ||
+          t("admin.users.toast.update_error.description", "Erro ao atualizar usuário"),
         variant: "destructive",
       });
     },
@@ -302,10 +305,10 @@ export default function AdminUsers() {
       setPhoneError(t("admin.users.validation.phone_length", "Telefone deve ter 10 ou 11 dígitos"));
       return;
     }
-    // Garantir que o telefone enviado seja só números e comece com 55
+    // Telefone só DDD+número (sem 55) — mesmo padrão WhatsApp / banco
     let telefoneLimpo = createForm.telefone ? createForm.telefone.replace(/\D/g, "") : undefined;
-    if (telefoneLimpo && telefoneLimpo.length >= 10 && telefoneLimpo.length <= 11) {
-      telefoneLimpo = "55" + telefoneLimpo;
+    if (telefoneLimpo?.startsWith("55") && telefoneLimpo.length >= 12) {
+      telefoneLimpo = telefoneLimpo.slice(2);
     }
     createUserMutation.mutate({ ...createForm, telefone: telefoneLimpo });
   };
@@ -333,17 +336,76 @@ export default function AdminUsers() {
 
   const handleUpdateUser = () => {
     if (!selectedUser) return;
+
+    const email = (editForm.email || "").trim().toLowerCase();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast({
+        title: t("admin.users.toast.update_error.title", "Erro"),
+        description: t("admin.users.validation.email_invalid", "Informe um e-mail válido"),
+        variant: "destructive",
+      });
+      return;
+    }
+    if (email.endsWith("@tel.local")) {
+      toast({
+        title: t("admin.users.toast.update_error.title", "Erro"),
+        description: t(
+          "admin.users.validation.email_placeholder",
+          "Troque o e-mail placeholder (@tel.local) por um e-mail real"
+        ),
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (editForm.telefone && editForm.telefone.length > 0 && (editForm.telefone.length < 10 || editForm.telefone.length > 11)) {
       setEditPhoneError(t("admin.users.validation.phone_length", "Telefone deve ter 10 ou 11 dígitos"));
       return;
     }
-    let telefoneLimpo = editForm.telefone ? editForm.telefone.replace(/\D/g, "") : undefined;
-    if (telefoneLimpo && !telefoneLimpo.startsWith("55")) {
-      telefoneLimpo = "55" + telefoneLimpo;
+
+    const novaSenha = (editForm.nova_senha || "").trim();
+    if (novaSenha && novaSenha.length < 6) {
+      toast({
+        title: t("admin.users.toast.update_error.title", "Erro"),
+        description: t(
+          "admin.users.validation.password_min",
+          "A nova senha deve ter pelo menos 6 caracteres"
+        ),
+        variant: "destructive",
+      });
+      return;
     }
+
+    // Telefone sem DDI 55 (mesmo padrão do WhatsApp / banco)
+    let telefoneLimpo: string | null | undefined = undefined;
+    if (editForm.telefone !== undefined) {
+      let digits = (editForm.telefone || "").replace(/\D/g, "");
+      if (!digits) {
+        telefoneLimpo = null;
+      } else {
+        if (digits.startsWith("55") && digits.length >= 12) {
+          digits = digits.slice(2);
+        }
+        telefoneLimpo = digits;
+      }
+    }
+
+    const userData: Record<string, any> = {
+      nome: (editForm.nome || "").trim(),
+      email,
+      ativo: editForm.ativo,
+      tipo_usuario: editForm.tipo_usuario,
+      tipo_pessoa: editForm.tipo_pessoa || "fisica",
+      data_expiracao_assinatura: editForm.data_expiracao_assinatura || "",
+      telefone: telefoneLimpo,
+    };
+    if (novaSenha) {
+      userData.nova_senha = novaSenha;
+    }
+
     updateUserMutation.mutate({
       id: selectedUser.id,
-      userData: { ...editForm, telefone: telefoneLimpo }
+      userData: userData as UpdateUserForm,
     });
   };
 
@@ -1093,6 +1155,14 @@ export default function AdminUsers() {
             placeholder={t("admin.users.edit_modal.fields.email.placeholder", "usuario@exemplo.com")}
             className="admin-edit-form-input"
           />
+          {editForm.email?.endsWith("@tel.local") && (
+            <div className="text-xs text-amber-500 mt-1">
+              {t(
+                "admin.users.edit_modal.fields.email.placeholder_hint",
+                "E-mail temporário do WhatsApp — troque por um e-mail real para o usuário recuperar a senha."
+              )}
+            </div>
+          )}
         </div>
         
         <div className="admin-edit-form-group">

@@ -1032,58 +1032,132 @@ export async function updateUser(req: Request, res: Response) {
     console.log("Dados recebidos:", JSON.stringify(req.body, null, 2));
     console.log("=====================================");
 
-    // Preparar dados de atualização
-    const updateData: any = { ...req.body };
-    
-    // Remover campos especiais que precisam de tratamento
-    delete updateData.nova_senha;
-    
-    // Para updateUser, só bloquear se o telefone for de outro usuário
-    if (updateData.telefone) {
-      const existingPhoneUser = await storage.getUserByPhone(updateData.telefone);
-      if (existingPhoneUser && existingPhoneUser.id !== userId) {
-        return res.status(400).json({ error: "Este número de telefone já está em uso por outro usuário." });
+    const body = req.body || {};
+
+    // Só campos permitidos (evita drizzle rejeitar lixo do form)
+    const updateData: Record<string, any> = {};
+    if (body.nome !== undefined) updateData.nome = String(body.nome).trim();
+    if (body.ativo !== undefined) updateData.ativo = Boolean(body.ativo);
+    if (body.tipo_usuario !== undefined) updateData.tipo_usuario = body.tipo_usuario;
+    if (body.tipo_pessoa !== undefined) updateData.tipo_pessoa = body.tipo_pessoa;
+
+    // E-mail: normaliza e valida unicidade (necessário p/ recuperação de senha)
+    if (body.email !== undefined) {
+      const email = String(body.email).trim().toLowerCase();
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ error: "E-mail inválido" });
+      }
+      if (email.endsWith("@tel.local")) {
+        return res.status(400).json({
+          error: "Informe um e-mail real (não use o placeholder @tel.local).",
+        });
+      }
+      const emailOwner = await storage.getUserByEmail(email);
+      if (emailOwner && emailOwner.id !== userId) {
+        return res.status(400).json({ error: "Este e-mail já está em uso por outro usuário." });
+      }
+      // Busca case-insensitive extra (cadastros antigos)
+      try {
+        const { sql: dsql } = await import("drizzle-orm");
+        const { db } = await import("../db");
+        const { users } = await import("../../shared/schema");
+        const rows = await db
+          .select()
+          .from(users)
+          .where(dsql`lower(${users.email}) = ${email}`)
+          .limit(1);
+        if (rows[0] && rows[0].id !== userId) {
+          return res.status(400).json({ error: "Este e-mail já está em uso por outro usuário." });
+        }
+      } catch {
+        // se falhar a query extra, segue com o check exato já feito
+      }
+      updateData.email = email;
+    }
+
+    // Telefone: grava só DDD+número (sem 55), igual ao fluxo WhatsApp
+    if (body.telefone !== undefined) {
+      let digits = String(body.telefone || "").replace(/\D/g, "");
+      if (!digits) {
+        updateData.telefone = null;
+      } else {
+        if (digits.startsWith("55") && digits.length >= 12) {
+          digits = digits.slice(2);
+        }
+        if (digits.length < 10 || digits.length > 11) {
+          return res.status(400).json({
+            error: "Telefone deve ter 10 ou 11 dígitos (DDD + número).",
+          });
+        }
+        const phoneOwnerExact = await storage.getUserByPhone(digits);
+        const phoneOwner55 = await storage.getUserByPhone(`55${digits}`);
+        const conflict = [phoneOwnerExact, phoneOwner55].find(
+          (u) => u && u.id !== userId
+        );
+        if (conflict) {
+          return res.status(400).json({
+            error: "Este número de telefone já está em uso por outro usuário.",
+          });
+        }
+        updateData.telefone = digits;
       }
     }
 
     // Detectar se está ativando um usuário inativo e é super_admin
-    const isActivatingInactiveUser = 
-      req.body.ativo === true && 
-      existingUser.ativo === false && 
-      req.user?.tipo_usuario === 'super_admin';
+    const isActivatingInactiveUser =
+      body.ativo === true &&
+      existingUser.ativo === false &&
+      req.user?.tipo_usuario === "super_admin";
 
     // Se estiver ativando um usuário que estava cancelado, limpar dados de cancelamento
-    if (req.body.ativo === true && (existingUser.status_assinatura === 'cancelada' || existingUser.data_cancelamento)) {
-      updateData.status_assinatura = 'ativa';
+    if (
+      body.ativo === true &&
+      (existingUser.status_assinatura === "cancelada" || existingUser.data_cancelamento)
+    ) {
+      updateData.status_assinatura = "ativa";
       updateData.data_cancelamento = null;
       updateData.motivo_cancelamento = null;
-      
+
       console.log("=== LIMPANDO DADOS DE CANCELAMENTO (UPDATE) ===");
       console.log(`Usuário ${existingUser.nome} reativado - removendo status de cancelamento`);
       console.log("=============================================");
     }
 
     // Processar data de expiração da assinatura
-    if (req.body.data_expiracao_assinatura) {
-      const expirationDate = new Date(req.body.data_expiracao_assinatura);
+    if (body.data_expiracao_assinatura) {
+      const expirationDate = new Date(body.data_expiracao_assinatura);
+      if (Number.isNaN(expirationDate.getTime())) {
+        return res.status(400).json({ error: "Data de expiração inválida" });
+      }
       updateData.data_expiracao_assinatura = expirationDate;
       console.log(`Data de expiração definida: ${expirationDate.toISOString()}`);
-    } else if (req.body.data_expiracao_assinatura === "") {
-      // Se campo vazio, remover data de expiração (assinatura ilimitada)
+    } else if (body.data_expiracao_assinatura === "") {
       updateData.data_expiracao_assinatura = null;
       console.log("Assinatura definida como ilimitada");
     }
 
-    // Atualizar usuário
-    const updatedUser = await storage.updateUser(userId, updateData);
-    if (!updatedUser) {
-      return res.status(500).json({ error: "Erro ao atualizar usuário" });
+    const novaSenha =
+      typeof body.nova_senha === "string" ? body.nova_senha.trim() : "";
+    if (novaSenha && novaSenha.length < 6) {
+      return res.status(400).json({
+        error: "A nova senha deve ter pelo menos 6 caracteres.",
+      });
     }
 
-    // Processar alteração de senha se fornecida
-    if (req.body.nova_senha && req.body.nova_senha.trim()) {
+    // Atualizar usuário (campos cadastrais)
+    let updatedUser = existingUser;
+    if (Object.keys(updateData).length > 0) {
+      const result = await storage.updateUser(userId, updateData);
+      if (!result) {
+        return res.status(500).json({ error: "Erro ao atualizar usuário" });
+      }
+      updatedUser = result;
+    }
+
+    // Alteração de senha (se informada)
+    if (novaSenha) {
       console.log("Atualizando senha do usuário...");
-      const hashedPassword = await bcrypt.hash(req.body.nova_senha, 10);
+      const hashedPassword = await bcrypt.hash(novaSenha, 10);
       await storage.updateUser(userId, { senha: hashedPassword });
       console.log("Senha atualizada com sucesso");
     }
@@ -1093,62 +1167,62 @@ export async function updateUser(req: Request, res: Response) {
       try {
         console.log("=== ENVIANDO WEBHOOK DE ATIVAÇÃO ===");
         console.log(`Super Admin ${req.user?.nome} ativou usuário ${updatedUser.nome}`);
-        console.log(`isActivatingInactiveUser: ${isActivatingInactiveUser}`);
-        console.log(`req.body.ativo: ${req.body.ativo}`);
-        console.log(`existingUser.ativo: ${existingUser.ativo}`);
-        console.log(`req.user?.tipo_usuario: ${req.user?.tipo_usuario}`);
-        
-        // Buscar token do usuário
+
         const userTokens = await storage.getApiTokensByUserId(updatedUser.id);
         const userToken = userTokens && userTokens.length > 0 ? userTokens[0].token : null;
-        
-        // Gerar nova senha aleatória usando utilitário compartilhado
-        const newPassword = generateRandomPassword(8);
-        
-        // Atualizar a senha do usuário
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
-        await storage.updateUser(updatedUser.id, { senha: hashedPassword });
-        
-        console.log(`Nova senha gerada para o usuário ${updatedUser.nome}: ${newPassword}`);
-        
-        // Buscar mensagem de ativação personalizada
+
+        // Só gera senha aleatória se o admin NÃO definiu uma nova senha neste update
+        let accessPassword = novaSenha || null;
+        if (!accessPassword) {
+          accessPassword = generateRandomPassword(8);
+          const hashedPassword = await bcrypt.hash(accessPassword, 10);
+          await storage.updateUser(updatedUser.id, { senha: hashedPassword });
+          console.log(`Nova senha gerada para o usuário ${updatedUser.nome}: ${accessPassword}`);
+        }
+
         let activationMessage = {
-          title: 'Sua conta foi ativada!',
-          message: 'Olá! Sua conta foi ativada com sucesso. Agora você tem acesso completo a todos os recursos da plataforma.',
-          email_content: 'Sua conta foi ativada com sucesso!'
+          title: "Sua conta foi ativada!",
+          message:
+            "Olá! Sua conta foi ativada com sucesso. Agora você tem acesso completo a todos os recursos da plataforma.",
+          email_content: "Sua conta foi ativada com sucesso!",
         };
-        
+
         try {
-          const postgres = (await import('postgres')).default;
-          const client = postgres(process.env.DATABASE_URL || '', { prepare: false });
-          
+          const postgres = (await import("postgres")).default;
+          const client = postgres(process.env.DATABASE_URL || "", { prepare: false });
+
           const result = await client`
             SELECT title, message, email_content 
             FROM welcome_messages 
             WHERE type = 'activated'
           `;
-          
+
           if (result.length > 0) {
             activationMessage = result[0];
-            // Processar tags na mensagem usando notification.service
             const notificationService = getNotificationService();
-            activationMessage.title = notificationService.processMessageTags(activationMessage.title, updatedUser);
-            activationMessage.message = notificationService.processMessageTags(activationMessage.message, updatedUser);
+            activationMessage.title = notificationService.processMessageTags(
+              activationMessage.title,
+              updatedUser
+            );
+            activationMessage.message = notificationService.processMessageTags(
+              activationMessage.message,
+              updatedUser
+            );
             activationMessage.email_content = notificationService.processMessageTags(
               activationMessage.email_content || activationMessage.message,
               updatedUser
             );
           }
-          
+
           await client.end();
         } catch (msgError) {
           console.error("Erro ao buscar mensagem de ativação, usando padrão:", msgError);
         }
-        
+
         const webhookData = {
           evento: "usuario_ativado",
           timestamp: new Date().toISOString(),
-          dominio: process.env.BASE_URL || 'https://app.controledinheiro.com.br',
+          dominio: process.env.BASE_URL || "https://app.controledinheiro.com.br",
           id: updatedUser.id,
           nome: updatedUser.nome,
           email: updatedUser.email,
@@ -1158,56 +1232,54 @@ export async function updateUser(req: Request, res: Response) {
           token: userToken,
           acesso_web: {
             usuario: updatedUser.email,
-            senha: newPassword
+            senha: accessPassword,
           },
           mensagem_ativacao: {
             titulo: activationMessage.title,
             mensagem: activationMessage.message,
-            conteudo_email: activationMessage.email_content
-          }
+            conteudo_email: activationMessage.email_content,
+          },
         };
 
         console.log("=== WEBHOOK DATA ===");
         console.log(JSON.stringify(webhookData, null, 2));
         console.log("====================");
-
-        // === N8N DESATIVADO — pipeline agora roda via app (POST /api/webhook/uazapi) ===
-        // const webhookResponse = await fetch(process.env.WEBHOOK_ATIVACAO_URL || 'https://prod-wf.pulsofinanceiro.net.br/webhook/ativacao', {
-        //   method: 'POST',
-        //   headers: {
-        //     'Content-Type': 'application/json',
-        //   },
-        //   body: JSON.stringify(webhookData)
-        // });
-        //
-        // console.log(`Webhook Response Status: ${webhookResponse.status}`);
-        // const responseText = await webhookResponse.text();
-        // console.log(`Webhook Response Body: ${responseText}`);
-        //
-        // if (webhookResponse.ok) {
-        //   console.log("✅ Webhook de ativação enviado com sucesso");
-        // } else {
-        //   console.error("❌ Erro ao enviar webhook:", webhookResponse.status, responseText);
-        // }
         console.log("✅ Webhook N8N desativado — ativação agora via pipeline interno.");
         console.log("=====================================");
       } catch (webhookError) {
         console.error("Erro ao enviar webhook de ativação:", webhookError);
-        // Não falhar a operação se o webhook falhar
       }
     }
 
+    // Recarrega usuário final (email/senha atualizados)
+    const finalUser = (await storage.getUserById(userId)) || updatedUser;
+    const { senha: _omit, ...safeUser } = finalUser as any;
+
     console.log("=== ADMIN UPDATE USER - SUCCESS ===");
-    console.log(`Usuário ${updatedUser.nome} atualizado com sucesso`);
+    console.log(`Usuário ${finalUser.nome} atualizado com sucesso`);
     console.log("===================================");
 
     res.status(200).json({
       message: "Usuário atualizado com sucesso",
-      user: updatedUser
+      user: safeUser,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error in updateUser:", error);
-    res.status(500).json({ error: "Erro ao atualizar usuário" });
+    // Unique violation Postgres
+    if (error?.code === "23505") {
+      const detail = String(error?.detail || "");
+      if (detail.includes("email")) {
+        return res.status(400).json({ error: "Este e-mail já está em uso por outro usuário." });
+      }
+      if (detail.includes("telefone")) {
+        return res.status(400).json({ error: "Este telefone já está em uso por outro usuário." });
+      }
+      return res.status(400).json({ error: "Dados conflitantes com outro usuário." });
+    }
+    res.status(500).json({
+      error: "Erro ao atualizar usuário",
+      message: error?.message || undefined,
+    });
   }
 }
 
