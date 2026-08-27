@@ -80,3 +80,8 @@ server/public/
 # Generated images at runtime
 public/charts/
 public/reports/
+
+# Dados pessoais de importação PF (não versionar)
+docs/importacao/controle-bruto*.txt
+docs/importacao/lancamentos-pf-importacao.csv
+docs/importacao/lancamentos-pf-importacao.xlsx
