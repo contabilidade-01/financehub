@@ -1329,6 +1329,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/empresas/:id/conciliacao/aceitar-sugestoes", combinedAuth, ConciliacaoController.aceitarSugestoes);
   app.get("/api/empresas/:id/conciliacao/bater-saldo", combinedAuth, ConciliacaoController.baterSaldo);
 
+  // Importação de lançamentos PF (planilha -> contas a pagar; cria formas/cartões e vincula)
+  const { ImportLancamentosController } = await import("./controllers/import-lancamentos.controller");
+  app.post("/api/importacao/lancamentos/preview", combinedAuth, uploadMemoria.single("arquivo"), ImportLancamentosController.preview);
+  app.post("/api/importacao/lancamentos", combinedAuth, uploadMemoria.single("arquivo"), ImportLancamentosController.importar);
+
   // ==========================================
   // WEBHOOK UAZAPI — Pipeline IA internalizado (substitui N8N)
   // Recebe mensagens do WhatsApp via UazAPI, processa com IA, insere transação, responde.

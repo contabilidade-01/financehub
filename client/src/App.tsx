@@ -60,6 +60,7 @@ import ExternalCheckout from "@/pages/checkout/ExternalCheckout";
 import PjRouter from "@/pages/pj/PjRouter";
 import MetasPage from "@/pages/metas";
 import ContasPagarPage from "@/pages/contas-pagar";
+import ImportarLancamentos from "@/pages/importar";
 
 function Router() {
   const [location] = useLocation();
@@ -193,6 +194,11 @@ function Router() {
             <Route path="/contas-pagar">
               <MainLayout>
                 <ContasPagarPage />
+              </MainLayout>
+            </Route>
+            <Route path="/importar">
+              <MainLayout>
+                <ImportarLancamentos />
               </MainLayout>
             </Route>
             <Route path="/subscription/cancel">
