@@ -90,3 +90,64 @@ export async function sendPasswordResetEmail(opts: {
     html,
   });
 }
+
+/** Boas-vindas com senha inicial (cadastro via WhatsApp). */
+export async function sendWelcomeWithPasswordEmail(opts: {
+  to: string;
+  nome?: string;
+  password: string;
+  loginUrl?: string;
+  systemName?: string;
+}): Promise<void> {
+  if (!isSmtpConfigured()) {
+    throw new Error("SMTP não configurado");
+  }
+
+  const systemName = opts.systemName || "Magen";
+  const loginUrl = (opts.loginUrl || getPublicAppUrl() || "").replace(/\/+$/, "");
+  const from = smtpFrom()!;
+  const transport = createTransport();
+  const firstName = (opts.nome || "").split(" ")[0] || "";
+  const greeting = firstName ? `Olá, ${firstName}!` : "Olá!";
+
+  const subject = `Bem-vindo ao ${systemName} — seus dados de acesso`;
+  const text = [
+    greeting,
+    "",
+    `Sua conta no ${systemName} foi criada com sucesso.`,
+    "",
+    `E-mail (login): ${opts.to}`,
+    `Senha temporária: ${opts.password}`,
+    loginUrl ? `Acesse: ${loginUrl}` : "",
+    "",
+    "Você pode alterar essa senha a qualquer momento em Configurações ou em Esqueci minha senha.",
+    "",
+    "Se não foi você, ignore este e-mail.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const html = `
+    <p>${greeting}</p>
+    <p>Sua conta no <strong>${systemName}</strong> foi criada com sucesso.</p>
+    <p>
+      <strong>E-mail (login):</strong> ${opts.to}<br/>
+      <strong>Senha temporária:</strong> ${opts.password}
+    </p>
+    ${
+      loginUrl
+        ? `<p><a href="${loginUrl.replace(/"/g, "&quot;")}">Acessar o ${systemName}</a></p>`
+        : ""
+    }
+    <p>Você pode alterar essa senha a qualquer momento em <em>Configurações</em> ou em <em>Esqueci minha senha</em>.</p>
+    <p>Se não foi você, ignore este e-mail.</p>
+  `;
+
+  await transport.sendMail({
+    from,
+    to: opts.to,
+    subject,
+    text,
+    html,
+  });
+}

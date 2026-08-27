@@ -6,6 +6,12 @@ import { WhatsAppOnboardingService } from "../services/whatsapp-onboarding.servi
 import { transcribeAudio, analyzeWithGemini, runAgent } from "../services/ai-agent.service";
 import { classifyAiError } from "../utils/ai-errors";
 import { notificarAdmin } from "../services/admin-notify";
+import { generateRandomPassword } from "../utils/password-generator";
+import {
+  isSmtpConfigured,
+  getPublicAppUrl,
+  sendWelcomeWithPasswordEmail,
+} from "../services/mailer";
 import bcrypt from "bcryptjs";
 
 /**
@@ -37,14 +43,20 @@ function isDuplicate(messageId: string): boolean {
 }
 
 // ============================================
-// Onboarding / Degustação (15 dias) — máquina de estados via status_assinatura
-//   aguardando_confirmacao → aguardando_tipo_pessoa → degustacao → degustacao_expirada
+// Onboarding / Cadastro / Degustação (15 dias)
+//   aguardando_cadastro → aguardando_email → aguardando_confirmacao
+//     → aguardando_tipo_pessoa → degustacao → degustacao_expirada
 // ============================================
 const TRIAL_DIAS = 15;
-const norm = (s: string) => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+const SYSTEM_NAME = process.env.SYSTEM_NAME || "Magen";
+const norm = (s: string) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 const ehAfirmativo = (text: string) => {
   const t = norm(text);
-  return /\b(sim|quero|aceito|aceitar|ativar|bora|vamos|claro|pode|comecar|começar|ok|isso|quero sim)\b/.test(t) || t === "s" || t === "1" || t.includes("👍");
+  return /\b(sim|quero|aceito|aceitar|ativar|bora|vamos|claro|pode|comecar|começar|ok|isso|quero sim|cadastrar)\b/.test(t) || t === "s" || t === "1" || t.includes("👍");
+};
+const ehNegativo = (text: string) => {
+  const t = norm(text);
+  return /\b(nao|não|depois|agora nao|agora não|negativo|dispensa)\b/.test(t) || t === "n" || t === "2";
 };
 const detectarTipoPessoa = (text: string): "fisica" | "juridica" | null => {
   const t = norm(text);
@@ -55,9 +67,46 @@ const detectarTipoPessoa = (text: string): "fisica" | "juridica" | null => {
 const dataTrialFim = () => new Date(Date.now() + TRIAL_DIAS * 24 * 60 * 60 * 1000);
 const fmtData = (d: Date) => d.toLocaleDateString("pt-BR");
 const primeiro = (nome?: string | null) => (nome || "").split(" ")[0] || "";
+const isPlaceholderEmail = (email?: string | null) =>
+  !email || email.toLowerCase().endsWith("@tel.local");
+
+function extrairEmail(text: string): string | null {
+  const m = String(text || "").match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+  if (!m) return null;
+  const email = m[0].trim().toLowerCase();
+  if (email.endsWith("@tel.local")) return null;
+  return email;
+}
+
+const appUrl = () =>
+  getPublicAppUrl() || process.env.BASE_URL || "https://app.controledinheiro.com.br";
+
+const msgConviteCadastro = (nome?: string | null) =>
+  `Olá ${primeiro(nome) || "tudo bem"}! 👋 Sou o assistente do *${SYSTEM_NAME}*.\n\nQuer se *cadastrar no sistema* para controlar suas finanças por aqui?\n\nResponda *SIM* para continuar.`;
+
+const msgNudgeCadastro = () =>
+  `Sem problema! Quando quiser se cadastrar no *${SYSTEM_NAME}*, é só mandar *SIM*. 😊`;
+
+const msgPedirEmail = (nome?: string | null) =>
+  `Perfeito${primeiro(nome) ? `, ${primeiro(nome)}` : ""}! ✅\n\nJá peguei seu *WhatsApp* automaticamente.\nAgora me envia o *melhor e-mail* para você acessar o sistema (ex.: seuemail@gmail.com).`;
+
+const msgEmailInvalido = () =>
+  `Não consegui identificar um e-mail válido. 😅\n\nMe envia de novo no formato *seuemail@dominio.com*.`;
+
+const msgEmailEmUso = () =>
+  `Esse e-mail já está cadastrado em outra conta. Envie outro e-mail, por favor.`;
+
+const msgContaCriada = (opts: { nome?: string | null; email: string; senha: string }) =>
+  `Pronto${primeiro(opts.nome) ? `, ${primeiro(opts.nome)}` : ""}! 🎉 Sua conta no *${SYSTEM_NAME}* foi criada.\n\n` +
+  `*Login:* ${opts.email}\n` +
+  `*Senha temporária:* ${opts.senha}\n` +
+  `*Acesse:* ${appUrl()}\n\n` +
+  `Também enviei esses dados no seu e-mail (se o envio estiver ativo).\n` +
+  `Você pode *alterar a senha* quando quiser em *Configurações* ou em *Esqueci minha senha*.\n\n` +
+  `Agora: posso liberar *${TRIAL_DIAS} dias grátis* pra você testar tudo?\nResponda *SIM* para ativar. 😊`;
 
 const msgOferta = (nome?: string | null) =>
-  `Olá ${primeiro(nome)}! 👋 Sou o assistente do *Controle Financeiro*.\n\nPosso liberar *${TRIAL_DIAS} dias grátis* para você testar tudo — é só responder *SIM* que eu ativo agora mesmo. 😊`;
+  `Olá ${primeiro(nome)}! 👋 Posso liberar *${TRIAL_DIAS} dias grátis* no *${SYSTEM_NAME}* para você testar tudo — é só responder *SIM* que eu ativo agora mesmo. 😊`;
 const msgPerguntaTipo = (nome?: string | null) =>
   `Que ótimo, ${primeiro(nome)}! 🎉\n\nÉ para suas finanças *pessoais* ou da sua *empresa*?\n\nResponda:\n*1* — Pessoal (PF)\n*2* — Empresa (PJ)`;
 const msgAtivadoPF = (nome: string | null | undefined, fim: Date) =>
@@ -70,6 +119,60 @@ const msgExpirado = (nome?: string | null) =>
   `Oi ${primeiro(nome)}! Seus *${TRIAL_DIAS} dias* de degustação chegaram ao fim. 🙌\n\nGostou? Nossa equipe vai entrar em contato para te ajudar a continuar. Qualquer coisa, estou por aqui!`;
 const msgEmAnalise = (nome?: string | null) =>
   `Oi ${primeiro(nome)}! Sua conta está em análise no momento. Nossa equipe vai falar com você em breve para liberar o acesso. 😊`;
+
+async function finalizarCadastroComEmail(opts: {
+  user: any;
+  email: string;
+  chatid: string;
+  BaseUrl: string;
+  token: string;
+}): Promise<void> {
+  const { user, email, chatid, BaseUrl, token } = opts;
+  const senha = generateRandomPassword(8);
+  const hashed = await bcrypt.hash(senha, 10);
+
+  await storage.updateUser(user.id, {
+    email,
+    senha: hashed,
+    status_assinatura: "aguardando_confirmacao",
+  } as any);
+
+  // WhatsApp com credenciais
+  await uazapiService.sendText(
+    BaseUrl,
+    token,
+    chatid,
+    msgContaCriada({ nome: user.nome, email, senha })
+  );
+
+  // E-mail com as mesmas credenciais (se SMTP ok)
+  if (isSmtpConfigured()) {
+    try {
+      await sendWelcomeWithPasswordEmail({
+        to: email,
+        nome: user.nome,
+        password: senha,
+        loginUrl: appUrl(),
+        systemName: SYSTEM_NAME,
+      });
+      console.log(`[UazAPI Webhook] E-mail de boas-vindas enviado para ${email}`);
+    } catch (err: any) {
+      console.error(`[UazAPI Webhook] Falha ao enviar e-mail de boas-vindas:`, err?.message || err);
+      await uazapiService.sendText(
+        BaseUrl,
+        token,
+        chatid,
+        `⚠️ Não consegui enviar o e-mail agora, mas seus dados de acesso já estão nesta conversa. Guarde a senha.`
+      );
+    }
+  } else {
+    console.warn("[UazAPI Webhook] SMTP não configurado — senha enviada só no WhatsApp");
+  }
+
+  await notificarAdmin(
+    `🆕 Cadastro WhatsApp concluído: ${user.nome} | ${email} | tel ${user.telefone} | id=${user.id}`
+  );
+}
 
 // Retorna true se a mensagem foi tratada pelo onboarding (não processar como transação).
 async function tratarOnboarding(user: any, text: string, chatid: string, BaseUrl: string, token: string): Promise<boolean> {
@@ -87,8 +190,43 @@ async function tratarOnboarding(user: any, text: string, chatid: string, BaseUrl
     return false; // dentro do prazo → segue fluxo normal
   }
 
-  // Aguardando o SIM da oferta
+  // 1) Quer se cadastrar?
+  if (status === "aguardando_cadastro") {
+    if (ehAfirmativo(text)) {
+      await storage.updateUser(user.id, { status_assinatura: "aguardando_email" } as any);
+      await uazapiService.sendText(BaseUrl, token, chatid, msgPedirEmail(user.nome));
+    } else if (ehNegativo(text)) {
+      await uazapiService.sendText(BaseUrl, token, chatid, msgNudgeCadastro());
+    } else {
+      await uazapiService.sendText(BaseUrl, token, chatid, msgNudgeCadastro());
+    }
+    return true;
+  }
+
+  // 2) Aguardando e-mail real
+  if (status === "aguardando_email") {
+    const email = extrairEmail(text);
+    if (!email) {
+      await uazapiService.sendText(BaseUrl, token, chatid, msgEmailInvalido());
+      return true;
+    }
+    const existing = await storage.getUserByEmail(email);
+    if (existing && existing.id !== user.id) {
+      await uazapiService.sendText(BaseUrl, token, chatid, msgEmailEmUso());
+      return true;
+    }
+    await finalizarCadastroComEmail({ user, email, chatid, BaseUrl, token });
+    return true;
+  }
+
+  // 3) Aguardando o SIM da oferta de degustação
   if (status === "aguardando_confirmacao") {
+    // Contas antigas ainda com @tel.local: coleta e-mail antes de seguir
+    if (isPlaceholderEmail(user.email)) {
+      await storage.updateUser(user.id, { status_assinatura: "aguardando_email" } as any);
+      await uazapiService.sendText(BaseUrl, token, chatid, msgPedirEmail(user.nome));
+      return true;
+    }
     if (ehAfirmativo(text)) {
       await storage.updateUser(user.id, { status_assinatura: "aguardando_tipo_pessoa" } as any);
       await uazapiService.sendText(BaseUrl, token, chatid, msgPerguntaTipo(user.nome));
@@ -98,7 +236,7 @@ async function tratarOnboarding(user: any, text: string, chatid: string, BaseUrl
     return true;
   }
 
-  // Aguardando PF/PJ
+  // 4) Aguardando PF/PJ
   if (status === "aguardando_tipo_pessoa") {
     const tipo = detectarTipoPessoa(text);
     if (!tipo) {
@@ -112,8 +250,6 @@ async function tratarOnboarding(user: any, text: string, chatid: string, BaseUrl
       await notificarAdmin(`🆕 Nova degustação PJ: ${user.nome} (${user.telefone}) id=${user.id} — expira ${fmtData(fim)}`);
 
       // Iniciar fluxo guiado de cadastro de CNPJ e dados da empresa
-      const onboarding = new WhatsAppOnboardingService();
-      // Força a criação do estado inicial de onboarding PJ
       await storage.createWhatsAppOnboardingState({
         remoteJid: chatid,
         usuarioId: user.id,
@@ -131,6 +267,7 @@ async function tratarOnboarding(user: any, text: string, chatid: string, BaseUrl
   }
 
   // Pós-degustação (expirada) ou conta inativa → aguarda validação do admin
+  // Exceto quem ainda está no funil de cadastro (já tratado acima)
   if (status === "degustacao_expirada" || !user.ativo) {
     await uazapiService.sendText(BaseUrl, token, chatid, msgEmAnalise(user.nome));
     return true;
@@ -197,36 +334,32 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
     let user = await storage.getUserByRemoteJid(chatid);
 
     if (!user) {
-      // Criar usuário (mesmo padrão do N8N)
-      console.log(`[UazAPI Webhook] Novo usuário: ${senderName} (${chatid})`);
+      // Rascunho: telefone/nome do WhatsApp; e-mail e senha só após confirmação
+      console.log(`[UazAPI Webhook] Novo contato: ${senderName} (${chatid})`);
       const phoneRaw = chatid.split("@")[0]; // ex: 5511984630568
-      // Remover código do país (55) — manter apenas DDD+número
       const phone = phoneRaw.startsWith("55") ? phoneRaw.slice(2) : phoneRaw; // ex: 11984630568
 
       user = await storage.createUser({
         nome: senderName || "Usuário WhatsApp",
-        email: `${phone}@tel.local`, // placeholder mínimo — login será por telefone+senha
+        email: `${phone}@tel.local`, // temporário até informar e-mail real
         telefone: phone,
-        senha: "mudar@123",
+        senha: generateRandomPassword(12), // descartada quando concluir o cadastro
         remoteJid: chatid,
         tipo_usuario: "normal",
         ativo: false,
-        status_assinatura: "aguardando_confirmacao", // aguarda o SIM da degustação
+        status_assinatura: "aguardando_cadastro",
       } as any);
 
-      // Criar carteira
       await storage.createWallet({
         usuario_id: user.id,
         nome: "Principal",
         descricao: "Carteira principal criada automaticamente",
       });
 
-      // Criar plano de contas pessoal (cópia do template base — editável pelo usuário)
       await seedPlanoContasPessoal(user.id);
-      console.log(`[UazAPI Webhook] Plano de contas pessoal criado para user ${user.id}`);
+      console.log(`[UazAPI Webhook] Rascunho criado user ${user.id} — aguardando_cadastro`);
 
-      // Oferta de degustação (15 dias) — em vez de pedir assinatura direto.
-      await uazapiService.sendText(BaseUrl, token, chatid, msgOferta(senderName));
+      await uazapiService.sendText(BaseUrl, token, chatid, msgConviteCadastro(senderName));
       return;
     }
 
