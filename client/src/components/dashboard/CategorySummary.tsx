@@ -80,7 +80,7 @@ export default function CategorySummary({ isLoading, categories }: CategorySumma
                   <div className="flex-1">
                     <div className="flex justify-between items-center mb-1">
                       <h3 className="text-sm font-medium">{category.name}</h3>
-                      <span className="text-sm font-orbitron">{formatCurrency(category.total)}</span>
+                      <span className="text-sm font-numeric">{formatCurrency(category.total)}</span>
                     </div>
                     <div className="w-full h-1.5 bg-dark rounded-full overflow-hidden">
                       <div 

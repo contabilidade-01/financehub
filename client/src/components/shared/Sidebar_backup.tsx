@@ -201,7 +201,7 @@ export default function Sidebar() {
               {allMenuItems.map((group, groupIndex) => (
                 <div key={groupIndex} className="mb-8">
                   <div className="mb-5">
-                    <span className="text-xs font-orbitron text-gray-400 tracking-wider">{group.label}</span>
+                    <span className="text-xs font-label text-gray-400">{group.label}</span>
                   </div>
                   <nav>
                     <ul className="space-y-3">
@@ -304,7 +304,7 @@ export default function Sidebar() {
           {allMenuItems.map((group, groupIndex) => (
             <div key={groupIndex} className="mb-8">
               <div className="mb-5">
-                <span className="text-xs font-orbitron text-gray-400 tracking-wider">{group.label}</span>
+                <span className="text-xs font-label text-gray-400">{group.label}</span>
               </div>
               <nav>
                 <ul className="space-y-3">

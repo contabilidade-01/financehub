@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=Orbitron:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 @import url('https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css');
 
 @tailwind base;
@@ -29,7 +29,9 @@
 
   --font-sans: 'Inter', sans-serif;
   --font-space: 'Space Grotesk', sans-serif;
-  --font-orbitron: 'Orbitron', sans-serif;
+  /* Números financeiros: mono com dígitos de largura fixa (colunas alinhadas). */
+  --font-numeric: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
+  --font-orbitron: var(--font-numeric);
 
   --chart-1: 157 100% 50%;
   --chart-2: 255 100% 70%;
@@ -482,7 +484,18 @@
   }
 
   .font-numeric {
-    font-family: var(--font-orbitron);
+    font-family: var(--font-numeric);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1, "zero" 1;
+    letter-spacing: -0.01em;
+  }
+
+  /* Rótulos de coluna / eyebrow: caixa alta discreta, sem display futurista. */
+  .font-label {
+    font-family: var(--font-space);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
 
   .menu-item-active {

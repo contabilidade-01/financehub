@@ -545,6 +545,101 @@ const ActionsDropdown = ({ onEdit, onDelete, t }: { onEdit: () => void; onDelete
   );
 };
 
+type Periodo = "all" | "current_month" | "next_month" | "custom";
+
+function PeriodFilterDropdown({
+  value, onChange, t,
+}: { value: Periodo; onChange: (v: Periodo) => void; t: (key: string, fallback: string) => string }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const selectRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (selectRef.current && !selectRef.current.contains(event.target as Node)) setIsOpen(false);
+    };
+    if (isOpen) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen]);
+
+  const opcoes: { id: Periodo; label: string }[] = [
+    { id: "all", label: t('transactions.filters.all_periods', 'Todo o período') },
+    { id: "current_month", label: t('transactions.filters.current_month', 'Mês atual') },
+    { id: "next_month", label: t('transactions.filters.next_month', 'Próximo mês') },
+    { id: "custom", label: t('transactions.filters.custom_period', 'Personalizado') },
+  ];
+  const atual = opcoes.find((o) => o.id === value) ?? opcoes[0];
+
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-sm font-medium text-muted-foreground">{t('transactions.filters.period', 'Período')}</label>
+      <div ref={selectRef} className="relative">
+        <button
+          type="button"
+          onClick={() => setIsOpen(!isOpen)}
+          className="flex h-10 w-[170px] items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm"
+        >
+          <span>{atual.label}</span>
+          <ChevronDown className="h-4 w-4 opacity-50" />
+        </button>
+
+        {isOpen && (
+          <div className="absolute z-50 w-full mt-1 rounded-md border bg-popover text-popover-foreground shadow-md max-h-[300px] overflow-y-auto">
+            <div className="p-1">
+              {opcoes.map((o) => (
+                <button
+                  key={o.id}
+                  type="button"
+                  className="relative flex w-full items-center rounded-sm py-1.5 pl-8 pr-2 text-sm hover:bg-accent hover:text-accent-foreground"
+                  onClick={() => { onChange(o.id); setIsOpen(false); }}
+                >
+                  {value === o.id && (
+                    <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+                      <Check className="h-4 w-4" />
+                    </span>
+                  )}
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SubtotalCard({
+  label, value, tone, hint,
+}: { label: string; value: string; tone: "neutral" | "income" | "expense"; hint?: string }) {
+  const cor =
+    tone === "income" ? "text-emerald-500"
+    : tone === "expense" ? "text-rose-500"
+    : "text-foreground";
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
+      <p className="text-[11px] font-label text-muted-foreground">{label}</p>
+      <p className={`mt-1 text-xl font-numeric font-semibold ${cor}`}>{value}</p>
+      {hint && <p className="mt-0.5 text-[11px] text-muted-foreground">{hint}</p>}
+    </div>
+  );
+}
+
+// AAAA-MM-DD do primeiro/último dia do mês, com offset de meses.
+function limitesDoMes(offsetMeses: number): { de: string; ate: string } {
+  const hoje = new Date();
+  const inicio = new Date(hoje.getFullYear(), hoje.getMonth() + offsetMeses, 1);
+  const fim = new Date(hoje.getFullYear(), hoje.getMonth() + offsetMeses + 1, 0);
+  const iso = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return { de: iso(inicio), ate: iso(fim) };
+}
+
+// Data de referência da transação: vencimento quando existe (conta a pagar).
+function dataRef(t: Transaction): string {
+  const v = (t as any).data_vencimento || t.data_transacao;
+  return String(v).slice(0, 10);
+}
+
 export default function Transactions() {
   const { theme } = useTheme();
   const { t } = useTranslation();
@@ -555,6 +650,9 @@ export default function Transactions() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [paymentMethodFilter, setPaymentMethodFilter] = useState<string>("all");
+  const [periodFilter, setPeriodFilter] = useState<Periodo>("all");
+  const [customFrom, setCustomFrom] = useState<string>("");
+  const [customTo, setCustomTo] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
   const { toast } = useToast();
   
@@ -625,9 +723,34 @@ export default function Transactions() {
     
     const matchesSearch = searchQuery === "" || 
       transaction.descricao.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    return matchesType && matchesStatus && matchesCategory && matchesPaymentMethod && matchesSearch;
+
+    let matchesPeriodo = true;
+    if (periodFilter !== "all") {
+      const { de, ate } =
+        periodFilter === "current_month" ? limitesDoMes(0)
+        : periodFilter === "next_month" ? limitesDoMes(1)
+        : { de: customFrom, ate: customTo };
+      const d = dataRef(transaction);
+      if (de && d < de) matchesPeriodo = false;
+      if (ate && d > ate) matchesPeriodo = false;
+    }
+
+    return matchesType && matchesStatus && matchesCategory && matchesPaymentMethod && matchesSearch && matchesPeriodo;
   });
+
+  // Subtotais do que está visível na lista (respeita todos os filtros).
+  const subtotais = (filteredTransactions ?? []).reduce(
+    (acc, t) => {
+      const v = Number(t.valor) || 0;
+      if (t.tipo === TransactionType.INCOME) acc.receitas += v;
+      else if ((t as any).reembolsavel) acc.aReceber += v;
+      else acc.despesas += v;
+      acc.qtd++;
+      return acc;
+    },
+    { receitas: 0, despesas: 0, aReceber: 0, qtd: 0 },
+  );
+  const saldoFiltrado = subtotais.receitas - subtotais.despesas;
 
   const handleDeleteTransaction = async (id: number) => {
     try {
@@ -783,6 +906,8 @@ export default function Transactions() {
                 t={t}
               />
 
+              <PeriodFilterDropdown value={periodFilter} onChange={setPeriodFilter} t={t} />
+
               <div className="flex flex-col gap-1">
                 <label className="text-sm font-medium text-muted-foreground">{t('transactions.table.actions', 'Ações')}</label>
                 <div className="h-10 flex items-center justify-end">
@@ -793,6 +918,9 @@ export default function Transactions() {
                       setStatusFilter("all");
                       setCategoryFilter("all");
                       setPaymentMethodFilter("all");
+                      setPeriodFilter("all");
+                      setCustomFrom("");
+                      setCustomTo("");
                       setSearchQuery("");
                     }}
                     className="bg-dark-purple/10"
@@ -804,18 +932,58 @@ export default function Transactions() {
             </div>
           </div>
 
+          {periodFilter === "custom" && (
+            <div className="flex flex-wrap items-end gap-4 mb-6">
+              <div className="flex flex-col gap-1">
+                <label className="text-sm font-medium text-muted-foreground">{t('transactions.filters.date_from', 'De')}</label>
+                <Input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="h-10 w-[170px] bg-dark-purple/10" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-sm font-medium text-muted-foreground">{t('transactions.filters.date_to', 'Até')}</label>
+                <Input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="h-10 w-[170px] bg-dark-purple/10" />
+              </div>
+            </div>
+          )}
+
+          {/* Subtotais do resultado filtrado */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+            <SubtotalCard
+              label={t('transactions.subtotal.count', 'Lançamentos')}
+              value={String(subtotais.qtd)}
+              tone="neutral"
+            />
+            <SubtotalCard
+              label={t('transactions.subtotal.income', 'Receitas')}
+              value={formatCurrency(subtotais.receitas)}
+              tone="income"
+            />
+            <SubtotalCard
+              label={t('transactions.subtotal.expense', 'Despesas')}
+              value={formatCurrency(subtotais.despesas)}
+              tone="expense"
+              hint={subtotais.aReceber > 0
+                ? `${t('transactions.subtotal.reimbursable', 'A receber')}: ${formatCurrency(subtotais.aReceber)}`
+                : undefined}
+            />
+            <SubtotalCard
+              label={t('transactions.subtotal.balance', 'Saldo do filtro')}
+              value={formatCurrency(saldoFiltrado)}
+              tone={saldoFiltrado >= 0 ? "income" : "expense"}
+            />
+          </div>
+
           {/* Desktop Table View */}
           <div className="hidden md:block">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[640px]">
                 <thead>
                   <tr>
-                    <th className="text-left pb-4 text-xs font-orbitron text-gray-400 tracking-wider">{t('transactions.table.description', 'DESCRIÇÃO')}</th>
-                    <th className="text-left pb-4 text-xs font-orbitron text-gray-400 tracking-wider">{t('transactions.table.category', 'CATEGORIA')}</th>
-                    <th className="text-left pb-4 text-xs font-orbitron text-gray-400 tracking-wider">{t('transactions.table.date', 'DATA')}</th>
-                    <th className="text-left pb-4 text-xs font-orbitron text-gray-400 tracking-wider">{t('transactions.table.value', 'VALOR')}</th>
-                    <th className="text-left pb-4 text-xs font-orbitron text-gray-400 tracking-wider">{t('transactions.table.status', 'STATUS')}</th>
-                    <th className="text-right pb-4 text-xs font-orbitron text-gray-400 tracking-wider">{t('transactions.table.actions', 'AÇÕES')}</th>
+                    <th className="text-left pb-4 text-xs font-label text-gray-400">{t('transactions.table.description', 'DESCRIÇÃO')}</th>
+                    <th className="text-left pb-4 text-xs font-label text-gray-400">{t('transactions.table.category', 'CATEGORIA')}</th>
+                    <th className="text-left pb-4 text-xs font-label text-gray-400">{t('transactions.table.date', 'DATA')}</th>
+                    <th className="text-left pb-4 text-xs font-label text-gray-400">{t('transactions.table.value', 'VALOR')}</th>
+                    <th className="text-left pb-4 text-xs font-label text-gray-400">{t('transactions.table.status', 'STATUS')}</th>
+                    <th className="text-right pb-4 text-xs font-label text-gray-400">{t('transactions.table.actions', 'AÇÕES')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -863,7 +1031,7 @@ export default function Transactions() {
                           <span className="text-gray-400">{formatDate(transaction.data_transacao)}</span>
                         </td>
                         <td className="py-4 whitespace-nowrap">
-                          <span className={`${transaction.tipo === TransactionType.INCOME ? 'text-green-400' : 'text-red-400'} font-orbitron`}>
+                          <span className={`${transaction.tipo === TransactionType.INCOME ? 'text-green-400' : 'text-red-400'} font-numeric`}>
                             {transaction.tipo === TransactionType.INCOME ? '+ ' : '- '}
                             {formatCurrency(Number(transaction.valor))}
                           </span>
@@ -943,7 +1111,7 @@ export default function Transactions() {
                   <div className="space-y-2">
                     <div className="flex justify-between items-center">
                       <span className={`text-sm font-medium ${theme === 'light' ? 'text-gray-700' : 'text-gray-400'}`}>{t('transactions.table.value', 'Valor')}:</span>
-                      <span className={`${transaction.tipo === TransactionType.INCOME ? 'text-green-500' : 'text-red-500'} font-orbitron font-medium`}>
+                      <span className={`${transaction.tipo === TransactionType.INCOME ? 'text-green-500' : 'text-red-500'} font-numeric font-medium`}>
                         {transaction.tipo === TransactionType.INCOME ? '+ ' : '- '}
                         {formatCurrency(Number(transaction.valor))}
                       </span>

@@ -96,7 +96,7 @@ export default function WalletSummary({ isWalletLoading, isSummaryLoading, walle
                 </p>
               </div>
               <div className="mt-3 md:mt-0">
-                <span className={`text-xs font-orbitron px-3 py-1 rounded-full ${theme === 'light' ? 'bg-gray-100 text-gray-700' : 'bg-dark'}`}>
+                <span className={`text-xs font-label px-3 py-1 rounded-full ${theme === 'light' ? 'bg-gray-100 text-gray-700' : 'bg-dark'}`}>
                   {isWalletLoading ? (
                     <Skeleton className="h-4 w-16" />
                   ) : (
@@ -133,7 +133,7 @@ export default function WalletSummary({ isWalletLoading, isSummaryLoading, walle
                   {isWalletLoading ? (
                     <Skeleton className="h-8 w-32 mb-2" />
                   ) : (
-                    <h3 className={`text-2xl md:text-3xl font-orbitron font-bold mb-1 ${
+                    <h3 className={`text-2xl md:text-3xl font-numeric font-bold mb-1 ${
                       (walletData?.saldo_atual || 0) < 0
                         ? theme === 'light' ? 'text-red-600' : 'text-[#dd0000]'
                         : theme === 'light' ? 'text-gray-900' : ''
@@ -174,7 +174,7 @@ export default function WalletSummary({ isWalletLoading, isSummaryLoading, walle
                   {isSummaryLoading ? (
                     <Skeleton className="h-8 w-32 mb-2" />
                   ) : (
-                    <h3 className={`text-2xl md:text-3xl font-orbitron font-bold mb-1 ${theme === 'light' ? 'text-gray-900' : ''}`}>
+                    <h3 className={`text-2xl md:text-3xl font-numeric font-bold mb-1 ${theme === 'light' ? 'text-gray-900' : ''}`}>
                       {formatCurrency(summaryData?.totalIncome || 0)}
                     </h3>
                   )}
@@ -211,7 +211,7 @@ export default function WalletSummary({ isWalletLoading, isSummaryLoading, walle
                   {isSummaryLoading ? (
                     <Skeleton className="h-8 w-32 mb-2" />
                   ) : (
-                    <h3 className={`text-2xl md:text-3xl font-orbitron font-bold mb-1 ${theme === 'light' ? 'text-gray-900' : ''}`}>
+                    <h3 className={`text-2xl md:text-3xl font-numeric font-bold mb-1 ${theme === 'light' ? 'text-gray-900' : ''}`}>
                       {formatCurrency(summaryData?.totalExpenses || 0)}
                     </h3>
                   )}

@@ -8,7 +8,9 @@ export default {
       fontFamily: {
         sans: ["Inter", "sans-serif"],
         space: ["Space Grotesk", "sans-serif"],
-        orbitron: ["Orbitron", "sans-serif"],
+        numeric: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "monospace"],
+        // alias legado — mesma stack numérica
+        orbitron: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "monospace"],
       },
       borderRadius: {
         lg: "var(--radius)",

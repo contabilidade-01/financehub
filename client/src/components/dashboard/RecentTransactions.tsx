@@ -154,12 +154,12 @@ export default function RecentTransactions({ isLoading, transactions, onRefetch 
             <table className={`w-full min-w-[640px] ${theme === 'light' ? 'bg-white' : ''}`}>
               <thead>
                 <tr>
-                  <th className={`text-left pb-4 text-xs font-orbitron tracking-wider ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>{t('transactions.table.description', 'DESCRIÇÃO')}</th>
-                  <th className={`text-left pb-4 text-xs font-orbitron tracking-wider ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>{t('transactions.table.category', 'CATEGORIA')}</th>
-                  <th className={`text-left pb-4 text-xs font-orbitron tracking-wider ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>{t('transactions.table.date', 'DATA')}</th>
-                  <th className={`text-left pb-4 text-xs font-orbitron tracking-wider ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>{t('transactions.table.value', 'VALOR')}</th>
-                  <th className={`text-left pb-4 text-xs font-orbitron tracking-wider ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>{t('transactions.table.status', 'STATUS')}</th>
-                  <th className={`text-right pb-4 text-xs font-orbitron tracking-wider ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>{t('transactions.table.actions', 'AÇÕES')}</th>
+                  <th className={`text-left pb-4 text-xs font-label ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>{t('transactions.table.description', 'DESCRIÇÃO')}</th>
+                  <th className={`text-left pb-4 text-xs font-label ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>{t('transactions.table.category', 'CATEGORIA')}</th>
+                  <th className={`text-left pb-4 text-xs font-label ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>{t('transactions.table.date', 'DATA')}</th>
+                  <th className={`text-left pb-4 text-xs font-label ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>{t('transactions.table.value', 'VALOR')}</th>
+                  <th className={`text-left pb-4 text-xs font-label ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>{t('transactions.table.status', 'STATUS')}</th>
+                  <th className={`text-right pb-4 text-xs font-label ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>{t('transactions.table.actions', 'AÇÕES')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -217,7 +217,7 @@ export default function RecentTransactions({ isLoading, transactions, onRefetch 
                       <td className="py-4 whitespace-nowrap">
                         <span className={`${transaction.tipo === TransactionType.INCOME
                           ? theme === 'light' ? 'text-green-600' : 'text-green-400'
-                          : theme === 'light' ? 'text-red-600' : 'text-red-400'} font-orbitron`}>
+                          : theme === 'light' ? 'text-red-600' : 'text-red-400'} font-numeric`}>
                           {transaction.tipo === TransactionType.INCOME ? '+ ' : '- '}
                           {formatCurrency(Number(transaction.valor))}
                         </span>

@@ -173,7 +173,7 @@ export default function WalletPage() {
                   </div>
                   <div>
                     <h3 className="text-sm text-gray-400 mb-1">Saldo atual</h3>
-                    <h2 className="text-3xl font-orbitron text-primary mb-4">
+                    <h2 className="text-3xl font-numeric text-primary mb-4">
                       {formatCurrency(Number(wallet?.saldo_atual) || 0)}
                     </h2>
                   </div>

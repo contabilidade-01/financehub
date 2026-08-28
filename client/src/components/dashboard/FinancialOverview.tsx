@@ -145,7 +145,7 @@ export default function FinancialOverview({ isLoading, chartData }: FinancialOve
     if (active && payload && payload.length) {
       return (
         <div className={`${theme === 'light' ? 'bg-white text-gray-900' : 'glass'} p-2 rounded-lg text-sm`}>
-          <p className="font-orbitron text-xs mb-1">{viewType === "monthly" ? `${t('dashboard.overview.day', 'Dia')} ${label}` : label}</p>
+          <p className="font-numeric text-xs mb-1">{viewType === "monthly" ? `${t('dashboard.overview.day', 'Dia')} ${label}` : label}</p>
           <p className="text-secondary font-medium">
             {t('dashboard.overview.income', 'Receitas')}: {formatCurrency(payload[0].value)}
           </p>

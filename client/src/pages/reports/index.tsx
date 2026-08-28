@@ -748,7 +748,7 @@ export default function ReportsPage() {
                             ></div>
                             <span>{category.displayName ?? category.name}</span>
                           </div>
-                          <span className="font-orbitron">{formatCurrency(Number(category.total))}</span>
+                          <span className="font-numeric">{formatCurrency(Number(category.total))}</span>
                         </div>
                         <div className="w-full bg-gray-700/30 rounded-full h-1.5 overflow-hidden">
                           <div
@@ -783,7 +783,7 @@ export default function ReportsPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="space-y-2">
                 <h3 className="text-sm text-gray-400">{t('reports.total_income', 'Total Income')}</h3>
-                <p className="text-2xl font-orbitron text-green-400">
+                <p className="text-2xl font-numeric text-green-400">
                   {isLoadingSummary ? (
                     <Skeleton className="h-8 w-32" />
                   ) : (
@@ -793,7 +793,7 @@ export default function ReportsPage() {
               </div>
               <div className="space-y-2">
                 <h3 className="text-sm text-gray-400">{t('reports.total_expenses', 'Total Expenses')}</h3>
-                <p className="text-2xl font-orbitron text-red-400">
+                <p className="text-2xl font-numeric text-red-400">
                   {isLoadingSummary ? (
                     <Skeleton className="h-8 w-32" />
                   ) : (
@@ -804,7 +804,7 @@ export default function ReportsPage() {
               <div className="space-y-2">
                 <h3 className="text-sm text-gray-400">{t('reports.current_balance', 'Current Balance')}</h3>
                 <p 
-                  className={`text-2xl font-orbitron ${
+                  className={`text-2xl font-numeric ${
                     Number(walletData?.saldo_atual || 0) >= 0 ? "text-primary" : "text-red-400"
                   }`}
                 >
