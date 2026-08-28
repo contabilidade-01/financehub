@@ -2816,36 +2816,43 @@ export async function aprenderMemoriaCategoria(
 // Nomes genéricos que NÃO são cartões nominais (não pedimos limite/fechamento).
 const FORMAS_GENERICAS = /^(pix|dinheiro|d[eé]bito|cart[aã]o de d[eé]bito|cart[aã]o de cr[eé]dito|boleto|transfer[eê]ncia|esp[eé]cie|cart[aã]o)$/i;
 
+function ehFormaGenerica(nome: string): boolean {
+  return FORMAS_GENERICAS.test((nome || "").trim());
+}
+
 export async function resolveOuCriaFormaPagamento(
   userId: number,
   nome: string,
 ): Promise<{ id: number; nome: string; criado: boolean; incompleto: boolean; faltando: string[] }> {
-  const norm = (s: string) => (s || "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const norm = (s: string) => (s || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const alvo = norm(nome);
   const rows = await db.execute(sql`
-    SELECT id, nome, dia_fechamento, dia_vencimento, limite FROM formas_pagamento
+    SELECT id, nome, dia_fechamento, dia_vencimento, limite, global, usuario_id FROM formas_pagamento
     WHERE (usuario_id = ${userId} OR global = true) AND ativo = true
   `);
   const lista = rows as any[];
 
-  // 1) match exato. 2) match por substring — mas ignora nomes genéricos na
-  //    direção "alvo contém nome" (evita o 'Cartão de Crédito' engolir 'Nubank').
-  let match = lista.find((r) => norm(r.nome) === alvo);
-  if (!match) {
+  // 1) match EXATO (preferindo o do usuário sobre o global)
+  const exatos = lista.filter((r) => norm(r.nome) === alvo);
+  let match =
+    exatos.find((r) => Number(r.usuario_id) === userId) ||
+    exatos.find((r) => r.global) ||
+    exatos[0];
+
+  // 2) substring só entre nomes NÃO genéricos e com alvo razoável (>= 3 chars)
+  //    Nunca deixa "Cartão de Crédito" engolir "CC Nubank" / "Inter" / etc.
+  if (!match && alvo.length >= 3 && !ehFormaGenerica(nome)) {
     const candidatos = lista.filter((r) => {
       const n = norm(r.nome);
-      if (!n) return false;
-      if (n === alvo) return true;
-      if (n.includes(alvo)) return true; // ex.: alvo "nu" em "nubank"
-      if (alvo.includes(n) && !FORMAS_GENERICAS.test(r.nome)) return true; // ex.: "nubank" em "cartão nubank"
+      if (!n || ehFormaGenerica(r.nome)) return false;
+      if (n.includes(alvo) || alvo.includes(n)) return true;
       return false;
     });
-    // mais específico (nome mais longo) vence
     match = candidatos.sort((a, b) => norm(b.nome).length - norm(a.nome).length)[0];
   }
 
   const analisar = (r: any) => {
-    const ehCartaoNominal = !FORMAS_GENERICAS.test(r.nome);
+    const ehCartaoNominal = !ehFormaGenerica(r.nome);
     const faltando: string[] = [];
     if (ehCartaoNominal) {
       if (r.limite == null) faltando.push("limite");
@@ -2869,7 +2876,12 @@ export async function resolveOuCriaFormaPagamento(
     const a = analisar(created);
     return { id: created.id, nome: created.nome, criado: true, ...a };
   } catch {
-    const again = await db.execute(sql`SELECT id, nome, dia_fechamento, dia_vencimento, limite FROM formas_pagamento WHERE lower(nome) = ${alvo} LIMIT 1`);
+    const again = await db.execute(sql`
+      SELECT id, nome, dia_fechamento, dia_vencimento, limite FROM formas_pagamento
+      WHERE lower(nome) = ${alvo} AND (usuario_id = ${userId} OR global = true)
+      ORDER BY CASE WHEN usuario_id = ${userId} THEN 0 ELSE 1 END
+      LIMIT 1
+    `);
     const row = (again as any[])[0];
     if (row) { const a = analisar(row); return { id: row.id, nome: row.nome, criado: false, ...a }; }
     return { id: 0, nome, criado: false, incompleto: false, faltando: [] };
@@ -3143,12 +3155,27 @@ export async function limparLixeiraAntiga(): Promise<void> {
 }
 
 // Cadastra OU atualiza um cartão pelo nome (evita erro de nome duplicado).
+// Nunca reaproveita o global "Cartão de Crédito" — cartão nominal é sempre do usuário.
 export async function cadastrarOuAtualizarCartao(userId: number, data: {
   nome: string; limite?: number; dia_fechamento?: number; dia_vencimento?: number; bandeira?: string; ultimos_digitos?: string;
 }): Promise<{ id: number; nome: string; atualizado: boolean }> {
-  const alvo = data.nome.trim().toLowerCase();
+  const nomeLimpo = (data.nome || "").trim();
+  if (!nomeLimpo) {
+    throw new Error("Nome do cartão é obrigatório");
+  }
+
+  // Se alguém mandar o genérico, NÃO cria cartão nominal — devolve a forma global.
+  if (ehFormaGenerica(nomeLimpo)) {
+    const gen = await resolveOuCriaFormaPagamento(userId, nomeLimpo);
+    return { id: gen.id, nome: gen.nome, atualizado: false };
+  }
+
+  const alvo = nomeLimpo.toLowerCase();
+  // Só cartões DO USUÁRIO (nunca atualiza o global genérico)
   const existentes = await db.execute(sql`
-    SELECT id, nome FROM formas_pagamento WHERE lower(nome) = ${alvo} AND (usuario_id = ${userId} OR global = true) LIMIT 1
+    SELECT id, nome FROM formas_pagamento
+    WHERE lower(nome) = ${alvo} AND usuario_id = ${userId}
+    LIMIT 1
   `);
   const ex = (existentes as any[])[0];
   if (ex) {
@@ -3166,7 +3193,7 @@ export async function cadastrarOuAtualizarCartao(userId: number, data: {
   }
   const ins = await db.execute(sql`
     INSERT INTO formas_pagamento (nome, descricao, icone, cor, usuario_id, global, ativo, limite, dia_fechamento, dia_vencimento, bandeira, ultimos_digitos)
-    VALUES (${data.nome.trim()}, ${'Cartão'}, ${'💳'}, ${'#FF6B35'}, ${userId}, false, true,
+    VALUES (${nomeLimpo}, ${'Cartão'}, ${'💳'}, ${'#FF6B35'}, ${userId}, false, true,
             ${data.limite ?? null}, ${data.dia_fechamento ?? null}, ${data.dia_vencimento ?? null}, ${data.bandeira ?? null}, ${data.ultimos_digitos ?? null})
     RETURNING id, nome
   `);

@@ -84,6 +84,17 @@ export default function ImportarLancamentos() {
           Suba sua planilha de controle (.xlsx ou .csv). Despesas comuns viram <b>contas a pagar</b>;
           linhas com “reembolso pendente” vão para <b>A Receber</b> e continuam compondo a fatura do cartão.
         </p>
+        <p className="text-sm text-amber-700 dark:text-amber-300 mt-2">
+          Na coluna <b>forma</b>, use o <b>nome do cartão</b> (ex.: <code>CC Nubank PF</code>, <code>CC Mercado Pago</code>, <code>CC Inter PJ · Venc. 25</code>).
+          Evite só “Cartão de Crédito” — isso é genérico e não cria o cartão certo.
+        </p>
+        <a
+          href="/modelo-lancamentos.csv"
+          download="modelo-lancamentos.csv"
+          className="inline-block text-sm text-primary underline mt-1"
+        >
+          Baixar planilha modelo
+        </a>
       </div>
 
       {/* Resultado final */}

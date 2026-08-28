@@ -15,8 +15,23 @@ import { db } from "../db";
 import { sql } from "drizzle-orm";
 import { storage, resolveOuCriaFormaPagamento, cadastrarOuAtualizarCartao } from "../storage";
 
-// Formas que NÃO são cartão de crédito (não viram cartão no cadastro).
-const FORMAS_GENERICAS = /^(boleto|d[ée]bito|pix|dinheiro|transfer[êe]ncia|ted|doc|esp[ée]cie)$/i;
+// Formas que NÃO são cartão nominal (não viram cartão no cadastro do usuário).
+// "Cartão de Crédito/Débito" genéricos ficam como forma global — o nome REAL
+// do cartão deve ser "CC Nubank PF", "CC Mercado Pago", etc.
+const FORMAS_GENERICAS =
+  /^(boleto|d[ée]bito|cart[aã]o de d[ée]bito|cart[aã]o de cr[ée]dito|cart[aã]o|pix|dinheiro|transfer[êe]ncia|ted|doc|esp[ée]cie)$/i;
+
+function ehCartaoNominal(nome: string): boolean {
+  const s = (nome || "").trim();
+  if (!s || FORMAS_GENERICAS.test(s)) return false;
+  // Heurística: prefixo CC, "Card", "Venc.", ou qualquer nome específico restante
+  if (/^CC\b/i.test(s)) return true;
+  if (/\bCard\b/i.test(s)) return true;
+  if (/Venc\.?\s*\d{1,2}/i.test(s)) return true;
+  // Qualquer outra coisa que não seja forma genérica vira cartão nominal
+  // (Mercado Pago, Magalu, Inter Platinum, Passaí, Tenda, Nubank…)
+  return true;
+}
 
 export interface LinhaImport {
   linha: number;              // nº da linha na planilha (para mensagens)
@@ -108,7 +123,7 @@ function parseForma(v: any): { nome: string; dia: number | null; cartao: boolean
   const mv = s.match(/·?\s*Venc\.?\s*(\d{1,2})/i);
   if (mv) { dia = parseInt(mv[1], 10); s = s.replace(/·?\s*Venc\.?\s*\d{1,2}/i, "").trim(); }
   s = s.replace(/·\s*$/, "").trim();
-  const cartao = !FORMAS_GENERICAS.test(s);
+  const cartao = ehCartaoNominal(s);
   return { nome: s, dia: dia && dia >= 1 && dia <= 31 ? dia : null, cartao };
 }
 

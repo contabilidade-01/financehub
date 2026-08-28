@@ -12,7 +12,8 @@ const brutoPath = path.join(__dirname, "controle-bruto.txt");
 const outCsv = path.join(__dirname, "lancamentos-pf-importacao.csv");
 const outXlsx = path.join(__dirname, "lancamentos-pf-importacao.xlsx");
 
-const FORMAS_GENERICAS = /^(boleto|d[ée]bito|pix|dinheiro|transfer[êe]ncia|ted|doc|esp[ée]cie)$/i;
+const FORMAS_GENERICAS =
+  /^(boleto|d[ée]bito|cart[aã]o de d[ée]bito|cart[aã]o de cr[ée]dito|cart[aã]o|pix|dinheiro|transfer[êe]ncia|ted|doc|esp[ée]cie)$/i;
 const RE_DATA = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
 const RE_VALOR = /[−\-]\s*R\$\s*[\d.]+,\d{2}|R\$\s*[\d.]+,\d{2}/i;
 
