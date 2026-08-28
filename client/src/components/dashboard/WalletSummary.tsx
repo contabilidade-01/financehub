@@ -9,6 +9,7 @@ import { useTranslation } from "@/contexts/LocalizationContext";
 interface WalletSummaryProps {
   isWalletLoading: boolean;
   isSummaryLoading: boolean;
+  periodLabel?: string;
   walletData?: {
     id: number;
     saldo_atual: number;
@@ -46,11 +47,13 @@ const itemVariants = {
   }
 };
 
-export default function WalletSummary({ isWalletLoading, isSummaryLoading, walletData, summaryData }: WalletSummaryProps) {
+export default function WalletSummary({ isWalletLoading, isSummaryLoading, walletData, summaryData, periodLabel }: WalletSummaryProps) {
   const { theme } = useTheme();
   const { t } = useTranslation();
-  // Calculate monthly change percentage (placeholder for now)
-  const monthlyChangePercentage = 2.5;
+  const income = summaryData?.totalIncome || 0;
+  const expenses = summaryData?.totalExpenses || 0;
+  const periodBalance = income - expenses;
+  const periodo = periodLabel || t('wallet.this_month', 'este mês');
   
   const cardHoverOverlay = (
     <>
@@ -128,22 +131,21 @@ export default function WalletSummary({ isWalletLoading, isSummaryLoading, walle
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${theme === 'light' ? 'bg-primary/10' : 'bg-secondary/20'}`}>
                       <WalletIcon className={`h-4 w-4 ${theme === 'light' ? 'text-primary' : 'text-secondary'}`} />
                     </div>
-                    <span className={`${theme === 'light' ? 'text-gray-700' : 'text-gray-300'} text-sm font-semibold`}>{t('wallet.current_balance', 'Current Balance')}</span>
+                    <span className={`${theme === 'light' ? 'text-gray-700' : 'text-gray-300'} text-sm font-semibold`}>{t('wallet.period_balance', 'Saldo do período')}</span>
                   </div>
                   {isWalletLoading ? (
                     <Skeleton className="h-8 w-32 mb-2" />
                   ) : (
                     <h3 className={`text-2xl md:text-3xl font-numeric font-bold mb-1 ${
-                      (walletData?.saldo_atual || 0) < 0
+                      periodBalance < 0
                         ? theme === 'light' ? 'text-red-600' : 'text-[#dd0000]'
                         : theme === 'light' ? 'text-gray-900' : ''
                     }`}>
-                      {formatCurrency(walletData?.saldo_atual || 0)}
+                      {formatCurrency(periodBalance)}
                     </h3>
                   )}
-                  <p className={`${theme === 'light' ? 'text-green-600' : 'text-green-400'} text-sm flex items-center font-medium`}>
-                    <ArrowUpIcon className={`h-3 w-3 mr-1 ${theme === 'light' ? 'text-green-600' : 'text-green-400'}`} />
-                    <span>+{monthlyChangePercentage}% {t('wallet.this_month', 'este mês')}</span>
+                  <p className={`${theme === 'light' ? 'text-gray-500' : 'text-gray-400'} text-sm font-medium`}>
+                    {t('wallet.wallet_total', 'Carteira')}: {formatCurrency(walletData?.saldo_atual || 0)} · {periodo}
                   </p>
                 </div>
               </motion.div>
@@ -169,18 +171,17 @@ export default function WalletSummary({ isWalletLoading, isSummaryLoading, walle
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${theme === 'light' ? 'bg-green-100' : 'bg-green-500/20'}`}>
                       <ArrowUpIcon className={`h-4 w-4 ${theme === 'light' ? 'text-green-600' : 'text-green-500'}`} />
                     </div>
-                    <span className={`${theme === 'light' ? 'text-gray-700' : 'text-gray-300'} text-sm font-semibold`}>{t('wallet.monthly_income', 'Monthly Income')}</span>
+                    <span className={`${theme === 'light' ? 'text-gray-700' : 'text-gray-300'} text-sm font-semibold`}>{t('wallet.period_income', 'Receitas')}</span>
                   </div>
                   {isSummaryLoading ? (
                     <Skeleton className="h-8 w-32 mb-2" />
                   ) : (
                     <h3 className={`text-2xl md:text-3xl font-numeric font-bold mb-1 ${theme === 'light' ? 'text-gray-900' : ''}`}>
-                      {formatCurrency(summaryData?.totalIncome || 0)}
+                      {formatCurrency(income)}
                     </h3>
                   )}
-                  <p className={`${theme === 'light' ? 'text-green-600' : 'text-green-400'} text-sm flex items-center font-medium`}>
-                    <ArrowUpIcon className={`h-3 w-3 mr-1 ${theme === 'light' ? 'text-green-600' : 'text-green-400'}`} />
-                    <span>+12% {t('wallet.vs_last_month', 'vs. último mês')}</span>
+                  <p className={`${theme === 'light' ? 'text-gray-500' : 'text-gray-400'} text-sm font-medium`}>
+                    {periodo}
                   </p>
                 </div>
               </motion.div>
@@ -206,18 +207,17 @@ export default function WalletSummary({ isWalletLoading, isSummaryLoading, walle
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${theme === 'light' ? 'bg-red-100' : 'bg-red-500/20'}`}>
                       <ArrowDownIcon className={`h-4 w-4 ${theme === 'light' ? 'text-red-600' : 'text-red-500'}`} />
                     </div>
-                    <span className={`${theme === 'light' ? 'text-gray-700' : 'text-gray-300'} text-sm font-semibold`}>{t('wallet.monthly_expenses', 'Monthly Expenses')}</span>
+                    <span className={`${theme === 'light' ? 'text-gray-700' : 'text-gray-300'} text-sm font-semibold`}>{t('wallet.period_expenses', 'Despesas')}</span>
                   </div>
                   {isSummaryLoading ? (
                     <Skeleton className="h-8 w-32 mb-2" />
                   ) : (
                     <h3 className={`text-2xl md:text-3xl font-numeric font-bold mb-1 ${theme === 'light' ? 'text-gray-900' : ''}`}>
-                      {formatCurrency(summaryData?.totalExpenses || 0)}
+                      {formatCurrency(expenses)}
                     </h3>
                   )}
-                  <p className={`${theme === 'light' ? 'text-red-600' : 'text-red-400'} text-sm flex items-center font-medium`}>
-                    <ArrowDownIcon className={`h-3 w-3 mr-1 ${theme === 'light' ? 'text-red-600' : 'text-red-400'}`} />
-                    <span>-5% {t('wallet.vs_last_month', 'vs. último mês')}</span>
+                  <p className={`${theme === 'light' ? 'text-gray-500' : 'text-gray-400'} text-sm font-medium`}>
+                    {periodo}
                   </p>
                 </div>
               </motion.div>

@@ -83,42 +83,51 @@ import { eq, and, or, desc, gte, lte, isNull, count, sum, sql, ne } from "drizzl
  * @param period - "month" | "quarter" | "year" | undefined (defaults to month)
  * @returns { startDate: Date, endDate: Date }
  */
-function calculateDateRange(period?: string): { startDate: Date; endDate: Date } {
+function isoDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function calculateDateRange(
+  period?: string,
+  from?: string,
+  to?: string,
+): { startDate: Date; endDate: Date; from: string; to: string } {
+  if (from && to) {
+    const startDate = new Date(`${from}T00:00:00`);
+    const endDate = new Date(`${to}T23:59:59.999`);
+    return { startDate, endDate, from, to };
+  }
+
   const now = new Date();
   let startDate = new Date();
   let endDate = new Date();
 
   switch (period) {
-    case "quarter":
-      // Last 3 months (current month - 2 months to current month)
-      startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-      startDate.setHours(0, 0, 0, 0);
+    case "all":
+      startDate = new Date(1970, 0, 1);
+      endDate = new Date(2099, 11, 31);
+      break;
 
+    case "quarter":
+      startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
       endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-      endDate.setHours(23, 59, 59, 999);
       break;
 
     case "year":
-      // Current year (January 1 to December 31)
       startDate = new Date(now.getFullYear(), 0, 1);
-      startDate.setHours(0, 0, 0, 0);
-
       endDate = new Date(now.getFullYear(), 11, 31);
-      endDate.setHours(23, 59, 59, 999);
       break;
 
     case "month":
     default:
-      // Current month (first day to last day)
       startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-      startDate.setHours(0, 0, 0, 0);
-
       endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-      endDate.setHours(23, 59, 59, 999);
       break;
   }
 
-  return { startDate, endDate };
+  startDate.setHours(0, 0, 0, 0);
+  endDate.setHours(23, 59, 59, 999);
+  return { startDate, endDate, from: isoDate(startDate), to: isoDate(endDate) };
 }
 
 export interface IStorage {
@@ -163,9 +172,9 @@ export interface IStorage {
   deleteTransaction(id: number): Promise<boolean>;
   
   // Dashboard methods
-  getMonthlyTransactionSummary(walletId: number, period?: string): Promise<any>;
-  getExpensesByCategory(walletId: number, period?: string): Promise<any>;
-  getIncomeExpenseTotals(walletId: number, period?: string): Promise<{ totalIncome: number; totalExpenses: number }>;
+  getMonthlyTransactionSummary(walletId: number, period?: string, from?: string, to?: string): Promise<any>;
+  getExpensesByCategory(walletId: number, period?: string, from?: string, to?: string): Promise<any>;
+  getIncomeExpenseTotals(walletId: number, period?: string, from?: string, to?: string): Promise<{ totalIncome: number; totalExpenses: number }>;
 
   // Bulk operations for performance
   getWalletStatsForAllUsers(): Promise<{ walletId: number; userId: number; balance: number; transactionCount: number }[]>;
@@ -756,23 +765,22 @@ export class DbStorage implements IStorage {
   }
   
   // Dashboard methods
-  async getMonthlyTransactionSummary(walletId: number, period?: string): Promise<any> {
+  async getMonthlyTransactionSummary(walletId: number, period?: string, from?: string, to?: string): Promise<any> {
     try {
-      // Calculate date range based on period parameter
-      const { startDate, endDate } = calculateDateRange(period);
+      const range = calculateDateRange(period, from, to);
 
       const monthlyData = await db.execute(sql`
         SELECT
-          TO_CHAR(data_transacao, 'Mon') as month,
-          EXTRACT(MONTH FROM data_transacao) as month_num,
-          EXTRACT(YEAR FROM data_transacao) as year,
+          TO_CHAR(COALESCE(data_vencimento, data_transacao), 'Mon') as month,
+          EXTRACT(MONTH FROM COALESCE(data_vencimento, data_transacao)) as month_num,
+          EXTRACT(YEAR FROM COALESCE(data_vencimento, data_transacao)) as year,
           SUM(CASE WHEN tipo = 'Receita' THEN valor ELSE 0 END) as income,
           SUM(CASE WHEN tipo = 'Despesa' AND COALESCE(reembolsavel, false) = false THEN valor ELSE 0 END) as expense
         FROM transacoes
         WHERE
           carteira_id = ${walletId}
-          AND data_transacao >= ${startDate.toISOString()}
-          AND data_transacao <= ${endDate.toISOString()}
+          AND COALESCE(data_vencimento, data_transacao)::date >= ${range.from}::date
+          AND COALESCE(data_vencimento, data_transacao)::date <= ${range.to}::date
         GROUP BY month, month_num, year
         ORDER BY year, month_num
       `);
@@ -784,9 +792,8 @@ export class DbStorage implements IStorage {
     }
   }
   
-  async getExpensesByCategory(walletId: number, period?: string): Promise<any> {
-    // Calculate date range based on period parameter
-    const { startDate, endDate } = calculateDateRange(period);
+  async getExpensesByCategory(walletId: number, period?: string, from?: string, to?: string): Promise<any> {
+    const range = calculateDateRange(period, from, to);
 
     try {
       const result = await db.execute(sql`
@@ -802,8 +809,8 @@ export class DbStorage implements IStorage {
           t.carteira_id = ${walletId}
           AND t.tipo = 'Despesa'
           AND COALESCE(t.reembolsavel, false) = false
-          AND t.data_transacao >= ${startDate.toISOString()}
-          AND t.data_transacao <= ${endDate.toISOString()}
+          AND COALESCE(t.data_vencimento, t.data_transacao)::date >= ${range.from}::date
+          AND COALESCE(t.data_vencimento, t.data_transacao)::date <= ${range.to}::date
         GROUP BY c.id, c.nome, c.cor, c.icone
         ORDER BY total DESC
       `);
@@ -815,10 +822,9 @@ export class DbStorage implements IStorage {
     }
   }
   
-  async getIncomeExpenseTotals(walletId: number, period?: string): Promise<{ totalIncome: number; totalExpenses: number }> {
+  async getIncomeExpenseTotals(walletId: number, period?: string, from?: string, to?: string): Promise<{ totalIncome: number; totalExpenses: number }> {
     try {
-      // Calculate date range based on period parameter
-      const { startDate, endDate } = calculateDateRange(period);
+      const range = calculateDateRange(period, from, to);
 
       const result = await db.execute(sql`
         SELECT
@@ -827,8 +833,8 @@ export class DbStorage implements IStorage {
         FROM transacoes
         WHERE
           carteira_id = ${walletId}
-          AND data_transacao >= ${startDate.toISOString()}
-          AND data_transacao <= ${endDate.toISOString()}
+          AND COALESCE(data_vencimento, data_transacao)::date >= ${range.from}::date
+          AND COALESCE(data_vencimento, data_transacao)::date <= ${range.to}::date
       `);
 
       if (result && result[0]) {

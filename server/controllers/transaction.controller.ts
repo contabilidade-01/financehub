@@ -549,25 +549,24 @@ export async function getDashboardSummary(req: Request, res: Response) {
       return res.status(404).json({ message: "Carteira não encontrada" });
     }
 
-    // Extract period parameter from query string (optional)
-    // Valid values: "month", "quarter", "year"
-    // Defaults to "month" if not provided
-    const period = req.query.period as string | undefined;
+    const from = typeof req.query.from === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.from)
+      ? req.query.from
+      : undefined;
+    const to = typeof req.query.to === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.to)
+      ? req.query.to
+      : undefined;
 
-    // Validate period parameter
-    const validPeriods = ["month", "quarter", "year"];
-    if (period && !validPeriods.includes(period)) {
+    const period = req.query.period as string | undefined;
+    const validPeriods = ["month", "quarter", "year", "all"];
+    if (!from && !to && period && !validPeriods.includes(period)) {
       return res.status(400).json({
         error: "Parâmetro de período inválido",
         message: `O período deve ser um dos seguintes: ${validPeriods.join(", ")}`
       });
     }
 
-    // Get monthly transaction summary (filtered by period)
-    const monthlyData = await storage.getMonthlyTransactionSummary(wallet.id, period);
-
-    // Get expenses by category (filtered by period)
-    const expensesData = await storage.getExpensesByCategory(wallet.id, period);
+    const monthlyData = await storage.getMonthlyTransactionSummary(wallet.id, period, from, to);
+    const expensesData = await storage.getExpensesByCategory(wallet.id, period, from, to);
 
     // Calculate total expenses for percentage calculation
     const totalExpensesAmount = expensesData.reduce(
@@ -588,7 +587,7 @@ export async function getDashboardSummary(req: Request, res: Response) {
     }));
 
     // Get income and expense totals (filtered by period)
-    const { totalIncome, totalExpenses } = await storage.getIncomeExpenseTotals(wallet.id, period);
+    const { totalIncome, totalExpenses } = await storage.getIncomeExpenseTotals(wallet.id, period, from, to);
 
     res.status(200).json({
       monthlyData,

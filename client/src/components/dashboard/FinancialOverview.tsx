@@ -27,16 +27,18 @@ interface FinancialOverviewProps {
     income: number;
     expense: number;
   }>;
+  from?: string;
+  to?: string;
 }
 
-export default function FinancialOverview({ isLoading, chartData }: FinancialOverviewProps) {
+export default function FinancialOverview({ isLoading, chartData, from, to }: FinancialOverviewProps) {
   const [viewType, setViewType] = useState<"monthly" | "annual">("monthly");
   const { theme } = useTheme();
   const { t } = useTranslation();
   
   // Buscar dados específicos baseado no tipo de visualização
   const { data: filteredData, isLoading: isFilteredLoading } = useQuery({
-    queryKey: ["/api/dashboard/summary", viewType],
+    queryKey: ["/api/dashboard/summary", viewType, from, to],
     queryFn: async () => {
       if (viewType === "monthly") {
         // Para visão mensal, buscar transações detalhadas para agrupar por dia
@@ -48,14 +50,14 @@ export default function FinancialOverview({ isLoading, chartData }: FinancialOve
         }>>("/api/transactions");
         return { transactions };
       } else {
-        // Para visão anual, usar dados mensais normais
-        return apiRequest<{
-          monthlyData: Array<{
-            month: string;
-            income: number;
-            expense: number;
-          }>;
-        }>("/api/dashboard/summary");
+        const params = new URLSearchParams();
+        if (from && to) {
+          params.set("from", from);
+          params.set("to", to);
+        } else {
+          params.set("period", "year");
+        }
+        return apiRequest(`/api/dashboard/summary?${params.toString()}`);
       }
     },
   });
@@ -73,15 +75,15 @@ export default function FinancialOverview({ isLoading, chartData }: FinancialOve
         }));
       }
 
-      const currentDate = new Date();
-      const currentYear = currentDate.getFullYear();
-      const currentMonth = currentDate.getMonth();
+      const refDate = from ? new Date(`${from}T00:00:00`) : new Date();
+      const year = refDate.getFullYear();
+      const month = refDate.getMonth();
       
-      // Filtrar transações apenas do mês atual
       const currentMonthTransactions = filteredData.transactions.filter(transaction => {
-        const transactionDate = new Date(transaction.data_transacao);
-        return transactionDate.getFullYear() === currentYear && 
-               transactionDate.getMonth() === currentMonth;
+        const d = String(transaction.data_transacao).slice(0, 10);
+        if (from && d < from) return false;
+        if (to && d > to) return false;
+        return true;
       });
 
       // Agrupar por dia
@@ -102,7 +104,7 @@ export default function FinancialOverview({ isLoading, chartData }: FinancialOve
       });
 
       // Criar array com todos os dias do mês (30 dias)
-      const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
       return Array.from({ length: Math.min(30, daysInMonth) }, (_, index) => {
         const day = index + 1;
         return {
