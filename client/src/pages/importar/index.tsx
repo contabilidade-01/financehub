@@ -91,9 +91,16 @@ export default function ImportarLancamentos() {
         <a
           href="/modelo-lancamentos.csv"
           download="modelo-lancamentos.csv"
-          className="inline-block text-sm text-primary underline mt-1"
+          className="inline-block text-sm text-primary underline mt-1 mr-4"
         >
           Baixar planilha modelo
+        </a>
+        <a
+          href="/lancamentos-pf-exemplo.xlsx"
+          download="lancamentos-pf-exemplo.xlsx"
+          className="inline-block text-sm text-primary underline mt-1"
+        >
+          Baixar exemplo com cartões CC …
         </a>
       </div>
 
