@@ -16,10 +16,10 @@ import { sql } from "drizzle-orm";
 import { storage, resolveOuCriaFormaPagamento, cadastrarOuAtualizarCartao } from "../storage";
 
 // Formas que NÃO são cartão nominal (não viram cartão no cadastro do usuário).
-// "Cartão de Crédito/Débito" genéricos ficam como forma global — o nome REAL
-// do cartão deve ser "CC Nubank PF", "CC Mercado Pago", etc.
+// "Cartão de Crédito/Débito" genéricos e slugs (cartao_credito) ficam como forma global —
+// o nome REAL do cartão deve ser "CC Nubank PF", "CC Mercado Pago", etc.
 const FORMAS_GENERICAS =
-  /^(boleto|d[ée]bito|cart[aã]o de d[ée]bito|cart[aã]o de cr[ée]dito|cart[aã]o|pix|dinheiro|transfer[êe]ncia|ted|doc|esp[ée]cie)$/i;
+  /^(boleto|d[ée]bito|cart[aã]o([_\s-]?de)?[_\s-]?d[ée]bito|cart[aã]o([_\s-]?de)?[_\s-]?cr[ée]dito|cartao_credito|cartao_debito|credit[_\s-]?card|debit[_\s-]?card|cart[aã]o|pix|dinheiro|transfer[êe]ncia|ted|doc|esp[ée]cie)$/i;
 
 function ehCartaoNominal(nome: string): boolean {
   const s = (nome || "").trim();
@@ -288,11 +288,48 @@ export async function montarPreview(userId: number, walletId: number, parsed: Pa
     formasNovas: [...formasNovas.values()],
     cartoesIncompletos: [...cartoesIncompletos],
     erros,
-    amostra: linhas.slice(0, 20).map((l) => ({
-      vencimento: l.vencimento, descricao: l.descricao, categoria: l.categoria || "Outros",
-      forma: l.forma || "—", valor: l.valor, reembolsavel: l.reembolsavel,
-    })),
+    // Amostra com variedade de formas (não só as 20 primeiras, que podem ser só boleto)
+    amostra: amostraDiversa(linhas, 20),
   };
+}
+
+function amostraDiversa(
+  linhas: LinhaImport[],
+  limite: number,
+): PreviewResult["amostra"] {
+  const map = (l: LinhaImport) => ({
+    vencimento: l.vencimento,
+    descricao: l.descricao,
+    categoria: l.categoria || "Outros",
+    forma: l.forma || "—",
+    valor: l.valor,
+    reembolsavel: l.reembolsavel,
+  });
+  if (linhas.length <= limite) return linhas.map(map);
+
+  const porForma = new Map<string, LinhaImport[]>();
+  for (const l of linhas) {
+    const k = l.forma || "—";
+    if (!porForma.has(k)) porForma.set(k, []);
+    porForma.get(k)!.push(l);
+  }
+  const out: LinhaImport[] = [];
+  const keys = [...porForma.keys()];
+  // 1 de cada forma primeiro
+  for (const k of keys) {
+    if (out.length >= limite) break;
+    out.push(porForma.get(k)!.shift()!);
+  }
+  // completa intercalando
+  let i = 0;
+  while (out.length < limite) {
+    const k = keys[i % keys.length];
+    const fila = porForma.get(k)!;
+    if (fila.length) out.push(fila.shift()!);
+    i++;
+    if (keys.every((kk) => porForma.get(kk)!.length === 0)) break;
+  }
+  return out.map(map);
 }
 
 // -------- commit (grava) --------

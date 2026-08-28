@@ -2814,7 +2814,7 @@ export async function aprenderMemoriaCategoria(
 
 // Resolve uma forma de pagamento pelo nome (usuário + globais); cria se não achar.
 // Nomes genéricos que NÃO são cartões nominais (não pedimos limite/fechamento).
-const FORMAS_GENERICAS = /^(pix|dinheiro|d[eé]bito|cart[aã]o de d[eé]bito|cart[aã]o de cr[eé]dito|boleto|transfer[eê]ncia|esp[eé]cie|cart[aã]o)$/i;
+const FORMAS_GENERICAS = /^(pix|dinheiro|d[eé]bito|cart[aã]o([_\s-]?de)?[_\s-]?d[eé]bito|cart[aã]o([_\s-]?de)?[_\s-]?cr[eé]dito|cartao_credito|cartao_debito|credit[_\s-]?card|debit[_\s-]?card|boleto|transfer[eê]ncia|esp[eé]cie|cart[aã]o)$/i;
 
 function ehFormaGenerica(nome: string): boolean {
   return FORMAS_GENERICAS.test((nome || "").trim());

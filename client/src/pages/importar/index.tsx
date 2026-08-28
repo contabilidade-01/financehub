@@ -194,6 +194,18 @@ export default function ImportarLancamentos() {
                   </Bloco>
                 )}
 
+                {preview.formasNovas.some((f) => /cartao[_]?credito|cart[aã]o de cr[eé]dito/i.test(f.nome)) &&
+                  !preview.formasNovas.some((f) => f.cartao && /^CC\b/i.test(f.nome)) && (
+                  <div className="flex items-start gap-2 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 rounded-lg p-3 text-sm text-red-800 dark:text-red-300">
+                    <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                    <span>
+                      A planilha só traz forma genérica (<b>cartao_credito</b> / Cartão de Crédito).
+                      Para criar Nubank, Mercado Pago, Inter etc., a coluna <b>forma</b> precisa ter o nome do cartão
+                      (ex.: <code>CC Nubank PF</code>). Sem isso o sistema não consegue separar os cartões.
+                    </span>
+                  </div>
+                )}
+
                 {preview.categoriasNovas.length > 0 && (
                   <Bloco icon={<Tag className="h-4 w-4" />} titulo="Categorias que serão criadas">
                     {preview.categoriasNovas.map((c) => (
