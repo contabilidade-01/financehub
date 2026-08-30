@@ -24,13 +24,15 @@ import {
   TrendingUp,
   FileUp,
   Target,
-  HandCoins
+  HandCoins,
+  LineChart
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { VersionDisplay } from "@/components/shared/VersionDisplay";
 import { ThemeToggleSimple } from "@/components/theme-toggle-simple";
 import { useTheme } from "next-themes";
 import { useTranslation } from "@/contexts/LocalizationContext";
+import { useSystemConfig } from "@/contexts/SystemConfigContext";
 
 interface MenuItem {
   icon: React.ReactNode;
@@ -49,6 +51,8 @@ function Sidebar() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const { theme } = useTheme();
   const { t } = useTranslation();
+  const { config: systemConfig } = useSystemConfig();
+  const nomeSistema = systemConfig.system_name || "Magen";
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [prevLogoUrl, setPrevLogoUrl] = useState<string | null>(null);
   const [hasCustomLogo, setHasCustomLogo] = useState<boolean | null>(null);
@@ -109,6 +113,7 @@ function Sidebar() {
       { icon: <FileUp className="mr-3 h-4 w-4" />, text: 'Importar Lançamentos', path: "/importar" },
       { icon: <Building2 className="mr-3 h-4 w-4" />, text: 'Metas e Sonhos', path: "/metas" },
       { icon: <BarChart3 className="mr-3 h-4 w-4" />, text: t('navigation.reports', 'Relatórios'), path: "/reports" },
+      { icon: <LineChart className="mr-3 h-4 w-4" />, text: 'Fluxo Projetado', path: "/fluxo-projetado" },
       { icon: <CreditCard className="mr-3 h-4 w-4" />, text: t('navigation.payment_methods', 'Cartões e Pagamentos'), path: "/payment-methods" },
       { icon: <CalendarDays className="mr-3 h-4 w-4" />, text: t('navigation.reminders', 'Lembretes'), path: "/reminders" },
     ]
@@ -197,37 +202,27 @@ function Sidebar() {
       <aside className={`${sidebarBg} ${isSidebarOpen ? 'hidden' : 'block'} lg:hidden w-full z-10 ${shouldApplyAdminOffset ? 'sidebar-admin-offset' : ''}`}>
         <div className="p-5 pb-0 flex-shrink-0">
           <div className="flex items-center justify-between mb-8">
-            <div className="flex items-center">
-              <div className="w-[230px] h-[60px] rounded-lg mr-3 overflow-hidden relative">
-                {/* Logo anterior durante transição */}
+            <div className="flex items-center gap-3">
+              <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full">
                 {prevLogoUrl && (
-                  <img 
-                    src={prevLogoUrl} 
-                    alt="Logo" 
-                    className="object-contain w-[230px] h-[60px] absolute inset-0 transition-opacity duration-200"
-                    style={{ maxWidth: 230, maxHeight: 60, opacity: logoUrl ? 0 : 1 }}
+                  <img
+                    src={prevLogoUrl}
+                    alt=""
+                    className="absolute inset-0 h-12 w-12 object-contain transition-opacity duration-200"
+                    style={{ opacity: logoUrl ? 0 : 1 }}
                   />
                 )}
-                {/* Logo atual */}
-                {logoUrl && (
-                  <img 
-                    src={logoUrl} 
-                    alt="Logo" 
-                    className="object-contain w-[230px] h-[60px] transition-opacity duration-200"
-                    style={{ maxWidth: 230, maxHeight: 60 }}
-                  />
-                )}
-                {/* Fallback apenas quando não há logo customizado E não está carregando */}
-                {!isInitialLoad && hasCustomLogo === false && (
-                  <LayoutDashboard className="h-5 w-5 text-white" />
+                {logoUrl ? (
+                  <img src={logoUrl} alt="" className="h-12 w-12 object-contain" />
+                ) : (
+                  !isInitialLoad && hasCustomLogo === false && (
+                    <LayoutDashboard className="h-5 w-5 text-white" />
+                  )
                 )}
               </div>
-              {/* Texto padrão apenas quando confirmado que não há logo customizado */}
-              {!isInitialLoad && hasCustomLogo === false && (
-                <h1 className="text-2xl font-space font-bold text-white tracking-wide">
-                  Magen
-                </h1>
-              )}
+              <h1 className={`text-2xl font-space font-bold tracking-wide ${theme === "light" ? "text-gray-900" : "text-white"}`}>
+                {nomeSistema}
+              </h1>
             </div>
             <Button 
               variant="ghost"
@@ -266,37 +261,27 @@ function Sidebar() {
             {/* Header com botão fechar */}
             <div className="p-5 pb-0 flex-shrink-0">
               <div className="flex items-center justify-between mb-8">
-                <div className="flex items-center">
-                  <div className="w-[230px] h-[60px] rounded-lg mr-3 overflow-hidden relative">
-                    {/* Logo anterior durante transição */}
+                <div className="flex items-center gap-3">
+                  <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full">
                     {prevLogoUrl && (
-                      <img 
-                        src={prevLogoUrl} 
-                        alt="Logo" 
-                        className="object-contain w-[230px] h-[60px] absolute inset-0 transition-opacity duration-200"
-                        style={{ maxWidth: 230, maxHeight: 60, opacity: logoUrl ? 0 : 1 }}
+                      <img
+                        src={prevLogoUrl}
+                        alt=""
+                        className="absolute inset-0 h-12 w-12 object-contain transition-opacity duration-200"
+                        style={{ opacity: logoUrl ? 0 : 1 }}
                       />
                     )}
-                    {/* Logo atual */}
-                    {logoUrl && (
-                      <img 
-                        src={logoUrl} 
-                        alt="Logo" 
-                        className="object-contain w-[230px] h-[60px] transition-opacity duration-200"
-                        style={{ maxWidth: 230, maxHeight: 60 }}
-                      />
-                    )}
-                    {/* Fallback apenas quando não há logo customizado E não está carregando */}
-                    {!isInitialLoad && hasCustomLogo === false && (
-                      <LayoutDashboard className="h-5 w-5 text-white" />
+                    {logoUrl ? (
+                      <img src={logoUrl} alt="" className="h-12 w-12 object-contain" />
+                    ) : (
+                      !isInitialLoad && hasCustomLogo === false && (
+                        <LayoutDashboard className="h-5 w-5 text-white" />
+                      )
                     )}
                   </div>
-                  {/* Texto padrão apenas quando confirmado que não há logo customizado */}
-                  {!isInitialLoad && hasCustomLogo === false && (
-                    <h1 className="text-2xl font-space font-bold text-white tracking-wide">
-                      Magen
-                    </h1>
-                  )}
+                  <h1 className={`text-2xl font-space font-bold tracking-wide ${theme === "light" ? "text-gray-900" : "text-white"}`}>
+                    {nomeSistema}
+                  </h1>
                 </div>
                 <Button 
                   variant="ghost"
@@ -394,38 +379,29 @@ function Sidebar() {
         {/* Header fixo do Magen */}
         <div className="p-5 pb-0 flex-shrink-0">
           <div className="flex items-center justify-start mb-8">
-            <div className="flex items-center">
-              <div className={`flex items-center justify-center w-[230px] h-[60px] rounded-lg shadow-neon mr-3 overflow-hidden pr-1 relative`}>
-                {/* Logo anterior durante transição */}
+            <div className="flex items-center gap-3">
+              <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full">
                 {prevLogoUrl && (
-                  <img 
-                    src={prevLogoUrl} 
-                    alt="Logo" 
-                    className="object-contain w-[230px] h-[60px] absolute inset-0 transition-opacity duration-200"
-                    style={{ maxWidth: 230, maxHeight: 60, opacity: logoUrl ? 0 : 1 }}
+                  <img
+                    src={prevLogoUrl}
+                    alt=""
+                    className="absolute inset-0 h-12 w-12 object-contain transition-opacity duration-200"
+                    style={{ opacity: logoUrl ? 0 : 1 }}
                   />
                 )}
-                {/* Logo atual */}
-                {logoUrl && (
-                  <img 
-                    src={logoUrl} 
-                    alt="Logo" 
-                    className="object-contain w-[230px] h-[60px] transition-opacity duration-200"
-                    style={{ maxWidth: 230, maxHeight: 60 }}
-                  />
-                )}
-                {/* Fallback apenas quando confirmado que não há logo customizado */}
-                {!isInitialLoad && hasCustomLogo === false && (
-                  <div className="flex items-center">
-                    <span className="w-12 h-12 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-neon">
+                {logoUrl ? (
+                  <img src={logoUrl} alt="" className="h-12 w-12 object-contain" />
+                ) : (
+                  !isInitialLoad && hasCustomLogo === false && (
+                    <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-secondary shadow-neon">
                       <LayoutDashboard className="h-5 w-5 text-white" />
                     </span>
-                    <h1 className="text-2xl font-space font-bold text-white tracking-wide ml-3">
-                      Magen
-                    </h1>
-                  </div>
+                  )
                 )}
               </div>
+              <h1 className={`text-2xl font-space font-bold tracking-wide ${theme === "light" ? "text-gray-900" : "text-white"}`}>
+                {nomeSistema}
+              </h1>
             </div>
           </div>
         </div>

@@ -91,25 +91,18 @@ export default function ForgotPassword() {
       <div className="w-full max-w-md">
         <div className="text-center mb-6">
           <div className="flex items-center justify-center mb-4">
-            {logoUrl ? (
-              <div className="w-[230px] h-[60px] flex items-center justify-center">
-                <img
-                  src={logoUrl}
-                  alt="Logo"
-                  className="object-contain w-[230px] h-[60px]"
-                  style={{ maxWidth: 230, maxHeight: 60 }}
-                />
-              </div>
-            ) : (
-              <>
+            <div className="flex flex-col items-center gap-3">
+              {logoUrl ? (
+                <img src={logoUrl} alt="" className="h-16 w-16 object-contain" />
+              ) : (
                 <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-neon">
                   <i className="ri-line-chart-fill text-2xl text-white"></i>
                 </div>
-                <h1 className="text-3xl font-bold font-space mt-3">
-                  {systemConfig?.system_name || "Magen"}
-                </h1>
-              </>
-            )}
+              )}
+              <h1 className="text-3xl font-bold font-space">
+                {systemConfig?.system_name || "Magen"}
+              </h1>
+            </div>
           </div>
         </div>
 

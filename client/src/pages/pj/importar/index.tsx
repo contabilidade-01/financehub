@@ -75,8 +75,11 @@ export default function ImportarLancamentosPj({ empresaId }: { empresaId: number
         <p className="text-sm text-amber-700 dark:text-amber-300 mt-2">
           Na coluna forma, use o nome real do cartão (ex.: <code>CC Inter PJ · Venc. 25</code>), não só “Cartão de Crédito”.
         </p>
-        <a href="/modelo-lancamentos-pj.csv" download="modelo-lancamentos-pj.csv" className="inline-block text-sm text-primary underline mt-1">
+        <a href="/modelo-lancamentos-pj.csv" download="modelo-lancamentos-pj.csv" className="inline-block text-sm text-primary underline mt-1 mr-4">
           Baixar planilha modelo PJ
+        </a>
+        <a href="/lancamentos-pj-exemplo.xlsx" download="lancamentos-pj-exemplo.xlsx" className="inline-block text-sm text-primary underline mt-1">
+          Baixar exemplo preenchido (87 lançamentos)
         </a>
       </div>
 

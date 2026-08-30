@@ -19,6 +19,7 @@ import { z } from "zod";
 import { InsertUser } from "@shared/schema";
 import { useTheme } from "next-themes";
 import { useTranslation } from "@/contexts/LocalizationContext";
+import { useSystemConfig } from "@/contexts/SystemConfigContext";
 
 // Schema será criado dentro do componente para ter acesso ao t()
 
@@ -72,6 +73,7 @@ export default function Register() {
   const { toast } = useToast();
   const { theme } = useTheme();
   const { t } = useTranslation();
+  const { config: systemConfig } = useSystemConfig();
   
   // Schema de validação com localização
   const registerSchema = z.object({
@@ -171,18 +173,16 @@ export default function Register() {
       <div className="w-full max-w-md">
         <div className="text-center mb-6">
           <div className="flex items-center justify-center mb-4">
-            {isLogoChecking ? null : logoUrl ? (
-              <div className="w-[230px] h-[60px] flex items-center justify-center">
-                <img src={logoUrl} alt="Logo" className="object-contain w-[230px] h-[60px]" style={{ maxWidth: 230, maxHeight: 60, transition: 'opacity 0.2s' }} />
-              </div>
-            ) : (
-              <>
+            <div className="flex flex-col items-center gap-3">
+              {isLogoChecking ? null : logoUrl ? (
+                <img src={logoUrl} alt="" className="h-16 w-16 object-contain" />
+              ) : (
                 <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-neon">
                   <i className="ri-line-chart-fill text-2xl text-white"></i>
                 </div>
-                <h1 className="text-3xl font-bold font-space mt-3">Magen</h1>
-              </>
-            )}
+              )}
+              <h1 className="text-3xl font-bold font-space">{systemConfig.system_name}</h1>
+            </div>
           </div>
           {!logoUrl && logoChecked && (
             <p className="text-gray-400 mt-2">{t('register.tagline', 'Seu controle financeiro pessoal')}</p>

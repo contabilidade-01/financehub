@@ -63,6 +63,7 @@ import PjRouter from "@/pages/pj/PjRouter";
 import MetasPage from "@/pages/metas";
 import ContasPagarPage from "@/pages/contas-pagar";
 import ImportarLancamentos from "@/pages/importar";
+import FluxoProjetadoPF from "@/pages/fluxo-projetado";
 import ReembolsosPage from "@/pages/reembolsos";
 
 function Router() {
@@ -185,6 +186,11 @@ function Router() {
             <Route path="/reports">
               <MainLayout>
                 <Reports />
+              </MainLayout>
+            </Route>
+            <Route path="/fluxo-projetado">
+              <MainLayout>
+                <FluxoProjetadoPF />
               </MainLayout>
             </Route>
             <Route path="/reminders">

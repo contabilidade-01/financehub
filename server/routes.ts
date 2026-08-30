@@ -1276,6 +1276,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (err: any) { res.status(500).json({ error: err.message }); }
   });
 
+  // Fluxo de caixa projetado (PF) — matriz categorias × meses
+  const fluxoProjetadoCtrl = await import("./controllers/fluxo-projetado.controller");
+  app.get("/api/fluxo-caixa/projetado", combinedAuth, fluxoProjetadoCtrl.getFluxoProjetadoPessoal);
+
   // ==========================================
   // PJ — ROTAS EMPRESAS / PLANO DE CONTAS / TRANSAÇÕES
   // Convivem ao lado das rotas PF sem alterá-las.
@@ -1311,6 +1315,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/empresas/:id/dashboard/resumo", combinedAuth, empresaTransacaoCtrl.getEmpresaResumo);
   app.get("/api/empresas/:id/relatorios/dre", combinedAuth, empresaTransacaoCtrl.getEmpresaDRE);
   app.get("/api/empresas/:id/relatorios/fluxo-caixa", combinedAuth, empresaTransacaoCtrl.getEmpresaFluxoCaixa);
+  // Fluxo projetado PJ — matriz plano de contas da empresa × meses
+  app.get("/api/empresas/:id/relatorios/fluxo-projetado", combinedAuth, fluxoProjetadoCtrl.getFluxoProjetadoEmpresa);
   // Fatura de cartão PJ (competência × caixa)
   const empresaFaturaCtrl = await import("./controllers/empresaFatura.controller");
   const uploadFatura = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });

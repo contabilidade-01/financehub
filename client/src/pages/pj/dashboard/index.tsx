@@ -1,26 +1,74 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrendingUp, TrendingDown, DollarSign, Target } from "lucide-react";
 import type { EmpresaResumo } from "@shared/schema";
+import PeriodoSelector from "@/components/shared/PeriodoSelector";
+import { Periodo, rangeDoPeriodo, rotuloPeriodo } from "@/lib/period";
 
 /**
  * PJ Dashboard — visão de gestão financeira (Yampa-like).
  * Cards: Entradas, Saídas, Margem de Contribuição, Lucro/Prejuízo.
  * Busca /api/empresas/:id/dashboard/resumo.
  */
+const dataBR = (iso: string) => iso.split("-").reverse().join("/");
+
+const OPCOES: Periodo[] = [
+  "current_month",
+  "last_month",
+  "next_month",
+  "current_quarter",
+  "current_year",
+  "custom",
+];
+
 export default function PjDashboard({ empresaId }: { empresaId: number }) {
+  const [periodo, setPeriodo] = useState<Periodo>("current_month");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+
+  const range = rangeDoPeriodo(periodo, customFrom, customTo);
+  const periodoPronto = periodo !== "custom" || Boolean(range.de && range.ate);
+  const periodoLabel = rotuloPeriodo(periodo, range.de, range.ate);
+
+  const params = new URLSearchParams();
+  if (range.de) params.set("de", range.de);
+  if (range.ate) params.set("ate", range.ate);
+  const qs = params.toString();
+  const url = `/api/empresas/${empresaId}/dashboard/resumo${qs ? `?${qs}` : ""}`;
+
   const { data: resumo, isLoading } = useQuery<EmpresaResumo>({
-    queryKey: [`/api/empresas/${empresaId}/dashboard/resumo`],
-    enabled: !!empresaId,
+    queryKey: [url],
+    enabled: !!empresaId && periodoPronto,
   });
 
-  if (isLoading) {
+  const filtros = (
+    <PeriodoSelector
+      periodo={periodo}
+      onPeriodoChange={setPeriodo}
+      customFrom={customFrom}
+      customTo={customTo}
+      onCustomFromChange={setCustomFrom}
+      onCustomToChange={setCustomTo}
+      opcoes={OPCOES}
+    />
+  );
+
+  if (isLoading || !periodoPronto) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-4">
-        {[1, 2, 3, 4].map((i) => (
-          <Skeleton key={i} className="h-32 w-full rounded-lg" />
-        ))}
+      <div className="space-y-6 p-4">
+        <h1 className="text-2xl font-bold">Dashboard Empresarial</h1>
+        {filtros}
+        {periodoPronto ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-32 w-full rounded-lg" />
+            ))}
+          </div>
+        ) : (
+          <p className="text-muted-foreground">Informe as datas inicial e final.</p>
+        )}
       </div>
     );
   }
@@ -70,7 +118,12 @@ export default function PjDashboard({ empresaId }: { empresaId: number }) {
 
   return (
     <div className="space-y-6 p-4">
-      <h1 className="text-2xl font-bold">Dashboard Empresarial</h1>
+      <div>
+        <h1 className="text-2xl font-bold">Dashboard Empresarial</h1>
+        <p className="text-sm text-muted-foreground capitalize">{periodoLabel}</p>
+      </div>
+
+      {filtros}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         {cards.map((card) => (
@@ -101,7 +154,7 @@ export default function PjDashboard({ empresaId }: { empresaId: number }) {
           <CardHeader>
             <CardTitle className="text-lg">Detalhamento do período</CardTitle>
             <p className="text-sm text-muted-foreground">
-              {resumo.periodo.de} a {resumo.periodo.ate} — {resumo.total_transacoes} transações
+              {dataBR(resumo.periodo.de)} a {dataBR(resumo.periodo.ate)} — {resumo.total_transacoes} transações
             </p>
           </CardHeader>
           <CardContent>

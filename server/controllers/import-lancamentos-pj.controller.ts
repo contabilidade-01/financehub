@@ -51,13 +51,24 @@ export const ImportLancamentosPjController = {
   },
 };
 
+const dataISO = (v: unknown): string | undefined =>
+  typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined;
+
 export const ReembolsosPjController = {
+  // GET /api/empresas/:id/reembolsos-pessoais?de=YYYY-MM-DD&ate=YYYY-MM-DD&status=Pendente
   async listar(req: Request, res: Response) {
     try {
       const empresaId = parseInt(req.params.id);
       if (isNaN(empresaId)) return res.status(400).json({ error: "ID inválido." });
       const empresa = await resolveEmpresa(empresaId, req.user!.id, res);
       if (!empresa) return;
+
+      // Reembolso é conta a pagar: a data que importa é o vencimento.
+      const ref = sql`COALESCE(t.data_vencimento, t.data_transacao)`;
+      const de = dataISO(req.query.de);
+      const ate = dataISO(req.query.ate);
+      const status = typeof req.query.status === "string" ? req.query.status : "";
+
       const rows = await db.execute(sql`
         SELECT t.id, t.descricao, t.valor, t.data_transacao, t.data_vencimento, t.status,
                t.itens_agrupados, t.metodo_pagamento, c.nome AS categoria, c.codigo AS categoria_codigo
@@ -65,7 +76,10 @@ export const ReembolsosPjController = {
         JOIN empresas_contas c ON c.id = t.categoria_id
         WHERE t.empresa_id = ${empresaId}
           AND t.reembolso_pessoal = true
-        ORDER BY t.data_transacao DESC, t.id DESC
+          ${de ? sql`AND ${ref} >= ${de}` : sql``}
+          ${ate ? sql`AND ${ref} <= ${ate}` : sql``}
+          ${status ? sql`AND t.status = ${status}` : sql``}
+        ORDER BY ${ref} DESC, t.id DESC
       `);
       return res.json(rows);
     } catch (err) {

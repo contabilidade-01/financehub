@@ -911,6 +911,63 @@ export interface EmpresaFluxoCaixaMensal {
   saldoAntesAno: { conta_bancaria_id: number; total: number }[];            // movimento acumulado antes do ano
 }
 
+// ============================================
+// FLUXO DE CAIXA PROJETADO (PF e PJ)
+// ============================================
+// Mesma forma de resposta para os dois ambientes; muda só o plano de contas
+// que alimenta as linhas (categorias do usuário no PF, empresas_contas no PJ).
+
+/** Uma linha do plano de contas com os valores mês a mês. */
+export interface FluxoProjetadoLinha {
+  conta_id: number;
+  codigo: string | null;
+  nome: string;
+  tipo: 'Receita' | 'Despesa';
+  /** Agrupador de exibição: no PJ vem da classificacao da conta; no PF, do tipo. */
+  grupo: string;
+  /** Total do mês (valor absoluto), alinhado ao array `meses`. */
+  valores: number[];
+  /** Parcela do mês que ainda é previsão (status != Efetivada). */
+  previstos: number[];
+  total: number;
+  total_previsto: number;
+}
+
+export interface FluxoProjetadoMes {
+  mes: string;    // 'YYYY-MM'
+  rotulo: string; // 'set/26'
+  /** true quando o mês já passou por completo. */
+  passado: boolean;
+  entradas: number;
+  saidas: number;
+  resultado: number;
+  saldo_inicial: number;
+  saldo_final: number;
+  /** Quanto de entradas/saídas do mês ainda não foi efetivado. */
+  entradas_previstas: number;
+  saidas_previstas: number;
+}
+
+export interface FluxoProjetado {
+  escopo: 'PF' | 'PJ';
+  periodo: { de: string; ate: string };
+  /** Caixa acumulado antes de `de`, considerando só o que já foi efetivado. */
+  saldo_inicial: number;
+  meses: FluxoProjetadoMes[];
+  receitas: FluxoProjetadoLinha[];
+  despesas: FluxoProjetadoLinha[];
+  /** Fora do caixa operacional: reembolsos (a pagar no PJ, a receber no PF). */
+  extras: FluxoProjetadoLinha[];
+  extras_titulo: string;
+  totais: {
+    entradas: number;
+    saidas: number;
+    resultado: number;
+    saldo_final: number;
+    extras: number;
+  };
+}
+
 // Tabela para rastrear o estado do onboarding guiado via WhatsApp para usuários PJ
 export const whatsappOnboardingStates = pgTable("whatsapp_onboarding_states", {
   id: serial("id").primaryKey(),
