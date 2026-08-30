@@ -469,6 +469,15 @@ const STEPS: Step[] = [
     },
   },
   {
+    name: "empresas_transacoes: reembolso_pessoal + vencimento (import PJ)",
+    run: async () => {
+      await db.execute(sql`ALTER TABLE empresas_transacoes ADD COLUMN IF NOT EXISTS reembolso_pessoal BOOLEAN NOT NULL DEFAULT false`);
+      await db.execute(sql`ALTER TABLE empresas_transacoes ADD COLUMN IF NOT EXISTS data_vencimento DATE`);
+      await db.execute(sql`ALTER TABLE empresas_transacoes ADD COLUMN IF NOT EXISTS itens_agrupados INTEGER`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_emp_tx_reembolso ON empresas_transacoes(empresa_id, reembolso_pessoal, status)`);
+    },
+  },
+  {
     name: "rebrand: FinanceHub → Magen (system_settings)",
     run: async () => {
       await db.execute(sql`

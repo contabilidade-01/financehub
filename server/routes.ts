@@ -1359,6 +1359,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/importacao/lancamentos/preview", combinedAuth, uploadMemoria.single("arquivo"), ImportLancamentosController.preview);
   app.post("/api/importacao/lancamentos", combinedAuth, uploadMemoria.single("arquivo"), ImportLancamentosController.importar);
 
+  const { ImportLancamentosPjController, ReembolsosPjController } = await import("./controllers/import-lancamentos-pj.controller");
+  app.post("/api/empresas/:id/importacao/lancamentos/preview", combinedAuth, uploadMemoria.single("arquivo"), ImportLancamentosPjController.preview);
+  app.post("/api/empresas/:id/importacao/lancamentos", combinedAuth, uploadMemoria.single("arquivo"), ImportLancamentosPjController.importar);
+  app.get("/api/empresas/:id/reembolsos-pessoais", combinedAuth, ReembolsosPjController.listar);
+  app.put("/api/empresas/:id/reembolsos-pessoais/:transacaoId/pagar", combinedAuth, ReembolsosPjController.pagar);
+
   // ==========================================
   // WEBHOOK UAZAPI — Pipeline IA internalizado (substitui N8N)
   // Recebe mensagens do WhatsApp via UazAPI, processa com IA, insere transação, responde.

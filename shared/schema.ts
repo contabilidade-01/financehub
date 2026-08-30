@@ -751,7 +751,15 @@ export const empresasTransacoes = pgTable("empresas_transacoes", {
   data_registro: timestamp("data_registro", { withTimezone: true }).default(sql`(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')`),
   status: varchar("status", { length: 20 }).notNull().default('Efetivada'),
   metodo_pagamento: varchar("metodo_pagamento", { length: 100 }),
-  origem: varchar("origem", { length: 20 }).notNull().default('manual') // 'manual' | 'whatsapp'
+  origem: varchar("origem", { length: 20 }).notNull().default('manual'), // 'manual' | 'whatsapp' | 'importacao'
+  movimenta_caixa: boolean("movimenta_caixa").notNull().default(true),
+  cartao_id: integer("cartao_id"),
+  fatura_id: integer("fatura_id"),
+  competencia: varchar("competencia", { length: 7 }),
+  // Empresa deve à pessoa (grupo "Reembolsos a Pagar — Pessoal").
+  reembolso_pessoal: boolean("reembolso_pessoal").notNull().default(false),
+  data_vencimento: date("data_vencimento"),
+  itens_agrupados: integer("itens_agrupados"),
 });
 
 // ----- Schemas Zod PJ -----
@@ -806,7 +814,14 @@ export const insertEmpresaTransacaoSchema = z.object({
   data_transacao: z.string().transform(normalizeDateFormat),
   status: z.string().optional(),
   metodo_pagamento: z.string().optional().nullable(),
-  origem: z.string().optional().default('manual')
+  origem: z.string().optional().default('manual'),
+  movimenta_caixa: z.boolean().optional(),
+  cartao_id: flexibleNumberSchema.optional().nullable(),
+  fatura_id: flexibleNumberSchema.optional().nullable(),
+  competencia: z.string().optional().nullable(),
+  reembolso_pessoal: z.boolean().optional().default(false),
+  data_vencimento: z.string().transform(normalizeDateFormat).optional().nullable(),
+  itens_agrupados: z.number().int().optional().nullable(),
 });
 
 export const updateEmpresaTransacaoSchema = z.object({
@@ -818,7 +833,9 @@ export const updateEmpresaTransacaoSchema = z.object({
   data_transacao: z.string().transform(normalizeDateFormat).optional(),
   status: z.string().optional(),
   metodo_pagamento: z.string().optional().nullable(),
-  origem: z.string().optional()
+  origem: z.string().optional(),
+  reembolso_pessoal: z.boolean().optional(),
+  data_vencimento: z.string().optional().nullable(),
 });
 
 // ----- Types PJ -----
@@ -863,6 +880,8 @@ export interface EmpresaResumo {
   lucro_prejuizo: number;
   lucro_prejuizo_pct: number | null;
   total_transacoes: number;
+  reembolsos_pessoais_pendentes: number;
+  reembolsos_pessoais_qtd: number;
 }
 
 export interface EmpresaDRE {

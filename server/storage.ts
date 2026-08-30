@@ -1723,6 +1723,9 @@ export class DbStorage implements IStorage {
       status: empresasTransacoes.status,
       metodo_pagamento: empresasTransacoes.metodo_pagamento,
       origem: empresasTransacoes.origem,
+      reembolso_pessoal: empresasTransacoes.reembolso_pessoal,
+      data_vencimento: empresasTransacoes.data_vencimento,
+      itens_agrupados: empresasTransacoes.itens_agrupados,
       categoria_nome: empresasContas.nome,
       categoria_classificacao: empresasContas.classificacao,
       categoria_codigo: empresasContas.codigo,
@@ -1758,6 +1761,9 @@ export class DbStorage implements IStorage {
       status: empresasTransacoes.status,
       metodo_pagamento: empresasTransacoes.metodo_pagamento,
       origem: empresasTransacoes.origem,
+      reembolso_pessoal: empresasTransacoes.reembolso_pessoal,
+      data_vencimento: empresasTransacoes.data_vencimento,
+      itens_agrupados: empresasTransacoes.itens_agrupados,
       categoria_nome: empresasContas.nome,
       categoria_classificacao: empresasContas.classificacao,
       categoria_codigo: empresasContas.codigo,
@@ -1807,6 +1813,7 @@ export class DbStorage implements IStorage {
       WHERE t.empresa_id = ${empresaId}
         AND t.data_transacao >= ${de}
         AND t.data_transacao <= ${ate}
+        AND COALESCE(t.reembolso_pessoal, false) = false
       GROUP BY t.tipo, c.classificacao
     `);
 
@@ -1835,7 +1842,7 @@ export class DbStorage implements IStorage {
 
     const pct = (n: number, d: number): number | null => (d > 0 ? (n / d) * 100 : null);
 
-    return {
+    const result = {
       empresa_id: empresaId,
       periodo: { de, ate },
       entradas: round2(entradas),
@@ -1847,8 +1854,27 @@ export class DbStorage implements IStorage {
       margem_contribuicao_pct: pct(margemContribuicao, entradas),
       lucro_prejuizo: round2(lucroPrejuizo),
       lucro_prejuizo_pct: pct(lucroPrejuizo, entradas),
-      total_transacoes: totalTransacoes
+      total_transacoes: totalTransacoes,
+      reembolsos_pessoais_pendentes: 0,
+      reembolsos_pessoais_qtd: 0,
     };
+
+    try {
+      const reb = await db.execute(sql`
+        SELECT COALESCE(SUM(valor::numeric), 0) AS total, COUNT(*) AS qtd
+        FROM empresas_transacoes
+        WHERE empresa_id = ${empresaId}
+          AND reembolso_pessoal = true
+          AND status = 'Pendente'
+          AND data_transacao >= ${de}
+          AND data_transacao <= ${ate}
+      `);
+      const r0 = (reb as any[])[0];
+      result.reembolsos_pessoais_pendentes = round2(parseFloat(r0?.total) || 0);
+      result.reembolsos_pessoais_qtd = parseInt(r0?.qtd) || 0;
+    } catch { /* coluna ainda não migrada */ }
+
+    return result;
   }
 
   async getEmpresaDRE(empresaId: number, opts: { de?: string; ate?: string } = {}): Promise<EmpresaDRE> {
@@ -1866,6 +1892,7 @@ export class DbStorage implements IStorage {
         AND t.tipo = 'Despesa'
         AND t.data_transacao >= ${de}
         AND t.data_transacao <= ${ate}
+        AND COALESCE(t.reembolso_pessoal, false) = false
       GROUP BY c.classificacao
     `);
 

@@ -80,13 +80,17 @@ export const listEmpresaTransacoes = async (req: Request, res: Response) => {
     const empresa = await resolveEmpresa(empresaId, userId, res);
     if (!empresa) return;
 
+    const todos = req.query.todos === "1" || req.query.todos === "true";
     const { de, ate } = parsePeriodo(
       req.query.de as string | undefined,
       req.query.ate as string | undefined
     );
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
 
-    const transacoes = await storage.getEmpresaTransacoesByEmpresaId(empresaId, { de, ate, limit });
+    const transacoes = await storage.getEmpresaTransacoesByEmpresaId(
+      empresaId,
+      todos ? { limit } : { de, ate, limit },
+    );
     return res.json(transacoes);
   } catch (err) {
     console.error("listEmpresaTransacoes:", err);

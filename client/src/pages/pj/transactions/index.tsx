@@ -15,7 +15,7 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
   const [showForm, setShowForm] = useState(false);
 
   const { data: transacoes = [], isLoading } = useQuery<EmpresaTransacaoWithDetails[]>({
-    queryKey: [`/api/empresas/${empresaId}/transacoes`],
+    queryKey: [`/api/empresas/${empresaId}/transacoes?todos=1`],
     enabled: !!empresaId,
   });
 
@@ -132,7 +132,12 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
                   transacoes.map((t) => (
                     <tr key={t.id} className="border-b hover:bg-muted/30">
                       <td className="p-3">{t.data_transacao}</td>
-                      <td className="p-3">{t.descricao}</td>
+                      <td className="p-3">
+                        {t.descricao}
+                        {(t as any).reembolso_pessoal && (
+                          <Badge variant="secondary" className="ml-2 text-[10px]">A pagar à pessoa</Badge>
+                        )}
+                      </td>
                       <td className="p-3 text-xs">
                         {t.categoria_codigo} — {t.categoria_nome}
                       </td>

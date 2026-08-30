@@ -56,6 +56,13 @@ export default function PjDashboard({ empresaId }: { empresaId: number }) {
       color: (resumo?.lucro_prejuizo ?? 0) >= 0 ? "text-emerald-600" : "text-rose-600",
       bg: (resumo?.lucro_prejuizo ?? 0) >= 0 ? "bg-emerald-50 dark:bg-emerald-950/20" : "bg-rose-50 dark:bg-rose-950/20",
     },
+    {
+      title: "Reembolsos à pessoa",
+      value: resumo?.reembolsos_pessoais_pendentes ?? 0,
+      icon: DollarSign,
+      color: "text-amber-600",
+      bg: "bg-amber-50 dark:bg-amber-950/20",
+    },
   ];
 
   const fmt = (n: number) =>
@@ -65,7 +72,7 @@ export default function PjDashboard({ empresaId }: { empresaId: number }) {
     <div className="space-y-6 p-4">
       <h1 className="text-2xl font-bold">Dashboard Empresarial</h1>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         {cards.map((card) => (
           <Card key={card.title} className={card.bg}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
