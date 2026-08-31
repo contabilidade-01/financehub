@@ -22,6 +22,13 @@ const CHECK_INTERVAL = 60 * 60 * 1000; // 1 hora
 const UAZAPI_BASE_URL = process.env.UAZAPI_BASE_URL || "https://nescon.uazapi.com";
 const UAZAPI_TOKEN = process.env.UAZAPI_TOKEN || "";
 
+// Horário de São Paulo — alertas ao cliente só saem em horário comercial (8h–20h),
+// e uma vez por dia (hora 9), para nunca enviar de madrugada nem repetir de hora em hora.
+const HORA_ALERTAS = 9; // hora do dia (SP) em que os alertas ao cliente são enviados
+function nowSP(): Date {
+  return new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+}
+
 interface UserWithWallet {
   id: number;
   nome: string;
@@ -239,77 +246,14 @@ async function checkUpcomingReminders(): Promise<void> {
 }
 
 // ============================================
-// 4. DETECÇÃO DE ANOMALIAS (2x+ a média)
+// 4. (REMOVIDO) Alerta de "Gastos Acima do Normal" (baseado em média)
 // ============================================
-async function checkSpendingAnomalies(): Promise<void> {
-  // Só roda no dia 15 e último dia do mês (2x/mês)
-  const now = new Date();
-  const day = now.getDate();
-  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  if (day !== 15 && day !== lastDay) return;
-
-  console.log("[Alerts] Verificando anomalias de gasto...");
-
-  const users = await getActiveUsersWithWhatsApp();
-
-  for (const user of users) {
-    try {
-      // Média mensal dos últimos 3 meses por categoria
-      const rows = await db.execute(sql`
-        WITH monthly_by_cat AS (
-          SELECT
-            c.nome AS categoria,
-            date_trunc('month', t.data_transacao::timestamp) AS mes,
-            SUM(t.valor::numeric) AS total
-          FROM transacoes t
-          JOIN categorias c ON t.categoria_id = c.id
-          WHERE t.carteira_id = ${user.wallet_id}
-            AND t.tipo = 'Despesa'
-            AND t.data_transacao >= (CURRENT_DATE - INTERVAL '3 months')
-            AND t.data_transacao < date_trunc('month', CURRENT_DATE)
-          GROUP BY c.nome, date_trunc('month', t.data_transacao::timestamp)
-        ),
-        avg_by_cat AS (
-          SELECT categoria, AVG(total) AS media_mensal
-          FROM monthly_by_cat
-          GROUP BY categoria
-          HAVING COUNT(*) >= 2
-        ),
-        current_month AS (
-          SELECT
-            c.nome AS categoria,
-            SUM(t.valor::numeric) AS gasto_atual
-          FROM transacoes t
-          JOIN categorias c ON t.categoria_id = c.id
-          WHERE t.carteira_id = ${user.wallet_id}
-            AND t.tipo = 'Despesa'
-            AND t.data_transacao >= date_trunc('month', CURRENT_DATE)::date
-          GROUP BY c.nome
-        )
-        SELECT cm.categoria, cm.gasto_atual, ac.media_mensal
-        FROM current_month cm
-        JOIN avg_by_cat ac ON cm.categoria = ac.categoria
-        WHERE cm.gasto_atual >= ac.media_mensal * 2
-      `);
-
-      if ((rows as any[]).length === 0) continue;
-
-      let msg = "📈 *Alerta de Gastos Acima do Normal*\n\n";
-      for (const row of rows as any[]) {
-        const gasto = parseFloat(row.gasto_atual).toFixed(2);
-        const media = parseFloat(row.media_mensal).toFixed(2);
-        const mult = (parseFloat(row.gasto_atual) / parseFloat(row.media_mensal)).toFixed(1);
-        msg += `⚠️ *${row.categoria}*: R$ ${gasto} (${mult}x a média de R$ ${media})\n`;
-      }
-      msg += "\nQuer que eu detalhe alguma dessas categorias?";
-
-      await uazapiService.sendText(UAZAPI_BASE_URL, UAZAPI_TOKEN, user.remotejid, msg);
-      console.log(`[Alerts] Anomalia detectada para ${user.nome}: ${(rows as any[]).length} categoria(s)`);
-    } catch (err: any) {
-      console.error(`[Alerts] Erro anomalia para ${user.nome}:`, err.message);
-    }
-  }
-}
+// A lógica antiga comparava o gasto do mês com a MÉDIA dos meses anteriores por
+// categoria e disparava quando passava de 2x a média. Foi removida por:
+//   - gerar falsos positivos / média imprecisa;
+//   - rodar de hora em hora no dia 15 e no último dia do mês (mensagens repetidas).
+// Substituída pelo alerta de % do LIMITE de gastos (checkBudgetAlerts / checkBudgetAlertsPJ),
+// que usa o limite definido pelo próprio usuário e agora só envia 1x/dia, em horário comercial.
 
 // ============================================
 // 5. DEGUSTAÇÃO EXPIRADA (proativo — não espera o cliente mandar mensagem)
@@ -383,13 +327,20 @@ export function initializeAlerts(): void {
 }
 
 async function runAllChecks(): Promise<void> {
-  console.log("[Alerts] Executando verificações...");
+  // Janela diária: alertas ao cliente só saem 1x por dia, às 9h (horário de SP).
+  // Isso garante horário comercial (8h–20h) e evita repetição de hora em hora.
+  const hora = nowSP().getHours();
+  if (hora !== HORA_ALERTAS) {
+    console.log(`[Alerts] Fora da janela diária de alertas (hora SP=${hora}, alvo=${HORA_ALERTAS}). Nada a enviar.`);
+    return;
+  }
+
+  console.log("[Alerts] Executando verificações (janela diária das 9h)...");
   try {
-    await checkBudgetAlerts();
-    await checkBudgetAlertsPJ();
-    await sendWeeklySummary();
+    await checkBudgetAlerts();      // PF: % do limite de gastos definido pelo usuário
+    await checkBudgetAlertsPJ();    // PJ: % do limite de gastos definido pelo usuário
+    await sendWeeklySummary();      // valida internamente: segunda, 8–9h
     await checkUpcomingReminders();
-    await checkSpendingAnomalies();
     await checkDegustacaoExpirada();
     await checkAssinaturasVencidas();
     console.log("[Alerts] ✅ Verificações concluídas.");
