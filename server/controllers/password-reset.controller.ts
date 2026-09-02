@@ -35,6 +35,26 @@ function resetTtlMinutes(): number {
 }
 
 /**
+ * Gera um link de "criar/definir senha" para um usuário (reaproveita a infra de
+ * reset). Usado no onboarding e na ativação manual pelo admin. TTL longo (7 dias
+ * por padrão), pois é o primeiro acesso. Retorna a URL ou null se faltar config.
+ */
+export async function gerarLinkDefinirSenha(userId: number, ttlMinutos = 60 * 24 * 7): Promise<string | null> {
+  const publicUrl = getPublicAppUrl();
+  if (!publicUrl) return null;
+  const rawToken = crypto.randomBytes(32).toString("hex");
+  const tokenHash = hashToken(rawToken);
+  const expiresAt = new Date(Date.now() + ttlMinutos * 60 * 1000);
+  await db.delete(passwordResetTokens).where(
+    and(eq(passwordResetTokens.usuario_id, userId), isNull(passwordResetTokens.used_at))
+  );
+  await db.insert(passwordResetTokens).values({
+    token_hash: tokenHash, usuario_id: userId, expires_at: expiresAt,
+  });
+  return `${publicUrl}/reset-password?token=${encodeURIComponent(rawToken)}`;
+}
+
+/**
  * POST /api/auth/forgot-password  { email }
  * Resposta sempre genérica (não vaza se a conta existe).
  */

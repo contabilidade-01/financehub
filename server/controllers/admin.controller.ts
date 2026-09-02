@@ -9,6 +9,8 @@ import "../types/session.types";
 import { generateCheckoutToken } from "../utils/checkout-token.utils";
 import { getNotificationService } from "../services/notification.service";
 import { generateRandomPassword } from "../utils/password-generator";
+import { uazapiService } from "../services/uazapi.service";
+import { gerarLinkDefinirSenha } from "./password-reset.controller";
 
 /**
  * @swagger
@@ -1244,10 +1246,41 @@ export async function updateUser(req: Request, res: Response) {
         console.log("=== WEBHOOK DATA ===");
         console.log(JSON.stringify(webhookData, null, 2));
         console.log("====================");
-        console.log("✅ Webhook N8N desativado — ativação agora via pipeline interno.");
-        console.log("=====================================");
+
+        // Pipeline interno: ENVIA de fato o acesso ao usuário (antes era só log).
+        // 1) Link para o usuário DEFINIR a própria senha (melhor que senha temporária).
+        let linkSenha: string | null = null;
+        try { linkSenha = await gerarLinkDefinirSenha(updatedUser.id); } catch (e) { console.error("Falha ao gerar link de senha:", e); }
+
+        const loginUrl = process.env.PUBLIC_APP_URL || process.env.FRONTEND_URL || webhookData.dominio;
+        const emailReal = updatedUser.email && !String(updatedUser.email).endsWith("@tel.local");
+
+        // 2) WhatsApp com os dados de acesso (usa a sessão configurada por env).
+        const UAZAPI_BASE_URL = process.env.UAZAPI_BASE_URL || "https://nescon.uazapi.com";
+        const UAZAPI_TOKEN = process.env.UAZAPI_TOKEN || "";
+        if (UAZAPI_TOKEN && updatedUser.remoteJid) {
+          const primeiroNome = (updatedUser.nome || "").split(" ")[0];
+          const linhas = [
+            `Olá ${primeiroNome}! 🎉 Sua conta no *Khesef* foi *ativada*!`,
+            ``,
+            linkSenha ? `👉 Crie sua senha de acesso aqui:\n${linkSenha}` : `Acesse: ${loginUrl}`,
+            emailReal ? `\n*Login:* ${updatedUser.email}` : ``,
+          ].filter(Boolean);
+          try {
+            await uazapiService.sendText(UAZAPI_BASE_URL, UAZAPI_TOKEN, updatedUser.remoteJid, linhas.join("\n"));
+            console.log(`✅ Acesso enviado por WhatsApp para ${updatedUser.remoteJid}`);
+          } catch (waErr: any) {
+            console.error("Falha ao enviar WhatsApp de ativação:", waErr?.message || waErr);
+          }
+        } else {
+          console.warn("⚠️ Sem UAZAPI_TOKEN ou remoteJid — WhatsApp de ativação não enviado.");
+        }
+
+        // (E-mail de ativação: o link de criar senha já vai pelo WhatsApp; o
+        //  envio por e-mail pode ser adicionado depois via mailer dedicado.)
+        void emailReal;
       } catch (webhookError) {
-        console.error("Erro ao enviar webhook de ativação:", webhookError);
+        console.error("Erro no envio de ativação:", webhookError);
       }
     }
 
