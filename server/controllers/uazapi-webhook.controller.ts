@@ -3,6 +3,7 @@ import { storage } from "../storage";
 import { seedPlanoContasPessoal, createIngestionEvent, getConversaRecente, appendConversa } from "../storage";
 import { uazapiService } from "../services/uazapi.service";
 import { WhatsAppOnboardingService } from "../services/whatsapp-onboarding.service";
+import { gerarLinkDefinirSenha } from "./password-reset.controller";
 import { transcribeAudio, analyzeWithGemini, runAgent } from "../services/ai-agent.service";
 import { classifyAiError } from "../utils/ai-errors";
 import { notificarAdmin } from "../services/admin-notify";
@@ -96,13 +97,11 @@ const msgEmailInvalido = () =>
 const msgEmailEmUso = () =>
   `Esse e-mail já está cadastrado em outra conta. Envie outro e-mail, por favor.`;
 
-const msgContaCriada = (opts: { nome?: string | null; email: string; senha: string }) =>
+const msgContaCriada = (opts: { nome?: string | null; email: string; linkSenha: string | null }) =>
   `Pronto${primeiro(opts.nome) ? `, ${primeiro(opts.nome)}` : ""}! 🎉 Sua conta no *${SYSTEM_NAME}* foi criada.\n\n` +
-  `*Login:* ${opts.email}\n` +
-  `*Senha temporária:* ${opts.senha}\n` +
-  `*Acesse:* ${appUrl()}\n\n` +
-  `Também enviei esses dados no seu e-mail (se o envio estiver ativo).\n` +
-  `Você pode *alterar a senha* quando quiser em *Configurações* ou em *Esqueci minha senha*.\n\n` +
+  (opts.linkSenha
+    ? `👉 *Crie sua senha de acesso* aqui:\n${opts.linkSenha}\n\n*Login:* ${opts.email}\n(o link vale por alguns dias)\n\n`
+    : `*Login:* ${opts.email}\n*Acesse:* ${appUrl()}\n(use *Esqueci minha senha* para definir sua senha)\n\n`) +
   `Agora: posso liberar *${TRIAL_DIAS} dias grátis* pra você testar tudo?\nResponda *SIM* para ativar. 😊`;
 
 const msgOferta = (nome?: string | null) =>
@@ -128,46 +127,28 @@ async function finalizarCadastroComEmail(opts: {
   token: string;
 }): Promise<void> {
   const { user, email, chatid, BaseUrl, token } = opts;
-  const senha = generateRandomPassword(8);
-  const hashed = await bcrypt.hash(senha, 10);
 
+  // Grava o e-mail real e marca aguardando a confirmação do trial.
+  // A senha NÃO é definida aqui: o usuário cria a própria via link seguro.
   await storage.updateUser(user.id, {
     email,
-    senha: hashed,
     status_assinatura: "aguardando_confirmacao",
   } as any);
 
-  // WhatsApp com credenciais
+  // Link para o usuário DEFINIR a própria senha (reaproveita a infra de reset).
+  let linkSenha: string | null = null;
+  try {
+    linkSenha = await gerarLinkDefinirSenha(user.id);
+  } catch (err: any) {
+    console.error(`[UazAPI Webhook] Falha ao gerar link de senha:`, err?.message || err);
+  }
+
   await uazapiService.sendText(
     BaseUrl,
     token,
     chatid,
-    msgContaCriada({ nome: user.nome, email, senha })
+    msgContaCriada({ nome: user.nome, email, linkSenha })
   );
-
-  // E-mail com as mesmas credenciais (se SMTP ok)
-  if (isSmtpConfigured()) {
-    try {
-      await sendWelcomeWithPasswordEmail({
-        to: email,
-        nome: user.nome,
-        password: senha,
-        loginUrl: appUrl(),
-        systemName: SYSTEM_NAME,
-      });
-      console.log(`[UazAPI Webhook] E-mail de boas-vindas enviado para ${email}`);
-    } catch (err: any) {
-      console.error(`[UazAPI Webhook] Falha ao enviar e-mail de boas-vindas:`, err?.message || err);
-      await uazapiService.sendText(
-        BaseUrl,
-        token,
-        chatid,
-        `⚠️ Não consegui enviar o e-mail agora, mas seus dados de acesso já estão nesta conversa. Guarde a senha.`
-      );
-    }
-  } else {
-    console.warn("[UazAPI Webhook] SMTP não configurado — senha enviada só no WhatsApp");
-  }
 
   await notificarAdmin(
     `🆕 Cadastro WhatsApp concluído: ${user.nome} | ${email} | tel ${user.telefone} | id=${user.id}`
