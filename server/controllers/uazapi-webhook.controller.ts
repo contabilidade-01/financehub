@@ -205,17 +205,39 @@ async function tratarOnboarding(user: any, text: string, chatid: string, BaseUrl
 
   // 2) Aguardando e-mail real
   if (status === "aguardando_email") {
-    const email = extrairEmail(text);
+    // E-mail é case-insensitive: normaliza para minúsculo (evita duplicado no
+    // índice UNIQUE quando o mesmo e-mail chega com caixa diferente).
+    const email = extrairEmail(text)?.toLowerCase() ?? null;
     if (!email) {
       await uazapiService.sendText(BaseUrl, token, chatid, msgEmailInvalido());
       return true;
     }
-    const existing = await storage.getUserByEmail(email);
-    if (existing && existing.id !== user.id) {
-      await uazapiService.sendText(BaseUrl, token, chatid, msgEmailEmUso());
-      return true;
+    try {
+      const existing = await storage.getUserByEmail(email);
+      if (existing && existing.id !== user.id) {
+        await uazapiService.sendText(BaseUrl, token, chatid, msgEmailEmUso());
+        return true;
+      }
+      await finalizarCadastroComEmail({ user, email, chatid, BaseUrl, token });
+    } catch (err: any) {
+      // Captura a causa REAL (em vez do "erro inesperado" genérico do pipeline)
+      // e mantém o usuário no fluxo, sem travar o cadastro.
+      console.error(
+        `[Onboarding] FALHA ao finalizar cadastro — user=${user.id} tel=${user.telefone} email=${email}: ${err?.message}`,
+        err?.stack
+      );
+      try {
+        await notificarAdmin(
+          `🚨 Falha no cadastro por WhatsApp: user=${user.id} tel=${user.telefone} email=${email} — ${err?.message}`
+        );
+      } catch { /* não bloquear por falha no aviso */ }
+      await uazapiService.sendText(
+        BaseUrl,
+        token,
+        chatid,
+        "Tive um probleminha ao criar sua conta agora. 😕 Já avisei o suporte — pode tentar de novo em instantes, ou me mandar outro e-mail."
+      );
     }
-    await finalizarCadastroComEmail({ user, email, chatid, BaseUrl, token });
     return true;
   }
 
