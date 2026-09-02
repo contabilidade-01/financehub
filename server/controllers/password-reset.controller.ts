@@ -227,7 +227,14 @@ export async function resetPassword(req: Request, res: Response) {
         )
       );
 
-    return res.status(200).json({ message: "Senha redefinida com sucesso. Você já pode entrar." });
+    // Auto-login: abre a sessão para o usuário já entrar direto após criar a senha.
+    try {
+      (req.session as any).userId = row.usuario_id;
+    } catch (e) {
+      console.error("[resetPassword] falha ao abrir sessão (auto-login):", e);
+    }
+
+    return res.status(200).json({ message: "Senha redefinida com sucesso. Você já está conectado.", autenticado: true });
   } catch (error: any) {
     if (error?.name === "ZodError") {
       return res.status(400).json({ message: error.errors?.[0]?.message || "Dados inválidos" });

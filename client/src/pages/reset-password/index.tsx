@@ -86,12 +86,18 @@ export default function ResetPassword() {
         data: { token, novaSenha: data.nova_senha },
       });
       toast({
-        title: t("reset.success_title", "Senha redefinida"),
+        title: t("reset.success_title", "Senha criada"),
         description:
           response?.message ||
-          t("reset.success_desc", "Você já pode entrar com a nova senha."),
+          t("reset.success_desc", "Tudo certo! Entrando no sistema…"),
       });
-      navigate("/");
+      // Auto-login: o backend já abriu a sessão. Recarrega em "/" para o app
+      // reconhecer a sessão e cair direto no painel (em vez da tela de login).
+      if (response?.autenticado) {
+        window.location.href = "/";
+      } else {
+        navigate("/");
+      }
     } catch (error: any) {
       toast({
         title: t("reset.error_title", "Não foi possível redefinir"),
