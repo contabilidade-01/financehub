@@ -478,17 +478,17 @@ const STEPS: Step[] = [
     },
   },
   {
-    name: "rebrand: FinanceHub → Magen (system_settings)",
+    name: "rebrand: FinanceHub → Khesef (system_settings)",
     run: async () => {
       await db.execute(sql`
         UPDATE system_settings
-        SET setting_value = 'Magen'
+        SET setting_value = 'Khesef'
         WHERE setting_key = 'system_name'
           AND setting_value IN ('FinanceHub', 'financehub')
       `);
       await db.execute(sql`
         UPDATE system_settings
-        SET setting_value = 'magen'
+        SET setting_value = 'khesef'
         WHERE setting_key = 'system_name_short'
           AND lower(setting_value) = 'financehub'
       `);
@@ -505,7 +505,7 @@ const STEPS: Step[] = [
       `);
       await db.execute(sql`
         UPDATE system_settings
-        SET setting_value = replace(setting_value, 'FinanceHub', 'Magen')
+        SET setting_value = replace(setting_value, 'FinanceHub', 'Khesef')
         WHERE setting_key = 'system_description'
           AND setting_value LIKE '%FinanceHub%'
       `);
@@ -518,7 +518,7 @@ const STEPS: Step[] = [
       try {
         await db.execute(sql`
           UPDATE custom_themes
-          SET name = 'Padrão Magen'
+          SET name = 'Padrão Khesef'
           WHERE name = 'Padrão FinanceHub'
         `);
       } catch {
@@ -528,12 +528,53 @@ const STEPS: Step[] = [
         await db.execute(sql`
           UPDATE welcome_messages
           SET
-            title = replace(title, 'FinanceHub', 'Magen'),
-            message = replace(message, 'FinanceHub', 'Magen'),
-            email_content = replace(email_content, 'FinanceHub', 'Magen')
+            title = replace(title, 'FinanceHub', 'Khesef'),
+            message = replace(message, 'FinanceHub', 'Khesef'),
+            email_content = replace(email_content, 'FinanceHub', 'Khesef')
           WHERE title LIKE '%FinanceHub%'
              OR message LIKE '%FinanceHub%'
              OR email_content LIKE '%FinanceHub%'
+        `);
+      } catch {
+        // tabela pode não existir
+      }
+    },
+  },
+  {
+    name: "rebrand: Magen → Khesef (system_settings)",
+    run: async () => {
+      await db.execute(sql`
+        UPDATE system_settings
+        SET setting_value = 'Khesef'
+        WHERE setting_key = 'system_name' AND setting_value = 'Magen'
+      `);
+      await db.execute(sql`
+        UPDATE system_settings
+        SET setting_value = 'khesef'
+        WHERE setting_key = 'system_name_short' AND lower(setting_value) = 'magen'
+      `);
+      await db.execute(sql`
+        UPDATE system_settings
+        SET setting_value = replace(setting_value, 'Magen', 'Khesef')
+        WHERE setting_key = 'system_description' AND setting_value LIKE '%Magen%'
+      `);
+      try {
+        await db.execute(sql`
+          UPDATE custom_themes SET name = 'Padrão Khesef' WHERE name = 'Padrão Magen'
+        `);
+      } catch {
+        // tabela pode não existir
+      }
+      try {
+        await db.execute(sql`
+          UPDATE welcome_messages
+          SET
+            title = replace(title, 'Magen', 'Khesef'),
+            message = replace(message, 'Magen', 'Khesef'),
+            email_content = replace(email_content, 'Magen', 'Khesef')
+          WHERE title LIKE '%Magen%'
+             OR message LIKE '%Magen%'
+             OR email_content LIKE '%Magen%'
         `);
       } catch {
         // tabela pode não existir

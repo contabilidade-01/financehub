@@ -86,7 +86,7 @@ export function ThemePreview({ theme, mode, className, title }: ThemePreviewProp
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <LayoutDashboard className="w-5 h-5 text-primary" />
-              <span className="font-semibold text-card-foreground">Magen</span>
+              <span className="font-semibold text-card-foreground">Khesef</span>
             </div>
             <div className="flex items-center gap-2">
               <Badge className="bg-primary text-primary-foreground">Pro</Badge>

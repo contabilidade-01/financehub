@@ -39,7 +39,7 @@ INSERT INTO custom_themes (
   is_default
 ) 
 SELECT 
-  'Padrão Magen',
+  'Padrão Khesef',
   '{
     "background": "0 0% 98%",
     "foreground": "240 10% 3.9%", 

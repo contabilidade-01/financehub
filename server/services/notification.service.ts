@@ -33,7 +33,7 @@ async function getSystemConfig(): Promise<SystemConfig> {
   }
 
   const defaults: SystemConfig = {
-    system_name: 'Magen',
+    system_name: 'Khesef',
     support_email: 'suporte@controledinheiro.com.br'
   };
 
@@ -222,7 +222,7 @@ export class NotificationService {
   /**
    * Converter texto simples para HTML básico
    */
-  private textToHtml(text: string, systemName: string = 'Magen'): string {
+  private textToHtml(text: string, systemName: string = 'Khesef'): string {
     return `
 <!DOCTYPE html>
 <html>

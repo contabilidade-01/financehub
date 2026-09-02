@@ -727,7 +727,7 @@
         "theme_name_required": "Theme name is required"
       },
       "placeholders": {
-        "welcome_title": "Welcome to Magen!",
+        "welcome_title": "Welcome to Khesef!",
         "activation_title": "Activate your account to get started!",
         "activated_title": "Your account has been activated!",
         "notification_title": "Enter notification title",
@@ -855,7 +855,7 @@
     },
     "dashboard": {
       "header": {
-        "title": "Magen SaaS Dashboard",
+        "title": "Khesef SaaS Dashboard",
         "subtitle": "Administrative overview of the platform"
       },
       "toast": {
@@ -1290,7 +1290,7 @@
   "subscription": {
     "expired": {
       "title": "Subscription Expired",
-      "description": "Your Magen subscription has expired and access has been suspended",
+      "description": "Your Khesef subscription has expired and access has been suspended",
       "access_suspended": "Access Suspended",
       "access_suspended_desc": "Your account has been automatically deactivated due to subscription expiration.",
       "how_to_renew": "How to Renew",
@@ -1307,7 +1307,7 @@
       "access_blocked": "Your subscription has expired and access to features has been blocked",
       "expired_subscription": "Subscription expired",
       "date_label": "Date",
-      "renew_prompt": "To keep using all Magen Premium features, renew your subscription or contact support.",
+      "renew_prompt": "To keep using all Khesef Premium features, renew your subscription or contact support.",
       "renew_button": "Renew Subscription",
       "logout_button": "Sign Out"
     },
@@ -1342,7 +1342,7 @@
         "status_label": "Status",
         "status_value": "Active",
         "plan_label": "Plan",
-        "plan_value": "Magen Premium",
+        "plan_value": "Khesef Premium",
         "renewal_label": "Renewal",
         "renewal_value": "Monthly",
         "losses_title": "What you'll lose:",
@@ -1525,7 +1525,7 @@
   "billing": {
     "title": "Billing",
     "checkout": {
-      "title": "Subscribe to Magen",
+      "title": "Subscribe to Khesef",
       "subtitle": "Complete your registration and start using",
       "select_plan": "Choose your plan",
       "personal_info": "Personal Information",

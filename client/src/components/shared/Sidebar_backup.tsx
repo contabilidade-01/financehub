@@ -148,7 +148,7 @@ export default function Sidebar() {
                 <LayoutDashboard className="h-5 w-5 text-white" />
               </div>
               <h1 className="text-2xl font-space font-bold text-white tracking-wide">
-                Magen
+                Khesef
               </h1>
             </div>
             <Button 
@@ -182,7 +182,7 @@ export default function Sidebar() {
                     <LayoutDashboard className="h-5 w-5 text-white" />
                   </div>
                   <h1 className="text-2xl font-space font-bold text-white tracking-wide">
-                    Magen
+                    Khesef
                   </h1>
                 </div>
                 <Button 
@@ -285,7 +285,7 @@ export default function Sidebar() {
                flexDirection: 'column'
              } : { minHeight: '100vh' }}>
         
-        {/* Header fixo do Magen */}
+        {/* Header fixo do Khesef */}
         <div className="p-5 pb-0 flex-shrink-0">
           <div className="flex items-center justify-start mb-8">
             <div className="flex items-center">
@@ -293,7 +293,7 @@ export default function Sidebar() {
                 <LayoutDashboard className="h-5 w-5 text-white" />
               </div>
               <h1 className="text-2xl font-space font-bold text-white tracking-wide">
-                Magen
+                Khesef
               </h1>
             </div>
           </div>

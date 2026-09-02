@@ -1,6 +1,6 @@
 /**
  * Recuperação de senha — espelha o fluxo do nescon-clientes (auth forgot/reset).
- * Login do Magen e por e-mail; token hasheado (SHA-256), uso único, TTL configurável.
+ * Login do Khesef e por e-mail; token hasheado (SHA-256), uso único, TTL configurável.
  */
 import { Request, Response } from "express";
 import crypto from "crypto";
@@ -97,7 +97,7 @@ export async function forgotPassword(req: Request, res: Response) {
       await sendPasswordResetEmail({
         to: user.email,
         resetUrl,
-        systemName: process.env.SYSTEM_NAME || "Magen",
+        systemName: process.env.SYSTEM_NAME || "Khesef",
       });
     } catch (err: any) {
       console.error("[forgotPassword] sendPasswordResetEmail:", err?.message || err);

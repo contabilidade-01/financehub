@@ -589,9 +589,9 @@ export async function runInitialMigration({ dropAll = false }: { dropAll?: boole
       INSERT INTO welcome_messages (type, title, message, email_content, send_email_welcome, send_email_activation, show_dashboard_message)
       VALUES (
         'new_user',
-        'Bem-vindo ao Magen!',
-        'Olá {nome}! Seja bem-vindo ao Magen. Estamos felizes em tê-lo conosco. Aqui você encontrará todas as ferramentas necessárias para gerenciar suas finanças de forma eficiente e organizada.',
-        'Olá {nome}, seja bem-vindo ao Magen! Sua conta foi criada com sucesso. Acesse nossa plataforma para começar a gerenciar suas finanças de forma inteligente.',
+        'Bem-vindo ao Khesef!',
+        'Olá {nome}! Seja bem-vindo ao Khesef. Estamos felizes em tê-lo conosco. Aqui você encontrará todas as ferramentas necessárias para gerenciar suas finanças de forma eficiente e organizada.',
+        'Olá {nome}, seja bem-vindo ao Khesef! Sua conta foi criada com sucesso. Acesse nossa plataforma para começar a gerenciar suas finanças de forma inteligente.',
         true,
         false,
         true
@@ -605,8 +605,8 @@ export async function runInitialMigration({ dropAll = false }: { dropAll?: boole
       VALUES (
         'inactive_user',
         'Ative sua conta para começar!',
-        'Olá {nome}! Sua conta foi criada com sucesso, mas ainda não está ativa. Para acessar todos os recursos do Magen, você precisa ativar sua assinatura. Clique no botão abaixo para efetuar o pagamento e começar a usar nossa plataforma.',
-        'Olá {nome}, sua conta no Magen foi criada com sucesso! Para começar a usar todos os recursos, você precisa ativar sua assinatura. Acesse o link abaixo para efetuar o pagamento: {link_pagamento}',
+        'Olá {nome}! Sua conta foi criada com sucesso, mas ainda não está ativa. Para acessar todos os recursos do Khesef, você precisa ativar sua assinatura. Clique no botão abaixo para efetuar o pagamento e começar a usar nossa plataforma.',
+        'Olá {nome}, sua conta no Khesef foi criada com sucesso! Para começar a usar todos os recursos, você precisa ativar sua assinatura. Acesse o link abaixo para efetuar o pagamento: {link_pagamento}',
         'https://controledinheiro.com.br/pagamento',
         false,
         true,
@@ -621,8 +621,8 @@ export async function runInitialMigration({ dropAll = false }: { dropAll?: boole
       VALUES (
         'activated',
         'Sua conta foi ativada!',
-        'Olá {nome}! Temos uma ótima notícia: sua conta no Magen foi ativada com sucesso! Agora você tem acesso completo a todos os recursos da plataforma.',
-        'Olá {nome}!\n\nSua conta no Magen foi ativada com sucesso!\n\nAgora você tem acesso completo a todos os nossos recursos.',
+        'Olá {nome}! Temos uma ótima notícia: sua conta no Khesef foi ativada com sucesso! Agora você tem acesso completo a todos os recursos da plataforma.',
+        'Olá {nome}!\n\nSua conta no Khesef foi ativada com sucesso!\n\nAgora você tem acesso completo a todos os nossos recursos.',
         false,
         true,
         true
@@ -688,7 +688,7 @@ export async function runInitialMigration({ dropAll = false }: { dropAll?: boole
           dark_config, 
           is_default
         ) VALUES (
-          'Padrão Magen',
+          'Padrão Khesef',
           ${JSON.stringify({
             background: "0 0% 98%",
             foreground: "240 10% 3.9%", 
@@ -747,12 +747,12 @@ export async function runInitialMigration({ dropAll = false }: { dropAll?: boole
     // Inserir configurações padrão
     await client`
       INSERT INTO system_settings (setting_key, setting_value, setting_metadata) VALUES
-        ('system_name', 'Magen', '{"type": "text", "label": "Nome do Sistema", "description": "Nome exibido em todo o sistema"}'),
-        ('system_name_short', 'magen', '{"type": "text", "label": "Nome Curto", "description": "Versão curta usada em emails e URLs (lowercase)"}'),
+        ('system_name', 'Khesef', '{"type": "text", "label": "Nome do Sistema", "description": "Nome exibido em todo o sistema"}'),
+        ('system_name_short', 'khesef', '{"type": "text", "label": "Nome Curto", "description": "Versão curta usada em emails e URLs (lowercase)"}'),
         ('system_tagline', 'Gestão financeira inteligente e moderna', '{"type": "text", "label": "Slogan/Tagline", "description": "Frase descritiva do sistema"}'),
         ('support_email', 'suporte@controledinheiro.com.br', '{"type": "email", "label": "Email de Suporte", "description": "Email de contato do suporte"}'),
         ('system_url', 'https://app.controledinheiro.com.br', '{"type": "url", "label": "URL do Sistema", "description": "URL principal do sistema"}'),
-        ('system_description', 'Magen - Gerencie suas finanças pessoais com uma interface moderna e futurista. Acompanhe receitas, despesas e tenha controle total do seu dinheiro.', '{"type": "textarea", "label": "Descrição do Sistema", "description": "Descrição para SEO e meta tags"}')
+        ('system_description', 'Khesef - Gerencie suas finanças pessoais com uma interface moderna e futurista. Acompanhe receitas, despesas e tenha controle total do seu dinheiro.', '{"type": "textarea", "label": "Descrição do Sistema", "description": "Descrição para SEO e meta tags"}')
       ON CONFLICT (setting_key) DO NOTHING
     `;
 

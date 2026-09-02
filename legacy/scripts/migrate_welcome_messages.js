@@ -39,9 +39,9 @@ async function migrateWelcomeMessages() {
         show_dashboard_message
       ) VALUES (
         'new_user',
-        'Bem-vindo ao Magen!',
-        'Olá {nome}! Seja bem-vindo ao Magen. Estamos felizes em tê-lo conosco. Aqui você encontrará todas as ferramentas necessárias para gerenciar suas finanças de forma eficiente e organizada.',
-        'Olá {nome}, seja bem-vindo ao Magen! Sua conta foi criada com sucesso. Acesse nossa plataforma para começar a gerenciar suas finanças de forma inteligente.',
+        'Bem-vindo ao Khesef!',
+        'Olá {nome}! Seja bem-vindo ao Khesef. Estamos felizes em tê-lo conosco. Aqui você encontrará todas as ferramentas necessárias para gerenciar suas finanças de forma eficiente e organizada.',
+        'Olá {nome}, seja bem-vindo ao Khesef! Sua conta foi criada com sucesso. Acesse nossa plataforma para começar a gerenciar suas finanças de forma inteligente.',
         true,
         true
       ) ON CONFLICT (type) DO NOTHING
@@ -60,8 +60,8 @@ async function migrateWelcomeMessages() {
       ) VALUES (
         'inactive_user',
         'Ative sua conta para começar!',
-        'Olá {nome}! Sua conta foi criada com sucesso, mas ainda não está ativa. Para acessar todos os recursos do Magen, você precisa ativar sua assinatura. Clique no botão abaixo para efetuar o pagamento e começar a usar nossa plataforma.',
-        'Olá {nome}, sua conta no Magen foi criada com sucesso! Para começar a usar todos os recursos, você precisa ativar sua assinatura. Acesse o link abaixo para efetuar o pagamento: {link_pagamento}',
+        'Olá {nome}! Sua conta foi criada com sucesso, mas ainda não está ativa. Para acessar todos os recursos do Khesef, você precisa ativar sua assinatura. Clique no botão abaixo para efetuar o pagamento e começar a usar nossa plataforma.',
+        'Olá {nome}, sua conta no Khesef foi criada com sucesso! Para começar a usar todos os recursos, você precisa ativar sua assinatura. Acesse o link abaixo para efetuar o pagamento: {link_pagamento}',
         'https://controledinheiro.com.br/pagamento',
         true,
         true

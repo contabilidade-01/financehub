@@ -728,7 +728,7 @@
         "theme_name_required": "El nombre del tema es obligatorio"
       },
       "placeholders": {
-        "welcome_title": "¡Bienvenido a Magen!",
+        "welcome_title": "¡Bienvenido a Khesef!",
         "activation_title": "¡Activa tu cuenta para comenzar!",
         "activated_title": "¡Tu cuenta ha sido activada!",
         "notification_title": "Ingrese el título de la notificación",
@@ -856,7 +856,7 @@
     },
     "dashboard": {
       "header": {
-        "title": "Panel SaaS de Magen",
+        "title": "Panel SaaS de Khesef",
         "subtitle": "Resumen administrativo de la plataforma"
       },
       "toast": {
@@ -1291,7 +1291,7 @@
   "subscription": {
     "expired": {
       "title": "Suscripción Expirada",
-      "description": "Su suscripción de Magen ha expirado y el acceso ha sido suspendido",
+      "description": "Su suscripción de Khesef ha expirado y el acceso ha sido suspendido",
       "access_suspended": "Acceso Suspendido",
       "access_suspended_desc": "Su cuenta ha sido automáticamente desactivada debido a la expiración de la suscripción.",
       "how_to_renew": "Cómo Renovar",
@@ -1308,7 +1308,7 @@
       "access_blocked": "Tu suscripción venció y el acceso a las funciones fue bloqueado",
       "expired_subscription": "Suscripción vencida",
       "date_label": "Fecha",
-      "renew_prompt": "Para seguir usando todas las funciones de Magen Premium, renueva tu suscripción o contacta al soporte.",
+      "renew_prompt": "Para seguir usando todas las funciones de Khesef Premium, renueva tu suscripción o contacta al soporte.",
       "renew_button": "Renovar suscripción",
       "logout_button": "Cerrar sesión"
     },
@@ -1343,7 +1343,7 @@
         "status_label": "Estado",
         "status_value": "Activa",
         "plan_label": "Plan",
-        "plan_value": "Magen Premium",
+        "plan_value": "Khesef Premium",
         "renewal_label": "Renovación",
         "renewal_value": "Mensual",
         "losses_title": "Lo que perderás:",
@@ -1526,7 +1526,7 @@
   "billing": {
     "title": "Pagos",
     "checkout": {
-      "title": "Suscribirse a Magen",
+      "title": "Suscribirse a Khesef",
       "subtitle": "Complete su registro y comience a usar",
       "select_plan": "Elija su plan",
       "personal_info": "Información Personal",

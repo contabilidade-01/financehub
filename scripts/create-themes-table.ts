@@ -70,7 +70,7 @@ async function createThemesTable() {
           dark_config, 
           is_default
         ) VALUES (
-          'Padrão Magen',
+          'Padrão Khesef',
           ${JSON.stringify({
             background: "0 0% 98%",
             foreground: "240 10% 3.9%", 

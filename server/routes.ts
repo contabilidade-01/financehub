@@ -1046,7 +1046,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (result.length === 0) {
         // Retornar tema padrão hardcoded
         const defaultTheme = {
-          name: 'Padrão Magen',
+          name: 'Padrão Khesef',
           lightConfig: {
             background: '0 0% 98%',
             foreground: '240 10% 3.9%',

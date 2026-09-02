@@ -52,7 +52,7 @@ function Sidebar() {
   const { theme } = useTheme();
   const { t } = useTranslation();
   const { config: systemConfig } = useSystemConfig();
-  const nomeSistema = systemConfig.system_name || "Magen";
+  const nomeSistema = systemConfig.system_name || "Khesef";
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [prevLogoUrl, setPrevLogoUrl] = useState<string | null>(null);
   const [hasCustomLogo, setHasCustomLogo] = useState<boolean | null>(null);
@@ -376,7 +376,7 @@ function Sidebar() {
                top: '75px', 
                height: 'calc(100vh - 75px)'
              } : { minHeight: '100vh' }}>
-        {/* Header fixo do Magen */}
+        {/* Header fixo do Khesef */}
         <div className="p-5 pb-0 flex-shrink-0">
           <div className="flex items-center justify-start mb-8">
             <div className="flex items-center gap-3">

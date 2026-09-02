@@ -55,7 +55,7 @@ async function getSystemName(): Promise<string> {
     console.warn('[SubscriptionService] Erro ao buscar system_name, usando padrão:', error);
   }
 
-  return 'Magen'; // Fallback
+  return 'Khesef'; // Fallback
 }
 
 // ============================================

@@ -3,7 +3,7 @@
     "billing": {
       "title": "Pagamentos",
       "checkout": {
-        "title": "Assinar Magen",
+        "title": "Assinar Khesef",
         "subtitle": "Complete seu cadastro e comece a usar",
         "select_plan": "Escolha seu plano",
         "personal_info": "Informações Pessoais",
@@ -87,7 +87,7 @@
     "billing": {
       "title": "Billing",
       "checkout": {
-        "title": "Subscribe to Magen",
+        "title": "Subscribe to Khesef",
         "subtitle": "Complete your registration and start using",
         "select_plan": "Choose your plan",
         "personal_info": "Personal Information",
@@ -171,7 +171,7 @@
     "billing": {
       "title": "Pagos",
       "checkout": {
-        "title": "Suscribirse a Magen",
+        "title": "Suscribirse a Khesef",
         "subtitle": "Complete su registro y comience a usar",
         "select_plan": "Elija su plan",
         "personal_info": "Información Personal",

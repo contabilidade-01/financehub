@@ -21,7 +21,7 @@ export function GuidedTourModal() {
 
   const steps = [
     {
-      title: "Bem-vindo ao Magen! 🚀",
+      title: "Bem-vindo ao Khesef! 🚀",
       description: "Sua plataforma completa para gestão financeira pessoal e empresarial (PJ). Vamos fazer um tour rápido de 1 minuto para você aproveitar ao máximo.",
       icon: <Sparkles className="w-12 h-12 text-primary animate-pulse" />
     },

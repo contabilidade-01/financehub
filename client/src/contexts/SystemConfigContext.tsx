@@ -30,12 +30,12 @@ interface SystemSettingsResponse {
  * Valores padrão (fallback se API falhar)
  */
 const DEFAULT_CONFIG: SystemConfig = {
-  system_name: 'Magen',
-  system_name_short: 'magen',
+  system_name: 'Khesef',
+  system_name_short: 'khesef',
   system_tagline: 'Gestão financeira inteligente e moderna',
   support_email: 'suporte@controledinheiro.com.br',
   system_url: 'https://app.controledinheiro.com.br',
-  system_description: 'Magen - Gerencie suas finanças pessoais com uma interface moderna e futurista. Acompanhe receitas, despesas e tenha controle total do seu dinheiro.'
+  system_description: 'Khesef - Gerencie suas finanças pessoais com uma interface moderna e futurista. Acompanhe receitas, despesas e tenha controle total do seu dinheiro.'
 };
 
 /**

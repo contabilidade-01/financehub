@@ -467,7 +467,7 @@ export async function generateSimpleReportPDF(req: Request, res: Response) {
     doc.setFontSize(8);
     doc.setFont("helvetica", "normal");
     doc.text(
-      `Relatório gerado em ${new Date().toLocaleString("pt-BR")} • Magen`,
+      `Relatório gerado em ${new Date().toLocaleString("pt-BR")} • Khesef`,
       105,
       285,
       { align: "center" },

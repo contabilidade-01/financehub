@@ -373,7 +373,7 @@ export async function generateReportPDF(req: Request, res: Response) {
     doc.setTextColor(107, 114, 128);
     doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Relatório gerado em ${new Date().toLocaleString('pt-BR')} • Magen`, 105, 285, { align: 'center' });
+    doc.text(`Relatório gerado em ${new Date().toLocaleString('pt-BR')} • Khesef`, 105, 285, { align: 'center' });
     doc.text('Página 1 de 1', 190, 285, { align: 'right' });
 
     // Generate filename with unique timestamp hash to avoid caching

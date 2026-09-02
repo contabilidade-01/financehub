@@ -48,7 +48,7 @@ function isDuplicate(messageId: string): boolean {
 //     → aguardando_tipo_pessoa → degustacao → degustacao_expirada
 // ============================================
 const TRIAL_DIAS = 15;
-const SYSTEM_NAME = process.env.SYSTEM_NAME || "Magen";
+const SYSTEM_NAME = process.env.SYSTEM_NAME || "Khesef";
 const norm = (s: string) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 const ehAfirmativo = (text: string) => {
   const t = norm(text);

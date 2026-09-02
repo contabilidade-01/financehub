@@ -1498,7 +1498,7 @@ export async function exportUsersCsv(req: Request, res: Response) {
       csv += `"${u.id}","${u.nome || ''}","${u.email || ''}","${u.telefone || ''}","${u.tipo_usuario}","${(u as any).tipo_pessoa || 'fisica'}","${u.ativo}","${u.status_assinatura || ''}","${u.data_cadastro || ''}"\n`;
     }
     res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename="usuarios_magen.csv"');
+    res.setHeader('Content-Disposition', 'attachment; filename="usuarios_khesef.csv"');
     return res.send(csv);
   } catch (err) {
     console.error("exportUsersCsv:", err);
@@ -1524,7 +1524,7 @@ export async function exportTransactionsCsv(req: Request, res: Response) {
       }
     }
     res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename="transacoes_magen.csv"');
+    res.setHeader('Content-Disposition', 'attachment; filename="transacoes_khesef.csv"');
     return res.send(csv);
   } catch (err) {
     console.error("exportTransactionsCsv:", err);
