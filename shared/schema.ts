@@ -26,7 +26,7 @@ export const users = pgTable("usuarios", {
   motivo_cancelamento: text("motivo_cancelamento"),
   // Campos de assinatura (mantidos para compatibilidade, mas novos dados virão de user_subscriptions)
   data_expiracao_assinatura: timestamp("data_expiracao_assinatura", { withTimezone: true }),
-  status_assinatura: varchar("status_assinatura", { length: 20 }).default("sem_assinatura"),
+  status_assinatura: varchar("status_assinatura", { length: 50 }).default("sem_assinatura"),
   ciclo_assinatura: varchar("ciclo_assinatura", { length: 12 }), // mensal | trimestral | anual | null (definido pelo admin)
   // Novo campo para otimização de queries (denormalização estratégica)
   subscriptionActive: boolean("subscription_active").notNull().default(false)

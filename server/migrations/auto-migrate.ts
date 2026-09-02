@@ -541,6 +541,13 @@ const STEPS: Step[] = [
     },
   },
   {
+    name: "usuarios: status_assinatura VARCHAR(50) (onboarding WhatsApp)",
+    run: async () => {
+      // 'aguardando_confirmacao' (22) e 'aguardando_tipo_pessoa' (21) não cabem em VARCHAR(20).
+      await db.execute(sql`ALTER TABLE usuarios ALTER COLUMN status_assinatura TYPE VARCHAR(50)`);
+    },
+  },
+  {
     name: "rebrand: Magen → Khesef (system_settings)",
     run: async () => {
       await db.execute(sql`

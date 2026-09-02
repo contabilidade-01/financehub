@@ -96,7 +96,7 @@ CREATE TABLE "usuarios" (
 	"data_cancelamento" timestamp with time zone,
 	"motivo_cancelamento" text,
 	"data_expiracao_assinatura" timestamp with time zone,
-	"status_assinatura" varchar(20) DEFAULT 'ativa',
+	"status_assinatura" varchar(50) DEFAULT 'sem_assinatura',
 	CONSTRAINT "usuarios_email_unique" UNIQUE("email")
 );
 --> statement-breakpoint
