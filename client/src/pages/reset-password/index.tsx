@@ -388,9 +388,9 @@ function ResetFormCard({ token, info }: { token: string; info: TokenInfo }) {
                                   onChange={field.onChange}
                                 >
                                   <option value="">{t("reset.regime_placeholder", "Selecione")}</option>
+                                  <option value="MEI">MEI</option>
                                   <option value="Simples">Simples Nacional</option>
                                   <option value="Presumido">Lucro Presumido</option>
-                                  <option value="Real">Lucro Real</option>
                                 </select>
                               </FormControl>
                               <FormMessage />

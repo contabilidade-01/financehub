@@ -706,7 +706,7 @@ export const empresas = pgTable("empresas", {
   razao_social: varchar("razao_social", { length: 255 }).notNull(),
   nome_fantasia: varchar("nome_fantasia", { length: 255 }),
   cnpj: varchar("cnpj", { length: 20 }).unique(),
-  regime_tributario: varchar("regime_tributario", { length: 50 }), // Simples | Presumido | Real
+  regime_tributario: varchar("regime_tributario", { length: 50 }), // MEI | Simples | Presumido
   segmento: varchar("segmento", { length: 50 }),                   // servicos | comercio | misto
   ativo: boolean("ativo").notNull().default(true),
   created_at: timestamp("created_at", { withTimezone: true }).default(sql`(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')`),

@@ -70,9 +70,9 @@ export default function PjEmpresas() {
               <Select name="regime_tributario">
                 <SelectTrigger><SelectValue placeholder="Regime tributário" /></SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="MEI">MEI</SelectItem>
                   <SelectItem value="Simples">Simples Nacional</SelectItem>
                   <SelectItem value="Presumido">Lucro Presumido</SelectItem>
-                  <SelectItem value="Real">Lucro Real</SelectItem>
                 </SelectContent>
               </Select>
               <Select name="segmento">
