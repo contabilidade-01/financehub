@@ -259,7 +259,11 @@ export class SubscriptionService {
    * Enviamos nome/e-mail/telefone/CNPJ que já temos; o cliente só completa o que faltar (CPF/cartão/Pix).
    * A liberação do acesso continua automática no webhook PAYMENT_CONFIRMED / PAYMENT_RECEIVED.
    */
-  async createHostedCheckout(userId: number, ciclo: 'mensal' | 'trimestral' | 'anual'): Promise<{ url: string; ciclo: string }> {
+  async createHostedCheckout(
+    userId: number,
+    ciclo: 'mensal' | 'trimestral' | 'anual',
+    cpfCnpjInformado?: string
+  ): Promise<{ url: string; ciclo: string }> {
     const user = await this.storage.getUserById(userId);
     if (!user) {
       throw new Error('Usuário não encontrado');
@@ -306,7 +310,11 @@ export class SubscriptionService {
     }
 
     let cpfCnpj: string | undefined;
-    if ((user as any).tipo_pessoa === 'juridica') {
+    const informado = (cpfCnpjInformado || '').replace(/\D/g, '');
+    if (informado.length === 11 || informado.length === 14) {
+      cpfCnpj = informado;
+    }
+    if (!cpfCnpj && (user as any).tipo_pessoa === 'juridica') {
       const empresas = await this.storage.getEmpresasByUsuarioId(userId);
       const comCnpj = empresas.find((e) => e.cnpj && String(e.cnpj).replace(/\D/g, '').length === 14);
       if (comCnpj?.cnpj) cpfCnpj = String(comCnpj.cnpj).replace(/\D/g, '');
@@ -314,6 +322,9 @@ export class SubscriptionService {
     const customerCache = await this.storage.getAsaasCustomerByUserId(userId);
     if (!cpfCnpj && customerCache?.cpfCnpj) {
       cpfCnpj = customerCache.cpfCnpj.replace(/\D/g, '') || undefined;
+    }
+    if (!cpfCnpj || !AsaasService.validateCpfCnpj(cpfCnpj)) {
+      throw new Error('Para criar esta cobrança é necessário informar o CPF ou CNPJ.');
     }
 
     let asaasCustomer = customerCache;
@@ -323,13 +334,16 @@ export class SubscriptionService {
         email: user.email,
         phone: user.telefone || undefined,
         mobilePhone: user.telefone || undefined,
-        ...(cpfCnpj ? { cpfCnpj } : {}),
+        cpfCnpj,
       });
       asaasCustomer = await this.storage.createAsaasCustomer({
         usuarioId: userId,
         asaasCustomerId: created.id,
-        cpfCnpj: cpfCnpj || null,
+        cpfCnpj,
       } as any);
+    } else if (!asaasCustomer.cpfCnpj && cpfCnpj) {
+      await asaas.updateCustomer(asaasCustomer.asaasCustomerId, { cpfCnpj });
+      await this.storage.updateAsaasCustomer(asaasCustomer.id, { cpfCnpj });
     }
 
     const systemName = await getSystemName();

@@ -405,7 +405,11 @@ export async function createRenewLink(req: Request, res: Response) {
       || user.ciclo_assinatura
       || 'mensal';
 
-    const result = await getSubscriptionService(storage).createHostedCheckout(user.id, ciclo);
+    const result = await getSubscriptionService(storage).createHostedCheckout(
+      user.id,
+      ciclo,
+      req.body?.cpfCnpj
+    );
     return res.json(result);
   } catch (err: any) {
     console.error("createRenewLink:", err);

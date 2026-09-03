@@ -1301,7 +1301,10 @@
     },
     "renew": {
       "title": "Renovar Suscripción",
-      "description": "Página de renovación en desarrollo."
+      "description": "Ingresa tu CPF o CNPJ. Luego pagas en la página segura de Asaas (tarjeta o Pix).",
+      "generating": "Generando cobro…",
+      "pay_button": "Pagar en Asaas",
+      "hint": "El acceso vuelve solo cuando Asaas confirma el pago."
     },
     "overlay": {
       "restricted_access": "Acceso restringido",

@@ -1300,7 +1300,10 @@
     },
     "renew": {
       "title": "Renew Subscription",
-      "description": "Renewal page under development."
+      "description": "Enter your CPF or CNPJ. Then you pay on the secure Asaas page (card or Pix).",
+      "generating": "Creating charge…",
+      "pay_button": "Pay on Asaas",
+      "hint": "Access is restored automatically when Asaas confirms the payment."
     },
     "overlay": {
       "restricted_access": "Restricted Access",
