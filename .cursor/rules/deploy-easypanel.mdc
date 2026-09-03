@@ -1,0 +1,30 @@
+---
+description: EasyPanel só implanta a branch financehub. Sempre merge + push nela para o código ir ao ar.
+alwaysApply: true
+---
+
+# Deploy EasyPanel — sempre na `financehub`
+
+O EasyPanel deste projeto **só implanta a branch `financehub`**. Push em `cursor/*` (ou qualquer outra) **não** publica.
+
+## Sempre fazer
+
+Quando a correção/feature precisa ir para produção:
+
+1. Garantir que o commit está na branch `financehub` (merge da branch de trabalho nela).
+2. Dar **push em `origin/financehub`**.
+3. Confirmar no EasyPanel que o deploy mostra **esse** commit — não um commit antigo.
+
+## Não fazer
+
+- Não dizer que “já está no ar” só porque a branch `cursor/...` foi enviada.
+- Não deixar o usuário clicar Implantar esperando código que ainda não está na `financehub`.
+- Não misturar com a branch `main`, a menos que o usuário peça explicitamente.
+
+## Conferência rápida
+
+```
+git log origin/financehub -1 --oneline
+```
+
+O hash/mensagem tem que ser o da correção. Se o EasyPanel listar outro commit (ex.: `feat(pj): inclui MEI...`), a correção **não** subiu.
