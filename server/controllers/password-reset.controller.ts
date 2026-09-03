@@ -7,7 +7,7 @@ import crypto from "crypto";
 import { z } from "zod";
 import { eq, and, isNull, gt, sql } from "drizzle-orm";
 import { db } from "../db";
-import { users, passwordResetTokens } from "../../shared/schema";
+import { users, passwordResetTokens, empresas } from "../../shared/schema";
 import { storage } from "../storage";
 import {
   isSmtpConfigured,
@@ -227,6 +227,11 @@ export async function resetPassword(req: Request, res: Response) {
       telefone: z.string().optional(),
       email: z.string().optional(),
       tipo_pessoa: z.enum(["fisica", "juridica"]).optional(),
+      razao_social: z.string().optional(),
+      nome_fantasia: z.string().optional(),
+      cnpj: z.string().optional(),
+      regime_tributario: z.string().optional(),
+      segmento: z.string().optional(),
     }).refine(
       (d) => d.novaSenha || d.nova_senha || d.password,
       { message: "Nova senha é obrigatória" }
@@ -286,6 +291,24 @@ export async function resetPassword(req: Request, res: Response) {
         return res.status(400).json({ message: "Esse e-mail já está cadastrado em outra conta." });
       }
 
+      const razaoSocial = String(parsed.razao_social || "").trim();
+      const nomeFantasia = String(parsed.nome_fantasia || "").trim() || null;
+      const cnpj = onlyDigits(parsed.cnpj || "", 20);
+      const regime = String(parsed.regime_tributario || "").trim() || null;
+      const segmento = String(parsed.segmento || "").trim() || null;
+      if (tipoPessoa === "juridica") {
+        if (razaoSocial.length < 2) {
+          return res.status(400).json({ message: "Informe a razão social da empresa." });
+        }
+        if (cnpj.length !== 14) {
+          return res.status(400).json({ message: "Informe um CNPJ válido (14 dígitos)." });
+        }
+        const cnpjDup = await db.select({ id: empresas.id }).from(empresas).where(eq(empresas.cnpj, cnpj)).limit(1);
+        if (cnpjDup.length > 0) {
+          return res.status(400).json({ message: "Este CNPJ já está cadastrado." });
+        }
+      }
+
       const fim = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000);
       const fmtData = (d: Date) => d.toLocaleDateString("pt-BR");
       try {
@@ -307,6 +330,37 @@ export async function resetPassword(req: Request, res: Response) {
         throw err;
       }
 
+      let empresaNome: string | null = null;
+      if (tipoPessoa === "juridica") {
+        try {
+          const jaTem = await storage.getEmpresasByUsuarioId(user.id);
+          if (jaTem.length === 0) {
+            const empresa = await storage.createEmpresa({
+              usuario_id: user.id,
+              razao_social: razaoSocial,
+              nome_fantasia: nomeFantasia || razaoSocial,
+              cnpj,
+              regime_tributario: regime,
+              segmento: segmento || "servicos",
+              ativo: true,
+            } as any);
+            await storage.seedEmpresasContas(empresa.id);
+            empresaNome = empresa.razao_social;
+          } else {
+            empresaNome = jaTem[0].razao_social;
+          }
+          if (user.remoteJid) {
+            try { await storage.deleteWhatsAppOnboardingState(user.remoteJid); } catch { /* ok */ }
+          }
+        } catch (err: any) {
+          console.error("[resetPassword] falha ao criar empresa:", err?.message || err);
+          const msg = String(err?.message || "");
+          if (err?.code === "23505" || /cnpj/i.test(msg)) {
+            return res.status(400).json({ message: "Este CNPJ já está cadastrado." });
+          }
+        }
+      }
+
       try {
         await notificarAdmin(
           `🆕 Cadastro WhatsApp ${tipoPessoa === "juridica" ? "PJ" : "PF"} no formulário: ${nome} | ${email} | tel ${telefone} | id=${user.id} — expira ${fmtData(fim)}`
@@ -319,21 +373,12 @@ export async function resetPassword(req: Request, res: Response) {
       if (user.remoteJid && uazToken) {
         try {
           if (tipoPessoa === "juridica") {
-            const jaOnboarding = await storage.getWhatsAppOnboardingState(user.remoteJid);
-            if (!jaOnboarding) {
-              await storage.createWhatsAppOnboardingState({
-                remoteJid: user.remoteJid,
-                usuarioId: user.id,
-                currentStep: "ASKING_RESPONSIBLE",
-                collectedData: JSON.stringify({}),
-                updatedAt: new Date(),
-              });
-            }
+            const nomeEmp = empresaNome || razaoSocial;
             await uazapiService.sendText(
               uazBase,
               uazToken,
               user.remoteJid,
-              `Prontinho${primeiro ? `, ${primeiro}` : ""}! ✅ Sua degustação *empresarial* de *15 dias* está ativa até *${fmtData(fim)}*.\n\nPara configurar sua empresa, preciso de alguns dados. 🏢\n\nQual o seu *nome completo* (responsável pela empresa)?`
+              `Prontinho${primeiro ? `, ${primeiro}` : ""}! ✅ Sua degustação *empresarial* de *15 dias* está ativa até *${fmtData(fim)}*.\n\nA empresa *${nomeEmp}* já está no painel. Pode começar a registrar entradas e saídas por aqui. 📊`
             );
           } else {
             await uazapiService.sendText(

@@ -1260,14 +1260,28 @@ export async function updateUser(req: Request, res: Response) {
         const UAZAPI_TOKEN = process.env.UAZAPI_TOKEN || "";
         if (UAZAPI_TOKEN && updatedUser.remoteJid) {
           const primeiroNome = (updatedUser.nome || "").split(" ")[0];
-          const linhas = [
-            `Olá ${primeiroNome}! 🎉 Sua conta no *Khesef* foi *ativada*!`,
-            ``,
-            linkSenha ? `👉 Crie sua senha de acesso aqui:\n${linkSenha}` : `Acesse: ${loginUrl}`,
-            emailReal ? `\n*Login:* ${updatedUser.email}` : ``,
-          ].filter(Boolean);
+          const texto =
+            `Olá ${primeiroNome}! 🎉 Sua conta no *Khesef* foi *ativada*!` +
+            (emailReal ? `\n\n*Login:* ${updatedUser.email}` : "");
           try {
-            await uazapiService.sendText(UAZAPI_BASE_URL, UAZAPI_TOKEN, updatedUser.remoteJid, linhas.join("\n"));
+            if (linkSenha) {
+              await uazapiService.sendUrlButton(
+                UAZAPI_BASE_URL,
+                UAZAPI_TOKEN,
+                updatedUser.remoteJid,
+                texto + `\n\nToque no botão para criar sua senha de acesso.`,
+                "Criar senha",
+                linkSenha,
+                "Khesef"
+              );
+            } else {
+              await uazapiService.sendText(
+                UAZAPI_BASE_URL,
+                UAZAPI_TOKEN,
+                updatedUser.remoteJid,
+                `${texto}\n\nAcesse: ${loginUrl}`
+              );
+            }
             console.log(`✅ Acesso enviado por WhatsApp para ${updatedUser.remoteJid}`);
           } catch (waErr: any) {
             console.error("Falha ao enviar WhatsApp de ativação:", waErr?.message || waErr);

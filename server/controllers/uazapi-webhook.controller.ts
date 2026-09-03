@@ -100,24 +100,15 @@ const msgNudgeCadastro = () =>
 const msgPedirEmail = (nome?: string | null) =>
   `Perfeito${primeiro(nome) ? `, ${primeiro(nome)}` : ""}! ✅\n\nJá peguei seu *WhatsApp* automaticamente.\nAgora me envia o *melhor e-mail* para você acessar o sistema (ex.: seuemail@gmail.com).`;
 
-const msgLinkCadastro = (opts: { nome?: string | null; link: string }) =>
-  `Perfeito${primeiro(opts.nome) ? `, ${primeiro(opts.nome)}` : ""}! ✅\n\n` +
-  `Já peguei seu *WhatsApp*. Para concluir o cadastro no *${SYSTEM_NAME}*, abra o link e preencha *nome, telefone, e-mail e senha*:\n\n` +
-  `${opts.link}\n\n` +
-  `O link vale por alguns dias. Depois é só voltar aqui.`;
+const msgLinkCadastro = (nome?: string | null) =>
+  `Perfeito${primeiro(nome) ? `, ${primeiro(nome)}` : ""}! ✅\n\n` +
+  `Já peguei seu *WhatsApp*. Toque no botão abaixo para concluir o cadastro no *${SYSTEM_NAME}* (nome, telefone, e-mail e senha).`;
 
 const msgEmailInvalido = () =>
   `Não consegui identificar um e-mail válido. 😅\n\nMe envia de novo no formato *seuemail@dominio.com*.`;
 
 const msgEmailEmUso = () =>
   `Esse e-mail já está cadastrado em outra conta. Envie outro e-mail, por favor.`;
-
-const msgContaCriada = (opts: { nome?: string | null; email: string; linkSenha: string | null }) =>
-  `Pronto${primeiro(opts.nome) ? `, ${primeiro(opts.nome)}` : ""}! 🎉 Sua conta no *${SYSTEM_NAME}* foi criada.\n\n` +
-  (opts.linkSenha
-    ? `👉 *Crie sua senha de acesso* aqui:\n${opts.linkSenha}\n\n*Login:* ${opts.email}\n(o link vale por alguns dias)\n\n`
-    : `*Login:* ${opts.email}\n*Acesse:* ${appUrl()}\n(use *Esqueci minha senha* para definir sua senha)\n\n`) +
-  `Agora: posso liberar *${TRIAL_DIAS} dias grátis* pra você testar tudo?\nResponda *SIM* para ativar. 😊`;
 
 const msgOferta = (nome?: string | null) =>
   `Olá ${primeiro(nome)}! 👋 Posso liberar *${TRIAL_DIAS} dias grátis* no *${SYSTEM_NAME}* para você testar tudo — é só responder *SIM* que eu ativo agora mesmo. 😊`;
@@ -158,12 +149,27 @@ async function finalizarCadastroComEmail(opts: {
     console.error(`[UazAPI Webhook] Falha ao gerar link de senha:`, err?.message || err);
   }
 
-  await uazapiService.sendText(
-    BaseUrl,
-    token,
-    chatid,
-    msgContaCriada({ nome: user.nome, email, linkSenha })
-  );
+  const texto =
+    `Pronto${primeiro(user.nome) ? `, ${primeiro(user.nome)}` : ""}! 🎉 Sua conta no *${SYSTEM_NAME}* foi criada.\n\n` +
+    `*Login:* ${email}\n` +
+    (linkSenha
+      ? `Toque no botão para criar sua senha de acesso.`
+      : `Acesse: ${appUrl()}\n(use *Esqueci minha senha* para definir sua senha)`) +
+    `\n\nAgora: posso liberar *${TRIAL_DIAS} dias grátis* pra você testar tudo?\nResponda *SIM* para ativar. 😊`;
+
+  if (linkSenha) {
+    await uazapiService.sendUrlButton(
+      BaseUrl,
+      token,
+      chatid,
+      texto,
+      "Criar senha",
+      linkSenha,
+      "O link vale por alguns dias"
+    );
+  } else {
+    await uazapiService.sendText(BaseUrl, token, chatid, texto);
+  }
 
   await notificarAdmin(
     `🆕 Cadastro WhatsApp concluído: ${user.nome} | ${email} | tel ${user.telefone} | id=${user.id}`
@@ -185,7 +191,15 @@ async function enviarLinkCadastro(opts: {
   }
   if (!link) return false;
   await storage.updateUser(user.id, { status_assinatura: ST_FORM } as any);
-  await uazapiService.sendText(BaseUrl, token, chatid, msgLinkCadastro({ nome: user.nome, link }));
+  await uazapiService.sendUrlButton(
+    BaseUrl,
+    token,
+    chatid,
+    msgLinkCadastro(user.nome),
+    "Concluir cadastro",
+    link,
+    "O link vale por alguns dias"
+  );
   return true;
 }
 

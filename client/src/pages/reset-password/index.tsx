@@ -28,6 +28,15 @@ type TokenInfo = {
   email?: string;
 };
 
+function formatCnpj(val: string) {
+  const d = val.replace(/\D/g, "").slice(0, 14);
+  if (d.length <= 2) return d;
+  if (d.length <= 5) return `${d.slice(0, 2)}.${d.slice(2)}`;
+  if (d.length <= 8) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5)}`;
+  if (d.length <= 12) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8)}`;
+  return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
+}
+
 function formatPhone(val: string) {
   const digits = val.replace(/\D/g, "").slice(0, 11);
   if (!digits) return "";
@@ -64,6 +73,28 @@ const createResetSchema = (
         tipo_pessoa: z.enum(["fisica", "juridica"], {
           required_error: t("reset.validation.person_type", "Escolha pessoal (PF) ou empresa (PJ)"),
         }),
+        razao_social: z.string().optional(),
+        nome_fantasia: z.string().optional(),
+        cnpj: z.string().optional(),
+        regime_tributario: z.string().optional(),
+        segmento: z.string().optional(),
+      }).superRefine((d, ctx) => {
+        if (d.tipo_pessoa !== "juridica") return;
+        if (!d.razao_social || d.razao_social.trim().length < 2) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["razao_social"],
+            message: t("reset.validation.razao", "Informe a razão social"),
+          });
+        }
+        const cnpj = (d.cnpj || "").replace(/\D/g, "");
+        if (cnpj.length !== 14) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["cnpj"],
+            message: t("reset.validation.cnpj", "CNPJ deve ter 14 dígitos"),
+          });
+        }
       })
     : senha;
   return base.refine((d) => d.nova_senha === d.confirmar_senha, {
@@ -77,6 +108,11 @@ type ResetForm = {
   telefone?: string;
   email?: string;
   tipo_pessoa?: "fisica" | "juridica";
+  razao_social?: string;
+  nome_fantasia?: string;
+  cnpj?: string;
+  regime_tributario?: string;
+  segmento?: string;
   nova_senha: string;
   confirmar_senha: string;
 };
@@ -100,10 +136,16 @@ function ResetFormCard({ token, info }: { token: string; info: TokenInfo }) {
       telefone: (info.telefone || "").replace(/\D/g, "").slice(0, 11),
       email: info.email || "",
       tipo_pessoa: undefined,
+      razao_social: "",
+      nome_fantasia: "",
+      cnpj: "",
+      regime_tributario: "",
+      segmento: "",
       nova_senha: "",
       confirmar_senha: "",
     },
   });
+  const tipoPessoa = form.watch("tipo_pessoa");
 
   const onSubmit = async (data: ResetForm) => {
     try {
@@ -117,6 +159,13 @@ function ResetFormCard({ token, info }: { token: string; info: TokenInfo }) {
         payload.telefone = (data.telefone || "").replace(/\D/g, "");
         payload.email = (data.email || "").trim().toLowerCase();
         if (data.tipo_pessoa) payload.tipo_pessoa = data.tipo_pessoa;
+        if (data.tipo_pessoa === "juridica") {
+          payload.razao_social = (data.razao_social || "").trim();
+          payload.nome_fantasia = (data.nome_fantasia || "").trim();
+          payload.cnpj = (data.cnpj || "").replace(/\D/g, "");
+          if (data.regime_tributario) payload.regime_tributario = data.regime_tributario;
+          if (data.segmento) payload.segmento = data.segmento;
+        }
       }
       const response = await apiRequest("/api/auth/reset-password", {
         method: "POST",
@@ -275,6 +324,103 @@ function ResetFormCard({ token, info }: { token: string; info: TokenInfo }) {
                         </FormItem>
                       )}
                     />
+                    {tipoPessoa === "juridica" && (
+                      <div className="space-y-4 rounded-md border border-border p-3">
+                        <p className="text-sm font-medium">
+                          {t("reset.company_section", "Dados da empresa")}
+                        </p>
+                        <FormField
+                          control={form.control}
+                          name="razao_social"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>{t("reset.razao_label", "Razão social")}</FormLabel>
+                              <FormControl>
+                                <Input autoComplete="organization" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="nome_fantasia"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>{t("reset.fantasia_label", "Nome fantasia (opcional)")}</FormLabel>
+                              <FormControl>
+                                <Input {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="cnpj"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>{t("reset.cnpj_label", "CNPJ")}</FormLabel>
+                              <FormControl>
+                                <Input
+                                  inputMode="numeric"
+                                  placeholder="00.000.000/0001-00"
+                                  value={formatCnpj(field.value || "")}
+                                  onChange={(e) =>
+                                    field.onChange(e.target.value.replace(/\D/g, "").slice(0, 14))
+                                  }
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="regime_tributario"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>{t("reset.regime_label", "Regime tributário")}</FormLabel>
+                              <FormControl>
+                                <select
+                                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                  value={field.value || ""}
+                                  onChange={field.onChange}
+                                >
+                                  <option value="">{t("reset.regime_placeholder", "Selecione")}</option>
+                                  <option value="Simples">Simples Nacional</option>
+                                  <option value="Presumido">Lucro Presumido</option>
+                                  <option value="Real">Lucro Real</option>
+                                </select>
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="segmento"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>{t("reset.segmento_label", "Segmento")}</FormLabel>
+                              <FormControl>
+                                <select
+                                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                  value={field.value || ""}
+                                  onChange={field.onChange}
+                                >
+                                  <option value="">{t("reset.segmento_placeholder", "Selecione")}</option>
+                                  <option value="servicos">Serviços</option>
+                                  <option value="comercio">Comércio</option>
+                                  <option value="misto">Misto</option>
+                                </select>
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    )}
                   </>
                 )}
                 <FormField

@@ -76,8 +76,19 @@ export class UazapiService {
   /**
    * Envia menu com botões (para link de pagamento, etc).
    * POST {baseUrl}/send/menu
+   *
+   * URL button (UazAPI / WhatsApp): "Rótulo|https://..." — o WhatsApp NÃO
+   * renderiza markdown [texto](url) em conversa comum; o botão CTA é o
+   * formato suportado (texto do botão ≤ 20 caracteres).
    */
-  async sendMenu(baseUrl: string, token: string, chatId: string, text: string, choices: string[]): Promise<void> {
+  async sendMenu(
+    baseUrl: string,
+    token: string,
+    chatId: string,
+    text: string,
+    choices: string[],
+    footerText?: string
+  ): Promise<void> {
     await axios.post(
       `${baseUrl}/send/menu`,
       {
@@ -85,12 +96,35 @@ export class UazapiService {
         type: "button",
         text,
         choices,
+        ...(footerText ? { footerText } : {}),
       },
       {
         headers: { token },
         timeout: 15000,
       }
     );
+  }
+
+  /**
+   * Botão clicável com URL. Se o menu interativo falhar (conta não-Business),
+   * cai no texto com o link — WhatsApp não permite hiperlink markdown.
+   */
+  async sendUrlButton(
+    baseUrl: string,
+    token: string,
+    chatId: string,
+    text: string,
+    buttonLabel: string,
+    url: string,
+    footerText?: string
+  ): Promise<void> {
+    const label = buttonLabel.slice(0, 20);
+    try {
+      await this.sendMenu(baseUrl, token, chatId, text, [`${label}|${url}`], footerText);
+    } catch (err: any) {
+      console.error("[UazAPI] sendUrlButton falhou, enviando texto:", err?.message || err);
+      await this.sendText(baseUrl, token, chatId, `${text}\n\n${url}`);
+    }
   }
 }
 
