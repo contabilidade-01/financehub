@@ -444,6 +444,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
     billingController.checkout
   );
+  app.post(
+    "/api/billing/renew-link",
+    combinedAuth,
+    checkImpersonation,
+    billingController.createRenewLink
+  );
   app.get(
     "/api/billing/subscription",
     combinedAuth,

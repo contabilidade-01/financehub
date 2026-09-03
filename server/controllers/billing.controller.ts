@@ -389,6 +389,31 @@ export async function validateExternalCheckoutToken(req: Request, res: Response)
 }
 
 /**
+ * POST /api/billing/renew-link
+ * Mesma ação do admin "Gerar link de cobrança", para o usuário logado.
+ * Abre a página do Asaas com os dados que já temos.
+ */
+export async function createRenewLink(req: Request, res: Response) {
+  try {
+    const user = (req as any).user;
+    if (!user) {
+      return res.status(401).json({ error: "Usuário não autenticado" });
+    }
+
+    const cicloBody = req.body?.ciclo;
+    const ciclo = (['mensal', 'trimestral', 'anual'].includes(cicloBody) ? cicloBody : null)
+      || user.ciclo_assinatura
+      || 'mensal';
+
+    const result = await getSubscriptionService(storage).createHostedCheckout(user.id, ciclo);
+    return res.json(result);
+  } catch (err: any) {
+    console.error("createRenewLink:", err);
+    return res.status(400).json({ error: err?.message || "Falha ao gerar cobrança" });
+  }
+}
+
+/**
  * @swagger
  * /api/billing/subscription:
  *   get:

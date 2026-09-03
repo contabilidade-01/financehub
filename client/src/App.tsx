@@ -40,6 +40,7 @@ import AdminLgpd from "@/pages/admin/lgpd";
 import LgpdConsent from "@/components/LgpdConsent";
 import DatabasePage from "@/pages/admin/database";
 import CancelSubscription from "@/pages/subscription/cancel";
+import RenewSubscription from "@/pages/subscription/renew";
 import SubscriptionExpired from "@/pages/subscription-expired";
 import SetupWizard from "@/pages/setup";
 import MainLayout from "@/layouts/MainLayout";
@@ -153,7 +154,7 @@ function Router() {
         ) : (
           <>
             {/* Expired Subscription Overlay */}
-            {isAuthenticated && isSubscriptionExpired && !hasActiveAccess && (
+            {isAuthenticated && isSubscriptionExpired && !hasActiveAccess && !location.startsWith("/subscription/renew") && (
               <ExpiredSubscriptionOverlay 
                 expirationDate={expirationDate ? expirationDate.toString() : undefined} 
               />
@@ -231,12 +232,7 @@ function Router() {
             </Route>
             <Route path="/subscription/renew">
               <MainLayout>
-                <div className="container py-10">
-                  <h1 className="text-3xl font-bold mb-6">
-                    {t("subscription.renew.title", "Renovar Assinatura")}
-                  </h1>
-                  <p>{t("subscription.renew.description", "Página de renovação em desenvolvimento.")}</p>
-                </div>
+                <RenewSubscription />
               </MainLayout>
             </Route>
             <Route path="/admin">
