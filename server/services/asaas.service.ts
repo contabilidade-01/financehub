@@ -79,6 +79,7 @@ export interface AsaasSubscriptionData {
   creditCardHolderInfo?: AsaasCreditCardHolderInfo;
   creditCardToken?: string;
   remoteIp?: string;
+  externalReference?: string;
 }
 
 export interface AsaasSubscriptionResponse {

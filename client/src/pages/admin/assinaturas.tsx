@@ -186,7 +186,7 @@ export default function AdminAssinaturas() {
             {/* Cobrança automática (Asaas) — gera link para o cliente pagar */}
             <div className="rounded-md border p-3 space-y-2 bg-muted/30">
               <div className="text-xs text-muted-foreground">
-                <strong>Cobrança automática (Asaas):</strong> gera um link para o cliente preencher CPF/CNPJ e pagar — a assinatura recorrente é criada com o ciclo <strong>{form.ciclo}</strong>.
+                <strong>Cobrança no Asaas:</strong> envia nome, e-mail e telefone que já temos e abre a página do Asaas. O cliente só completa o que faltar (CPF/cartão/Pix). O acesso libera sozinho quando o pagamento confirmar. Ciclo: <strong>{form.ciclo}</strong>.
               </div>
               <Button size="sm" variant="secondary" className="w-full" onClick={() => definindo && linkMut.mutate({ id: definindo.id, ciclo: form.ciclo })} disabled={linkMut.isPending}>
                 {linkMut.isPending ? "Gerando…" : "Gerar link de cobrança"}

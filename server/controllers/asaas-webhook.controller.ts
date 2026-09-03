@@ -4,8 +4,6 @@ import { getAsaasService } from "../services/asaas.service";
 import { getSubscriptionService } from "../services/subscription.service";
 import { getNotificationService } from "../services/notification.service";
 import { broadcastNotification, broadcastToRole } from "../websocket";
-import { generateRandomPassword } from "../utils/password-generator";
-import bcrypt from "bcryptjs";
 
 /**
  * Asaas Webhook Controller
@@ -147,12 +145,35 @@ async function processWebhookEvent(eventType: string, paymentData: any, webhookI
   const notificationService = getNotificationService();
 
   // Buscar pagamento no nosso banco
-  const payment = await storage.getPaymentTransactionByAsaasId(paymentData.id);
+  let payment = await storage.getPaymentTransactionByAsaasId(paymentData.id);
 
   if (!payment) {
-    console.warn(`[AsaasWebhook] Payment not found in database: ${paymentData.id}`);
-    // Não é um erro crítico - pode ser um pagamento que não gerenciamos
-    return;
+    console.warn(`[AsaasWebhook] Payment not found in database: ${paymentData.id} — tentando vincular`);
+    const asaasSubId = paymentData.subscription;
+    let localSub = asaasSubId ? await storage.getSubscriptionByAsaasId(asaasSubId) : undefined;
+    if (!localSub && paymentData.customer) {
+      const cust = await storage.getAsaasCustomerByAsaasId(paymentData.customer);
+      if (cust) {
+        const subs = await storage.getAllSubscriptionsByUserId(cust.usuarioId);
+        localSub = subs.find((s) => s.status === 'pending' || s.status === 'active');
+      }
+    }
+    if (!localSub) {
+      console.warn(`[AsaasWebhook] Sem assinatura local para ${paymentData.id}; ignorando`);
+      return;
+    }
+    payment = await storage.createPaymentTransaction({
+      usuarioId: localSub.usuarioId,
+      subscriptionId: localSub.id,
+      asaasPaymentId: paymentData.id,
+      asaasInvoiceUrl: paymentData.invoiceUrl,
+      amount: String(paymentData.value ?? '0'),
+      status: 'pending',
+      paymentMethod: String(paymentData.billingType || 'undefined').toLowerCase(),
+      dueDate: paymentData.dueDate,
+      description: paymentData.description || 'Cobrança Asaas',
+      metadata: JSON.stringify(paymentData),
+    });
   }
 
   const user = await storage.getUserById(payment.usuarioId);
@@ -258,20 +279,12 @@ async function processWebhookEvent(eventType: string, paymentData: any, webhookI
           );
         }
 
-        // Buscar token do usuário (mesmo comportamento da ativação manual)
+        // NÃO gerar senha nova: o cliente já usa o sistema (degustação).
+        // Só libera o acesso; a senha atual permanece.
+
         const userTokens = await storage.getApiTokensByUserId(user.id);
         const userToken = userTokens && userTokens.length > 0 ? userTokens[0].token : null;
 
-        // Gerar nova senha aleatória (mesmo comportamento da ativação manual)
-        const newPassword = generateRandomPassword(8);
-
-        // Atualizar a senha do usuário
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
-        await storage.updateUser(user.id, { senha: hashedPassword });
-
-        console.log(`[AsaasWebhook] Nova senha gerada para usuário ${user.nome}: ${newPassword}`);
-
-        // Enviar webhook de ativação com payload COMPLETO (idêntico à ativação manual)
         const webhookData = {
           evento: "usuario_ativado",
           timestamp: new Date().toISOString(),
@@ -285,7 +298,6 @@ async function processWebhookEvent(eventType: string, paymentData: any, webhookI
           token: userToken,
           acesso_web: {
             usuario: user.email,
-            senha: newPassword
           },
           mensagem_ativacao: {
             titulo: activationMessage.title,

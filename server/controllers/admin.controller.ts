@@ -6,8 +6,8 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import "../types/session.types";
-import { generateCheckoutToken } from "../utils/checkout-token.utils";
 import { getNotificationService } from "../services/notification.service";
+import { getSubscriptionService } from "../services/subscription.service";
 import { generateRandomPassword } from "../utils/password-generator";
 import { uazapiService } from "../services/uazapi.service";
 import { gerarLinkDefinirSenha } from "./password-reset.controller";
@@ -1514,8 +1514,7 @@ export async function renovarAssinatura(req: Request, res: Response) {
 }
 
 // POST /api/admin/assinaturas/:id/gerar-link  { ciclo }
-// Gera um link de checkout (Asaas) já com o ciclo — o cliente preenche
-// CPF/CNPJ + cartão e a assinatura recorrente é criada com o ciclo escolhido.
+// Cria a cobrança no Asaas com os dados que já temos e devolve a URL da página deles.
 export async function gerarLinkCobranca(req: Request, res: Response) {
   try {
     const userId = parseInt(req.params.id);
@@ -1523,13 +1522,11 @@ export async function gerarLinkCobranca(req: Request, res: Response) {
     if (!MESES_CICLO[ciclo]) return res.status(400).json({ error: "ciclo inválido (mensal | trimestral | anual)" });
     const user = await storage.getUserById(userId);
     if (!user) return res.status(404).json({ error: "Usuário não encontrado" });
-    const token = generateCheckoutToken(user.id, user.email, ciclo);
-    const baseUrl = process.env.BASE_URL || "https://app.controledinheiro.com.br";
-    const url = `${baseUrl}/checkout/plans?tokenaccess=${encodeURIComponent(token)}`;
-    return res.json({ url, ciclo });
-  } catch (err) {
+    const result = await getSubscriptionService(storage).createHostedCheckout(userId, ciclo);
+    return res.json(result);
+  } catch (err: any) {
     console.error("gerarLinkCobranca:", err);
-    return res.status(500).json({ error: "Erro ao gerar link de cobrança" });
+    return res.status(500).json({ error: err?.message || "Falha ao gerar link de cobrança" });
   }
 }
 

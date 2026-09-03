@@ -79,6 +79,12 @@ export const CICLO_ASAAS: Record<string, { cycle: 'MONTHLY' | 'QUARTERLY' | 'YEA
   anual: { cycle: 'YEARLY', meses: 12 },
 };
 
+function addMeses(base: Date, meses: number): Date {
+  const d = new Date(base);
+  d.setMonth(d.getMonth() + meses);
+  return d;
+}
+
 export interface SubscriptionWithPlan extends UserSubscription {
   plan: SubscriptionPlan;
 }
@@ -249,26 +255,162 @@ export class SubscriptionService {
   }
 
   /**
+   * Cria cobrança recorrente no Asaas SEM cartão e devolve a URL da página deles.
+   * Enviamos nome/e-mail/telefone/CNPJ que já temos; o cliente só completa o que faltar (CPF/cartão/Pix).
+   * A liberação do acesso continua automática no webhook PAYMENT_CONFIRMED / PAYMENT_RECEIVED.
+   */
+  async createHostedCheckout(userId: number, ciclo: 'mensal' | 'trimestral' | 'anual'): Promise<{ url: string; ciclo: string }> {
+    const user = await this.storage.getUserById(userId);
+    if (!user) {
+      throw new Error('Usuário não encontrado');
+    }
+
+    const cfgCiclo = CICLO_ASAAS[ciclo];
+    if (!cfgCiclo) {
+      throw new Error('Ciclo inválido (mensal | trimestral | anual)');
+    }
+
+    const plans = await this.storage.getActiveSubscriptionPlans();
+    if (!plans.length) {
+      throw new Error('Nenhum plano ativo. Crie um plano em Pagamentos antes de gerar o link.');
+    }
+    const plan = plans[0];
+
+    const existingActive = await this.storage.getActiveSubscriptionByUserId(userId);
+    if (existingActive) {
+      throw new Error('Usuário já possui uma assinatura ativa');
+    }
+
+    const asaas = await this.getAsaas();
+
+    // Reaproveita cobrança pendente já gerada (evita assinatura duplicada no Asaas)
+    const existentes = await this.storage.getAllSubscriptionsByUserId(userId);
+    const pendente = existentes.find((s) => s.status === 'pending' && s.asaasSubscriptionId);
+    if (pendente?.asaasSubscriptionId) {
+      const locais = await this.storage.getPaymentTransactionsBySubscriptionId(pendente.id);
+      const localUrl = locais.find((p) => p.asaasInvoiceUrl && p.status === 'pending')?.asaasInvoiceUrl;
+      if (localUrl) {
+        await this.storage.updateUser(userId, { ciclo_assinatura: ciclo } as any);
+        return { url: localUrl, ciclo };
+      }
+      try {
+        const asaasPays = await asaas.getSubscriptionPayments(pendente.asaasSubscriptionId, { limit: 5 });
+        const aberta = asaasPays.data.find((p) => p.invoiceUrl && (p.status === 'PENDING' || p.status === 'OVERDUE'));
+        if (aberta?.invoiceUrl) {
+          await this.storage.updateUser(userId, { ciclo_assinatura: ciclo } as any);
+          return { url: aberta.invoiceUrl, ciclo };
+        }
+      } catch (err) {
+        console.warn('[SubscriptionService] Não reaproveitou cobrança pendente:', err);
+      }
+    }
+
+    let cpfCnpj: string | undefined;
+    if ((user as any).tipo_pessoa === 'juridica') {
+      const empresas = await this.storage.getEmpresasByUsuarioId(userId);
+      const comCnpj = empresas.find((e) => e.cnpj && String(e.cnpj).replace(/\D/g, '').length === 14);
+      if (comCnpj?.cnpj) cpfCnpj = String(comCnpj.cnpj).replace(/\D/g, '');
+    }
+    const customerCache = await this.storage.getAsaasCustomerByUserId(userId);
+    if (!cpfCnpj && customerCache?.cpfCnpj) {
+      cpfCnpj = customerCache.cpfCnpj.replace(/\D/g, '') || undefined;
+    }
+
+    let asaasCustomer = customerCache;
+    if (!asaasCustomer) {
+      const created = await asaas.createCustomer({
+        name: user.nome,
+        email: user.email,
+        phone: user.telefone || undefined,
+        mobilePhone: user.telefone || undefined,
+        ...(cpfCnpj ? { cpfCnpj } : {}),
+      });
+      asaasCustomer = await this.storage.createAsaasCustomer({
+        usuarioId: userId,
+        asaasCustomerId: created.id,
+        cpfCnpj: cpfCnpj || null,
+      } as any);
+    }
+
+    const systemName = await getSystemName();
+    const valorCiclo = parseFloat(plan.priceMonthly.toString()) * cfgCiclo.meses;
+    const nextDueDate = AsaasService.getTodayForAsaas();
+
+    const asaasSubscription = await asaas.createSubscription({
+      customer: asaasCustomer.asaasCustomerId,
+      billingType: 'UNDEFINED',
+      cycle: cfgCiclo.cycle,
+      value: valorCiclo,
+      nextDueDate,
+      description: `Assinatura ${plan.name} (${ciclo}) - ${systemName}`,
+      externalReference: `user:${userId}`,
+    });
+
+    const periodEnd = addMeses(new Date(), cfgCiclo.meses);
+    const subscription = await this.storage.createUserSubscription({
+      usuarioId: userId,
+      planId: plan.id,
+      asaasSubscriptionId: asaasSubscription.id,
+      status: 'pending',
+      currentPeriodStart: new Date(),
+      currentPeriodEnd: periodEnd,
+    });
+
+    await this.storage.updateUser(userId, { ciclo_assinatura: ciclo } as any);
+
+    const asaasPayments = await asaas.getSubscriptionPayments(asaasSubscription.id, { limit: 1 });
+    if (!asaasPayments.data.length) {
+      throw new Error('Asaas não gerou a cobrança. Tente novamente.');
+    }
+    const firstPayment = asaasPayments.data[0];
+    if (!firstPayment.invoiceUrl) {
+      throw new Error('Asaas não retornou o link da fatura.');
+    }
+
+    await this.storage.createPaymentTransaction({
+      usuarioId: userId,
+      subscriptionId: subscription.id,
+      asaasPaymentId: firstPayment.id,
+      asaasInvoiceUrl: firstPayment.invoiceUrl,
+      amount: firstPayment.value.toString(),
+      status: 'pending',
+      paymentMethod: 'undefined',
+      dueDate: firstPayment.dueDate,
+      description: `Pagamento ${plan.name} (${ciclo})`,
+      metadata: JSON.stringify(firstPayment),
+    });
+
+    console.log(`[SubscriptionService] Hosted checkout user=${userId} invoice=${firstPayment.invoiceUrl}`);
+    return { url: firstPayment.invoiceUrl, ciclo };
+  }
+
+  /**
    * Ativar assinatura do usuário (após confirmação de pagamento)
    */
   async activateUserSubscription(userId: number, subscriptionId: number): Promise<void> {
     try {
-      // Atualizar subscription
+      const user = await this.storage.getUserById(userId);
+      const ciclo = ((user as any)?.ciclo_assinatura as string) || 'mensal';
+      const meses = CICLO_ASAAS[ciclo]?.meses || 1;
+      const agora = new Date();
+      const periodEnd = addMeses(agora, meses);
+
       await this.storage.updateUserSubscription(subscriptionId, {
-        status: 'active'
+        status: 'active',
+        currentPeriodStart: agora,
+        currentPeriodEnd: periodEnd,
       });
 
-      // Atualizar usuário (denormalização para performance)
-      // IMPORTANTE: Atualizar AMBOS os campos para compatibilidade
-      // - ativo: usado pelo admin switch e verificação de login
-      // - subscriptionActive: usado pelo sistema de assinaturas
+      // Fonte de acesso do app é data_expiracao_assinatura — precisa ir junto.
       await this.storage.updateUser(userId, {
         ativo: true,
         subscriptionActive: true,
-        status_assinatura: 'ativa'
-      });
+        status_assinatura: 'ativa',
+        ciclo_assinatura: ciclo,
+        data_expiracao_assinatura: periodEnd,
+      } as any);
 
-      console.log(`[SubscriptionService] User ${userId} subscription activated`);
+      console.log(`[SubscriptionService] User ${userId} subscription activated until ${periodEnd.toISOString()}`);
     } catch (error) {
       console.error('[SubscriptionService] Error activating subscription:', error);
       throw error;
