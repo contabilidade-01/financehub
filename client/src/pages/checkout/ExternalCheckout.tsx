@@ -46,7 +46,7 @@ export default function ExternalCheckout() {
         throw new Error('Token não fornecido');
       }
 
-      const response = await fetch(`/api/billing/checkout/validate/${token}`);
+      const response = await fetch(`/api/billing/checkout/validate?token=${encodeURIComponent(token)}`);
 
       if (!response.ok) {
         const errorData = await response.json();

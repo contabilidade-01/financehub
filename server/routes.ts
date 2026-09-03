@@ -414,6 +414,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/billing/environment", billingController.getAsaasEnvironment);
 
   // Rota pública para validar token de checkout externo
+  app.get("/api/billing/checkout/validate", billingController.validateExternalCheckoutToken);
   app.get("/api/billing/checkout/validate/:token", billingController.validateExternalCheckoutToken);
 
   // Checkout com suporte tanto para usuários autenticados quanto para checkout externo (com token)

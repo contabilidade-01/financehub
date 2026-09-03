@@ -14,8 +14,8 @@
 export function generateCheckoutToken(userId: number, email: string, ciclo?: string): string {
   // Formato: userId:ciclo:email (ciclo opcional — retrocompatível com userId:email)
   const payload = ciclo ? `${userId}:${ciclo}:${email}` : `${userId}:${email}`;
-  const token = Buffer.from(payload).toString('base64');
-  return token;
+  // base64url evita `/` e `+`, que quebram a URL e a rota do Express
+  return Buffer.from(payload).toString('base64url');
 }
 
 const CICLOS_VALIDOS = ['mensal', 'trimestral', 'anual'];
@@ -25,10 +25,19 @@ const CICLOS_VALIDOS = ['mensal', 'trimestral', 'anual'];
  * @param token - Token em formato base64
  * @returns Objeto com userId e email, ou null se inválido
  */
+function normalizeCheckoutToken(token: string): string {
+  let t = token.trim();
+  try {
+    t = decodeURIComponent(t);
+  } catch {
+    // já estava decodificado
+  }
+  return t.replace(/-/g, '+').replace(/_/g, '/');
+}
+
 export function decodeCheckoutToken(token: string): { userId: number; email: string; ciclo?: string } | null {
   try {
-    // Decodifica base64
-    const decoded = Buffer.from(token, 'base64').toString('utf-8');
+    const decoded = Buffer.from(normalizeCheckoutToken(token), 'base64').toString('utf-8');
 
     // Encontra o primeiro ':' para separar userId do resto
     const firstColonIndex = decoded.indexOf(':');

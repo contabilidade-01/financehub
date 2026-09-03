@@ -306,7 +306,7 @@ export async function checkout(req: Request, res: Response) {
  */
 export async function validateExternalCheckoutToken(req: Request, res: Response) {
   try {
-    const { token } = req.params;
+    const token = String(req.query.token || req.params.token || '');
 
     // Validar formato do token
     if (!token || !validateCheckoutToken(token)) {
@@ -338,7 +338,13 @@ export async function validateExternalCheckoutToken(req: Request, res: Response)
     }
 
     // Verificar se usuário já tem assinatura ativa
-    const activeSubscription = await storage.getActiveSubscriptionByUserId(userId);
+    let activeSubscription;
+    try {
+      activeSubscription = await storage.getActiveSubscriptionByUserId(userId);
+    } catch (subErr: any) {
+      console.warn('[Checkout Validate] Falha ao checar assinatura (seguindo):', subErr?.message);
+      activeSubscription = undefined;
+    }
     if (activeSubscription) {
       return res.status(400).json({
         error: "Usuário já possui assinatura ativa",
@@ -347,7 +353,13 @@ export async function validateExternalCheckoutToken(req: Request, res: Response)
     }
 
     // Buscar planos disponíveis
-    const plans = await storage.getAllSubscriptionPlans();
+    let plans: any[] = [];
+    try {
+      plans = await storage.getAllSubscriptionPlans();
+    } catch (planErr: any) {
+      console.error('[Checkout Validate] Falha ao buscar planos:', planErr?.message);
+      return res.status(500).json({ error: "Erro ao validar token" });
+    }
     const activePlans = plans.filter(p => p.active);
 
     // Retornar dados do usuário (sem informações sensíveis) e planos

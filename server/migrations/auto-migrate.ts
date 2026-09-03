@@ -306,6 +306,85 @@ const STEPS: Step[] = [
     },
   },
   {
+    name: "billing: tabelas Asaas (plans, customers, subscriptions, payments, webhooks)",
+    run: async () => {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS subscription_plans (
+          id SERIAL PRIMARY KEY,
+          plan_code VARCHAR(50) NOT NULL UNIQUE,
+          name VARCHAR(100) NOT NULL,
+          description TEXT,
+          price_monthly DECIMAL(10, 2) NOT NULL,
+          features TEXT NOT NULL,
+          max_transactions INTEGER DEFAULT 0,
+          max_wallets INTEGER DEFAULT 0,
+          max_categories INTEGER DEFAULT 0,
+          active BOOLEAN NOT NULL DEFAULT true,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo'),
+          updated_at TIMESTAMP WITH TIME ZONE
+        )
+      `);
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS asaas_customers (
+          id SERIAL PRIMARY KEY,
+          usuario_id INTEGER NOT NULL UNIQUE REFERENCES usuarios(id) ON DELETE CASCADE,
+          asaas_customer_id VARCHAR(100) NOT NULL UNIQUE,
+          cpf_cnpj VARCHAR(18),
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo'),
+          updated_at TIMESTAMP WITH TIME ZONE
+        )
+      `);
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS user_subscriptions (
+          id SERIAL PRIMARY KEY,
+          usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+          plan_id INTEGER NOT NULL REFERENCES subscription_plans(id),
+          asaas_subscription_id VARCHAR(100) UNIQUE,
+          status VARCHAR(50) NOT NULL DEFAULT 'active',
+          current_period_start TIMESTAMP WITH TIME ZONE,
+          current_period_end TIMESTAMP WITH TIME ZONE,
+          canceled_at TIMESTAMP WITH TIME ZONE,
+          cancellation_reason TEXT,
+          ended_at TIMESTAMP WITH TIME ZONE,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo'),
+          updated_at TIMESTAMP WITH TIME ZONE
+        )
+      `);
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS payment_transactions (
+          id SERIAL PRIMARY KEY,
+          usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+          subscription_id INTEGER REFERENCES user_subscriptions(id),
+          asaas_payment_id VARCHAR(100) UNIQUE,
+          asaas_invoice_url TEXT,
+          amount DECIMAL(10, 2) NOT NULL,
+          currency VARCHAR(3) NOT NULL DEFAULT 'BRL',
+          status VARCHAR(50) NOT NULL DEFAULT 'pending',
+          payment_method VARCHAR(50) NOT NULL DEFAULT 'credit_card',
+          due_date DATE,
+          confirmed_date TIMESTAMP WITH TIME ZONE,
+          description TEXT,
+          retry_count INTEGER NOT NULL DEFAULT 0,
+          metadata TEXT,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo'),
+          updated_at TIMESTAMP WITH TIME ZONE
+        )
+      `);
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS asaas_webhooks (
+          id SERIAL PRIMARY KEY,
+          event_type VARCHAR(100) NOT NULL,
+          asaas_event_id VARCHAR(100) UNIQUE,
+          payload TEXT NOT NULL,
+          processed BOOLEAN NOT NULL DEFAULT false,
+          processed_at TIMESTAMP WITH TIME ZONE,
+          error_message TEXT,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')
+        )
+      `);
+    },
+  },
+  {
     name: "usuarios: ciclo_assinatura (mensal/trimestral/anual)",
     run: async () => {
       await db.execute(sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS ciclo_assinatura VARCHAR(12)`);

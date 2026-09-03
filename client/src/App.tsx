@@ -139,6 +139,8 @@ function Router() {
     <LgpdConsent />
     <AnimatePresence mode="wait">
       <Switch key={location}>
+        {/* Checkout externo precisa existir logado ou deslogado (link do Asaas) */}
+        <Route path="/checkout/plans" component={ExternalCheckout} />
         {!isAuthenticated ? (
           <>
             <Route path="/" component={Login} />
@@ -146,7 +148,6 @@ function Router() {
             <Route path="/forgot-password" component={ForgotPassword} />
             <Route path="/reset-password" component={ResetPassword} />
             <Route path="/subscription-expired" component={SubscriptionExpired} />
-            <Route path="/checkout/plans" component={ExternalCheckout} />
             {isSetupMode && <Route path="/setup" component={SetupWizard} />}
           </>
         ) : (

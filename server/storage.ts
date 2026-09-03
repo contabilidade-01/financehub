@@ -1294,20 +1294,12 @@ export class DbStorage implements IStorage {
   }
 
   async getActiveSubscriptionByUserId(userId: number): Promise<UserSubscription | undefined> {
-    const now = new Date();
-
     const result = await db.select()
       .from(userSubscriptions)
       .where(
         and(
           eq(userSubscriptions.usuarioId, userId),
-          or(
-            eq(userSubscriptions.status, 'active'),
-            and(
-              eq(userSubscriptions.status, 'canceled'),
-              gte(userSubscriptions.gracePeriodEndsAt, now)
-            )
-          )
+          eq(userSubscriptions.status, 'active'),
         )
       )
       .orderBy(desc(userSubscriptions.createdAt))
