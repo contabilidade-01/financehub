@@ -6,6 +6,20 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
+echo "==> Verificando dependências de sistema (PostgreSQL, canvas, chromium)"
+# Idempotente: só roda o apt se o PostgreSQL ainda não estiver presente.
+if ! command -v pg_ctlcluster >/dev/null 2>&1; then
+  echo "==> Instalando pacotes de sistema via apt"
+  sudo apt-get update -y
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    -o Dpkg::Options::="--force-confold" \
+    postgresql postgresql-contrib \
+    build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev \
+    python3 chromium-browser
+else
+  echo "==> PostgreSQL já instalado, pulando apt"
+fi
+
 echo "==> Instalando dependências npm"
 export PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 npm install
