@@ -226,6 +226,7 @@ export async function resetPassword(req: Request, res: Response) {
       nome: z.string().min(2, "Informe o nome completo").optional(),
       telefone: z.string().optional(),
       email: z.string().optional(),
+      tipo_pessoa: z.enum(["fisica", "juridica"]).optional(),
     }).refine(
       (d) => d.novaSenha || d.nova_senha || d.password,
       { message: "Nova senha é obrigatória" }
@@ -260,6 +261,7 @@ export async function resetPassword(req: Request, res: Response) {
     }
 
     const cadastroPendente = isCadastroPendente(user);
+    let tipoPessoaResposta: "fisica" | "juridica" | undefined;
 
     if (cadastroPendente) {
       const nome = String(parsed.nome || "").trim();
@@ -274,17 +276,24 @@ export async function resetPassword(req: Request, res: Response) {
       if (!email || !email.includes("@") || email.endsWith("@tel.local")) {
         return res.status(400).json({ message: "Informe um e-mail válido." });
       }
+      const tipoPessoa = parsed.tipo_pessoa === "juridica" ? "juridica" : parsed.tipo_pessoa === "fisica" ? "fisica" : null;
+      if (!tipoPessoa) {
+        return res.status(400).json({ message: "Escolha se o cadastro é pessoal (PF) ou empresarial (PJ)." });
+      }
+      tipoPessoaResposta = tipoPessoa;
       const existing = await storage.getUserByEmail(email);
       if (existing && existing.id !== user.id) {
         return res.status(400).json({ message: "Esse e-mail já está cadastrado em outra conta." });
       }
 
       const fim = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000);
+      const fmtData = (d: Date) => d.toLocaleDateString("pt-BR");
       try {
         await storage.updateUser(user.id, {
           nome,
           telefone,
           email,
+          tipo_pessoa: tipoPessoa,
           ativo: true,
           status_assinatura: "degustacao",
           data_expiracao_assinatura: fim,
@@ -300,21 +309,40 @@ export async function resetPassword(req: Request, res: Response) {
 
       try {
         await notificarAdmin(
-          `🆕 Cadastro WhatsApp concluído no formulário: ${nome} | ${email} | tel ${telefone} | id=${user.id}`
+          `🆕 Cadastro WhatsApp ${tipoPessoa === "juridica" ? "PJ" : "PF"} no formulário: ${nome} | ${email} | tel ${telefone} | id=${user.id} — expira ${fmtData(fim)}`
         );
       } catch { /* não bloquear */ }
 
       const uazBase = process.env.UAZAPI_BASE_URL || "https://nescon.uazapi.com";
       const uazToken = process.env.UAZAPI_TOKEN || "";
+      const primeiro = nome.split(" ")[0] || "";
       if (user.remoteJid && uazToken) {
         try {
-          const primeiro = nome.split(" ")[0] || "";
-          await uazapiService.sendText(
-            uazBase,
-            uazToken,
-            user.remoteJid,
-            `Pronto${primeiro ? `, ${primeiro}` : ""}! 🎉 Sua conta está criada e você já tem *15 dias grátis*. Pode começar a registrar suas finanças por aqui.`
-          );
+          if (tipoPessoa === "juridica") {
+            const jaOnboarding = await storage.getWhatsAppOnboardingState(user.remoteJid);
+            if (!jaOnboarding) {
+              await storage.createWhatsAppOnboardingState({
+                remoteJid: user.remoteJid,
+                usuarioId: user.id,
+                currentStep: "ASKING_RESPONSIBLE",
+                collectedData: JSON.stringify({}),
+                updatedAt: new Date(),
+              });
+            }
+            await uazapiService.sendText(
+              uazBase,
+              uazToken,
+              user.remoteJid,
+              `Prontinho${primeiro ? `, ${primeiro}` : ""}! ✅ Sua degustação *empresarial* de *15 dias* está ativa até *${fmtData(fim)}*.\n\nPara configurar sua empresa, preciso de alguns dados. 🏢\n\nQual o seu *nome completo* (responsável pela empresa)?`
+            );
+          } else {
+            await uazapiService.sendText(
+              uazBase,
+              uazToken,
+              user.remoteJid,
+              `Prontinho${primeiro ? `, ${primeiro}` : ""}! ✅ Sua degustação de *15 dias* está ativa até *${fmtData(fim)}*.\n\nPode começar agora: me manda suas receitas e despesas por aqui que eu registro tudo. 📊`
+            );
+          }
         } catch (e: any) {
           console.error("[resetPassword] falha ao avisar no WhatsApp:", e?.message || e);
         }
@@ -351,6 +379,7 @@ export async function resetPassword(req: Request, res: Response) {
         ? "Cadastro concluído. Você já está conectado."
         : "Senha redefinida com sucesso. Você já está conectado.",
       autenticado: true,
+      tipo_pessoa: tipoPessoaResposta,
     });
   } catch (error: any) {
     if (error?.name === "ZodError") {

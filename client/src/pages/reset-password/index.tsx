@@ -61,6 +61,9 @@ const createResetSchema = (
           .refine((e) => !e.toLowerCase().endsWith("@tel.local"), {
             message: t("reset.validation.email_real", "Informe um e-mail real"),
           }),
+        tipo_pessoa: z.enum(["fisica", "juridica"], {
+          required_error: t("reset.validation.person_type", "Escolha pessoal (PF) ou empresa (PJ)"),
+        }),
       })
     : senha;
   return base.refine((d) => d.nova_senha === d.confirmar_senha, {
@@ -73,6 +76,7 @@ type ResetForm = {
   nome?: string;
   telefone?: string;
   email?: string;
+  tipo_pessoa?: "fisica" | "juridica";
   nova_senha: string;
   confirmar_senha: string;
 };
@@ -95,6 +99,7 @@ function ResetFormCard({ token, info }: { token: string; info: TokenInfo }) {
       nome: info.nome || "",
       telefone: (info.telefone || "").replace(/\D/g, "").slice(0, 11),
       email: info.email || "",
+      tipo_pessoa: undefined,
       nova_senha: "",
       confirmar_senha: "",
     },
@@ -111,6 +116,7 @@ function ResetFormCard({ token, info }: { token: string; info: TokenInfo }) {
         payload.nome = data.nome || "";
         payload.telefone = (data.telefone || "").replace(/\D/g, "");
         payload.email = (data.email || "").trim().toLowerCase();
+        if (data.tipo_pessoa) payload.tipo_pessoa = data.tipo_pessoa;
       }
       const response = await apiRequest("/api/auth/reset-password", {
         method: "POST",
@@ -125,7 +131,10 @@ function ResetFormCard({ token, info }: { token: string; info: TokenInfo }) {
           t("reset.success_desc", "Tudo certo! Entrando no sistema…"),
       });
       if (response?.autenticado) {
-        window.location.href = "/";
+        window.location.href =
+          data.tipo_pessoa === "juridica" || response?.tipo_pessoa === "juridica"
+            ? "/p/dashboard"
+            : "/";
       } else {
         navigate("/");
       }
@@ -216,6 +225,52 @@ function ResetFormCard({ token, info }: { token: string; info: TokenInfo }) {
                           <FormControl>
                             <Input type="email" autoComplete="email" {...field} />
                           </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="tipo_pessoa"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>
+                            {t("reset.person_type_label", "Este cadastro é para")}
+                          </FormLabel>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => field.onChange("fisica")}
+                              className={`rounded-md border px-3 py-3 text-left text-sm transition-colors ${
+                                field.value === "fisica"
+                                  ? "border-primary bg-primary/10"
+                                  : "border-input hover:bg-muted/50"
+                              }`}
+                            >
+                              <span className="block font-medium">
+                                {t("reset.person_type_pf", "Pessoal (PF)")}
+                              </span>
+                              <span className="mt-0.5 block text-xs text-muted-foreground">
+                                {t("reset.person_type_pf_hint", "Minhas finanças")}
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => field.onChange("juridica")}
+                              className={`rounded-md border px-3 py-3 text-left text-sm transition-colors ${
+                                field.value === "juridica"
+                                  ? "border-primary bg-primary/10"
+                                  : "border-input hover:bg-muted/50"
+                              }`}
+                            >
+                              <span className="block font-medium">
+                                {t("reset.person_type_pj", "Empresa (PJ)")}
+                              </span>
+                              <span className="mt-0.5 block text-xs text-muted-foreground">
+                                {t("reset.person_type_pj_hint", "Finanças da empresa")}
+                              </span>
+                            </button>
+                          </div>
                           <FormMessage />
                         </FormItem>
                       )}
