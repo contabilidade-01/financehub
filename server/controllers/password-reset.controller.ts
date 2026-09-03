@@ -14,6 +14,8 @@ import {
   getPublicAppUrl,
   sendPasswordResetEmail,
 } from "../services/mailer";
+import { notificarAdmin } from "../services/admin-notify";
+import { uazapiService } from "../services/uazapi.service";
 
 const GENERIC_FORGOT_MSG =
   "Se o e-mail estiver cadastrado, você receberá um link em instantes.";
@@ -25,6 +27,27 @@ function hashToken(raw: string): string {
 function normalizeEmail(val: unknown): string {
   if (val == null) return "";
   return String(val).trim().toLowerCase();
+}
+
+function isPlaceholderEmail(email?: string | null): boolean {
+  return !email || email.toLowerCase().endsWith("@tel.local");
+}
+
+function isCadastroPendente(user: {
+  email?: string | null;
+  status_assinatura?: string | null;
+}): boolean {
+  const status = user.status_assinatura || "";
+  if (isPlaceholderEmail(user.email)) return true;
+  return (
+    status === "aguardando_cadastro" ||
+    status === "aguardando_email" ||
+    status === "aguardando_form"
+  );
+}
+
+function onlyDigits(v: string, max = 20): string {
+  return String(v || "").replace(/\D/g, "").slice(0, max);
 }
 
 function resetTtlMinutes(): number {
@@ -151,8 +174,15 @@ export async function checkResetToken(req: Request, res: Response) {
 
     const tokenHash = hashToken(token);
     const rows = await db
-      .select({ id: passwordResetTokens.id })
+      .select({
+        id: passwordResetTokens.id,
+        nome: users.nome,
+        telefone: users.telefone,
+        email: users.email,
+        status_assinatura: users.status_assinatura,
+      })
       .from(passwordResetTokens)
+      .innerJoin(users, eq(users.id, passwordResetTokens.usuario_id))
       .where(
         and(
           eq(passwordResetTokens.token_hash, tokenHash),
@@ -162,7 +192,20 @@ export async function checkResetToken(req: Request, res: Response) {
       )
       .limit(1);
 
-    return res.status(200).json({ valid: rows.length > 0 });
+    const row = rows[0];
+    if (!row) {
+      return res.status(200).json({ valid: false });
+    }
+
+    const cadastroPendente = isCadastroPendente(row);
+    const email = isPlaceholderEmail(row.email) ? "" : (row.email || "");
+    return res.status(200).json({
+      valid: true,
+      cadastroPendente,
+      nome: row.nome || "",
+      telefone: onlyDigits(row.telefone || ""),
+      email,
+    });
   } catch (error) {
     console.error("[checkResetToken]", error);
     return res.status(200).json({ valid: false });
@@ -170,7 +213,8 @@ export async function checkResetToken(req: Request, res: Response) {
 }
 
 /**
- * POST /api/auth/reset-password  { token, novaSenha }
+ * POST /api/auth/reset-password  { token, novaSenha, nome?, telefone?, email? }
+ * No cadastro via WhatsApp, o mesmo link completa nome/telefone/e-mail/senha.
  */
 export async function resetPassword(req: Request, res: Response) {
   try {
@@ -179,6 +223,9 @@ export async function resetPassword(req: Request, res: Response) {
       novaSenha: z.string().min(6, "A nova senha deve ter pelo menos 6 caracteres").optional(),
       nova_senha: z.string().min(6, "A nova senha deve ter pelo menos 6 caracteres").optional(),
       password: z.string().min(6, "A nova senha deve ter pelo menos 6 caracteres").optional(),
+      nome: z.string().min(2, "Informe o nome completo").optional(),
+      telefone: z.string().optional(),
+      email: z.string().optional(),
     }).refine(
       (d) => d.novaSenha || d.nova_senha || d.password,
       { message: "Nova senha é obrigatória" }
@@ -207,6 +254,73 @@ export async function resetPassword(req: Request, res: Response) {
       });
     }
 
+    const user = await storage.getUserById(row.usuario_id);
+    if (!user) {
+      return res.status(400).json({ message: "Usuário não encontrado." });
+    }
+
+    const cadastroPendente = isCadastroPendente(user);
+
+    if (cadastroPendente) {
+      const nome = String(parsed.nome || "").trim();
+      const telefone = onlyDigits(parsed.telefone || user.telefone || "");
+      const email = normalizeEmail(parsed.email);
+      if (nome.length < 2) {
+        return res.status(400).json({ message: "Informe o nome completo." });
+      }
+      if (telefone.length < 10 || telefone.length > 20) {
+        return res.status(400).json({ message: "Informe um telefone válido." });
+      }
+      if (!email || !email.includes("@") || email.endsWith("@tel.local")) {
+        return res.status(400).json({ message: "Informe um e-mail válido." });
+      }
+      const existing = await storage.getUserByEmail(email);
+      if (existing && existing.id !== user.id) {
+        return res.status(400).json({ message: "Esse e-mail já está cadastrado em outra conta." });
+      }
+
+      const fim = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000);
+      try {
+        await storage.updateUser(user.id, {
+          nome,
+          telefone,
+          email,
+          ativo: true,
+          status_assinatura: "degustacao",
+          data_expiracao_assinatura: fim,
+          subscriptionActive: true,
+        } as any);
+      } catch (err: any) {
+        const msg = String(err?.message || "");
+        if (err?.code === "23505" || /unique|duplicate/i.test(msg)) {
+          return res.status(400).json({ message: "Esse e-mail já está cadastrado em outra conta." });
+        }
+        throw err;
+      }
+
+      try {
+        await notificarAdmin(
+          `🆕 Cadastro WhatsApp concluído no formulário: ${nome} | ${email} | tel ${telefone} | id=${user.id}`
+        );
+      } catch { /* não bloquear */ }
+
+      const uazBase = process.env.UAZAPI_BASE_URL || "https://nescon.uazapi.com";
+      const uazToken = process.env.UAZAPI_TOKEN || "";
+      if (user.remoteJid && uazToken) {
+        try {
+          const primeiro = nome.split(" ")[0] || "";
+          await uazapiService.sendText(
+            uazBase,
+            uazToken,
+            user.remoteJid,
+            `Pronto${primeiro ? `, ${primeiro}` : ""}! 🎉 Sua conta está criada e você já tem *15 dias grátis*. Pode começar a registrar suas finanças por aqui.`
+          );
+        } catch (e: any) {
+          console.error("[resetPassword] falha ao avisar no WhatsApp:", e?.message || e);
+        }
+      }
+    }
+
     const success = await storage.updatePassword(row.usuario_id, novaSenha);
     if (!success) {
       return res.status(500).json({ message: "Erro ao atualizar senha" });
@@ -217,7 +331,6 @@ export async function resetPassword(req: Request, res: Response) {
       .set({ used_at: new Date() })
       .where(eq(passwordResetTokens.id, row.id));
 
-    // Invalida outros tokens pendentes do mesmo usuário
     await db
       .delete(passwordResetTokens)
       .where(
@@ -227,17 +340,25 @@ export async function resetPassword(req: Request, res: Response) {
         )
       );
 
-    // Auto-login: abre a sessão para o usuário já entrar direto após criar a senha.
     try {
       (req.session as any).userId = row.usuario_id;
     } catch (e) {
       console.error("[resetPassword] falha ao abrir sessão (auto-login):", e);
     }
 
-    return res.status(200).json({ message: "Senha redefinida com sucesso. Você já está conectado.", autenticado: true });
+    return res.status(200).json({
+      message: cadastroPendente
+        ? "Cadastro concluído. Você já está conectado."
+        : "Senha redefinida com sucesso. Você já está conectado.",
+      autenticado: true,
+    });
   } catch (error: any) {
     if (error?.name === "ZodError") {
       return res.status(400).json({ message: error.errors?.[0]?.message || "Dados inválidos" });
+    }
+    const msg = String(error?.message || "");
+    if (error?.code === "23505" || /unique|duplicate/i.test(msg)) {
+      return res.status(400).json({ message: "Esse e-mail já está cadastrado em outra conta." });
     }
     console.error("[resetPassword]", error);
     return res.status(500).json({ message: "Erro ao redefinir senha" });

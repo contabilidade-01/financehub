@@ -45,11 +45,20 @@ function isDuplicate(messageId: string): boolean {
 
 // ============================================
 // Onboarding / Cadastro / Degustação (15 dias)
-//   aguardando_cadastro → aguardando_email → aguardando_confirmacao
-//     → aguardando_tipo_pessoa → degustacao → degustacao_expirada
+//   aguardando_cadastro → aguardando_form → (formulário web)
+//     → degustacao → degustacao_expirada
+// Status ≤ 20 chars (coluna VARCHAR(20) em produção).
 // ============================================
 const TRIAL_DIAS = 15;
 const SYSTEM_NAME = process.env.SYSTEM_NAME || "Khesef";
+// Nomes curtos de propósito: 'aguardando_confirmacao' (22) e
+// 'aguardando_tipo_pessoa' (21) estouram VARCHAR(20).
+const ST_FORM = "aguardando_form";   // 15
+const ST_TRIAL = "aguardando_trial"; // 15
+const ST_TIPO = "aguardando_tipo";   // 15
+const ehAguardandoForm = (s: string) => s === ST_FORM || s === "aguardando_email";
+const ehAguardandoTrial = (s: string) => s === ST_TRIAL || s === "aguardando_confirmacao";
+const ehAguardandoTipo = (s: string) => s === ST_TIPO || s === "aguardando_tipo_pessoa";
 const norm = (s: string) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 const ehAfirmativo = (text: string) => {
   const t = norm(text);
@@ -90,6 +99,12 @@ const msgNudgeCadastro = () =>
 
 const msgPedirEmail = (nome?: string | null) =>
   `Perfeito${primeiro(nome) ? `, ${primeiro(nome)}` : ""}! ✅\n\nJá peguei seu *WhatsApp* automaticamente.\nAgora me envia o *melhor e-mail* para você acessar o sistema (ex.: seuemail@gmail.com).`;
+
+const msgLinkCadastro = (opts: { nome?: string | null; link: string }) =>
+  `Perfeito${primeiro(opts.nome) ? `, ${primeiro(opts.nome)}` : ""}! ✅\n\n` +
+  `Já peguei seu *WhatsApp*. Para concluir o cadastro no *${SYSTEM_NAME}*, abra o link e preencha *nome, telefone, e-mail e senha*:\n\n` +
+  `${opts.link}\n\n` +
+  `O link vale por alguns dias. Depois é só voltar aqui.`;
 
 const msgEmailInvalido = () =>
   `Não consegui identificar um e-mail válido. 😅\n\nMe envia de novo no formato *seuemail@dominio.com*.`;
@@ -132,7 +147,7 @@ async function finalizarCadastroComEmail(opts: {
   // A senha NÃO é definida aqui: o usuário cria a própria via link seguro.
   await storage.updateUser(user.id, {
     email,
-    status_assinatura: "aguardando_confirmacao",
+    status_assinatura: ST_TRIAL,
   } as any);
 
   // Link para o usuário DEFINIR a própria senha (reaproveita a infra de reset).
@@ -155,6 +170,25 @@ async function finalizarCadastroComEmail(opts: {
   );
 }
 
+async function enviarLinkCadastro(opts: {
+  user: any;
+  chatid: string;
+  BaseUrl: string;
+  token: string;
+}): Promise<boolean> {
+  const { user, chatid, BaseUrl, token } = opts;
+  let link: string | null = null;
+  try {
+    link = await gerarLinkDefinirSenha(user.id);
+  } catch (err: any) {
+    console.error(`[UazAPI Webhook] Falha ao gerar link de cadastro:`, err?.message || err);
+  }
+  if (!link) return false;
+  await storage.updateUser(user.id, { status_assinatura: ST_FORM } as any);
+  await uazapiService.sendText(BaseUrl, token, chatid, msgLinkCadastro({ nome: user.nome, link }));
+  return true;
+}
+
 // Retorna true se a mensagem foi tratada pelo onboarding (não processar como transação).
 async function tratarOnboarding(user: any, text: string, chatid: string, BaseUrl: string, token: string): Promise<boolean> {
   const status = user.status_assinatura || "";
@@ -171,23 +205,24 @@ async function tratarOnboarding(user: any, text: string, chatid: string, BaseUrl
     return false; // dentro do prazo → segue fluxo normal
   }
 
-  // 1) Quer se cadastrar?
+  // 1) Quer se cadastrar? → manda o link do formulário web (nome/tel/e-mail/senha)
   if (status === "aguardando_cadastro") {
     if (ehAfirmativo(text)) {
-      await storage.updateUser(user.id, { status_assinatura: "aguardando_email" } as any);
-      await uazapiService.sendText(BaseUrl, token, chatid, msgPedirEmail(user.nome));
-    } else if (ehNegativo(text)) {
-      await uazapiService.sendText(BaseUrl, token, chatid, msgNudgeCadastro());
+      const ok = await enviarLinkCadastro({ user, chatid, BaseUrl, token });
+      if (!ok) {
+        await storage.updateUser(user.id, { status_assinatura: "aguardando_email" } as any);
+        await uazapiService.sendText(BaseUrl, token, chatid, msgPedirEmail(user.nome));
+      }
     } else {
       await uazapiService.sendText(BaseUrl, token, chatid, msgNudgeCadastro());
     }
     return true;
   }
 
-  // 2) Aguardando e-mail real
-  if (status === "aguardando_email") {
-    // E-mail é case-insensitive: normaliza para minúsculo (evita duplicado no
-    // índice UNIQUE quando o mesmo e-mail chega com caixa diferente).
+  // 2) Aguardando o formulário web (ou e-mail, se o link não estiver disponível)
+  if (ehAguardandoForm(status)) {
+    const ok = await enviarLinkCadastro({ user, chatid, BaseUrl, token });
+    if (ok) return true;
     const email = extrairEmail(text)?.toLowerCase() ?? null;
     if (!email) {
       await uazapiService.sendText(BaseUrl, token, chatid, msgEmailInvalido());
@@ -201,8 +236,6 @@ async function tratarOnboarding(user: any, text: string, chatid: string, BaseUrl
       }
       await finalizarCadastroComEmail({ user, email, chatid, BaseUrl, token });
     } catch (err: any) {
-      // Captura a causa REAL (em vez do "erro inesperado" genérico do pipeline)
-      // e mantém o usuário no fluxo, sem travar o cadastro.
       console.error(
         `[Onboarding] FALHA ao finalizar cadastro — user=${user.id} tel=${user.telefone} email=${email}: ${err?.message}`,
         err?.stack
@@ -222,16 +255,18 @@ async function tratarOnboarding(user: any, text: string, chatid: string, BaseUrl
     return true;
   }
 
-  // 3) Aguardando o SIM da oferta de degustação
-  if (status === "aguardando_confirmacao") {
-    // Contas antigas ainda com @tel.local: coleta e-mail antes de seguir
+  // 3) Aguardando o SIM da oferta de degustação (fallback se cadastrou só o e-mail)
+  if (ehAguardandoTrial(status)) {
     if (isPlaceholderEmail(user.email)) {
-      await storage.updateUser(user.id, { status_assinatura: "aguardando_email" } as any);
-      await uazapiService.sendText(BaseUrl, token, chatid, msgPedirEmail(user.nome));
+      const ok = await enviarLinkCadastro({ user, chatid, BaseUrl, token });
+      if (!ok) {
+        await storage.updateUser(user.id, { status_assinatura: "aguardando_email" } as any);
+        await uazapiService.sendText(BaseUrl, token, chatid, msgPedirEmail(user.nome));
+      }
       return true;
     }
     if (ehAfirmativo(text)) {
-      await storage.updateUser(user.id, { status_assinatura: "aguardando_tipo_pessoa" } as any);
+      await storage.updateUser(user.id, { status_assinatura: ST_TIPO } as any);
       await uazapiService.sendText(BaseUrl, token, chatid, msgPerguntaTipo(user.nome));
     } else {
       await uazapiService.sendText(BaseUrl, token, chatid, msgNudge());
@@ -240,7 +275,7 @@ async function tratarOnboarding(user: any, text: string, chatid: string, BaseUrl
   }
 
   // 4) Aguardando PF/PJ
-  if (status === "aguardando_tipo_pessoa") {
+  if (ehAguardandoTipo(status)) {
     const tipo = detectarTipoPessoa(text);
     if (!tipo) {
       await uazapiService.sendText(BaseUrl, token, chatid, msgReperguntaTipo());
@@ -252,7 +287,6 @@ async function tratarOnboarding(user: any, text: string, chatid: string, BaseUrl
       await uazapiService.sendText(BaseUrl, token, chatid, msgAtivadoPJ(user.nome, fim));
       await notificarAdmin(`🆕 Nova degustação PJ: ${user.nome} (${user.telefone}) id=${user.id} — expira ${fmtData(fim)}`);
 
-      // Iniciar fluxo guiado de cadastro de CNPJ e dados da empresa
       await storage.createWhatsAppOnboardingState({
         remoteJid: chatid,
         usuarioId: user.id,
