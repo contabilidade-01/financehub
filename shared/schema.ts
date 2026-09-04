@@ -952,6 +952,9 @@ export interface EmpresaFluxoCaixaMensal {
   contasBancarias: { id: number; banco: string; saldo_inicial: number }[];
   movContas: { conta_bancaria_id: number; mes: number; total: number }[];   // movimento do ano, com sinal
   saldoAntesAno: { conta_bancaria_id: number; total: number }[];            // movimento acumulado antes do ano
+  /** Caixa acumulado antes do ano somando TODOS os lançamentos (com ou sem
+   *  conta bancária). Abertura de janeiro da linha de Saldo do Mês. */
+  movimentoAntesAno: number;
 }
 
 // ============================================

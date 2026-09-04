@@ -2096,7 +2096,24 @@ export class DbStorage implements IStorage {
       conta_bancaria_id: Number(r.conta_bancaria_id), total: parseFloat(r.total) || 0,
     }));
 
-    return { empresa_id: empresaId, ano, contas: contas as any, agregado, contasBancarias, movContas, saldoAntesAno };
+    // Caixa acumulado antes do ano considerando TODOS os lançamentos (inclusive
+    // os sem conta bancária). É a abertura de janeiro da linha de saldo: sem
+    // isso, empresa que não usa conta bancária começaria zerada todo ano.
+    const antesTotalRows = await db.execute(sql`
+      SELECT COALESCE(SUM(
+        CASE WHEN t.tipo = 'Receita' THEN t.valor::numeric ELSE -t.valor::numeric END
+      ), 0) AS total
+      FROM empresas_transacoes t
+      WHERE t.empresa_id = ${empresaId}
+        AND COALESCE(t.movimenta_caixa, true) = true
+        AND EXTRACT(YEAR FROM t.data_transacao) < ${ano}
+    `);
+    const movimentoAntesAno = parseFloat((antesTotalRows as any[])[0]?.total) || 0;
+
+    return {
+      empresa_id: empresaId, ano, contas: contas as any, agregado,
+      contasBancarias, movContas, saldoAntesAno, movimentoAntesAno,
+    };
   }
 }
 

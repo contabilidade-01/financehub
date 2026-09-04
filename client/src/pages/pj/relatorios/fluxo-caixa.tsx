@@ -18,7 +18,16 @@ const zeros = () => Array(12).fill(0);
 const sumArr = (a: number[]) => a.reduce((x, y) => x + y, 0);
 const addArr = (...as: number[][]) => { const t = zeros(); as.forEach((a) => a.forEach((v, i) => (t[i] += v))); return t; };
 
-type Row = { kind: "grupo" | "conta" | "calc" | "saldohd" | "saldo"; label: string; code?: string; values: number[]; receita?: boolean };
+type Row = {
+  kind: "grupo" | "conta" | "calc" | "saldohd" | "saldo";
+  label: string;
+  code?: string;
+  values: number[];
+  receita?: boolean;
+  /** Como calcular a coluna Total. Saldo é estoque, não fluxo: somar os 12 meses
+   *  não significa nada — vale a abertura (janeiro) ou o fechamento (dezembro). */
+  totalCol?: "soma" | "abertura" | "fechamento";
+};
 
 export default function PjFluxoCaixa({ empresaId }: { empresaId: number }) {
   const isMobile = useIsMobile();
@@ -130,13 +139,24 @@ const model = useMemo(() => (data ? buildModel(data, empresaData) : null), [data
           </CardContent>
         </Card>
       )}
-      <p className="text-xs text-muted-foreground">Baseado nas transações PJ do ano. Margem de Contribuição = Receita − Despesas Variáveis.</p>
+      <p className="text-xs text-muted-foreground">
+        Baseado nas transações PJ do ano. Margem de Contribuição = Receita − Despesas Variáveis.
+        O <strong>Saldo Final</strong> de cada mês é o inicial do mês seguinte (sobra acumulada; em vermelho quando negativo).
+        Na coluna Total, as linhas de saldo mostram a posição (abertura em janeiro / fechamento em dezembro), não a soma dos meses.
+      </p>
     </div>
   );
 }
 
+// Coluna "Total" da linha: fluxo soma; saldo mostra abertura ou fechamento.
+function totalDaLinha(r: Row): number {
+  if (r.totalCol === "abertura") return r.values[0] ?? 0;
+  if (r.totalCol === "fechamento") return r.values[r.values.length - 1] ?? 0;
+  return sumArr(r.values);
+}
+
 function ReportRow({ r }: { r: Row }) {
-  const total = sumArr(r.values);
+  const total = totalDaLinha(r);
   const cell = (v: number, i: number) => <td key={i} className={`px-2.5 py-1.5 text-right tabular-nums ${v < 0 ? "text-rose-500" : ""}`}>{v === 0 ? "—" : money0(v)}</td>;
   if (r.kind === "grupo") {
     return (
@@ -160,8 +180,11 @@ function ReportRow({ r }: { r: Row }) {
     return (
       <tr className="bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 font-bold">
         <td className="text-left sticky left-0 z-10 bg-amber-50 dark:bg-amber-950/40 px-3 py-1.5 uppercase text-[11px] tracking-wide">{r.label}</td>
-        {r.values.map((v, i) => <td key={i} className="px-2.5 py-1.5 text-right tabular-nums">{money0(v)}</td>)}
-        <td className="px-2.5 py-1.5 text-right tabular-nums">{money0(total)}</td>
+        {/* Saldo negativo em vermelho: é a informação que o usuário procura. */}
+        {r.values.map((v, i) => (
+          <td key={i} className={`px-2.5 py-1.5 text-right tabular-nums ${v < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{money0(v)}</td>
+        ))}
+        <td className={`px-2.5 py-1.5 text-right tabular-nums ${total < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{money0(total)}</td>
       </tr>
     );
   }
@@ -186,7 +209,7 @@ function ReportRow({ r }: { r: Row }) {
 }
 
 function MobileRow({ r, mes }: { r: Row; mes: number }) {
-  const val = mes >= 12 ? sumArr(r.values) : r.values[mes];
+  const val = mes >= 12 ? totalDaLinha(r) : r.values[mes];
   if (r.kind === "grupo") {
     return (
       <div className={`flex items-center justify-between px-3 py-2 ${r.receita ? "bg-emerald-600" : "bg-slate-700"} text-slate-50`}>
@@ -207,7 +230,7 @@ function MobileRow({ r, mes }: { r: Row; mes: number }) {
     return (
       <div className="flex items-center justify-between px-3 py-2 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300">
         <span className="uppercase text-[11px] font-bold tracking-wide">{r.label}</span>
-        <span className="tabular-nums font-bold">{money0(val)}</span>
+        <span className={`tabular-nums font-bold ${val < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{money0(val)}</span>
       </div>
     );
   }
@@ -298,8 +321,31 @@ function buildModel(data: EmpresaFluxoCaixaMensal, empresaData: any) {
   if (temNaoOp) { pushGrupo("Entradas e Saídas Não Operacionais", naoOp, naoOpContas); }
   rows.push({ kind: "calc", label: temNaoOp ? "= Resultado Líquido" : "= Lucro / Prejuízo", values: resultado });
 
-  // ---- Disponibilidades: saldo inicial/final por conta bancária ----
+  // ---- Saldo do mês: o que sobra (ou falta) e passa para o mês seguinte ----
+  // Vale mesmo sem conta bancária cadastrada — antes o saldo só aparecia dentro
+  // do bloco de Disponibilidades, então quem não tinha conta ficava sem saldo.
   const contasBanc = data.contasBancarias || [];
+  // Abertura de janeiro: saldo declarado das contas + tudo que já entrou/saiu
+  // de caixa antes deste ano (inclusive lançamentos sem conta bancária).
+  const aberturaAno =
+    contasBanc.reduce((t, cb) => t + (cb.saldo_inicial || 0), 0)
+    + (data.movimentoAntesAno || 0);
+
+  // Movimento do mês somando TODAS as contas, não a linha de resultado: se uma
+  // conta tiver grupo_gerencial fora dos seis previstos, ela some das linhas
+  // calculadas — mas o dinheiro dela entrou/saiu do caixa do mesmo jeito.
+  const movimentoMes = addArr(...contas.map(val), zeros());
+
+  const saldoIni = zeros();
+  const saldoFim = zeros();
+  for (let m = 0; m < 12; m++) {
+    saldoIni[m] = m === 0 ? aberturaAno : saldoFim[m - 1];
+    saldoFim[m] = saldoIni[m] + movimentoMes[m];
+  }
+  rows.push({ kind: "saldohd", label: "Saldo Inicial do Mês", values: saldoIni, totalCol: "abertura" });
+  rows.push({ kind: "saldohd", label: "= Saldo Final do Mês (passa p/ o próximo)", values: saldoFim, totalCol: "fechamento" });
+
+  // ---- Disponibilidades: saldo inicial/final por conta bancária ----
   if (contasBanc.length > 0) {
     const movBy = new Map<number, number[]>();
     for (const m of data.movContas || []) {
@@ -320,10 +366,10 @@ function buildModel(data: EmpresaFluxoCaixaMensal, empresaData: any) {
     }
     const totIni = addArr(...contasBanc.map((cb) => iniByConta.get(cb.id)!), zeros());
     const totFim = addArr(...contasBanc.map((cb) => fimByConta.get(cb.id)!), zeros());
-    rows.push({ kind: "saldohd", label: "Saldo Inicial — Disponibilidades", values: totIni });
-    contasBanc.forEach((cb) => rows.push({ kind: "saldo", label: cb.banco, values: iniByConta.get(cb.id)! }));
-    rows.push({ kind: "saldohd", label: "Saldo Final — Disponibilidades", values: totFim });
-    contasBanc.forEach((cb) => rows.push({ kind: "saldo", label: cb.banco, values: fimByConta.get(cb.id)! }));
+    rows.push({ kind: "saldohd", label: "Saldo Inicial — Disponibilidades", values: totIni, totalCol: "abertura" });
+    contasBanc.forEach((cb) => rows.push({ kind: "saldo", label: cb.banco, values: iniByConta.get(cb.id)!, totalCol: "abertura" }));
+    rows.push({ kind: "saldohd", label: "Saldo Final — Disponibilidades", values: totFim, totalCol: "fechamento" });
+    contasBanc.forEach((cb) => rows.push({ kind: "saldo", label: cb.banco, values: fimByConta.get(cb.id)!, totalCol: "fechamento" }));
   }
 
   // KPIs anuais
@@ -341,5 +387,12 @@ function buildModel(data: EmpresaFluxoCaixaMensal, empresaData: any) {
   kpis.push({ label: "Margem Contrib.", value: pct(MC, R), tone: "pos", hint: money0(MC) });
   kpis.push({ label: "Ponto Equilíbrio", value: money0(pe), hint: "p/ zerar" });
   kpis.push({ label: temNaoOp ? "Resultado Líq." : "Lucro / Prejuízo", value: money0(RES), tone: RES >= 0 ? "pos" : "neg", hint: pct(RES, R) });
+  const saldoFinalAno = saldoFim[11];
+  kpis.push({
+    label: "Saldo Final",
+    value: money0(saldoFinalAno),
+    tone: saldoFinalAno >= 0 ? "pos" : "neg",
+    hint: `dez/${data.ano}`,
+  });
   return { rows, kpis };
 }
