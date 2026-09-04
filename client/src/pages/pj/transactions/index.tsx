@@ -13,6 +13,7 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [showForm, setShowForm] = useState(false);
+  const [editId, setEditId] = useState<number | null>(null);
 
   const { data: transacoes = [], isLoading } = useQuery<EmpresaTransacaoWithDetails[]>({
     queryKey: [`/api/empresas/${empresaId}/transacoes?todos=1`],
@@ -35,6 +36,7 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
       return res.json();
     },
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [`/api/empresas/${empresaId}/transacoes?todos=1`] });
       qc.invalidateQueries({ queryKey: [`/api/empresas/${empresaId}/transacoes`] });
       qc.invalidateQueries({ queryKey: [`/api/empresas/${empresaId}/dashboard/resumo`] });
       toast({ title: "Transação criada com sucesso." });
@@ -49,10 +51,31 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
       if (!res.ok) throw new Error("Erro ao excluir");
     },
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [`/api/empresas/${empresaId}/transacoes?todos=1`] });
       qc.invalidateQueries({ queryKey: [`/api/empresas/${empresaId}/transacoes`] });
       qc.invalidateQueries({ queryKey: [`/api/empresas/${empresaId}/dashboard/resumo`] });
       toast({ title: "Transação removida." });
     },
+  });
+
+  const updateMut = useMutation({
+    mutationFn: async ({ id, categoria_id }: { id: number; categoria_id: number }) => {
+      const res = await fetch(`/api/empresas/${empresaId}/transacoes/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ categoria_id }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || "Erro ao atualizar");
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [`/api/empresas/${empresaId}/transacoes?todos=1`] });
+      qc.invalidateQueries({ queryKey: [`/api/empresas/${empresaId}/transacoes`] });
+      qc.invalidateQueries({ queryKey: [`/api/empresas/${empresaId}/dashboard/resumo`] });
+      setEditId(null);
+      toast({ title: "Conta alterada." });
+    },
+    onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
   });
 
   const fmt = (n: number | string) =>
@@ -139,7 +162,25 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
                         )}
                       </td>
                       <td className="p-3 text-xs">
-                        {t.categoria_codigo} — {t.categoria_nome}
+                        {editId === t.id ? (
+                          <Select
+                            defaultValue={String(t.categoria_id)}
+                            onValueChange={(v) => updateMut.mutate({ id: t.id, categoria_id: Number(v) })}
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {contas.filter((c) => c.tipo === t.tipo).map((c) => (
+                                <SelectItem key={c.id} value={String(c.id)}>
+                                  {c.codigo} — {c.nome}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <>{t.categoria_codigo} — {t.categoria_nome}</>
+                        )}
                       </td>
                       <td className={`p-3 text-right font-medium ${t.tipo === 'Receita' ? 'text-emerald-600' : 'text-rose-500'}`}>
                         {fmt(t.valor)}
@@ -150,6 +191,14 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
                         </Badge>
                       </td>
                       <td className="p-3 text-center">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Trocar conta"
+                          onClick={() => setEditId(editId === t.id ? null : t.id)}
+                        >
+                          <Edit2 className="h-4 w-4 text-muted-foreground" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"

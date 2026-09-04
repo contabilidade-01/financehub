@@ -592,10 +592,10 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
       const empresas = await storage.getEmpresasByUsuarioId(user.id);
       const comCnpj = empresas.find(e => e.cnpj && e.cnpj.trim().length > 0);
       if (comCnpj) {
-        empresaAtiva = { id: comCnpj.id, nome: comCnpj.nome_fantasia || comCnpj.razao_social, cnpj: comCnpj.cnpj };
+        empresaAtiva = { id: comCnpj.id, nome: comCnpj.nome_fantasia || comCnpj.razao_social, cnpj: comCnpj.cnpj, segmento: (comCnpj as any).segmento || null };
       } else if (empresas.length > 0) {
         // Fallback: usa a primeira empresa mesmo sem CNPJ (onboarding em andamento)
-        empresaAtiva = { id: empresas[0].id, nome: empresas[0].nome_fantasia || empresas[0].razao_social, cnpj: null };
+        empresaAtiva = { id: empresas[0].id, nome: empresas[0].nome_fantasia || empresas[0].razao_social, cnpj: null, segmento: (empresas[0] as any).segmento || null };
       }
     }
 

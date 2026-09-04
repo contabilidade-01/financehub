@@ -3,6 +3,7 @@ import { storage, getDailySummary, getPeriodSummary, getWeeklySummary, getCatego
 import { FINANCIAL_AGENT_SYSTEM_PROMPT, buildDynamicContext } from "../prompts/financial-agent";
 import { insertTransactionSchema } from "../../shared/schema";
 import { withRetry } from "../utils/ai-errors";
+import { resolverContaPj } from "./classificar-conta-pj";
 
 /**
  * AI Agent Service — processa mensagens financeiras com function calling.
@@ -141,7 +142,7 @@ interface ToolContext {
   walletId: number;
   categories: { id: number; nome: string; tipo: string }[];
   tipoPessoa?: string;
-  empresaAtiva?: { id: number; nome: string; cnpj: string | null } | null;
+  empresaAtiva?: { id: number; nome: string; cnpj: string | null; segmento?: string | null } | null;
   // true quando a mensagem veio de imagem/áudio/documento (extração automática).
   // Nesses casos o agente confirma antes de gravar (ver regra no runAgent).
   origemMidia?: boolean;
@@ -671,7 +672,7 @@ function buildTools() {
           type: "object",
           properties: {
             empresa: { type: "string", description: "Nome (ou parte) da empresa. Se houver dúvida, use listar_empresas e pergunte." },
-            conta: { type: "string", description: "Nome ou código da conta do plano de contas da empresa (ex.: 'Consultoria', '3.1.1')." },
+            conta: { type: "string", description: "Código ou nome da conta do plano da empresa (ex.: '3.01', 'Receita de Vendas'). Se não souber, pode omitir — o sistema escolhe a melhor conta e, se não achar, usa Outras." },
             descricao: { type: "string" },
             valor: { type: "number" },
             tipo: { type: "string", enum: ["Receita", "Despesa"] },
@@ -1500,14 +1501,13 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
 
         const contas = await storage.getEmpresasContasByEmpresaId(empresa.id);
         const tipo = args.tipo === "Receita" ? "Receita" : "Despesa";
-        // Resolve a conta pelo código ou nome; senão usa "Outros"/"Outras" do tipo.
-        const alvo = (args.conta || "").toString().toLowerCase();
-        let conta = alvo
-          ? contas.find((c) => c.codigo.toLowerCase() === alvo || c.nome.toLowerCase() === alvo)
-            || contas.find((c) => c.nome.toLowerCase().includes(alvo))
-          : undefined;
-        if (!conta) conta = contas.find((c) => c.tipo === tipo && /outr/i.test(c.nome));
-        if (!conta) conta = contas.find((c) => c.tipo === tipo);
+        const { conta, usouOutras } = resolverContaPj({
+          contas,
+          tipo,
+          contaInformada: args.conta,
+          descricao: `${args.descricao || ""} ${ctx.userMessage || ""}`,
+          segmento: ctx.empresaAtiva?.segmento || (empresa as any).segmento,
+        });
         if (!conta) {
           return JSON.stringify({ error: `A empresa não tem uma conta do tipo ${tipo} no plano de contas. Peça ao usuário para escolher uma conta.` });
         }
@@ -1523,13 +1523,16 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           status: "Efetivada",
           origem: "whatsapp",
         } as any);
-        // Aviso na hora: status do limite de despesa da empresa (se houver meta).
         const orcamento = tipo === "Despesa"
           ? await getStatusOrcamentoContaPJ(empresa.id, conta.id)
           : null;
         return JSON.stringify({
           success: true, id: criada.id, empresa: empresa.nome_fantasia || empresa.razao_social,
-          conta: conta.nome, valor: args.valor, tipo, data: args.data_transacao || today,
+          conta: `${conta.codigo} — ${conta.nome}`, valor: args.valor, tipo, data: args.data_transacao || today,
+          usou_outras: usouOutras,
+          dica: usouOutras
+            ? "Não achei uma conta mais específica. Deixei em Outras. Dá para mudar depois em Transações PJ no app."
+            : "Se a conta não for essa, dá para mudar depois em Transações PJ no app.",
           orcamento,
         });
       }
@@ -1644,11 +1647,27 @@ export async function runAgent(
 
   let pjInstructions = "";
   if (ctx.tipoPessoa === "juridica" && (ctx as any).empresaAtiva) {
-    const emp = (ctx as any).empresaAtiva;
+    const emp = (ctx as any).empresaAtiva as { id: number; nome: string; segmento?: string | null };
+    let planoLinhas = "";
+    try {
+      const contasPj = await storage.getEmpresasContasByEmpresaId(emp.id);
+      planoLinhas = contasPj.map((c: any) => `- ${c.codigo} — ${c.nome} (${c.tipo})`).join("\n");
+      if (!emp.segmento) {
+        const full = await storage.getEmpresaById(emp.id);
+        if (full) emp.segmento = (full as any).segmento;
+      }
+    } catch { /* segue sem plano na mensagem */ }
+    const seg = emp.segmento ? `Segmento da empresa: ${emp.segmento}.` : "";
     pjInstructions = `
 ## MODO EMPRESA (PJ) ATIVO
-- Este usuário é PJ (Empresa: ${emp.nome}).
+- Este usuário é PJ (Empresa: ${emp.nome}). ${seg}
 - TODAS as transações financeiras (receitas e despesas) enviadas por ele DEVEM ser lançadas na empresa utilizando a ferramenta 'lancar_empresa' (informando empresa: "${emp.nome}"). NUNCA use 'insere_transacao' (pessoal) para este usuário, a menos que ele especifique explicitamente que é uma transação pessoal.
+- Fale em frases curtas e simples.
+- Ao lançar, passe em 'conta' o CÓDIGO do plano (ex.: 3.01). Compra de mercadoria = 3.01. Venda = 1.01. Serviço prestado = 1.02. Imposto / IPVA / documento do carro = 2.05.
+- Se não tiver certeza, mesmo assim LANCE. O sistema escolhe a melhor conta; se não achar, usa Outras Receitas ou Outras Despesas. Diga a conta usada. Se for Outras, avise que dá para mudar depois em Transações PJ.
+
+### Plano de contas desta empresa
+${planoLinhas || "(não foi possível listar as contas)"}
 `;
   }
 
@@ -1666,10 +1685,14 @@ export async function runAgent(
 - Se o usuário já mandou a mídia junto com uma confirmação explícita no texto (ex.: "pode lançar essa nota"), aí sim pode registrar direto.`;
   }
 
-  const systemPrompt = FINANCIAL_AGENT_SYSTEM_PROMPT + buildDynamicContext() + pjInstructions + midiaInstructions + `
+  const categoriasBloco = (ctx.tipoPessoa === "juridica" && ctx.empresaAtiva)
+    ? ""
+    : `
 
 ## Categorias Disponíveis
 ${ctx.categories.map(c => `- ${c.nome} (${c.tipo})`).join("\n")}`;
+
+  const systemPrompt = FINANCIAL_AGENT_SYSTEM_PROMPT + buildDynamicContext() + pjInstructions + midiaInstructions + categoriasBloco;
 
   // Histórico curto da conversa (memória entre mensagens) entra entre o
   // system prompt e a mensagem atual, para o agente manter contexto.
