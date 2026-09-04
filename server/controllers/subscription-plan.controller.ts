@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { storage } from "../storage";
+import { storage, filtrarPlanosPorTipo } from "../storage";
 import { insertSubscriptionPlanSchema, updateSubscriptionPlanSchema } from "../../shared/schema";
 import { z } from "zod";
 
@@ -23,7 +23,15 @@ import { z } from "zod";
 export async function getActivePlans(req: Request, res: Response) {
   try {
     const plans = await storage.getActiveSubscriptionPlans();
-    res.json(plans);
+
+    // Rota pública (sem sessão): o tipo vem do usuário logado, quando houver,
+    // ou de ?tipo=. Mesma regra usada para escolher o plano da cobrança, para
+    // o cliente nunca ver um preço e ser cobrado outro.
+    const tipoUsuario = (req as any).user?.tipo_pessoa as string | undefined;
+    const tipoQuery = String(req.query.tipo || "");
+    const tipo = tipoUsuario || (tipoQuery === "fisica" || tipoQuery === "juridica" ? tipoQuery : null);
+
+    res.json(tipo ? filtrarPlanosPorTipo(plans, tipo) : plans);
   } catch (error) {
     console.error("Error fetching active subscription plans:", error);
     res.status(500).json({ error: "Erro ao buscar planos de assinatura" });

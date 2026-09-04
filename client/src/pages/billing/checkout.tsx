@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { usePlans } from '@/hooks/use-plans';
+import { useAuth } from '@/hooks/use-auth';
 import { useCheckout } from '@/hooks/use-billing';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { PlanCard } from '@/components/billing/PlanCard';
@@ -41,7 +42,12 @@ export default function CheckoutPage({
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { config: systemConfig } = useSystemConfig();
-  const { data: plansFromAPI, isLoading: isLoadingPlans } = usePlans();
+  // Só os planos do tipo do usuário (PF não vê preço de PJ e vice-versa).
+  // O servidor usa a mesma regra ao cobrar, então o preço visto é o cobrado.
+  const { user: usuarioLogado } = useAuth();
+  const { data: plansFromAPI, isLoading: isLoadingPlans } = usePlans(
+    (usuarioLogado as any)?.tipo_pessoa,
+  );
   const checkout = useCheckout();
   const { notifications } = useWebSocket();
 

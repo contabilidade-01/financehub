@@ -8,6 +8,7 @@ import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, Plus, Edit, Trash2, DollarSign, Users, CreditCard, TrendingUp } from 'lucide-react';
 import { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
@@ -20,9 +21,17 @@ interface SubscriptionPlan {
   planCode: string;
   name: string;
   priceMonthly: string;
+  /** 'fisica' | 'juridica' | null (null = vale para os dois) */
+  tipoPessoa?: string | null;
   features: string;
   active: boolean;
 }
+
+// No formulário o "sem tipo" precisa de um valor (Select não aceita ''),
+// então 'ambos' representa o NULL do banco.
+const TIPO_AMBOS = 'ambos';
+const rotuloTipo = (t?: string | null) =>
+  t === 'fisica' ? 'Pessoa Física' : t === 'juridica' ? 'Pessoa Jurídica' : 'PF e PJ';
 
 interface UserSubscription {
   id: number;
@@ -70,8 +79,15 @@ export default function AdminBillingDashboard() {
     planCode: '',
     name: '',
     priceMonthly: '',
+    tipoPessoa: TIPO_AMBOS,
     features: '',
     active: true
+  });
+
+  // 'ambos' vira NULL: é assim que o servidor entende "serve para PF e PJ".
+  const payloadPlano = () => ({
+    ...planForm,
+    tipoPessoa: planForm.tipoPessoa === TIPO_AMBOS ? null : planForm.tipoPessoa,
   });
 
   // Fetch metrics (real-time updates via WebSocket, no polling needed)
@@ -130,7 +146,7 @@ export default function AdminBillingDashboard() {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(planForm)
+        body: JSON.stringify(payloadPlano())
       });
 
       if (!response.ok) {
@@ -140,7 +156,7 @@ export default function AdminBillingDashboard() {
 
       toast({ title: 'Plano criado com sucesso!' });
       setShowCreatePlan(false);
-      setPlanForm({ planCode: '', name: '', priceMonthly: '', features: '', active: true });
+      setPlanForm({ planCode: '', name: '', priceMonthly: '', tipoPessoa: TIPO_AMBOS, features: '', active: true });
       refetchPlans();
     } catch (error: any) {
       toast({
@@ -159,7 +175,7 @@ export default function AdminBillingDashboard() {
         method: 'PUT',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(planForm)
+        body: JSON.stringify(payloadPlano())
       });
 
       if (!response.ok) {
@@ -258,6 +274,7 @@ export default function AdminBillingDashboard() {
       planCode: plan.planCode,
       name: plan.name,
       priceMonthly: plan.priceMonthly,
+      tipoPessoa: plan.tipoPessoa || TIPO_AMBOS,
       features: plan.features,
       active: plan.active
     });
@@ -421,6 +438,23 @@ export default function AdminBillingDashboard() {
                     />
                   </div>
                   <div>
+                    <Label htmlFor="tipoPessoa">Destinado a</Label>
+                    <Select
+                      value={planForm.tipoPessoa}
+                      onValueChange={(v) => setPlanForm({ ...planForm, tipoPessoa: v })}
+                    >
+                      <SelectTrigger id="tipoPessoa"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="fisica">Pessoa Física (PF)</SelectItem>
+                        <SelectItem value="juridica">Pessoa Jurídica (PJ)</SelectItem>
+                        <SelectItem value={TIPO_AMBOS}>PF e PJ (preço único)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      O cliente só vê e só é cobrado no plano do tipo dele. Mantenha um plano por tipo.
+                    </p>
+                  </div>
+                  <div>
                     <Label htmlFor="features">Recursos (JSON)</Label>
                     <Textarea
                       id="features"
@@ -448,6 +482,7 @@ export default function AdminBillingDashboard() {
                 <TableHead>Código</TableHead>
                 <TableHead>Nome</TableHead>
                 <TableHead>Preço</TableHead>
+                <TableHead>Destinado a</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Ações</TableHead>
               </TableRow>
@@ -458,6 +493,7 @@ export default function AdminBillingDashboard() {
                   <TableCell className="font-mono text-sm">{plan.planCode}</TableCell>
                   <TableCell>{plan.name}</TableCell>
                   <TableCell>R$ {parseFloat(plan.priceMonthly).toFixed(2)}/mês</TableCell>
+                  <TableCell className="text-sm">{rotuloTipo(plan.tipoPessoa)}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <Switch
@@ -545,6 +581,20 @@ export default function AdminBillingDashboard() {
                 value={planForm.priceMonthly}
                 onChange={(e) => setPlanForm({ ...planForm, priceMonthly: e.target.value })}
               />
+            </div>
+            <div>
+              <Label htmlFor="edit-tipoPessoa">Destinado a</Label>
+              <Select
+                value={planForm.tipoPessoa}
+                onValueChange={(v) => setPlanForm({ ...planForm, tipoPessoa: v })}
+              >
+                <SelectTrigger id="edit-tipoPessoa"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="fisica">Pessoa Física (PF)</SelectItem>
+                  <SelectItem value="juridica">Pessoa Jurídica (PJ)</SelectItem>
+                  <SelectItem value={TIPO_AMBOS}>PF e PJ (preço único)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label htmlFor="edit-features">Recursos (JSON)</Label>

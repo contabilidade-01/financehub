@@ -88,6 +88,25 @@ const NAO_E_PAGAMENTO_FATURA = sql`NOT EXISTS (
 )`;
 
 /**
+ * Quais planos valem para um tipo de pessoa ('fisica' | 'juridica').
+ *
+ * Regra única, usada tanto para LISTAR planos ao usuário quanto para ESCOLHER
+ * o plano da cobrança — as duas coisas precisam concordar, senão o cliente vê
+ * um preço e é cobrado outro:
+ *   1. Se existe plano marcado para o tipo, só ele vale (PF não vê preço de PJ).
+ *   2. Se não existe, valem os planos sem tipo (NULL = serve aos dois), que é
+ *      o caso de quem ainda tem um plano único.
+ */
+export function filtrarPlanosPorTipo<T extends { tipoPessoa?: string | null }>(
+  planos: T[],
+  tipoPessoa: string | null | undefined,
+): T[] {
+  const doTipo = tipoPessoa ? planos.filter((p) => p.tipoPessoa === tipoPessoa) : [];
+  if (doTipo.length > 0) return doTipo;
+  return planos.filter((p) => !p.tipoPessoa);
+}
+
+/**
  * Calculate date range based on period type
  * @param period - "month" | "quarter" | "year" | undefined (defaults to month)
  * @returns { startDate: Date, endDate: Date }
@@ -1222,6 +1241,14 @@ export class DbStorage implements IStorage {
       .from(subscriptionPlans)
       .where(eq(subscriptionPlans.active, true))
       .orderBy(subscriptionPlans.priceMonthly);
+  }
+
+  // Planos que valem para um tipo de pessoa ('fisica' | 'juridica').
+  // Prefere os planos marcados para o tipo; se não houver nenhum, cai nos
+  // planos sem tipo (que servem aos dois). Ver filtrarPlanosPorTipo.
+  async getActiveSubscriptionPlansForTipo(tipoPessoa: string): Promise<SubscriptionPlan[]> {
+    const todos = await this.getActiveSubscriptionPlans();
+    return filtrarPlanosPorTipo(todos, tipoPessoa);
   }
 
   async createSubscriptionPlan(planData: InsertSubscriptionPlan): Promise<SubscriptionPlan> {

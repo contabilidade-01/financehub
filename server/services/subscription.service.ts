@@ -12,6 +12,7 @@
 import { getAsaasService, AsaasService, AsaasCreditCardData, AsaasCreditCardHolderInfo } from './asaas.service';
 import { getNotificationService, NotificationService } from './notification.service';
 import type { IStorage } from '../storage';
+import { filtrarPlanosPorTipo } from '../storage';
 import type {
   User,
   SubscriptionPlan,
@@ -278,7 +279,24 @@ export class SubscriptionService {
     if (!plans.length) {
       throw new Error('Nenhum plano ativo. Crie um plano em Pagamentos antes de gerar o link.');
     }
-    const plan = plans[0];
+
+    // O plano vem do TIPO do usuário (PF/PJ), não do "primeiro da lista" — que,
+    // ordenada por preço, era sempre o mais barato e cobrava PJ como PF.
+    const tipoPessoa = (user as any).tipo_pessoa as string | null | undefined;
+    if (!tipoPessoa) {
+      throw new Error('Defina se o usuário é Pessoa Física ou Jurídica antes de gerar a cobrança.');
+    }
+    const candidatos = filtrarPlanosPorTipo(plans, tipoPessoa);
+    if (!candidatos.length) {
+      const rotulo = tipoPessoa === 'juridica' ? 'Pessoa Jurídica' : 'Pessoa Física';
+      throw new Error(`Nenhum plano ativo para ${rotulo}. Cadastre um plano desse tipo em Pagamentos.`);
+    }
+    if (candidatos.length > 1) {
+      console.warn(
+        `[Assinatura] ${candidatos.length} planos ativos para tipo '${tipoPessoa}'; usando o mais barato (${candidatos[0].planCode}). Mantenha um plano por tipo.`,
+      );
+    }
+    const plan = candidatos[0];
 
     const existingActive = await this.storage.getActiveSubscriptionByUserId(userId);
     if (existingActive) {

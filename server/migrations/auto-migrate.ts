@@ -432,6 +432,15 @@ const STEPS: Step[] = [
     },
   },
   {
+    name: "plano por tipo de pessoa (subscription_plans.tipo_pessoa)",
+    run: async () => {
+      // NULL = plano serve a PF e PJ (comportamento anterior de quem só tem um
+      // plano). Preenchido, o plano vale só para aquele tipo — é o que permite
+      // cobrar preços diferentes de PF e PJ.
+      await db.execute(sql`ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS tipo_pessoa VARCHAR(20)`);
+    },
+  },
+  {
     name: "fatura PJ (empresas_cartoes, empresas_faturas + competência em empresas_transacoes)",
     run: async () => {
       await db.execute(sql`

@@ -10,6 +10,7 @@ interface SubscriptionPlan {
   name: string;
   description?: string;
   priceMonthly: string;
+  tipoPessoa?: string | null;
   features: string;
   maxTransactions: number;
   maxWallets: number;
@@ -17,11 +18,22 @@ interface SubscriptionPlan {
   active: boolean;
 }
 
-export function usePlans() {
+/**
+ * Planos que valem para um tipo de pessoa: PF vê o preço de PF, PJ o de PJ.
+ * O servidor aplica a MESMA regra ao gerar a cobrança — o tipo vai na query
+ * porque a rota de planos é pública e não enxerga a sessão. Sem `tipoPessoa`,
+ * lista todos (usado antes do login, quando ainda não se sabe o tipo).
+ */
+export function usePlans(tipoPessoa?: string | null) {
+  const tipo = tipoPessoa || undefined;
+
   return useQuery<SubscriptionPlan[]>({
-    queryKey: ['subscription-plans'],
+    queryKey: ['subscription-plans', tipo ?? 'todos'],
     queryFn: async () => {
-      const response = await fetch('/api/subscription-plans');
+      const url = tipo
+        ? `/api/subscription-plans?tipo=${encodeURIComponent(tipo)}`
+        : '/api/subscription-plans';
+      const response = await fetch(url);
 
       if (!response.ok) {
         throw new Error('Failed to fetch plans');
