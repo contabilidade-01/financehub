@@ -1841,13 +1841,18 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
 
         const contas = await storage.getEmpresasContasByEmpresaId(empresa.id);
         const tipo = args.tipo === "Receita" ? "Receita" : "Despesa";
-        const { conta, usouOutras } = resolverContaPj({
+        const { conta, usouOutras, motivo, ignorouInformada } = resolverContaPj({
           contas,
           tipo,
           contaInformada: args.conta,
           descricao: `${args.descricao || ""} ${ctx.userMessage || ""}`,
           segmento: ctx.empresaAtiva?.segmento || (empresa as any).segmento,
         });
+        if (ignorouInformada) {
+          // Rastro para auditar classificação: o modelo sugeriu uma conta que a
+          // descrição do usuário não sustentava.
+          console.log(`[Classificação PJ] palpite '${args.conta}' descartado (motivo=${motivo}) para "${args.descricao}" → ${conta?.codigo}`);
+        }
         if (!conta) {
           return JSON.stringify({ error: `A empresa não tem uma conta do tipo ${tipo} no plano de contas. Peça ao usuário para escolher uma conta.` });
         }
@@ -1871,7 +1876,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           conta: `${conta.codigo} — ${conta.nome}`, valor: args.valor, tipo, data: args.data_transacao || today,
           usou_outras: usouOutras,
           dica: usouOutras
-            ? "Não achei uma conta mais específica. Deixei em Outras. Dá para mudar depois em Transações PJ no app."
+            ? "Não existe conta específica para isso no plano desta empresa. Lancei em Outras e AVISE o usuário, oferecendo criar a conta certa com 'criar_conta_empresa' (o código sai automático) — ex.: \"Lancei em Outras Despesas. Quer que eu crie a conta *Combustível* e mova para lá?\"."
             : "Se a conta não for essa, dá para mudar depois em Transações PJ no app.",
           orcamento,
         });
@@ -2317,8 +2322,9 @@ export async function runAgent(
 - Este usuário é PJ (Empresa: ${emp.nome}). ${seg}
 - TODAS as transações financeiras (receitas e despesas) enviadas por ele DEVEM ser lançadas na empresa utilizando a ferramenta 'lancar_empresa' (informando empresa: "${emp.nome}"). NUNCA use 'insere_transacao' (pessoal) para este usuário, a menos que ele especifique explicitamente que é uma transação pessoal.
 - Fale em frases curtas e simples.
-- Ao lançar, passe em 'conta' o CÓDIGO do plano (ex.: 3.01). Compra de mercadoria = 3.01. Venda = 1.01. Serviço prestado = 1.02. Imposto / IPVA / documento do carro = 2.05.
-- Se não tiver certeza, mesmo assim LANCE. O sistema escolhe a melhor conta; se não achar, usa Outras Receitas ou Outras Despesas. Diga a conta usada. Se for Outras, avise que dá para mudar depois em Transações PJ.
+- **NÃO CHUTE a conta.** Só preencha 'conta' quando o usuário NOMEAR a conta ("lança no aluguel", "isso é folha") ou quando a descrição disser exatamente o que é ("compra de mercadoria", "paguei o DAS"). Nos demais casos, OMITA 'conta': o sistema classifica lendo a descrição e o plano inteiro da empresa, e acerta mais do que um palpite.
+- Cuidado com armadilhas comuns: gasto com veículo (abastecimento, oficina, pneu, pedágio, cartório, despachante) NÃO é compra de mercadoria/CMV e NÃO é imposto. Imposto é só imposto mesmo (DAS, IPVA, licenciamento, taxa).
+- Se não tiver certeza, mesmo assim LANCE. O sistema escolhe a melhor conta; se não achar, usa Outras Receitas ou Outras Despesas. Diga a conta usada. Se cair em Outras, avise o usuário e OFEREÇA criar a conta certa com 'criar_conta_empresa' (o código é gerado automático).
 
 ### Ferramentas desta empresa (use SEMPRE as versões _empresa)
 Este usuário NÃO tem carteira pessoal ativa. Toda consulta, edição e cadastro é da EMPRESA:

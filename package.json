@@ -23,7 +23,8 @@
     "verify:localization:with-tests": "tsx verify_localization.js --with-tests",
     "import:locale": "tsx import_locales.js",
     "import:locale:list": "tsx import_locales.js --list",
-    "superadmin:reset-pass": "tsx scripts/reset-superadmin-password.ts"
+    "superadmin:reset-pass": "tsx scripts/reset-superadmin-password.ts",
+    "test:classificacao": "tsx scripts/testar-classificacao-pj.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
