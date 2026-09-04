@@ -244,8 +244,36 @@ export async function getFluxoProjetadoPJ(
     WHERE t.empresa_id = ${empresaId}
       AND ${ref} >= ${janela.de}
       AND ${ref} <= ${janela.ate}
+      -- Compra no cartão não é saída de caixa na data da compra (o dinheiro sai
+      -- no vencimento da fatura). Mesmo filtro do fluxo de caixa realizado.
+      AND COALESCE(t.movimenta_caixa, true) = true
     GROUP BY t.categoria_id, to_char(${ref}, 'YYYY-MM'), t.tipo, COALESCE(t.reembolso_pessoal, false)
   `);
+
+  // As faturas ainda NÃO pagas entram como previsão na data de VENCIMENTO,
+  // rateadas pelas contas das compras — senão o cartão sumiria da projeção.
+  // (A fatura já paga não entra aqui: ela virou a saída de caixa da query acima.)
+  let faturasRows: any[] = [];
+  try {
+    faturasRows = (await conn.execute(sql`
+      SELECT t.categoria_id AS conta_id,
+             to_char(f.data_vencimento::date, 'YYYY-MM') AS mes,
+             'Despesa' AS tipo,
+             false AS extra,
+             SUM(t.valor::numeric) AS total,
+             SUM(t.valor::numeric) AS previsto
+      FROM empresas_faturas f
+      JOIN empresas_transacoes t ON t.fatura_id = f.id
+      WHERE f.empresa_id = ${empresaId}
+        AND f.status <> 'paga'
+        AND COALESCE(t.movimenta_caixa, true) = false
+        AND f.data_vencimento >= ${janela.de}
+        AND f.data_vencimento <= ${janela.ate}
+      GROUP BY t.categoria_id, to_char(f.data_vencimento::date, 'YYYY-MM')
+    `)) as any[];
+  } catch {
+    /* empresa sem cartão / tabela ainda não migrada — projeção segue sem fatura */
+  }
 
   // Saldo de partida = saldo declarado das contas bancárias + movimento já
   // efetivado nelas antes da janela (mesma conta do fluxo de caixa realizado).
@@ -288,7 +316,7 @@ export async function getFluxoProjetadoPJ(
     });
   }
 
-  const agregado: LinhaAgregada[] = (rows as any[]).map((r) => ({
+  const agregado: LinhaAgregada[] = [...(rows as any[]), ...faturasRows].map((r) => ({
     conta_id: Number(r.conta_id),
     mes: String(r.mes),
     tipo: String(r.tipo),

@@ -79,6 +79,14 @@ import {
 } from "../shared/schema";
 import { eq, and, or, desc, gte, lte, isNull, count, sum, sql, ne } from "drizzle-orm";
 
+// Pagar a fatura do cartão é QUITAÇÃO DE DÍVIDA, não despesa nova: a compra já
+// entrou por competência no dia em que foi feita. Sem excluir o pagamento, o
+// mesmo gasto conta duas vezes no DRE e no Resumo. Vale só onde a transação
+// estiver com o alias 't'.
+const NAO_E_PAGAMENTO_FATURA = sql`NOT EXISTS (
+  SELECT 1 FROM empresas_faturas f WHERE f.transacao_pagamento_id = t.id
+)`;
+
 /**
  * Calculate date range based on period type
  * @param period - "month" | "quarter" | "year" | undefined (defaults to month)
@@ -1867,6 +1875,7 @@ export class DbStorage implements IStorage {
         AND t.data_transacao >= ${de}
         AND t.data_transacao <= ${ate}
         AND COALESCE(t.reembolso_pessoal, false) = false
+        AND ${NAO_E_PAGAMENTO_FATURA}
       GROUP BY t.tipo, c.classificacao
     `);
 
@@ -1946,6 +1955,7 @@ export class DbStorage implements IStorage {
         AND t.data_transacao >= ${de}
         AND t.data_transacao <= ${ate}
         AND COALESCE(t.reembolso_pessoal, false) = false
+        AND ${NAO_E_PAGAMENTO_FATURA}
       GROUP BY c.classificacao
     `);
 
