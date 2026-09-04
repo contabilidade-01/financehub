@@ -13,6 +13,10 @@ export default function PjCategorias({ empresaId }: { empresaId: number }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [showForm, setShowForm] = useState(false);
+  // Radix Select não entra no FormData — estado controlado para tipo/classificação/grupo.
+  const [tipo, setTipo] = useState("Despesa");
+  const [classificacao, setClassificacao] = useState("FIXA");
+  const [grupoGerencial, setGrupoGerencial] = useState("auto");
 
   const { data: contas = [], isLoading } = useQuery<EmpresaConta[]>({
     queryKey: [`/api/empresas/${empresaId}/contas`],
@@ -33,6 +37,9 @@ export default function PjCategorias({ empresaId }: { empresaId: number }) {
       qc.invalidateQueries({ queryKey: [`/api/empresas/${empresaId}/contas`] });
       toast({ title: "Conta criada." });
       setShowForm(false);
+      setTipo("Despesa");
+      setClassificacao("FIXA");
+      setGrupoGerencial("auto");
     },
     onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
   });
@@ -66,13 +73,14 @@ export default function PjCategorias({ empresaId }: { empresaId: number }) {
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const grupo = fd.get("grupo_gerencial");
+    const codigo = (fd.get("codigo") as string || "").trim();
     createMut.mutate({
-      codigo: fd.get("codigo"),
+      // Em branco: o servidor gera o próximo código da sequência do grupo.
+      codigo: codigo || undefined,
       nome: fd.get("nome"),
-      tipo: fd.get("tipo"),
-      classificacao: fd.get("classificacao"),
-      grupo_gerencial: grupo && grupo !== "auto" ? grupo : null,
+      tipo,
+      classificacao,
+      grupo_gerencial: grupoGerencial !== "auto" ? grupoGerencial : null,
       is_cmv: fd.get("is_cmv") === "on",
     });
   };
@@ -107,16 +115,16 @@ export default function PjCategorias({ empresaId }: { empresaId: number }) {
         <Card>
           <CardContent className="pt-4">
             <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-4 gap-3">
-              <Input name="codigo" placeholder="Código (ex: 5.01)" required />
+              <Input name="codigo" placeholder="Código (deixe vazio p/ automático)" title="Em branco, o sistema gera o próximo código da sequência." />
               <Input name="nome" placeholder="Nome da conta" required />
-              <Select name="tipo" defaultValue="Despesa">
+              <Select value={tipo} onValueChange={setTipo}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Receita">Receita</SelectItem>
                   <SelectItem value="Despesa">Despesa</SelectItem>
                 </SelectContent>
               </Select>
-              <Select name="classificacao" defaultValue="FIXA">
+              <Select value={classificacao} onValueChange={setClassificacao}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="FIXA">Fixa</SelectItem>
@@ -124,7 +132,7 @@ export default function PjCategorias({ empresaId }: { empresaId: number }) {
                   <SelectItem value="OUTRA">Outra</SelectItem>
                 </SelectContent>
               </Select>
-              <Select name="grupo_gerencial" defaultValue="auto">
+              <Select value={grupoGerencial} onValueChange={setGrupoGerencial}>
                 <SelectTrigger><SelectValue placeholder="Grupo (Fluxo)" /></SelectTrigger>
                 <SelectContent>
                   {GRUPOS.map((g) => <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>)}

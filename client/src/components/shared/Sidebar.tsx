@@ -129,6 +129,7 @@ function Sidebar() {
       { icon: <BarChart3 className="mr-3 h-4 w-4" />, text: 'Relatórios', path: "/p/relatorios" },
       { icon: <Tag className="mr-3 h-4 w-4" />, text: 'Plano de Contas', path: "/p/categorias" },
       { icon: <CreditCard className="mr-3 h-4 w-4" />, text: 'Faturas de Cartão', path: "/p/faturas" },
+      { icon: <CreditCard className="mr-3 h-4 w-4" />, text: 'Formas de Pagamento', path: "/p/formas-pagamento" },
       { icon: <FileUp className="mr-3 h-4 w-4" />, text: 'Conciliação', path: "/p/conciliacao" },
       { icon: <FileUp className="mr-3 h-4 w-4" />, text: 'Importar Lançamentos', path: "/p/importar" },
       { icon: <HandCoins className="mr-3 h-4 w-4" />, text: 'Reembolsos a Pagar', path: "/p/reembolsos" },

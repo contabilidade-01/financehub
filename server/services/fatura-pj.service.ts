@@ -204,3 +204,60 @@ export async function pagarFatura(
   `);
   return { fatura: (upd as any[])[0], transacao_id: txId, total };
 }
+
+/**
+ * Saldo do cartão PJ: limite − compras ainda não pagas (faturas abertas/fechadas).
+ * Espelha o getSaldoCartao do PF, mas sobre empresas_cartoes + empresas_transacoes.
+ */
+export async function getSaldoCartaoEmpresa(cartaoId: number): Promise<{
+  cartao_nome: string;
+  limite: number;
+  usado: number;
+  disponivel: number;
+  percentual: number;
+  dia_fechamento: number | null;
+  dia_vencimento: number | null;
+}> {
+  const cartaoRows = await db.execute(sql`SELECT * FROM empresas_cartoes WHERE id = ${cartaoId} LIMIT 1`);
+  const cartao = (cartaoRows as any[])[0];
+  if (!cartao) throw new Error("Cartão não encontrado");
+
+  const limite = num(cartao.limite);
+
+  // Usado = compras (competência) em faturas ainda não pagas + compras sem fatura.
+  const rows = await db.execute(sql`
+    SELECT COALESCE(SUM(ABS(t.valor::numeric)), 0) AS total
+    FROM empresas_transacoes t
+    LEFT JOIN empresas_faturas f ON f.id = t.fatura_id
+    WHERE t.cartao_id = ${cartaoId}
+      AND t.tipo = 'Despesa'
+      AND COALESCE(t.movimenta_caixa, false) = false
+      AND (t.fatura_id IS NULL OR f.status IN ('aberta', 'fechada'))
+  `);
+
+  const usado = num((rows as any[])[0]?.total);
+  const disponivel = limite > 0 ? Math.max(0, limite - usado) : 0;
+  const percentual = limite > 0 ? (usado / limite) * 100 : 0;
+
+  return {
+    cartao_nome: cartao.nome,
+    limite: Math.round(limite * 100) / 100,
+    usado: Math.round(usado * 100) / 100,
+    disponivel: Math.round(disponivel * 100) / 100,
+    percentual: Math.round(percentual * 10) / 10,
+    dia_fechamento: cartao.dia_fechamento ?? null,
+    dia_vencimento: cartao.dia_vencimento ?? null,
+  };
+}
+
+export async function listarCartoesComSaldo(empresaId: number): Promise<any[]> {
+  const cartoes = await listarCartoes(empresaId);
+  return Promise.all(cartoes.map(async (c) => {
+    try {
+      const saldo = await getSaldoCartaoEmpresa(c.id);
+      return { ...c, ...saldo };
+    } catch {
+      return { ...c, limite: num(c.limite), usado: 0, disponivel: num(c.limite), percentual: 0 };
+    }
+  }));
+}

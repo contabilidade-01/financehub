@@ -548,6 +548,38 @@ const STEPS: Step[] = [
     },
   },
   {
+    // Baixa de contas a pagar PJ: data em que Pendente virou Efetivada.
+    name: "empresas_transacoes: data_pagamento (baixa PJ)",
+    run: async () => {
+      await db.execute(sql`ALTER TABLE empresas_transacoes ADD COLUMN IF NOT EXISTS data_pagamento DATE`);
+    },
+  },
+  {
+    // Formas de pagamento da EMPRESA (PIX, boleto, débito…), isoladas do PF.
+    // Cartões continuam em empresas_cartoes. A FK antiga forma_pagamento_id
+    // (tabela PF) deixa de ser usada nos novos lançamentos.
+    name: "empresas_formas_pagamento (formas PJ isoladas)",
+    run: async () => {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS empresas_formas_pagamento (
+          id         SERIAL PRIMARY KEY,
+          empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+          nome       VARCHAR(100) NOT NULL,
+          tipo       VARCHAR(30) NOT NULL DEFAULT 'outro',
+          ativo      BOOLEAN NOT NULL DEFAULT true,
+          criado_em  TIMESTAMPTZ DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo'),
+          UNIQUE (empresa_id, nome)
+        )
+      `);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_emp_formas_empresa ON empresas_formas_pagamento(empresa_id)`);
+      await db.execute(sql`
+        ALTER TABLE empresas_transacoes
+        ADD COLUMN IF NOT EXISTS empresa_forma_pagamento_id INTEGER
+          REFERENCES empresas_formas_pagamento(id) ON DELETE SET NULL
+      `);
+    },
+  },
+  {
     name: "empresas_transacoes: reembolso_pessoal + vencimento (import PJ)",
     run: async () => {
       await db.execute(sql`ALTER TABLE empresas_transacoes ADD COLUMN IF NOT EXISTS reembolso_pessoal BOOLEAN NOT NULL DEFAULT false`);

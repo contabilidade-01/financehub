@@ -1,9 +1,13 @@
 import axios from "axios";
 import { storage, getDailySummary, getPeriodSummary, getWeeklySummary, getCategoryBreakdown, comparePeriods, createMeta, getMetasByUsuarioId, depositarMeta, deleteMeta, ajustarSaldoMeta, sacarMeta, verificarOrcamentos, getStatusOrcamentoContaPJ, getContasAPagar, marcarComoPaga, marcarRecorrente, getFluxoCaixaResumo, getSaldoCartao, getCartoesComSaldo, getFaturaCartao, resolveMemoriaCategoria, aprenderMemoriaCategoria, resolveOuCriaFormaPagamento, criarCompraParcelada, getUltimaCompra, editarTransacoesPorIds, getStatusOrcamentoCategoria, softDeleteTransacao, softDeleteTodasTransacoes, restaurarUltimaExcluida, transacaoPertenceAoWallet, cadastrarOuAtualizarCartao, resolveMemoriaGlobal } from "../storage";
+import { buscarTransacoesPorFiltro, buscarEmpresaTransacoesPorFiltro, empresaTransacaoPertenceAEmpresa, type CandidatoTransacao } from "../storage";
 import { FINANCIAL_AGENT_SYSTEM_PROMPT, buildDynamicContext } from "../prompts/financial-agent";
 import { insertTransactionSchema } from "../../shared/schema";
 import { withRetry } from "../utils/ai-errors";
 import { resolverContaPj } from "./classificar-conta-pj";
+import { atualizarTransacaoEmpresa, baixarTransacaoEmpresa } from "./empresa-transacao.service";
+import { listarCartoes as listarCartoesPj, criarCartao as criarCartaoPj, listarFaturas as listarFaturasPj, getSaldoCartaoEmpresa } from "./fatura-pj.service";
+import { garantirFormasPadrao, criarForma as criarFormaPj } from "./empresa-forma.service";
 
 /**
  * AI Agent Service — processa mensagens financeiras com function calling.
@@ -151,8 +155,66 @@ interface ToolContext {
   userMessage?: string;
 }
 
-function buildTools() {
-  return [
+// Ferramentas que o login PJ (empresa ativa) enxerga. Tudo que ficou de fora
+// lê a CARTEIRA PESSOAL: era por isso que "total de receita em março" voltava
+// zerado — o modelo chamava resumo_periodo (PF, vazio) em vez de resumo_empresa.
+// Metas ficam na lista porque são por usuário e já têm empresa_id.
+const TOOLS_PJ = new Set([
+  "listar_empresas",
+  "lancar_empresa",
+  "listar_todas_transacoes_empresa",
+  "resumo_empresa",
+  "dre_empresa",
+  "comparar_periodos_empresa",
+  "gastos_por_conta_empresa",
+  "fluxo_caixa_empresa",
+  "buscar_transacao_empresa_por_filtro",
+  "busca_transacao_empresa",
+  "atualiza_transacao_empresa",
+  "pagar_transacao_empresa",
+  "criar_conta_empresa",
+  "cadastrar_cartao_empresa",
+  "listar_cartoes_empresa",
+  "fatura_cartao_empresa",
+  "saldo_cartao_empresa",
+  "listar_formas_empresa",
+  "cadastrar_forma_empresa",
+  "simular_meta_financeira",
+  "criar_meta",
+  "deletar_meta",
+  "depositar_meta",
+  "sacar_meta",
+  "ajustar_saldo_meta",
+  "listar_metas",
+]);
+
+// Equivalente PJ de cada ferramenta PF, para avisar o modelo quando ele insistir
+// na versão pessoal (defesa extra, além da lista acima).
+const EQUIVALENTE_PJ: Record<string, string> = {
+  insere_transacao: "lancar_empresa",
+  atualiza_transacao: "atualiza_transacao_empresa",
+  busca_transacao: "busca_transacao_empresa",
+  buscar_transacao_por_filtro: "buscar_transacao_empresa_por_filtro",
+  listar_todas_transacoes: "listar_todas_transacoes_empresa",
+  transacoes_recentes: "listar_todas_transacoes_empresa",
+  resumo_periodo: "resumo_empresa",
+  resumo_dia: "resumo_empresa",
+  resumo_semana: "resumo_empresa",
+  resumo_customizado: "resumo_empresa",
+  comparar_periodos: "comparar_periodos_empresa",
+  gastos_por_categoria: "gastos_por_conta_empresa",
+  fluxo_caixa: "fluxo_caixa_empresa",
+  cadastrar_cartao: "cadastrar_cartao_empresa",
+  listar_cartoes: "listar_cartoes_empresa",
+  fatura_cartao: "fatura_cartao_empresa",
+  saldo_cartao: "saldo_cartao_empresa",
+  pagar_conta: "pagar_transacao_empresa",
+};
+
+const emModoPj = (ctx?: ToolContext) => ctx?.tipoPessoa === "juridica" && !!ctx?.empresaAtiva;
+
+function buildTools(ctx?: ToolContext) {
+  const todas = [
     {
       type: "function" as const,
       function: {
@@ -212,13 +274,30 @@ function buildTools() {
       type: "function" as const,
       function: {
         name: "busca_transacao",
-        description: "Busca detalhes de uma transação pelo ID.",
+        description: "Busca detalhes de uma transação pelo código (ID). Use depois que o usuário informar o código, para conferir a transação ANTES de editar.",
         parameters: {
           type: "object",
           properties: {
             id_transacao: { type: "number", description: "ID da transação" },
           },
           required: ["id_transacao"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "buscar_transacao_por_filtro",
+        description: "Procura transações por descrição, valor e/ou data, para descobrir QUAL o usuário quer editar. Use SEMPRE antes de editar quando ele não deu o código. Devolve 1 candidato, vários (para desambiguar) ou nenhum. NÃO altera nada.",
+        parameters: {
+          type: "object",
+          properties: {
+            descricao: { type: "string", description: "Parte da descrição (ex.: 'mercado', 'posto')." },
+            valor: { type: "number", description: "Valor aproximado da transação." },
+            data_inicio: { type: "string", description: "AAAA-MM-DD — início da janela de datas (ex.: 'ontem' → a data de ontem)." },
+            data_fim: { type: "string", description: "AAAA-MM-DD — fim da janela de datas." },
+            tipo: { type: "string", enum: ["Receita", "Despesa"] },
+          },
         },
       },
     },
@@ -686,15 +765,246 @@ function buildTools() {
       type: "function" as const,
       function: {
         name: "resumo_empresa",
-        description: "Resumo financeiro de uma empresa no período (receitas, despesas, saldo). Use para 'como está minha empresa', 'quanto a empresa faturou', etc.",
+        description: "Resumo financeiro da empresa num período: total de RECEITA, total de DESPESA e saldo. Use para 'quanto a empresa faturou', 'total de receita em março', 'quanto gastei no mês', 'como está minha empresa'. Para um mês específico, passe 'mes' (e 'ano' se não for o ano corrente).",
         parameters: {
           type: "object",
           properties: {
             empresa: { type: "string", description: "Nome (ou parte) da empresa." },
-            de: { type: "string", description: "AAAA-MM-DD (opcional)" },
-            ate: { type: "string", description: "AAAA-MM-DD (opcional)" },
+            mes: { type: "number", description: "Mês 1-12. Use quando o usuário citar um mês (ex.: 'em março' → 3)." },
+            ano: { type: "number", description: "Ano com 4 dígitos (default: ano corrente)." },
+            de: { type: "string", description: "AAAA-MM-DD (alternativa a mes/ano, para períodos livres)" },
+            ate: { type: "string", description: "AAAA-MM-DD (alternativa a mes/ano)" },
           },
           required: ["empresa"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "comparar_periodos_empresa",
+        description: "Compara dois períodos da empresa (receita, despesa, saldo e variação %). Use para 'compara esse mês com o anterior', 'a empresa melhorou?'.",
+        parameters: {
+          type: "object",
+          properties: {
+            empresa: { type: "string", description: "Nome (ou parte) da empresa." },
+            mes_a: { type: "number", description: "Mês do primeiro período (1-12)." },
+            ano_a: { type: "number", description: "Ano do primeiro período." },
+            mes_b: { type: "number", description: "Mês do segundo período (1-12)." },
+            ano_b: { type: "number", description: "Ano do segundo período." },
+          },
+          required: ["empresa", "mes_a", "mes_b"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "gastos_por_conta_empresa",
+        description: "Quebra os lançamentos da empresa por conta do plano de contas no período. Use para 'quanto gastei com folha', 'onde a empresa mais gasta', 'gastos por categoria da empresa'.",
+        parameters: {
+          type: "object",
+          properties: {
+            empresa: { type: "string", description: "Nome (ou parte) da empresa." },
+            mes: { type: "number", description: "Mês 1-12 (opcional)." },
+            ano: { type: "number", description: "Ano (opcional)." },
+            de: { type: "string", description: "AAAA-MM-DD (opcional)" },
+            ate: { type: "string", description: "AAAA-MM-DD (opcional)" },
+            tipo: { type: "string", enum: ["Receita", "Despesa"], description: "Filtra só receitas ou só despesas (opcional)." },
+          },
+          required: ["empresa"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "fluxo_caixa_empresa",
+        description: "Fluxo de caixa mês a mês da empresa no ano (receita, despesa e saldo de cada mês). Use para 'meu fluxo de caixa', 'como foi o ano', 'evolução mês a mês'.",
+        parameters: {
+          type: "object",
+          properties: {
+            empresa: { type: "string", description: "Nome (ou parte) da empresa." },
+            ano: { type: "number", description: "Ano com 4 dígitos (default: ano corrente)." },
+          },
+          required: ["empresa"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "buscar_transacao_empresa_por_filtro",
+        description: "Procura lançamentos DA EMPRESA por descrição, valor e/ou data, para descobrir QUAL o usuário quer editar. Use SEMPRE antes de editar quando ele não deu o código. Devolve 1 candidato, vários (para desambiguar) ou nenhum.",
+        parameters: {
+          type: "object",
+          properties: {
+            empresa: { type: "string", description: "Nome (ou parte) da empresa." },
+            descricao: { type: "string", description: "Parte da descrição (ex.: 'mercado', 'posto')." },
+            valor: { type: "number", description: "Valor aproximado do lançamento." },
+            data_inicio: { type: "string", description: "AAAA-MM-DD — início da janela de datas." },
+            data_fim: { type: "string", description: "AAAA-MM-DD — fim da janela de datas." },
+            tipo: { type: "string", enum: ["Receita", "Despesa"] },
+          },
+          required: ["empresa"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "busca_transacao_empresa",
+        description: "Busca um lançamento DA EMPRESA pelo código (ID). Use depois que o usuário informar o código, para conferir o lançamento ANTES de editar.",
+        parameters: {
+          type: "object",
+          properties: {
+            empresa: { type: "string", description: "Nome (ou parte) da empresa." },
+            id_transacao: { type: "number", description: "Código/ID do lançamento." },
+          },
+          required: ["empresa", "id_transacao"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "atualiza_transacao_empresa",
+        description: "Edita um lançamento DA EMPRESA pelo código (ID). Só chame DEPOIS que o usuário confirmar a alteração. Envie apenas os campos que mudam.",
+        parameters: {
+          type: "object",
+          properties: {
+            empresa: { type: "string", description: "Nome (ou parte) da empresa." },
+            id_transacao: { type: "number", description: "Código/ID do lançamento." },
+            descricao: { type: "string" },
+            valor: { type: "number" },
+            tipo: { type: "string", enum: ["Receita", "Despesa"] },
+            data_transacao: { type: "string", description: "AAAA-MM-DD" },
+            conta: { type: "string", description: "Código ou nome da conta do plano (ex.: '3.01', 'Folha de Pagamento')." },
+          },
+          required: ["empresa", "id_transacao"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "pagar_transacao_empresa",
+        description: "Baixa (marca como paga) uma conta Pendente da empresa. Use quando disserem 'paguei', 'quitei', 'baixa essa conta'. Confirme antes se o usuário não deu o código.",
+        parameters: {
+          type: "object",
+          properties: {
+            empresa: { type: "string", description: "Nome (ou parte) da empresa." },
+            id_transacao: { type: "number", description: "Código/ID do lançamento pendente." },
+            data_pagamento: { type: "string", description: "AAAA-MM-DD (opcional; default = hoje)." },
+          },
+          required: ["empresa", "id_transacao"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "criar_conta_empresa",
+        description: "Cria uma nova conta no plano de contas da empresa. O CÓDIGO é gerado automaticamente na sequência — NÃO peça nem invente código. Use quando o usuário disser 'cria uma conta', 'preciso de uma categoria para X'.",
+        parameters: {
+          type: "object",
+          properties: {
+            empresa: { type: "string", description: "Nome (ou parte) da empresa." },
+            nome: { type: "string", description: "Nome da conta (ex.: 'Manutenção de Veículos')." },
+            tipo: { type: "string", enum: ["Receita", "Despesa"], description: "Se é conta de entrada ou de saída." },
+            classificacao: { type: "string", enum: ["FIXA", "VARIAVEL", "OUTRA"], description: "Despesa FIXA (todo mês, valor previsível) ou VARIAVEL (varia com a operação). Em dúvida, pergunte ao usuário." },
+            grupo_gerencial: { type: "string", description: "Grupo do fluxo de caixa (opcional): receita, custo_variavel, despesa_fixa, investimento, nao_operacional, outras." },
+          },
+          required: ["empresa", "nome", "tipo"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "cadastrar_cartao_empresa",
+        description: "Cadastra um cartão de crédito DA EMPRESA. Precisa do dia de fechamento e do dia de vencimento — pergunte os dois de uma vez se o usuário não disser. NUNCA invente esses dias.",
+        parameters: {
+          type: "object",
+          properties: {
+            empresa: { type: "string", description: "Nome (ou parte) da empresa." },
+            nome: { type: "string", description: "Nome do cartão (ex.: 'Nubank PJ', 'Inter Empresa')." },
+            dia_fechamento: { type: "number", description: "Dia do mês em que a fatura fecha (1-31)." },
+            dia_vencimento: { type: "number", description: "Dia do mês em que a fatura vence (1-31)." },
+            limite: { type: "number", description: "Limite do cartão em R$ (opcional)." },
+            bandeira: { type: "string", description: "Visa, Mastercard, Elo... (opcional)" },
+          },
+          required: ["empresa", "nome", "dia_fechamento", "dia_vencimento"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "listar_cartoes_empresa",
+        description: "Lista os cartões de crédito cadastrados na empresa.",
+        parameters: {
+          type: "object",
+          properties: { empresa: { type: "string", description: "Nome (ou parte) da empresa." } },
+          required: ["empresa"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "fatura_cartao_empresa",
+        description: "Mostra as faturas de um cartão da empresa (competência, vencimento, total e status).",
+        parameters: {
+          type: "object",
+          properties: {
+            empresa: { type: "string", description: "Nome (ou parte) da empresa." },
+            cartao: { type: "string", description: "Nome (ou parte) do cartão." },
+          },
+          required: ["empresa", "cartao"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "saldo_cartao_empresa",
+        description: "Mostra limite, usado e disponível de um cartão da empresa. Use para 'quanto tenho disponível no cartão', 'meu cartão tá no limite?'.",
+        parameters: {
+          type: "object",
+          properties: {
+            empresa: { type: "string", description: "Nome (ou parte) da empresa." },
+            cartao: { type: "string", description: "Nome (ou parte) do cartão." },
+          },
+          required: ["empresa", "cartao"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "listar_formas_empresa",
+        description: "Lista as formas de pagamento da empresa (PIX, boleto, débito…). Cartões são listados com listar_cartoes_empresa.",
+        parameters: {
+          type: "object",
+          properties: { empresa: { type: "string" } },
+          required: ["empresa"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "cadastrar_forma_empresa",
+        description: "Cadastra uma forma de pagamento da empresa (PIX, boleto, débito, transferência, dinheiro). NÃO use para cartão de crédito — use cadastrar_cartao_empresa.",
+        parameters: {
+          type: "object",
+          properties: {
+            empresa: { type: "string" },
+            nome: { type: "string", description: "Ex.: 'PIX Conta PJ', 'Boleto'." },
+            tipo: { type: "string", enum: ["pix", "boleto", "debito", "transferencia", "dinheiro", "outro"] },
+          },
+          required: ["empresa", "nome"],
         },
       },
     },
@@ -747,6 +1057,9 @@ function buildTools() {
       },
     },
   ];
+
+  if (!emModoPj(ctx)) return todas;
+  return todas.filter((t) => TOOLS_PJ.has(t.function.name));
 }
 
 // ============================================
@@ -755,6 +1068,18 @@ function buildTools() {
 
 async function executeTool(name: string, args: any, ctx: ToolContext): Promise<string> {
   try {
+    // Isolamento PF × PJ: se o modelo insistir numa ferramenta pessoal com
+    // empresa ativa, não lê a carteira PF — devolve o equivalente PJ.
+    if (emModoPj(ctx) && !TOOLS_PJ.has(name)) {
+      const equivalente = EQUIVALENTE_PJ[name];
+      return JSON.stringify({
+        erro: true,
+        error: equivalente
+          ? `Este usuário é PJ. Use '${equivalente}' (dados da empresa), não '${name}' (carteira pessoal).`
+          : `'${name}' é uma ferramenta pessoal e não vale para este usuário PJ.`,
+      });
+    }
+
     switch (name) {
       case "insere_transacao": {
         // Normaliza o tipo para o padrão do banco ("Receita" | "Despesa").
@@ -877,8 +1202,23 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       }
 
       case "busca_transacao": {
+        // Isolamento: só devolve transação da própria carteira (antes devolvia
+        // a de qualquer usuário para quem acertasse o ID).
+        const doDono = await transacaoPertenceAoWallet(args.id_transacao, ctx.walletId);
+        if (!doDono) return JSON.stringify({ error: "Transação não encontrada nas suas transações." });
         const tx = await storage.getTransactionById(args.id_transacao);
         return JSON.stringify(tx || { error: "Transação não encontrada" });
+      }
+
+      case "buscar_transacao_por_filtro": {
+        const achados = await buscarTransacoesPorFiltro(ctx.walletId, {
+          descricao: args.descricao,
+          valor: args.valor,
+          data_inicio: args.data_inicio,
+          data_fim: args.data_fim,
+          tipo: args.tipo,
+        });
+        return JSON.stringify(respostaBusca(achados));
       }
 
       case "transacoes_recentes": {
@@ -1540,15 +1880,292 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       case "resumo_empresa": {
         const empresa = await resolverEmpresa(ctx.userId, args.empresa);
         if ("erro" in empresa) return JSON.stringify(empresa);
-        const resumo = await storage.getEmpresaResumo(empresa.id, { de: args.de, ate: args.ate });
-        return JSON.stringify({ empresa: empresa.nome_fantasia || empresa.razao_social, ...resumo });
+        const periodo = periodoDeArgs(args);
+        const resumo = await storage.getEmpresaResumo(empresa.id, periodo);
+        // Nomes explícitos: o modelo lia 'entradas'/'total_saidas' e não
+        // relacionava com "total de receita" que o usuário pediu.
+        return JSON.stringify({
+          empresa: empresa.nome_fantasia || empresa.razao_social,
+          periodo: resumo.periodo,
+          receita_total: resumo.entradas,
+          despesa_total: resumo.total_saidas,
+          saldo: resumo.lucro_prejuizo,
+          despesas_fixas: resumo.saidas_fixas,
+          despesas_variaveis: resumo.saidas_variaveis,
+          despesas_outras: resumo.saidas_outras,
+          margem_contribuicao: resumo.margem_contribuicao,
+          qtd_lancamentos: resumo.total_transacoes,
+        });
       }
 
       case "dre_empresa": {
         const empresa = await resolverEmpresa(ctx.userId, args.empresa);
         if ("erro" in empresa) return JSON.stringify(empresa);
-        const dre = await storage.getEmpresaDRE(empresa.id, { de: args.de, ate: args.ate });
+        const dre = await storage.getEmpresaDRE(empresa.id, periodoDeArgs(args));
         return JSON.stringify({ empresa: empresa.nome_fantasia || empresa.razao_social, ...dre });
+      }
+
+      case "comparar_periodos_empresa": {
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        if ("erro" in empresa) return JSON.stringify(empresa);
+        const anoCorrente = new Date().getFullYear();
+        const pA = periodoDeArgs({ mes: args.mes_a, ano: args.ano_a ?? anoCorrente });
+        const pB = periodoDeArgs({ mes: args.mes_b, ano: args.ano_b ?? anoCorrente });
+        const [a, b] = await Promise.all([
+          storage.getEmpresaResumo(empresa.id, pA),
+          storage.getEmpresaResumo(empresa.id, pB),
+        ]);
+        const variacao = (novo: number, velho: number) =>
+          velho === 0 ? null : Math.round(((novo - velho) / Math.abs(velho)) * 1000) / 10;
+        return JSON.stringify({
+          empresa: empresa.nome_fantasia || empresa.razao_social,
+          periodo_a: { ...pA, receita_total: a.entradas, despesa_total: a.total_saidas, saldo: a.lucro_prejuizo },
+          periodo_b: { ...pB, receita_total: b.entradas, despesa_total: b.total_saidas, saldo: b.lucro_prejuizo },
+          variacao_pct: {
+            receita: variacao(b.entradas, a.entradas),
+            despesa: variacao(b.total_saidas, a.total_saidas),
+            saldo: variacao(b.lucro_prejuizo, a.lucro_prejuizo),
+          },
+        });
+      }
+
+      case "gastos_por_conta_empresa": {
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        if ("erro" in empresa) return JSON.stringify(empresa);
+        const periodo = periodoDeArgs(args);
+        const txs = await storage.getEmpresaTransacoesByEmpresaId(empresa.id, periodo);
+
+        const porConta = new Map<string, { conta: string; tipo: string; total: number; qtd: number }>();
+        for (const t of txs) {
+          if (args.tipo && t.tipo !== args.tipo) continue;
+          const chave = `${(t as any).categoria_codigo} — ${(t as any).categoria_nome}`;
+          const atual = porConta.get(chave) || { conta: chave, tipo: t.tipo, total: 0, qtd: 0 };
+          atual.total += Number(t.valor) || 0;
+          atual.qtd += 1;
+          porConta.set(chave, atual);
+        }
+
+        const contas = [...porConta.values()]
+          .map((c) => ({ ...c, total: Math.round(c.total * 100) / 100 }))
+          .sort((a, b) => b.total - a.total);
+        return JSON.stringify({
+          empresa: empresa.nome_fantasia || empresa.razao_social,
+          periodo,
+          contas,
+        });
+      }
+
+      case "fluxo_caixa_empresa": {
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        if ("erro" in empresa) return JSON.stringify(empresa);
+        const ano = Number(args.ano) || new Date().getFullYear();
+        const fluxo = await storage.getEmpresaFluxoCaixaMensal(empresa.id, ano);
+
+        const tipoDaConta = new Map(fluxo.contas.map((c) => [c.id, c.tipo]));
+        const meses = Array.from({ length: 12 }, (_, i) => ({ mes: i + 1, receita: 0, despesa: 0, saldo: 0 }));
+        for (const linha of fluxo.agregado) {
+          const alvo = meses[linha.mes - 1];
+          if (!alvo) continue;
+          // 'agregado' vem com sinal (Receita +, Despesa −); o usuário quer valores absolutos.
+          if (tipoDaConta.get(linha.conta_id) === "Receita") alvo.receita += Math.abs(linha.total);
+          else alvo.despesa += Math.abs(linha.total);
+        }
+        for (const m of meses) {
+          m.receita = Math.round(m.receita * 100) / 100;
+          m.despesa = Math.round(m.despesa * 100) / 100;
+          m.saldo = Math.round((m.receita - m.despesa) * 100) / 100;
+        }
+
+        return JSON.stringify({
+          empresa: empresa.nome_fantasia || empresa.razao_social,
+          ano,
+          meses: meses.filter((m) => m.receita !== 0 || m.despesa !== 0),
+        });
+      }
+
+      case "buscar_transacao_empresa_por_filtro": {
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        if ("erro" in empresa) return JSON.stringify(empresa);
+        const achados = await buscarEmpresaTransacoesPorFiltro(empresa.id, {
+          descricao: args.descricao,
+          valor: args.valor,
+          data_inicio: args.data_inicio,
+          data_fim: args.data_fim,
+          tipo: args.tipo,
+        });
+        return JSON.stringify(respostaBusca(achados));
+      }
+
+      case "busca_transacao_empresa": {
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        if ("erro" in empresa) return JSON.stringify(empresa);
+        // Isolamento: o lançamento tem que ser DESSA empresa.
+        const daEmpresa = await empresaTransacaoPertenceAEmpresa(args.id_transacao, empresa.id);
+        if (!daEmpresa) {
+          return JSON.stringify({ error: `Não achei o lançamento de código ${args.id_transacao} nesta empresa. Confira o código com o usuário.` });
+        }
+        const tx = await storage.getEmpresaTransacaoById(args.id_transacao);
+        return JSON.stringify({
+          encontrou: true,
+          transacao: tx,
+          instrucao: "Mostre este lançamento e PEÇA CONFIRMAÇÃO antes de editar.",
+        });
+      }
+
+      case "atualiza_transacao_empresa": {
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        if ("erro" in empresa) return JSON.stringify(empresa);
+
+        const dados: any = {};
+        if (args.descricao) dados.descricao = args.descricao;
+        if (args.valor !== undefined && args.valor !== null) dados.valor = args.valor;
+        if (args.tipo) dados.tipo = args.tipo;
+        if (args.data_transacao) dados.data_transacao = args.data_transacao;
+        if (args.conta) {
+          const contas = await storage.getEmpresasContasByEmpresaId(empresa.id);
+          const alvo = String(args.conta).toLowerCase().trim();
+          const conta = contas.find((c) => c.codigo.toLowerCase() === alvo)
+            || contas.find((c) => c.nome.toLowerCase().includes(alvo));
+          if (!conta) {
+            return JSON.stringify({ error: `Não achei a conta '${args.conta}' no plano desta empresa. Peça ao usuário para escolher outra.` });
+          }
+          dados.categoria_id = conta.id;
+        }
+        if (Object.keys(dados).length === 0) {
+          return JSON.stringify({ error: "Nada para alterar: informe o que muda (valor, descrição, data, tipo ou conta)." });
+        }
+
+        // Mesmas validações da tela (serviço compartilhado com o controller).
+        const r = await atualizarTransacaoEmpresa(empresa.id, args.id_transacao, ctx.userId, dados);
+        if (!r.ok) return JSON.stringify({ success: false, error: r.error });
+        return JSON.stringify({
+          success: true,
+          alterado: dados,
+          antes: { descricao: r.anterior.descricao, valor: r.anterior.valor, data: r.anterior.data_transacao, tipo: r.anterior.tipo },
+          transacao: r.transacao,
+        });
+      }
+
+      case "pagar_transacao_empresa": {
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        if ("erro" in empresa) return JSON.stringify(empresa);
+        const r = await baixarTransacaoEmpresa(empresa.id, args.id_transacao, ctx.userId, args.data_pagamento);
+        if (!r.ok) return JSON.stringify({ success: false, error: r.error });
+        return JSON.stringify({
+          success: true,
+          mensagem: "Conta baixada (marcada como paga).",
+          data_pagamento: (r.transacao as any)?.data_pagamento,
+          transacao: r.transacao,
+        });
+      }
+
+      case "criar_conta_empresa": {
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        if ("erro" in empresa) return JSON.stringify(empresa);
+        const tipo = args.tipo === "Receita" ? "Receita" : "Despesa";
+        // Código sai da sequência do grupo — nunca vem do usuário.
+        const conta = await storage.createEmpresaConta({
+          empresa_id: empresa.id,
+          nome: args.nome,
+          tipo,
+          classificacao: tipo === "Receita" ? "OUTRA" : (args.classificacao || "VARIAVEL"),
+          grupo_gerencial: args.grupo_gerencial || null,
+        } as any);
+        return JSON.stringify({
+          success: true,
+          conta: `${conta.codigo} — ${conta.nome}`,
+          codigo: conta.codigo,
+          tipo: conta.tipo,
+          classificacao: conta.classificacao,
+        });
+      }
+
+      case "cadastrar_cartao_empresa": {
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        if ("erro" in empresa) return JSON.stringify(empresa);
+        const cartao = await criarCartaoPj(empresa.id, {
+          nome: args.nome,
+          bandeira: args.bandeira ?? null,
+          limite: args.limite ?? null,
+          dia_fechamento: args.dia_fechamento,
+          dia_vencimento: args.dia_vencimento,
+        });
+        return JSON.stringify({
+          success: true,
+          cartao: cartao.nome,
+          id: cartao.id,
+          dia_fechamento: cartao.dia_fechamento,
+          dia_vencimento: cartao.dia_vencimento,
+          limite: cartao.limite,
+          dica: "O cartão já aparece em Faturas PJ no app.",
+        });
+      }
+
+      case "listar_cartoes_empresa": {
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        if ("erro" in empresa) return JSON.stringify(empresa);
+        const cartoes = await listarCartoesPj(empresa.id);
+        if (cartoes.length === 0) {
+          return JSON.stringify({ cartoes: [], mensagem: "A empresa ainda não tem cartão cadastrado." });
+        }
+        return JSON.stringify({
+          cartoes: cartoes.map((c) => ({
+            id: c.id, nome: c.nome, limite: c.limite,
+            dia_fechamento: c.dia_fechamento, dia_vencimento: c.dia_vencimento, ativo: c.ativo,
+          })),
+        });
+      }
+
+      case "fatura_cartao_empresa": {
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        if ("erro" in empresa) return JSON.stringify(empresa);
+        const cartoes = await listarCartoesPj(empresa.id);
+        const alvo = String(args.cartao || "").toLowerCase().trim();
+        const achados = cartoes.filter((c) => String(c.nome).toLowerCase().includes(alvo));
+        if (achados.length === 0) {
+          return JSON.stringify({ erro: true, error: `Não achei o cartão '${args.cartao}'.`, cartoes: cartoes.map((c) => c.nome) });
+        }
+        if (achados.length > 1) {
+          return JSON.stringify({ erro: true, error: "Mais de um cartão corresponde; peça ao usuário para especificar.", cartoes: achados.map((c) => c.nome) });
+        }
+        const faturas = await listarFaturasPj(achados[0].id);
+        return JSON.stringify({ cartao: achados[0].nome, faturas: faturas.slice(0, 6) });
+      }
+
+      case "saldo_cartao_empresa": {
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        if ("erro" in empresa) return JSON.stringify(empresa);
+        const cartoes = await listarCartoesPj(empresa.id);
+        const alvo = String(args.cartao || "").toLowerCase().trim();
+        const achados = cartoes.filter((c) => String(c.nome).toLowerCase().includes(alvo));
+        if (achados.length === 0) {
+          return JSON.stringify({ erro: true, error: `Não achei o cartão '${args.cartao}'.`, cartoes: cartoes.map((c) => c.nome) });
+        }
+        if (achados.length > 1) {
+          return JSON.stringify({ erro: true, error: "Mais de um cartão corresponde; peça ao usuário para especificar.", cartoes: achados.map((c) => c.nome) });
+        }
+        const saldo = await getSaldoCartaoEmpresa(achados[0].id);
+        return JSON.stringify(saldo);
+      }
+
+      case "listar_formas_empresa": {
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        if ("erro" in empresa) return JSON.stringify(empresa);
+        const formas = await garantirFormasPadrao(empresa.id);
+        return JSON.stringify({
+          formas: formas.filter((f) => f.ativo).map((f) => ({ id: f.id, nome: f.nome, tipo: f.tipo })),
+        });
+      }
+
+      case "cadastrar_forma_empresa": {
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        if ("erro" in empresa) return JSON.stringify(empresa);
+        try {
+          const forma = await criarFormaPj(empresa.id, { nome: args.nome, tipo: args.tipo });
+          return JSON.stringify({ success: true, forma: forma.nome, tipo: forma.tipo, id: forma.id });
+        } catch (e: any) {
+          return JSON.stringify({ success: false, error: e?.message || "Erro ao cadastrar forma" });
+        }
       }
 
       default:
@@ -1558,6 +2175,43 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
     console.error(`[AI Agent] Erro ao executar tool '${name}':`, err.message);
     return JSON.stringify({ error: err.message });
   }
+}
+
+// Converte os argumentos de período das tools PJ em { de, ate }.
+// Aceita mes/ano (o jeito que o usuário fala: "em março") ou de/ate soltos.
+// Sem nada, devolve {} e o storage assume o mês corrente.
+function periodoDeArgs(args: any): { de?: string; ate?: string } {
+  if (args?.de || args?.ate) return { de: args.de, ate: args.ate };
+  const mes = Number(args?.mes);
+  if (!mes || mes < 1 || mes > 12) return {};
+  const ano = Number(args?.ano) || new Date().getFullYear();
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  return { de: iso(new Date(ano, mes - 1, 1)), ate: iso(new Date(ano, mes, 0)) };
+}
+
+// Formata o resultado de uma busca por filtro no padrão de desambiguação que o
+// prompt manda seguir (mesmo espírito do resolverEmpresa).
+function respostaBusca(achados: CandidatoTransacao[]) {
+  if (achados.length === 0) {
+    return {
+      encontrou: false,
+      motivo: "nenhum",
+      instrucao: "Não achei nenhum lançamento com esses dados. PEÇA ao usuário o código da transação — ele foi enviado na confirmação de quando o lançamento foi registrado.",
+    };
+  }
+  if (achados.length === 1) {
+    return {
+      encontrou: true,
+      transacao: achados[0],
+      instrucao: "Mostre este lançamento ao usuário e PEÇA CONFIRMAÇÃO antes de editar.",
+    };
+  }
+  return {
+    encontrou: false,
+    motivo: "ambiguo",
+    candidatos: achados,
+    instrucao: "Achei mais de um lançamento parecido. LISTE os candidatos mostrando o código de cada um e peça ao usuário para escolher pelo código.",
+  };
 }
 
 // Resolve a empresa do usuário por nome/parte; garante que pertence a ele.
@@ -1666,6 +2320,18 @@ export async function runAgent(
 - Ao lançar, passe em 'conta' o CÓDIGO do plano (ex.: 3.01). Compra de mercadoria = 3.01. Venda = 1.01. Serviço prestado = 1.02. Imposto / IPVA / documento do carro = 2.05.
 - Se não tiver certeza, mesmo assim LANCE. O sistema escolhe a melhor conta; se não achar, usa Outras Receitas ou Outras Despesas. Diga a conta usada. Se for Outras, avise que dá para mudar depois em Transações PJ.
 
+### Ferramentas desta empresa (use SEMPRE as versões _empresa)
+Este usuário NÃO tem carteira pessoal ativa. Toda consulta, edição e cadastro é da EMPRESA:
+- Quanto faturou / total de receita / total de despesa / saldo de um mês → 'resumo_empresa' (passe 'mes' e, se citarem outro ano, 'ano'). NUNCA responda "não encontrei" sem antes chamar essa ferramenta.
+- DRE, margem, lucro → 'dre_empresa'. Comparar dois meses → 'comparar_periodos_empresa'.
+- Onde a empresa mais gasta / gasto por conta → 'gastos_por_conta_empresa'. Evolução do ano → 'fluxo_caixa_empresa'.
+- Editar/corrigir um lançamento → 'buscar_transacao_empresa_por_filtro' → 'atualiza_transacao_empresa' (siga o fluxo da seção 5, sempre confirmando antes).
+- Criar conta no plano → 'criar_conta_empresa'. O CÓDIGO é gerado automaticamente na sequência: não peça código ao usuário nem invente um. Pergunte só o nome e, se for despesa e não der para deduzir, se é FIXA ou VARIÁVEL. Depois informe o código que saiu.
+- Cartão de crédito da empresa → 'cadastrar_cartao_empresa' (peça dia de fechamento e dia de vencimento numa pergunta só; nunca invente esses dias), 'listar_cartoes_empresa', 'fatura_cartao_empresa', 'saldo_cartao_empresa' (limite/usado/disponível).
+- Formas de pagamento (PIX, boleto, débito) → 'listar_formas_empresa', 'cadastrar_forma_empresa'. Cartão NÃO é forma — é 'cadastrar_cartao_empresa'.
+- Baixar / marcar como paga uma conta Pendente → 'pagar_transacao_empresa' (depois de confirmar o lançamento).
+- NÃO ofereça gráfico nem lembrete no modo empresa (ainda não existem no PJ). Responda com os números e, se couber, indique a tela de Relatórios PJ no app.
+
 ### Plano de contas desta empresa
 ${planoLinhas || "(não foi possível listar as contas)"}
 `;
@@ -1682,7 +2348,8 @@ ${planoLinhas || "(não foi possível listar as contas)"}
 - NÃO registre lançamento(s) agora. Primeiro RESUMA o que entendeu: descrição, categoria provável, data e VALOR (e o total, se houver vários itens).
 - Termine perguntando: "Confirma o lançamento? Responda *SIM* para registrar, ou me diga o que corrigir."
 - Só use as ferramentas de lançamento (insere_transacao / lancar_empresa) DEPOIS que o usuário confirmar (ex.: responder "sim", "pode lançar", "confirmo") numa próxima mensagem.
-- Se o usuário já mandou a mídia junto com uma confirmação explícita no texto (ex.: "pode lançar essa nota"), aí sim pode registrar direto.`;
+- Se o usuário já mandou a mídia junto com uma confirmação explícita no texto (ex.: "pode lançar essa nota"), aí sim pode registrar direto.
+- A MESMA regra vale para CRIAR CONTA do plano ('criar_conta_empresa') e para EDITAR lançamento: transcrição de áudio erra nome de conta e valor com facilidade. Repita o que entendeu ("criar a conta *Manutenção de Veículos* como Despesa Variável — confirma?") e só execute depois do "sim".`;
   }
 
   const categoriasBloco = (ctx.tipoPessoa === "juridica" && ctx.empresaAtiva)
@@ -1706,7 +2373,8 @@ ${ctx.categories.map(c => `- ${c.nome} (${c.tipo})`).join("\n")}`;
     { role: "user", content: userMessage },
   ];
 
-  const tools = buildTools();
+  // Com empresa ativa, só as ferramentas PJ entram na lista (isolamento).
+  const tools = buildTools(ctx);
   const maxIterations = 8; // safety net
   let ultimaToolExecutada: string | null = null;
   let ultimoResultadoTool: string | null = null;

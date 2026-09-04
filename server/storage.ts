@@ -19,6 +19,7 @@ import {
   empresas,
   empresasContas,
   empresasTransacoes,
+  empresasFormasPagamento,
   getSaoPauloTimestamp,
   type User,
   type InsertUser,
@@ -268,6 +269,7 @@ export interface IStorage {
   seedEmpresasContas(empresaId: number): Promise<EmpresaConta[]>;
   getEmpresasContasByEmpresaId(empresaId: number): Promise<EmpresaConta[]>;
   getEmpresaContaById(id: number): Promise<EmpresaConta | undefined>;
+  proximoCodigoConta(empresaId: number, tipo: string, classificacao?: string | null): Promise<string>;
   createEmpresaConta(contaData: InsertEmpresaConta): Promise<EmpresaConta>;
   updateEmpresaConta(id: number, contaData: UpdateEmpresaConta): Promise<EmpresaConta | undefined>;
   deleteEmpresaConta(id: number): Promise<boolean>;
@@ -1659,12 +1661,55 @@ export class DbStorage implements IStorage {
     return result[0];
   }
 
+  // Próximo código livre da sequência, no mesmo padrão G.NN do plano base
+  // (seedEmpresasContas): 1=Receita, 2=Despesa FIXA, 3=Despesa VARIAVEL, 4=Despesa OUTRA.
+  async proximoCodigoConta(empresaId: number, tipo: string, classificacao?: string | null): Promise<string> {
+    const grupo = tipo === 'Receita'
+      ? '1'
+      : ({ FIXA: '2', VARIAVEL: '3' } as Record<string, string>)[(classificacao || 'OUTRA').toUpperCase()] || '4';
+
+    // Consulta a tabela direto (e não getEmpresasContasByEmpresaId, que filtra
+    // ativo=true): a constraint única não ignora conta inativa.
+    const rows = await db.execute(sql`
+      SELECT codigo FROM empresas_contas
+      WHERE empresa_id = ${empresaId} AND codigo LIKE ${grupo + '.%'}
+    `);
+
+    let maior = 0;
+    for (const r of rows as any[]) {
+      const m = String(r.codigo).match(/^\d+\.(\d+)$/);
+      if (m) maior = Math.max(maior, parseInt(m[1], 10));
+    }
+    return `${grupo}.${String(maior + 1).padStart(2, '0')}`;
+  }
+
   async createEmpresaConta(contaData: InsertEmpresaConta): Promise<EmpresaConta> {
-    const result = await db.insert(empresasContas).values({
+    const inserir = (codigo: string) => db.insert(empresasContas).values({
       ...contaData,
+      codigo,
       created_at: new Date()
-    }).returning();
-    return result[0];
+    } as any).returning();
+
+    if (contaData.codigo) {
+      const result = await inserir(contaData.codigo);
+      return result[0];
+    }
+
+    // Sem código informado: gera na sequência. Em corrida (23505), tenta o próximo.
+    for (let tentativa = 0; tentativa < 5; tentativa++) {
+      const codigo = await this.proximoCodigoConta(
+        contaData.empresa_id!,
+        contaData.tipo,
+        contaData.classificacao,
+      );
+      try {
+        const result = await inserir(codigo);
+        return result[0];
+      } catch (err: any) {
+        if (err?.code !== '23505') throw err;
+      }
+    }
+    throw new Error('Não foi possível gerar um código livre para a conta.');
   }
 
   async updateEmpresaConta(id: number, contaData: UpdateEmpresaConta): Promise<EmpresaConta | undefined> {
@@ -1707,6 +1752,7 @@ export class DbStorage implements IStorage {
       carteira_id: empresasTransacoes.carteira_id,
       categoria_id: empresasTransacoes.categoria_id,
       forma_pagamento_id: empresasTransacoes.forma_pagamento_id,
+      empresa_forma_pagamento_id: empresasTransacoes.empresa_forma_pagamento_id,
       descricao: empresasTransacoes.descricao,
       valor: empresasTransacoes.valor,
       tipo: empresasTransacoes.tipo,
@@ -1717,15 +1763,18 @@ export class DbStorage implements IStorage {
       origem: empresasTransacoes.origem,
       reembolso_pessoal: empresasTransacoes.reembolso_pessoal,
       data_vencimento: empresasTransacoes.data_vencimento,
+      data_pagamento: empresasTransacoes.data_pagamento,
       itens_agrupados: empresasTransacoes.itens_agrupados,
       categoria_nome: empresasContas.nome,
       categoria_classificacao: empresasContas.classificacao,
       categoria_codigo: empresasContas.codigo,
-      metodo_pagamento_nome: paymentMethods.nome
+      metodo_pagamento_nome: paymentMethods.nome,
+      empresa_forma_nome: empresasFormasPagamento.nome,
     })
       .from(empresasTransacoes)
       .leftJoin(empresasContas, eq(empresasTransacoes.categoria_id, empresasContas.id))
       .leftJoin(paymentMethods, eq(empresasTransacoes.forma_pagamento_id, paymentMethods.id))
+      .leftJoin(empresasFormasPagamento, eq(empresasTransacoes.empresa_forma_pagamento_id, empresasFormasPagamento.id))
       .where(and(...conditions))
       .orderBy(desc(empresasTransacoes.data_transacao), desc(empresasTransacoes.data_registro));
 
@@ -1734,7 +1783,7 @@ export class DbStorage implements IStorage {
     const rows = await q;
     return rows.map((r: any) => ({
       ...r,
-      metodo_pagamento: r.metodo_pagamento_nome ?? r.metodo_pagamento ?? null
+      metodo_pagamento: r.empresa_forma_nome ?? r.metodo_pagamento ?? r.metodo_pagamento_nome ?? null,
     })) as EmpresaTransacaoWithDetails[];
   }
 
@@ -1745,6 +1794,7 @@ export class DbStorage implements IStorage {
       carteira_id: empresasTransacoes.carteira_id,
       categoria_id: empresasTransacoes.categoria_id,
       forma_pagamento_id: empresasTransacoes.forma_pagamento_id,
+      empresa_forma_pagamento_id: empresasTransacoes.empresa_forma_pagamento_id,
       descricao: empresasTransacoes.descricao,
       valor: empresasTransacoes.valor,
       tipo: empresasTransacoes.tipo,
@@ -1755,15 +1805,18 @@ export class DbStorage implements IStorage {
       origem: empresasTransacoes.origem,
       reembolso_pessoal: empresasTransacoes.reembolso_pessoal,
       data_vencimento: empresasTransacoes.data_vencimento,
+      data_pagamento: empresasTransacoes.data_pagamento,
       itens_agrupados: empresasTransacoes.itens_agrupados,
       categoria_nome: empresasContas.nome,
       categoria_classificacao: empresasContas.classificacao,
       categoria_codigo: empresasContas.codigo,
-      metodo_pagamento_nome: paymentMethods.nome
+      metodo_pagamento_nome: paymentMethods.nome,
+      empresa_forma_nome: empresasFormasPagamento.nome,
     })
       .from(empresasTransacoes)
       .leftJoin(empresasContas, eq(empresasTransacoes.categoria_id, empresasContas.id))
       .leftJoin(paymentMethods, eq(empresasTransacoes.forma_pagamento_id, paymentMethods.id))
+      .leftJoin(empresasFormasPagamento, eq(empresasTransacoes.empresa_forma_pagamento_id, empresasFormasPagamento.id))
       .where(eq(empresasTransacoes.id, id))
       .limit(1);
 
@@ -1771,7 +1824,7 @@ export class DbStorage implements IStorage {
     if (!row) return undefined;
     return {
       ...row,
-      metodo_pagamento: (row as any).metodo_pagamento_nome ?? row.metodo_pagamento ?? null
+      metodo_pagamento: (row as any).empresa_forma_nome ?? row.metodo_pagamento ?? (row as any).metodo_pagamento_nome ?? null,
     } as EmpresaTransacaoWithDetails;
   }
 
@@ -3118,6 +3171,101 @@ export async function getStatusOrcamentoContaPJ(
 export async function transacaoPertenceAoWallet(transacaoId: number, walletId: number): Promise<boolean> {
   const rows = await db.execute(sql`SELECT 1 FROM transacoes WHERE id = ${transacaoId} AND carteira_id = ${walletId} LIMIT 1`);
   return (rows as any[]).length > 0;
+}
+
+// Confirma que a transação PJ pertence à empresa (isolamento PJ).
+export async function empresaTransacaoPertenceAEmpresa(transacaoId: number, empresaId: number): Promise<boolean> {
+  const rows = await db.execute(sql`SELECT 1 FROM empresas_transacoes WHERE id = ${transacaoId} AND empresa_id = ${empresaId} LIMIT 1`);
+  return (rows as any[]).length > 0;
+}
+
+// ============================================
+// Busca de transação por descrição/valor/data (usada pelo agente para EDITAR)
+// ============================================
+
+export interface FiltroBuscaTransacao {
+  descricao?: string;
+  valor?: number;
+  data_inicio?: string;
+  data_fim?: string;
+  tipo?: string;
+}
+
+export interface CandidatoTransacao {
+  id: number;
+  descricao: string;
+  valor: number;
+  data: string;
+  tipo: string;
+  categoria: string | null;
+}
+
+// Teto de candidatos devolvidos: o suficiente para o usuário escolher pelo
+// código no WhatsApp sem virar uma parede de texto.
+const LIMITE_CANDIDATOS = 8;
+// "era 80" pode ser 79,90 no lançamento — casa por aproximação, não por igualdade.
+const TOLERANCIA_VALOR = 0.05;
+
+// Monta as condições comuns às buscas PF e PJ. 'alias' é o prefixo da tabela.
+function condicoesBusca(filtro: FiltroBuscaTransacao, alias: string): any[] {
+  const cond: any[] = [];
+  const col = (c: string) => sql.raw(`${alias}.${c}`);
+
+  if (filtro.descricao) {
+    // Casa por qualquer palavra relevante: "mercado de ontem" acha "Compras
+    // Supermercado". Se sobrar mais de um, o fluxo de desambiguação assume.
+    const termos = filtro.descricao
+      .split(/\s+/)
+      .map((t) => t.trim())
+      .filter((t) => t.length >= 3);
+    const alvos = termos.length > 0 ? termos : [filtro.descricao];
+    cond.push(sql.join(alvos.map((t) => sql`${col('descricao')} ILIKE ${'%' + t + '%'}`), sql` OR `));
+  }
+  if (typeof filtro.valor === "number" && !isNaN(filtro.valor)) {
+    const margem = Math.max(Math.abs(filtro.valor) * TOLERANCIA_VALOR, 0.01);
+    cond.push(sql`ABS(${col('valor')}::numeric - ${filtro.valor}) <= ${margem}`);
+  }
+  if (filtro.data_inicio) cond.push(sql`${col('data_transacao')} >= ${filtro.data_inicio}`);
+  if (filtro.data_fim) cond.push(sql`${col('data_transacao')} <= ${filtro.data_fim}`);
+  if (filtro.tipo) cond.push(sql`${col('tipo')} = ${filtro.tipo}`);
+
+  return cond;
+}
+
+// PF — busca restrita à carteira do usuário (nunca vaza transação de outro).
+export async function buscarTransacoesPorFiltro(
+  walletId: number,
+  filtro: FiltroBuscaTransacao,
+): Promise<CandidatoTransacao[]> {
+  const cond = [sql`t.carteira_id = ${walletId}`, ...condicoesBusca(filtro, "t")];
+  const rows = await db.execute(sql`
+    SELECT t.id, t.descricao, t.valor::float8 AS valor, t.data_transacao::text AS data,
+           t.tipo, c.nome AS categoria
+    FROM transacoes t
+    LEFT JOIN categorias c ON c.id = t.categoria_id
+    WHERE ${sql.join(cond.map((c) => sql`(${c})`), sql` AND `)}
+    ORDER BY t.data_transacao DESC, t.id DESC
+    LIMIT ${LIMITE_CANDIDATOS}
+  `);
+  return rows as unknown as CandidatoTransacao[];
+}
+
+// PJ — busca restrita à empresa (nunca vaza transação de outra empresa nem do PF).
+export async function buscarEmpresaTransacoesPorFiltro(
+  empresaId: number,
+  filtro: FiltroBuscaTransacao,
+): Promise<CandidatoTransacao[]> {
+  const cond = [sql`t.empresa_id = ${empresaId}`, ...condicoesBusca(filtro, "t")];
+  const rows = await db.execute(sql`
+    SELECT t.id, t.descricao, t.valor::float8 AS valor, t.data_transacao::text AS data,
+           t.tipo, (c.codigo || ' — ' || c.nome) AS categoria
+    FROM empresas_transacoes t
+    LEFT JOIN empresas_contas c ON c.id = t.categoria_id
+    WHERE ${sql.join(cond.map((c) => sql`(${c})`), sql` AND `)}
+    ORDER BY t.data_transacao DESC, t.id DESC
+    LIMIT ${LIMITE_CANDIDATOS}
+  `);
+  return rows as unknown as CandidatoTransacao[];
 }
 
 // Soft delete: move a transação para a lixeira (mantém 30 dias) e remove da tabela.

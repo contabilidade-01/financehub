@@ -759,8 +759,24 @@ export const empresasTransacoes = pgTable("empresas_transacoes", {
   // Empresa deve à pessoa (grupo "Reembolsos a Pagar — Pessoal").
   reembolso_pessoal: boolean("reembolso_pessoal").notNull().default(false),
   data_vencimento: date("data_vencimento"),
+  // Quando a conta Pendente foi baixada (marcada como paga).
+  data_pagamento: date("data_pagamento"),
   itens_agrupados: integer("itens_agrupados"),
+  // Forma de pagamento da EMPRESA (PIX/boleto/débito…). Isolada do PF.
+  empresa_forma_pagamento_id: integer("empresa_forma_pagamento_id"),
 });
+
+// Formas de pagamento PJ (não-cartão). Cartões ficam em empresas_cartoes.
+export const empresasFormasPagamento = pgTable("empresas_formas_pagamento", {
+  id: serial("id").primaryKey(),
+  empresa_id: integer("empresa_id").notNull().references(() => empresas.id, { onDelete: 'cascade' }),
+  nome: varchar("nome", { length: 100 }).notNull(),
+  tipo: varchar("tipo", { length: 30 }).notNull().default('outro'), // pix|boleto|debito|transferencia|dinheiro|outro
+  ativo: boolean("ativo").notNull().default(true),
+  criado_em: timestamp("criado_em", { withTimezone: true }).default(sql`(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')`),
+}, (table) => [
+  unique().on(table.empresa_id, table.nome)
+]);
 
 // ----- Schemas Zod PJ -----
 
@@ -788,7 +804,9 @@ export const updateEmpresaSchema = insertEmpresaSchema.partial();
 
 export const insertEmpresaContaSchema = z.object({
   empresa_id: z.number().int().optional(),
-  codigo: z.string().min(1, { message: 'Código é obrigatório' }),
+  // Opcional: quando não vier, o storage gera o próximo código da sequência do
+  // grupo (tipo × classificacao), no mesmo padrão G.NN do plano de contas base.
+  codigo: z.string().min(1).optional(),
   nome: z.string().min(1, { message: 'Nome é obrigatório' }),
   tipo: empresaContaTipoSchema,
   classificacao: empresaContaClassificacaoSchema,
@@ -808,6 +826,7 @@ export const insertEmpresaTransacaoSchema = z.object({
   carteira_id: flexibleNumberSchema.optional(),
   categoria_id: flexibleNumberSchema,
   forma_pagamento_id: flexibleNumberSchema.optional(),
+  empresa_forma_pagamento_id: flexibleNumberSchema.optional().nullable(),
   descricao: z.string().min(1, { message: 'Descrição é obrigatória' }),
   valor: flexibleNumberSchema,
   tipo: z.string().transform(normalizeTransactionType),
@@ -821,12 +840,14 @@ export const insertEmpresaTransacaoSchema = z.object({
   competencia: z.string().optional().nullable(),
   reembolso_pessoal: z.boolean().optional().default(false),
   data_vencimento: z.string().transform(normalizeDateFormat).optional().nullable(),
+  data_pagamento: z.string().transform(normalizeDateFormat).optional().nullable(),
   itens_agrupados: z.number().int().optional().nullable(),
 });
 
 export const updateEmpresaTransacaoSchema = z.object({
   categoria_id: flexibleNumberSchema.optional(),
   forma_pagamento_id: flexibleNumberSchema.optional(),
+  empresa_forma_pagamento_id: flexibleNumberSchema.optional().nullable(),
   descricao: z.string().min(1).optional(),
   valor: flexibleNumberSchema.optional(),
   tipo: z.string().transform(normalizeTransactionType).optional(),
@@ -836,7 +857,18 @@ export const updateEmpresaTransacaoSchema = z.object({
   origem: z.string().optional(),
   reembolso_pessoal: z.boolean().optional(),
   data_vencimento: z.string().optional().nullable(),
+  data_pagamento: z.string().optional().nullable(),
+  movimenta_caixa: z.boolean().optional(),
 });
+
+export const insertEmpresaFormaPagamentoSchema = z.object({
+  empresa_id: z.number().int().optional(),
+  nome: z.string().min(1, { message: 'Nome é obrigatório' }),
+  tipo: z.enum(['pix', 'boleto', 'debito', 'transferencia', 'dinheiro', 'outro']).optional().default('outro'),
+  ativo: z.boolean().optional().default(true),
+});
+
+export const updateEmpresaFormaPagamentoSchema = insertEmpresaFormaPagamentoSchema.partial();
 
 // ----- Types PJ -----
 
@@ -852,11 +884,16 @@ export type EmpresaTransacao = typeof empresasTransacoes.$inferSelect;
 export type InsertEmpresaTransacao = z.infer<typeof insertEmpresaTransacaoSchema>;
 export type UpdateEmpresaTransacao = z.infer<typeof updateEmpresaTransacaoSchema>;
 
+export type EmpresaFormaPagamento = typeof empresasFormasPagamento.$inferSelect;
+export type InsertEmpresaFormaPagamento = z.infer<typeof insertEmpresaFormaPagamentoSchema>;
+export type UpdateEmpresaFormaPagamento = z.infer<typeof updateEmpresaFormaPagamentoSchema>;
+
 export type EmpresaTransacaoWithDetails = EmpresaTransacao & {
   categoria_nome?: string;
   categoria_classificacao?: string;
   categoria_codigo?: string;
   metodo_pagamento?: string;
+  metodo_pagamento_nome?: string | null;
 };
 
 // Enum para classificação das contas PJ (usado no frontend)

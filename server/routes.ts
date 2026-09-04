@@ -1316,7 +1316,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/empresas/:id/transacoes", combinedAuth, empresaTransacaoCtrl.listEmpresaTransacoes);
   app.get("/api/empresas/:id/transacoes/:transacaoId", combinedAuth, empresaTransacaoCtrl.getEmpresaTransacao);
   app.put("/api/empresas/:id/transacoes/:transacaoId", combinedAuth, empresaTransacaoCtrl.updateEmpresaTransacao);
+  app.put("/api/empresas/:id/transacoes/:transacaoId/pagar", combinedAuth, empresaTransacaoCtrl.pagarEmpresaTransacao);
   app.delete("/api/empresas/:id/transacoes/:transacaoId", combinedAuth, empresaTransacaoCtrl.deleteEmpresaTransacao);
+
+  // Formas de pagamento PJ (PIX, boleto, débito…) — isoladas do PF
+  app.get("/api/empresas/:id/formas-pagamento", combinedAuth, empresaTransacaoCtrl.listEmpresaFormas);
+  app.post("/api/empresas/:id/formas-pagamento", combinedAuth, empresaTransacaoCtrl.createEmpresaForma);
+  app.put("/api/empresas/:id/formas-pagamento/:formaId", combinedAuth, empresaTransacaoCtrl.updateEmpresaForma);
+  app.delete("/api/empresas/:id/formas-pagamento/:formaId", combinedAuth, empresaTransacaoCtrl.deleteEmpresaForma);
 
   // Dashboard e relatórios PJ
   app.get("/api/empresas/:id/dashboard/resumo", combinedAuth, empresaTransacaoCtrl.getEmpresaResumo);
@@ -1328,10 +1335,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const empresaFaturaCtrl = await import("./controllers/empresaFatura.controller");
   const uploadFatura = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
   app.get("/api/empresas/:id/cartoes", combinedAuth, empresaFaturaCtrl.listarCartoes);
+  app.get("/api/empresas/:id/cartoes-com-saldo", combinedAuth, empresaFaturaCtrl.listarCartoesComSaldo);
   app.post("/api/empresas/:id/cartoes", combinedAuth, empresaFaturaCtrl.criarCartao);
   app.delete("/api/empresas/:id/cartoes/:cartaoId", combinedAuth, empresaFaturaCtrl.excluirCartao);
   app.post("/api/empresas/:id/cartoes/:cartaoId/compras", combinedAuth, empresaFaturaCtrl.registrarCompra);
   app.get("/api/empresas/:id/cartoes/:cartaoId/faturas", combinedAuth, empresaFaturaCtrl.listarFaturas);
+  app.get("/api/empresas/:id/cartoes/:cartaoId/saldo", combinedAuth, empresaFaturaCtrl.saldoCartao);
   app.get("/api/empresas/:id/faturas/:faturaId", combinedAuth, empresaFaturaCtrl.detalheFatura);
   app.post("/api/empresas/:id/faturas/:faturaId/fechar", combinedAuth, empresaFaturaCtrl.fecharFatura);
   app.post("/api/empresas/:id/faturas/:faturaId/pagar", combinedAuth, empresaFaturaCtrl.pagarFatura);

@@ -69,6 +69,24 @@ export async function listarFaturas(req: Request, res: Response) {
   return res.json({ cartao, faturas: await fatura.listarFaturas(cartao.id) });
 }
 
+// GET /api/empresas/:id/cartoes/:cartaoId/saldo
+export async function saldoCartao(req: Request, res: Response) {
+  const empresaId = await guardEmpresa(req, res); if (!empresaId) return;
+  const cartao = await fatura.cartaoDoUsuario(Number(req.params.cartaoId), req.user!.id);
+  if (!cartao || cartao.empresa_id !== empresaId) return res.status(404).json({ error: "Cartão não encontrado" });
+  try {
+    return res.json(await fatura.getSaldoCartaoEmpresa(cartao.id));
+  } catch (e: any) {
+    return res.status(400).json({ error: e?.message || "Erro ao calcular saldo" });
+  }
+}
+
+// GET /api/empresas/:id/cartoes-com-saldo
+export async function listarCartoesComSaldo(req: Request, res: Response) {
+  const empresaId = await guardEmpresa(req, res); if (!empresaId) return;
+  return res.json(await fatura.listarCartoesComSaldo(empresaId));
+}
+
 // GET /api/empresas/:id/faturas/:faturaId
 export async function detalheFatura(req: Request, res: Response) {
   const empresaId = await guardEmpresa(req, res); if (!empresaId) return;

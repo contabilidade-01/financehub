@@ -13,6 +13,7 @@ import ConciliacaoPage from "@/pages/pj/conciliacao";
 import MetasPage from "@/pages/metas";
 import ImportarLancamentosPj from "@/pages/pj/importar";
 import PjReembolsos from "@/pages/pj/reembolsos";
+import PjFormasPagamento from "@/pages/pj/formas-pagamento";
 
 /**
  * PjRouter — resolve a empresa ativa e renderiza o componente PJ correto.
@@ -80,6 +81,8 @@ export default function PjRouter() {
         return <PjRelatorios empresaId={empresaAtiva} />;
       case "faturas":
         return <PjFaturas empresaId={empresaAtiva} />;
+      case "formas-pagamento":
+        return <PjFormasPagamento empresaId={empresaAtiva} />;
       case "conciliacao":
         return <ConciliacaoPage empresaId={empresaAtiva} />;
       case "importar":

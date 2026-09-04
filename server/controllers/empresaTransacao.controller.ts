@@ -1,7 +1,9 @@
 import { Request, Response } from "express";
 import { storage } from "../storage";
 import { softDeleteEmpresaTransacao, restaurarUltimaExcluidaPJ, listarLixeiraPJ } from "../storage";
-import { insertEmpresaTransacaoSchema, updateEmpresaTransacaoSchema } from "../../shared/schema";
+import { insertEmpresaTransacaoSchema } from "../../shared/schema";
+import { atualizarTransacaoEmpresa, baixarTransacaoEmpresa } from "../services/empresa-transacao.service";
+import * as formas from "../services/empresa-forma.service";
 
 /**
  * Controller: empresaTransacao
@@ -57,9 +59,20 @@ export const createEmpresaTransacao = async (req: Request, res: Response) => {
       });
     }
 
+    // Forma PJ: resolve nome para metodo_pagamento (filtro/exibição).
+    let metodoPagamento = parsed.data.metodo_pagamento ?? null;
+    let empresaFormaId = parsed.data.empresa_forma_pagamento_id ?? null;
+    if (empresaFormaId) {
+      const forma = await formas.getFormaById(empresaId, Number(empresaFormaId));
+      if (!forma) return res.status(400).json({ error: "Forma de pagamento não encontrada." });
+      metodoPagamento = forma.nome;
+    }
+
     const transacao = await storage.createEmpresaTransacao({
       ...parsed.data,
       empresa_id: empresaId,
+      empresa_forma_pagamento_id: empresaFormaId,
+      metodo_pagamento: metodoPagamento,
       origem: (req.body.origem as string) ?? 'manual'
     });
 
@@ -128,29 +141,13 @@ export const updateEmpresaTransacao = async (req: Request, res: Response) => {
     const transacaoId = parseInt(req.params.transacaoId);
     if (isNaN(empresaId) || isNaN(transacaoId)) return res.status(400).json({ error: "ID inválido." });
 
-    const empresa = await resolveEmpresa(empresaId, userId, res);
-    if (!empresa) return;
-
-    const transacao = await storage.getEmpresaTransacaoById(transacaoId);
-    if (!transacao) return res.status(404).json({ error: "Transação não encontrada." });
-    if (transacao.empresa_id !== empresaId) return res.status(403).json({ error: "Transação não pertence a esta empresa." });
-
-    const parsed = updateEmpresaTransacaoSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ error: "Dados inválidos", details: parsed.error.errors });
+    // Posse e validações ficam no serviço, compartilhado com a tool do agente.
+    const resultado = await atualizarTransacaoEmpresa(empresaId, transacaoId, userId, req.body);
+    if (!resultado.ok) {
+      return res.status(resultado.status).json({ error: resultado.error, details: resultado.details });
     }
 
-    // Se trocou a categoria, valida novamente
-    if (parsed.data.categoria_id) {
-      const conta = await storage.getEmpresaContaById(parsed.data.categoria_id as number);
-      if (!conta) return res.status(400).json({ error: "Categoria não encontrada." });
-      if (conta.empresa_id !== empresaId) {
-        return res.status(400).json({ error: "Categoria não pertence a esta empresa." });
-      }
-    }
-
-    const updated = await storage.updateEmpresaTransacao(transacaoId, parsed.data);
-    return res.json(updated);
+    return res.json(resultado.transacao);
   } catch (err) {
     console.error("updateEmpresaTransacao:", err);
     return res.status(500).json({ error: "Erro interno." });
@@ -179,6 +176,97 @@ export const deleteEmpresaTransacao = async (req: Request, res: Response) => {
     return res.status(204).send();
   } catch (err) {
     console.error("deleteEmpresaTransacao:", err);
+    return res.status(500).json({ error: "Erro interno." });
+  }
+};
+
+// PUT /api/empresas/:id/transacoes/:transacaoId/pagar
+// Baixa conta a pagar: Pendente → Efetivada + data_pagamento + movimenta_caixa.
+export const pagarEmpresaTransacao = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const empresaId = parseInt(req.params.id);
+    const transacaoId = parseInt(req.params.transacaoId);
+    if (isNaN(empresaId) || isNaN(transacaoId)) return res.status(400).json({ error: "ID inválido." });
+
+    const resultado = await baixarTransacaoEmpresa(
+      empresaId,
+      transacaoId,
+      userId,
+      req.body?.data_pagamento,
+    );
+    if (!resultado.ok) {
+      return res.status(resultado.status).json({ error: resultado.error });
+    }
+    return res.json(resultado.transacao);
+  } catch (err) {
+    console.error("pagarEmpresaTransacao:", err);
+    return res.status(500).json({ error: "Erro interno." });
+  }
+};
+
+// ----- Formas de pagamento PJ -----
+
+export const listEmpresaFormas = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const empresaId = parseInt(req.params.id);
+    if (isNaN(empresaId)) return res.status(400).json({ error: "ID inválido." });
+    const empresa = await resolveEmpresa(empresaId, userId, res);
+    if (!empresa) return;
+    const lista = await formas.garantirFormasPadrao(empresaId);
+    return res.json(lista);
+  } catch (err) {
+    console.error("listEmpresaFormas:", err);
+    return res.status(500).json({ error: "Erro interno." });
+  }
+};
+
+export const createEmpresaForma = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const empresaId = parseInt(req.params.id);
+    if (isNaN(empresaId)) return res.status(400).json({ error: "ID inválido." });
+    const empresa = await resolveEmpresa(empresaId, userId, res);
+    if (!empresa) return;
+    const criada = await formas.criarForma(empresaId, req.body || {});
+    return res.status(201).json(criada);
+  } catch (err: any) {
+    console.error("createEmpresaForma:", err);
+    return res.status(err?.status || 500).json({ error: err?.message || "Erro interno." });
+  }
+};
+
+export const updateEmpresaForma = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const empresaId = parseInt(req.params.id);
+    const formaId = parseInt(req.params.formaId);
+    if (isNaN(empresaId) || isNaN(formaId)) return res.status(400).json({ error: "ID inválido." });
+    const empresa = await resolveEmpresa(empresaId, userId, res);
+    if (!empresa) return;
+    const upd = await formas.atualizarForma(empresaId, formaId, req.body || {});
+    if (!upd) return res.status(404).json({ error: "Forma não encontrada." });
+    return res.json(upd);
+  } catch (err: any) {
+    console.error("updateEmpresaForma:", err);
+    return res.status(500).json({ error: err?.message || "Erro interno." });
+  }
+};
+
+export const deleteEmpresaForma = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const empresaId = parseInt(req.params.id);
+    const formaId = parseInt(req.params.formaId);
+    if (isNaN(empresaId) || isNaN(formaId)) return res.status(400).json({ error: "ID inválido." });
+    const empresa = await resolveEmpresa(empresaId, userId, res);
+    if (!empresa) return;
+    const ok = await formas.excluirForma(empresaId, formaId);
+    if (!ok) return res.status(404).json({ error: "Forma não encontrada." });
+    return res.status(204).send();
+  } catch (err) {
+    console.error("deleteEmpresaForma:", err);
     return res.status(500).json({ error: "Erro interno." });
   }
 };

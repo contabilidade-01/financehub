@@ -13,7 +13,11 @@ import { Plus, CreditCard, Lock, CheckCircle2, Trash2, ShoppingCart, FileUp } fr
 import { apiRequest } from "@/lib/queryClient";
 import type { EmpresaConta } from "@shared/schema";
 
-type Cartao = { id: number; nome: string; bandeira: string | null; dia_fechamento: number; dia_vencimento: number };
+type Cartao = {
+  id: number; nome: string; bandeira: string | null;
+  dia_fechamento: number; dia_vencimento: number;
+  limite?: number; usado?: number; disponivel?: number; percentual?: number;
+};
 type Fatura = { id: number; competencia: string; data_fechamento: string; data_vencimento: string; status: string; total: number };
 const money = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
 const fmt = (d: any) => { if (!d) return "—"; try { return new Date(String(d).slice(0, 10) + "T00:00:00").toLocaleDateString("pt-BR"); } catch { return String(d); } };
@@ -36,7 +40,11 @@ export default function PjFaturas({ empresaId }: { empresaId: number }) {
   const [concLoading, setConcLoading] = useState(false);
 
   const base = `/api/empresas/${empresaId}`;
-  const { data: cartoes = [], isLoading } = useQuery<Cartao[]>({ queryKey: [`${base}/cartoes`], queryFn: () => apiRequest(`${base}/cartoes`), enabled: !!empresaId });
+  const { data: cartoes = [], isLoading } = useQuery<Cartao[]>({
+    queryKey: [`${base}/cartoes-com-saldo`],
+    queryFn: () => apiRequest(`${base}/cartoes-com-saldo`),
+    enabled: !!empresaId,
+  });
   const { data: contas = [] } = useQuery<EmpresaConta[]>({ queryKey: [`${base}/contas`], queryFn: () => apiRequest(`${base}/contas`), enabled: !!empresaId });
   const { data: bancos = [] } = useQuery<any[]>({ queryKey: [`${base}/contas-bancarias`], queryFn: () => apiRequest(`${base}/contas-bancarias`), enabled: !!empresaId });
 
@@ -55,18 +63,19 @@ export default function PjFaturas({ empresaId }: { empresaId: number }) {
 
   const inval = () => {
     qc.invalidateQueries({ queryKey: [`${base}/cartoes`, cartaoAtivo, "faturas"] });
+    qc.invalidateQueries({ queryKey: [`${base}/cartoes-com-saldo`] });
     qc.invalidateQueries({ queryKey: [`${base}/relatorios/fluxo-caixa`] });
     if (faturaAberta) qc.invalidateQueries({ queryKey: [`${base}/faturas`, faturaAberta] });
   };
 
   const createCartao = useMutation({
     mutationFn: (d: any) => apiRequest(`${base}/cartoes`, { method: "POST", data: d }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: [`${base}/cartoes`] }); setNovoCartao(false); setCForm({ nome: "", bandeira: "", limite: "", dia_fechamento: "", dia_vencimento: "" }); toast({ title: "Cartão criado" }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: [`${base}/cartoes`] }); qc.invalidateQueries({ queryKey: [`${base}/cartoes-com-saldo`] }); setNovoCartao(false); setCForm({ nome: "", bandeira: "", limite: "", dia_fechamento: "", dia_vencimento: "" }); toast({ title: "Cartão criado" }); },
     onError: (e: any) => toast({ title: "Erro", description: e?.error || e?.message, variant: "destructive" }),
   });
   const delCartao = useMutation({
     mutationFn: (id: number) => apiRequest(`${base}/cartoes/${id}`, { method: "DELETE" }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: [`${base}/cartoes`] }); setCartaoSel(null); toast({ title: "Cartão excluído" }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: [`${base}/cartoes`] }); qc.invalidateQueries({ queryKey: [`${base}/cartoes-com-saldo`] }); setCartaoSel(null); toast({ title: "Cartão excluído" }); },
   });
   const addCompra = useMutation({
     mutationFn: (d: any) => apiRequest(`${base}/cartoes/${cartaoAtivo}/compras`, { method: "POST", data: d }),
@@ -137,9 +146,18 @@ export default function PjFaturas({ empresaId }: { empresaId: number }) {
         <>
           <div className="flex flex-wrap gap-2 items-center">
             {cartoes.map((c) => (
-              <button key={c.id} onClick={() => setCartaoSel(c.id)} className={`px-4 py-2 rounded-lg border text-sm text-left ${c.id === cartaoAtivo ? "border-primary bg-primary/5" : "border-border"}`}>
+              <button key={c.id} onClick={() => setCartaoSel(c.id)} className={`px-4 py-2 rounded-lg border text-sm text-left min-w-[180px] ${c.id === cartaoAtivo ? "border-primary bg-primary/5" : "border-border"}`}>
                 <div className="font-medium flex items-center gap-2"><CreditCard className="h-4 w-4" /> {c.nome}</div>
                 <div className="text-xs text-muted-foreground">Fecha dia {c.dia_fechamento} · vence dia {c.dia_vencimento}</div>
+                {c.limite != null && Number(c.limite) > 0 ? (
+                  <div className="mt-1 text-xs space-y-0.5">
+                    <div>Limite: {money(Number(c.limite))}</div>
+                    <div className="text-rose-500">Usado: {money(Number(c.usado || 0))} ({Number(c.percentual || 0).toFixed(0)}%)</div>
+                    <div className="text-emerald-600 font-medium">Disponível: {money(Number(c.disponivel || 0))}</div>
+                  </div>
+                ) : (
+                  <div className="mt-1 text-xs text-muted-foreground">Sem limite cadastrado</div>
+                )}
               </button>
             ))}
             {cartaoAtivo && <Button size="sm" variant="outline" onClick={() => setComprando(true)}><ShoppingCart className="h-4 w-4 mr-1" /> Registrar compra</Button>}
