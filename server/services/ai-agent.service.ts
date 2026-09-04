@@ -1708,7 +1708,11 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           const cartao = todos.find(c => c.nome.toLowerCase().includes(args.nome_cartao.toLowerCase()));
           if (!cartao) return JSON.stringify({ error: `Cartão '${args.nome_cartao}' não encontrado. Cadastre com: cadastrar_cartao.` });
           const saldo = await getSaldoCartao(cartao.id, ctx.walletId);
-          return JSON.stringify(saldo);
+          // Sem limite não há disponível: diz isso em texto, senão o template
+          // do prompt imprimiria "Disponível: R$ null".
+          return JSON.stringify(saldo.sem_limite
+            ? { ...saldo, disponivel: null, limite: null, aviso: "Este cartão está sem limite cadastrado — informe o total usado e diga que não dá para calcular o disponível. Ofereça cadastrar o limite." }
+            : saldo);
         } else {
           // Mostrar todos
           const todos = await getCartoesComSaldo(ctx.userId, ctx.walletId);
@@ -1762,8 +1766,12 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       case "parcelar_compra": {
         const parcelas = Math.max(1, Math.min(60, Number(args.parcelas) || 1));
         let valorParcela = Number(args.valor_parcela) || 0;
-        if (!valorParcela && args.valor_total) valorParcela = Math.round((Number(args.valor_total) / parcelas) * 100) / 100;
+        const valorTotalArg = args.valor_total != null ? Number(args.valor_total) : null;
+        if (!valorParcela && valorTotalArg) valorParcela = valorTotalArg / parcelas;
         if (!valorParcela) return JSON.stringify({ error: "Informe valor_total ou valor_parcela." });
+        const valorTotal = valorTotalArg != null && Number.isFinite(valorTotalArg)
+          ? valorTotalArg
+          : valorParcela * parcelas;
 
         // Categoria (por nome, com fallback Outros).
         const catP = ctx.categories.find(c => c.nome.toLowerCase() === (args.categoria || "").toLowerCase() && c.tipo === "Despesa")
@@ -1786,15 +1794,16 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           walletId: ctx.walletId,
           categoriaId: catP!.id,
           descricao: args.descricao || "Compra",
-          valorParcela,
+          valorTotal,
           parcelas,
           formaPagamentoId: formaId,
           dataInicio,
+          usuarioId: ctx.userId,
         });
         const orcamentoP = await getStatusOrcamentoCategoria(ctx.userId, ctx.walletId, catP!.id);
         return JSON.stringify({
           success: true, compra_grupo: r.compra_grupo, parcelas: r.parcelas,
-          valor_parcela: r.valor_parcela, total: Math.round(r.valor_parcela * r.parcelas * 100) / 100,
+          valor_parcela: r.valor_parcela, total: Math.round(valorTotal * 100) / 100,
           categoria: catP?.nome, forma_pagamento: formaNome, ids: r.ids, orcamento: orcamentoP, cartao_incompleto: cartaoIncompletoP,
         });
       }

@@ -222,6 +222,8 @@ Template saldo cartão:
 ✅ Disponível: R$ [disponível]
 🗓 Fecha dia [dia_fechamento] | Vence dia [dia_vencimento]
 
+- **Cartão sem limite cadastrado** (resultado com "sem_limite"): NÃO escreva "Limite: R$ 0" nem "Disponível: R$ 0" — omita essas duas linhas, informe só o usado e diga que não dá para calcular o disponível sem o limite. Ofereça cadastrar: "Quer me dizer o limite desse cartão?"
+
 ### 12. CUPOM FISCAL / NOTA COM MUITOS ITENS
 - Para cupons fiscais, notas de supermercado ou compras com MUITOS itens: registre como UMA TRANSAÇÃO ÚNICA com o VALOR TOTAL.
 - Descrição resumida: "Compras Supermercado [nome]" ou "Compras Mercado".
