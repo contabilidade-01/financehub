@@ -792,8 +792,10 @@ const STEPS: Step[] = [
     run: async () => {
       const { migrarTxsCartaoGenericoPf } = await import("../services/fatura-pf.service");
       const r = await migrarTxsCartaoGenericoPf();
-      if (r.txs > 0) {
-        console.log(`[AutoMigrate] cartão genérico → ${r.txs} txs em ${r.usuarios} usuário(s)`);
+      if (r.txs > 0 || r.promovidos > 0 || r.anexadas > 0) {
+        console.log(
+          `[AutoMigrate] cartões PF → legado:${r.txs} txs/${r.usuarios} user(s), promovidos:${r.promovidos}, anexadas:${r.anexadas}`,
+        );
       }
     },
   },

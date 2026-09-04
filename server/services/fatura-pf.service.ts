@@ -16,16 +16,19 @@ export async function cartaoPfDoUsuario(cartaoId: number, userId: number): Promi
     WHERE id = ${cartaoId}
       AND dia_fechamento IS NOT NULL
       AND dia_vencimento IS NOT NULL
-      AND (usuario_id = ${userId} OR global = true)
+      AND usuario_id = ${userId}
+      AND COALESCE(global, false) = false
     LIMIT 1
   `);
   return (r as any[])[0] || null;
 }
 
 export async function listarCartoesPf(userId: number): Promise<any[]> {
+  // Só cartões do usuário (nunca a forma global genérica).
   const r = await db.execute(sql`
     SELECT * FROM formas_pagamento
-    WHERE (usuario_id = ${userId} OR global = true)
+    WHERE usuario_id = ${userId}
+      AND COALESCE(global, false) = false
       AND dia_fechamento IS NOT NULL
       AND dia_vencimento IS NOT NULL
       AND ativo = true
@@ -323,121 +326,246 @@ export async function listarCartoesComSaldoPf(userId: number): Promise<any[]> {
   }));
 }
 
+const NOME_FORMA_GENERICA_CC = sql`(
+  nome ILIKE 'Cartão de Crédito'
+  OR nome ILIKE 'Cartao de Credito'
+  OR lower(nome) IN ('cartao de credito', 'cartão de crédito', 'cartao_credito', 'credit card', 'cartao', 'cartão')
+)`;
+
+async function garantirCartaoLegadoPf(userId: number): Promise<any | null> {
+  const ins = await db.execute(sql`
+    INSERT INTO formas_pagamento
+      (usuario_id, nome, global, ativo, limite, dia_fechamento, dia_vencimento, cor, icone, descricao)
+    SELECT ${userId}, 'Cartão de Crédito (legado)', false, true, NULL, 1, 10, '#FF6B35', '💳', 'Migrado da forma genérica'
+    WHERE NOT EXISTS (
+      SELECT 1 FROM formas_pagamento
+      WHERE usuario_id = ${userId}
+        AND COALESCE(global, false) = false
+        AND (
+          nome ILIKE 'Cartão de Crédito (legado)'
+          OR lower(nome) = 'cartão de crédito (legado)'
+        )
+    )
+    RETURNING *
+  `);
+  let cartao = (ins as any[])[0] || null;
+  if (!cartao) {
+    const again = await db.execute(sql`
+      SELECT * FROM formas_pagamento
+      WHERE usuario_id = ${userId}
+        AND COALESCE(global, false) = false
+        AND (
+          nome ILIKE 'Cartão de Crédito (legado)'
+          OR lower(nome) LIKE '%legado%'
+        )
+      ORDER BY id ASC LIMIT 1
+    `);
+    cartao = (again as any[])[0] || null;
+  }
+  if (cartao && (cartao.dia_fechamento == null || cartao.dia_vencimento == null)) {
+    await db.execute(sql`
+      UPDATE formas_pagamento
+      SET dia_fechamento = COALESCE(dia_fechamento, 1),
+          dia_vencimento = COALESCE(dia_vencimento, 10)
+      WHERE id = ${cartao.id}
+    `);
+    cartao.dia_fechamento = cartao.dia_fechamento ?? 1;
+    cartao.dia_vencimento = cartao.dia_vencimento ?? 10;
+  }
+  return cartao;
+}
+
+/** Anexa fatura e tira do caixa despesas já vinculadas a um cartão do usuário. */
+async function anexarFaturasDoCartaoPf(
+  userId: number,
+  carteiraId: number,
+  cartao: { id: number; dia_fechamento: number; dia_vencimento: number },
+): Promise<number> {
+  const txsUser = await db.execute(sql`
+    SELECT id, data_transacao
+    FROM transacoes
+    WHERE carteira_id = ${carteiraId}
+      AND forma_pagamento_id = ${cartao.id}
+      AND tipo = 'Despesa'
+      AND NOT EXISTS (SELECT 1 FROM faturas fp WHERE fp.transacao_pagamento_id = transacoes.id)
+      AND (
+        fatura_id IS NULL
+        OR COALESCE(movimenta_caixa, true) = true
+        OR conta_bancaria_id IS NOT NULL
+      )
+    ORDER BY data_transacao, id
+  `);
+
+  const faturaByComp = new Map<string, { id: number; competencia: string }>();
+  let n = 0;
+  for (const t of txsUser as any[]) {
+    const dataISO = String(t.data_transacao).slice(0, 10);
+    const { competencia } = competenciaDaCompra(
+      dataISO,
+      Number(cartao.dia_fechamento) || 1,
+      Number(cartao.dia_vencimento) || 10,
+    );
+    let cached = faturaByComp.get(competencia);
+    if (!cached) {
+      const { fatura, competencia: comp } = await resolverFaturaPf(userId, carteiraId, cartao as any, dataISO);
+      cached = { id: fatura.id, competencia: comp };
+      faturaByComp.set(comp, cached);
+    }
+    await db.execute(sql`
+      UPDATE transacoes
+      SET conta_bancaria_id = NULL,
+          movimenta_caixa = false,
+          fatura_id = ${cached.id},
+          competencia = ${cached.competencia},
+          status = CASE
+            WHEN status = 'Efetivada' AND data_pagamento IS NULL THEN 'Pendente'
+            ELSE status
+          END
+      WHERE id = ${t.id}
+    `);
+    n++;
+  }
+  return n;
+}
+
 /**
- * Migração idempotente: txs na forma global genérica "Cartão de Crédito"
- * passam para um cartão real do usuário (existente ou legado) com fatura.
+ * Migração idempotente no boot:
+ * 1) Promove formas do usuário que já parecem cartão (limite/bandeira/…) preenchendo dias.
+ * 2) Cria "Cartão de Crédito (legado)" e move txs da forma genérica para ele (não misturam no Nubank).
+ * 3) Anexa fatura/caixa em todas as despesas dos cartões do usuário.
  */
-export async function migrarTxsCartaoGenericoPf(): Promise<{ usuarios: number; txs: number }> {
+export async function migrarTxsCartaoGenericoPf(): Promise<{
+  usuarios: number;
+  txs: number;
+  promovidos: number;
+  anexadas: number;
+}> {
+  // 1) Formas incompletas → viram cartão (aparecem em Contas e Cartões).
+  //    Inclui: dados de cartão preenchidos OU já usadas em despesas (ex.: Inter criado pelo agente sem dias).
+  const promo = await db.execute(sql`
+    UPDATE formas_pagamento fp
+    SET dia_fechamento = COALESCE(fp.dia_fechamento, 1),
+        dia_vencimento = COALESCE(
+          fp.dia_vencimento,
+          CASE WHEN fp.dia_fechamento IS NOT NULL THEN LEAST(31, fp.dia_fechamento + 5) ELSE 10 END
+        ),
+        descricao = COALESCE(NULLIF(fp.descricao, ''), 'Cartão'),
+        icone = COALESCE(NULLIF(fp.icone, ''), '💳')
+    WHERE fp.usuario_id IS NOT NULL
+      AND COALESCE(fp.global, false) = false
+      AND fp.ativo = true
+      AND (fp.dia_fechamento IS NULL OR fp.dia_vencimento IS NULL)
+      AND NOT (${NOME_FORMA_GENERICA_CC})
+      AND (
+        fp.limite IS NOT NULL
+        OR fp.bandeira IS NOT NULL
+        OR fp.ultimos_digitos IS NOT NULL
+        OR fp.descricao ILIKE '%cart%'
+        OR fp.icone IN ('💳', 'credit-card', 'CreditCard')
+        OR EXISTS (
+          SELECT 1 FROM transacoes t
+          WHERE t.forma_pagamento_id = fp.id AND t.tipo = 'Despesa'
+        )
+      )
+    RETURNING fp.id
+  `);
+  const promovidos = (promo as any[]).length;
+
+  // Formas genéricas (global OU cópia do usuário) — nunca o próprio "legado".
   const g2 = await db.execute(sql`
     SELECT id FROM formas_pagamento
-    WHERE global = true
-      AND (
-        nome ILIKE 'Cartão de Crédito'
-        OR nome ILIKE 'Cartao de Credito'
-        OR lower(nome) IN ('cartao de credito', 'cartao_credito', 'credit card', 'cartão', 'cartao')
-      )
+    WHERE (${NOME_FORMA_GENERICA_CC})
+      AND nome NOT ILIKE '%legado%'
   `);
   const genIds = (g2 as any[]).map((r) => Number(r.id)).filter(Boolean);
-  if (genIds.length === 0) return { usuarios: 0, txs: 0 };
-  const genIdsSql = sql.join(genIds.map((id) => sql`${id}`), sql`, `);
-
-  const users = await db.execute(sql`
-    SELECT DISTINCT w.usuario_id AS usuario_id, w.id AS carteira_id
-    FROM transacoes t
-    JOIN carteiras w ON w.id = t.carteira_id
-    WHERE t.forma_pagamento_id IN (${genIdsSql})
-      AND t.tipo = 'Despesa'
-  `);
 
   let usuarios = 0;
   let txs = 0;
+  let anexadas = 0;
 
-  for (const u of users as any[]) {
-    const userId = Number(u.usuario_id);
-    const carteiraId = Number(u.carteira_id);
-    if (!userId || !carteiraId) continue;
-
-    let cartoes = (await listarCartoesPf(userId)).filter((c) => c.usuario_id === userId);
-    let cartao = cartoes.sort((a, b) => a.id - b.id)[0] || null;
-
-    if (!cartao) {
-      const ins = await db.execute(sql`
-        INSERT INTO formas_pagamento
-          (usuario_id, nome, global, ativo, limite, dia_fechamento, dia_vencimento, cor, icone, descricao)
-        SELECT ${userId}, 'Cartão de Crédito (legado)', false, true, NULL, 1, 10, '#FF6B35', '💳', 'Migrado da forma genérica'
-        WHERE NOT EXISTS (
-          SELECT 1 FROM formas_pagamento
-          WHERE usuario_id = ${userId}
-            AND (nome ILIKE 'Cartão de Crédito (legado)' OR lower(nome) = 'cartão de crédito (legado)')
-        )
-        RETURNING *
-      `);
-      cartao = (ins as any[])[0] || null;
-      if (!cartao) {
-        const again = await db.execute(sql`
-          SELECT * FROM formas_pagamento
-          WHERE usuario_id = ${userId}
-            AND (nome ILIKE 'Cartão de Crédito (legado)' OR lower(nome) LIKE '%legado%')
-          ORDER BY id ASC LIMIT 1
-        `);
-        cartao = (again as any[])[0] || null;
-      }
-      if (cartao && (cartao.dia_fechamento == null || cartao.dia_vencimento == null)) {
-        await db.execute(sql`
-          UPDATE formas_pagamento
-          SET dia_fechamento = COALESCE(dia_fechamento, 1),
-              dia_vencimento = COALESCE(dia_vencimento, 10)
-          WHERE id = ${cartao.id}
-        `);
-        cartao.dia_fechamento = cartao.dia_fechamento ?? 1;
-        cartao.dia_vencimento = cartao.dia_vencimento ?? 10;
-      }
-    }
-    if (!cartao) continue;
-    usuarios++;
-
-    const txsUser = await db.execute(sql`
-      SELECT id, data_transacao
-      FROM transacoes
-      WHERE carteira_id = ${carteiraId}
-        AND forma_pagamento_id IN (${genIdsSql})
-        AND tipo = 'Despesa'
-      ORDER BY data_transacao, id
+  if (genIds.length > 0) {
+    const genIdsSql = sql.join(genIds.map((id) => sql`${id}`), sql`, `);
+    const users = await db.execute(sql`
+      SELECT DISTINCT w.usuario_id AS usuario_id, w.id AS carteira_id
+      FROM transacoes t
+      JOIN carteiras w ON w.id = t.carteira_id
+      WHERE t.forma_pagamento_id IN (${genIdsSql})
+        AND t.tipo = 'Despesa'
     `);
 
-    const faturaByComp = new Map<string, { id: number; competencia: string }>();
-    const { competenciaDaCompra } = await import("./fatura-core");
+    for (const u of users as any[]) {
+      const userId = Number(u.usuario_id);
+      const carteiraId = Number(u.carteira_id);
+      if (!userId || !carteiraId) continue;
 
-    for (const t of txsUser as any[]) {
-      const dataISO = String(t.data_transacao).slice(0, 10);
-      const { competencia } = competenciaDaCompra(
-        dataISO,
-        Number(cartao.dia_fechamento) || 1,
-        Number(cartao.dia_vencimento) || 10,
-      );
-      let cached = faturaByComp.get(competencia);
-      if (!cached) {
-        const { fatura, competencia: comp } = await resolverFaturaPf(userId, carteiraId, cartao, dataISO);
-        cached = { id: fatura.id, competencia: comp };
-        faturaByComp.set(comp, cached);
-      }
+      // Sempre cartão legado — não despejar no Nubank/outro cartão nominal.
+      const cartao = await garantirCartaoLegadoPf(userId);
+      if (!cartao) continue;
+      usuarios++;
 
-      await db.execute(sql`
-        UPDATE transacoes
-        SET forma_pagamento_id = ${cartao.id},
-            conta_bancaria_id = NULL,
-            movimenta_caixa = false,
-            fatura_id = ${cached.id},
-            competencia = ${cached.competencia},
-            status = CASE
-              WHEN status = 'Efetivada' AND data_pagamento IS NULL THEN 'Pendente'
-              ELSE status
-            END
-        WHERE id = ${t.id}
+      const txsUser = await db.execute(sql`
+        SELECT id, data_transacao
+        FROM transacoes
+        WHERE carteira_id = ${carteiraId}
+          AND forma_pagamento_id IN (${genIdsSql})
+          AND tipo = 'Despesa'
+        ORDER BY data_transacao, id
       `);
-      txs++;
+
+      const faturaByComp = new Map<string, { id: number; competencia: string }>();
+      for (const t of txsUser as any[]) {
+        const dataISO = String(t.data_transacao).slice(0, 10);
+        const { competencia } = competenciaDaCompra(
+          dataISO,
+          Number(cartao.dia_fechamento) || 1,
+          Number(cartao.dia_vencimento) || 10,
+        );
+        let cached = faturaByComp.get(competencia);
+        if (!cached) {
+          const { fatura, competencia: comp } = await resolverFaturaPf(userId, carteiraId, cartao, dataISO);
+          cached = { id: fatura.id, competencia: comp };
+          faturaByComp.set(comp, cached);
+        }
+        await db.execute(sql`
+          UPDATE transacoes
+          SET forma_pagamento_id = ${cartao.id},
+              conta_bancaria_id = NULL,
+              movimenta_caixa = false,
+              fatura_id = ${cached.id},
+              competencia = ${cached.competencia},
+              status = CASE
+                WHEN status = 'Efetivada' AND data_pagamento IS NULL THEN 'Pendente'
+                ELSE status
+              END
+          WHERE id = ${t.id}
+        `);
+        txs++;
+      }
     }
   }
 
-  return { usuarios, txs };
+  // 3) Cartões já existentes (Nubank etc.): amarrar fatura e tirar do caixa.
+  const pares = await db.execute(sql`
+    SELECT DISTINCT w.usuario_id AS usuario_id, w.id AS carteira_id, fp.id AS cartao_id,
+           fp.dia_fechamento, fp.dia_vencimento
+    FROM formas_pagamento fp
+    JOIN carteiras w ON w.usuario_id = fp.usuario_id
+    WHERE fp.usuario_id IS NOT NULL
+      AND COALESCE(fp.global, false) = false
+      AND fp.dia_fechamento IS NOT NULL
+      AND fp.dia_vencimento IS NOT NULL
+      AND fp.ativo = true
+  `);
+  for (const p of pares as any[]) {
+    const userId = Number(p.usuario_id);
+    const carteiraId = Number(p.carteira_id);
+    if (!userId || !carteiraId) continue;
+    anexadas += await anexarFaturasDoCartaoPf(userId, carteiraId, {
+      id: Number(p.cartao_id),
+      dia_fechamento: Number(p.dia_fechamento),
+      dia_vencimento: Number(p.dia_vencimento),
+    });
+  }
+
+  return { usuarios, txs, promovidos, anexadas };
 }

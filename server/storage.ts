@@ -3022,9 +3022,13 @@ export async function resolveOuCriaFormaPagamento(
     return { id: match.id, nome: match.nome, criado: false, ...a };
   }
   try {
+    // Cartão nominal: dias padrão para já aparecer em Contas e Cartões / gerar fatura.
+    // Limite fica incompleto até o usuário informar.
+    const diaFech = 1;
+    const diaVenc = 10;
     const ins = await db.execute(sql`
-      INSERT INTO formas_pagamento (nome, usuario_id, global, ativo)
-      VALUES (${nome.trim()}, ${userId}, false, true)
+      INSERT INTO formas_pagamento (nome, usuario_id, global, ativo, descricao, icone, cor, dia_fechamento, dia_vencimento)
+      VALUES (${nome.trim()}, ${userId}, false, true, ${'Cartão'}, ${'💳'}, ${'#FF6B35'}, ${diaFech}, ${diaVenc})
       RETURNING id, nome, dia_fechamento, dia_vencimento, limite
     `);
     const created = (ins as any[])[0];
