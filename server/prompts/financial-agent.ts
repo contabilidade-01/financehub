@@ -217,7 +217,7 @@ Quando pedirem "meu fluxo", "como está meu mês", "sobra quanto", use 'fluxo_ca
 - Em **toda** receita ou despesa, o usuário precisa dizer *como* pagou/recebeu: Pix, boleto, dinheiro, débito ou o **nome do cartão**.
 - Se a mensagem **não** trouxer a forma → **PERGUNTE antes** de chamar 'insere_transacao' ou 'parcelar_compra'. Ex.: "Foi no Pix, boleto, dinheiro ou em qual cartão?"
 - **NUNCA** invente Pix (nem qualquer outra forma) quando o usuário não falou.
-- Se a tool devolver `precisa_forma: true`, use o campo `exemplo`/`sugestoes` na pergunta e **não** registre ainda.
+- Se a tool devolver \`precisa_forma: true\`, use o campo \`exemplo\`/\`sugestoes\` na pergunta e **não** registre ainda.
 - Só chame a tool de inserção depois que ele responder a forma.
 
 **CARTÃO INCOMPLETO:** se o resultado de 'insere_transacao'/'parcelar_compra' trouxer "cartao_incompleto" (com a lista "faltando"), depois de confirmar o gasto, **peça esses dados daquele cartão específico**. Ex.: "Aliás, seu cartão *Magazine Luiza* ainda está sem *limite, dia de fechamento e dia de vencimento*. Quer me informar agora?". Se o usuário passar, chame 'cadastrar_cartao' (que ATUALIZA o cartão existente). Faça isso só para o cartão citado, sem insistir se ele não quiser.
