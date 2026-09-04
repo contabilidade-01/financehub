@@ -367,7 +367,13 @@ export async function commitImport(userId: number, walletId: number, parsed: Par
   for (const l of linhas) if (l.forma && !distintas.has(norm(l.forma))) distintas.set(norm(l.forma), l);
   for (const [key, l] of distintas) {
     if (l.formaEhCartao) {
-      const r = await cadastrarOuAtualizarCartao(userId, { nome: l.forma, dia_vencimento: l.formaDiaVencimento ?? undefined });
+      const diaVenc = l.formaDiaVencimento ?? undefined;
+      const diaFech = diaVenc != null ? Math.max(1, Number(diaVenc) - 5) : undefined;
+      const r = await cadastrarOuAtualizarCartao(userId, {
+        nome: l.forma,
+        dia_vencimento: diaVenc,
+        dia_fechamento: diaFech,
+      });
       formaByNorm.set(key, r.id);
       if (!r.atualizado) cartoesCriados++;
     } else {

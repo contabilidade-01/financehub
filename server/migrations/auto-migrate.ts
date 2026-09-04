@@ -786,6 +786,17 @@ const STEPS: Step[] = [
       `);
     },
   },
+  {
+    // Txs na forma global "Cartão de Crédito" → cartão real do usuário + fatura.
+    name: "backfill cartões PF a partir da forma genérica",
+    run: async () => {
+      const { migrarTxsCartaoGenericoPf } = await import("../services/fatura-pf.service");
+      const r = await migrarTxsCartaoGenericoPf();
+      if (r.txs > 0) {
+        console.log(`[AutoMigrate] cartão genérico → ${r.txs} txs em ${r.usuarios} usuário(s)`);
+      }
+    },
+  },
 ];
 
 export async function runAutoMigrations(): Promise<void> {

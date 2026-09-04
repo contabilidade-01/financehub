@@ -236,7 +236,7 @@ function buildTools(ctx?: ToolContext) {
       type: "function" as const,
       function: {
         name: "insere_transacao",
-        description: "Insere uma nova transação (receita ou despesa) para o usuário.",
+        description: "Insere uma nova transação (receita ou despesa). OBRIGATÓRIO informar forma_pagamento (Pix, boleto, dinheiro, nome do cartão…). Se o usuário não disse como pagou, NÃO chame esta tool — pergunte antes.",
         parameters: {
           type: "object",
           properties: {
@@ -245,9 +245,9 @@ function buildTools(ctx?: ToolContext) {
             tipo: { type: "string", enum: ["Receita", "Despesa"], description: "Tipo da transação" },
             data_transacao: { type: "string", description: "Data no formato YYYY-MM-DD" },
             categoria: { type: "string", description: "Nome da categoria (ex: Alimentação, Transporte)" },
-            forma_pagamento: { type: "string", description: "Forma de pagamento/cartão (ex: 'Pix', 'Nubank', 'Cartão de Crédito'). Se for cartão e o usuário não disser qual, PERGUNTE antes." },
+            forma_pagamento: { type: "string", description: "Como pagou/recebeu: 'Pix', 'Boleto', 'Dinheiro', 'Nubank', etc. Obrigatório." },
           },
-          required: ["descricao", "valor", "tipo", "data_transacao", "categoria"],
+          required: ["descricao", "valor", "tipo", "data_transacao", "categoria", "forma_pagamento"],
         },
       },
     },
@@ -702,7 +702,7 @@ function buildTools(ctx?: ToolContext) {
       type: "function" as const,
       function: {
         name: "parcelar_compra",
-        description: "Registra uma compra PARCELADA em várias vezes, agrupadas como UMA compra. Use quando disserem 'parcelado em Nx', 'em N vezes', 'dividido em N'. Cria uma parcela por mês.",
+        description: "Registra uma compra PARCELADA em várias vezes. OBRIGATÓRIO informar forma_pagamento (quase sempre o cartão). Se o usuário não disse em qual cartão/forma, NÃO chame — pergunte antes.",
         parameters: {
           type: "object",
           properties: {
@@ -710,11 +710,11 @@ function buildTools(ctx?: ToolContext) {
             valor_total: { type: "number", description: "Valor TOTAL da compra (será dividido pelas parcelas)" },
             valor_parcela: { type: "number", description: "Valor de CADA parcela (use este OU valor_total)" },
             parcelas: { type: "number", description: "Número de parcelas (ex.: 10)" },
-            forma_pagamento: { type: "string", description: "Ex.: 'Cartão de Crédito', 'Nubank', 'Magazine Luiza'" },
+            forma_pagamento: { type: "string", description: "Cartão/forma (ex.: 'Nubank', 'Magazine Luiza'). Obrigatório." },
             categoria: { type: "string" },
             data_inicio: { type: "string", description: "AAAA-MM-DD (default hoje)" },
           },
-          required: ["descricao", "parcelas"],
+          required: ["descricao", "parcelas", "forma_pagamento"],
         },
       },
     },
@@ -1087,6 +1087,26 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           ? "Receita"
           : "Despesa";
 
+        // Exige forma de pagamento — não inventa PIX nem deixa em branco.
+        const formaInformada = String(args.forma_pagamento || "").trim();
+        if (!formaInformada) {
+          const cartoes = await getCartoesComSaldo(ctx.userId, ctx.walletId).catch(() => []);
+          const nomesCartoes = (cartoes as any[]).map((c) => c.cartao_nome || c.nome).filter(Boolean);
+          const sugestoes = [
+            "Pix", "Boleto", "Dinheiro", "Débito",
+            ...nomesCartoes.slice(0, 5),
+          ];
+          return JSON.stringify({
+            precisa_forma: true,
+            error: "Forma de pagamento não informada.",
+            mensagem: "Pergunte ao usuário como pagou/recebeu antes de registrar. Não invente Pix.",
+            sugestoes,
+            exemplo: nomesCartoes.length
+              ? `Foi no Pix, boleto, dinheiro ou no cartão (${nomesCartoes.join(", ")})?`
+              : "Foi no Pix, boleto, dinheiro ou em qual cartão?",
+          });
+        }
+
         // Resolver categoria pelo nome (case-insensitive), preferindo o tipo.
         const nomeBusca = (args.categoria || "").toLowerCase();
         const cat = ctx.categories.find(
@@ -1164,6 +1184,27 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           status: "Efetivada",
         };
         if (formaPagId) txData.forma_pagamento_id = formaPagId;
+
+        // Mesma regra do formulário/API: cartão → fatura + sem caixa; senão → conta padrão.
+        try {
+          const { aplicarMeioPagamentoPf } = await import("./meio-pagamento-pf");
+          const meio = await aplicarMeioPagamentoPf({
+            userId: ctx.userId,
+            walletId: ctx.walletId,
+            tipo,
+            dataISO: String(txData.data_transacao).slice(0, 10),
+            forma_pagamento_id: formaPagId ?? null,
+            statusAtual: txData.status,
+          });
+          txData.forma_pagamento_id = meio.forma_pagamento_id;
+          txData.conta_bancaria_id = meio.conta_bancaria_id;
+          txData.fatura_id = meio.fatura_id;
+          txData.competencia = meio.competencia;
+          txData.movimenta_caixa = meio.movimenta_caixa;
+          if (meio.status) txData.status = meio.status;
+        } catch (meioErr: any) {
+          return JSON.stringify({ error: meioErr?.message || "Meio de pagamento inválido" });
+        }
 
         try {
           const result = await storage.createTransaction(txData as any);
@@ -1764,6 +1805,21 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       }
 
       case "parcelar_compra": {
+        const formaParcelar = String(args.forma_pagamento || "").trim();
+        if (!formaParcelar) {
+          const cartoes = await getCartoesComSaldo(ctx.userId, ctx.walletId).catch(() => []);
+          const nomesCartoes = (cartoes as any[]).map((c) => c.cartao_nome || c.nome).filter(Boolean);
+          return JSON.stringify({
+            precisa_forma: true,
+            error: "Forma de pagamento não informada.",
+            mensagem: "Pergunte em qual cartão/forma foi a compra parcelada. Não invente.",
+            sugestoes: nomesCartoes.length ? nomesCartoes : ["Nubank", "Inter", "outro cartão"],
+            exemplo: nomesCartoes.length
+              ? `Em qual cartão? Você tem: ${nomesCartoes.join(", ")}.`
+              : "Em qual cartão foi essa compra parcelada?",
+          });
+        }
+
         const parcelas = Math.max(1, Math.min(60, Number(args.parcelas) || 1));
         let valorParcela = Number(args.valor_parcela) || 0;
         const valorTotalArg = args.valor_total != null ? Number(args.valor_total) : null;
@@ -1790,6 +1846,20 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         }
         const dataInicio = /^\d{4}-\d{2}-\d{2}$/.test(args.data_inicio || "") ? args.data_inicio : new Date().toISOString().slice(0, 10);
 
+        // Conta padrão se não for cartão completo (criarCompraParcelada já amarra fatura no cartão).
+        let contaBancariaId: number | null = null;
+        if (formaId) {
+          const { cartaoPfDoUsuario } = await import("./fatura-pf.service");
+          const cartao = await cartaoPfDoUsuario(formaId, ctx.userId);
+          if (!cartao) {
+            const { contaPadraoPf } = await import("./conta-bancaria.service");
+            contaBancariaId = await contaPadraoPf(ctx.userId);
+          }
+        } else {
+          const { contaPadraoPf } = await import("./conta-bancaria.service");
+          contaBancariaId = await contaPadraoPf(ctx.userId);
+        }
+
         const r = await criarCompraParcelada({
           walletId: ctx.walletId,
           categoriaId: catP!.id,
@@ -1799,6 +1869,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           formaPagamentoId: formaId,
           dataInicio,
           usuarioId: ctx.userId,
+          contaBancariaId,
         });
         const orcamentoP = await getStatusOrcamentoCategoria(ctx.userId, ctx.walletId, catP!.id);
         return JSON.stringify({
@@ -1816,9 +1887,10 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         const patch: any = {};
         let formaNome: string | undefined;
         let catNome: string | undefined;
+        let formaIdEdit: number | null = null;
         if (args.forma_pagamento) {
           const fp = await resolveOuCriaFormaPagamento(ctx.userId, args.forma_pagamento);
-          if (fp.id) { patch.forma_pagamento_id = fp.id; formaNome = fp.nome; }
+          if (fp.id) { patch.forma_pagamento_id = fp.id; formaNome = fp.nome; formaIdEdit = fp.id; }
         }
         if (args.categoria) {
           const cat = ctx.categories.find(c => c.nome.toLowerCase() === args.categoria.toLowerCase());
@@ -1829,6 +1901,47 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           return JSON.stringify({ error: "Diga o que mudar: forma de pagamento, categoria ou descrição." });
         }
         const n = await editarTransacoesPorIds(compra.ids, patch);
+
+        // Se trocou a forma para um cartão (ou saiu dele), reaplica fatura/caixa em cada parcela.
+        if (formaIdEdit != null) {
+          try {
+            const { aplicarMeioPagamentoPf } = await import("./meio-pagamento-pf");
+            const { db } = await import("../db");
+            const { sql } = await import("drizzle-orm");
+            for (const id of compra.ids) {
+              const row = await db.execute(sql`
+                SELECT data_transacao, tipo, status FROM transacoes WHERE id = ${id} LIMIT 1
+              `);
+              const t = (row as any[])[0];
+              if (!t) continue;
+              const meio = await aplicarMeioPagamentoPf({
+                userId: ctx.userId,
+                walletId: ctx.walletId,
+                tipo: t.tipo || "Despesa",
+                dataISO: String(t.data_transacao).slice(0, 10),
+                forma_pagamento_id: formaIdEdit,
+                statusAtual: t.status,
+              });
+              await db.execute(sql`
+                UPDATE transacoes SET
+                  forma_pagamento_id = ${meio.forma_pagamento_id},
+                  conta_bancaria_id = ${meio.conta_bancaria_id},
+                  fatura_id = ${meio.fatura_id},
+                  competencia = ${meio.competencia},
+                  movimenta_caixa = ${meio.movimenta_caixa},
+                  status = ${meio.status || t.status}
+                WHERE id = ${id}
+              `);
+            }
+          } catch (e: any) {
+            return JSON.stringify({
+              success: true, parcelas_afetadas: n, compra: compra.descricao_base,
+              forma_pagamento: formaNome, categoria: catNome, nova_descricao: args.descricao,
+              aviso: e?.message || "Forma alterada, mas fatura/caixa não foram recalculados.",
+            });
+          }
+        }
+
         return JSON.stringify({
           success: true, parcelas_afetadas: n, compra: compra.descricao_base,
           forma_pagamento: formaNome, categoria: catNome, nova_descricao: args.descricao,

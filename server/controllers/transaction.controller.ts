@@ -236,44 +236,29 @@ export async function createTransaction(req: Request, res: Response) {
       return res.status(400).json(errorResponse);
     }
     
-    // Cartão de crédito (forma com limite): compra vai para fatura, não mexe no caixa.
+    // Cartão / conta / forma — regra única compartilhada com o UPDATE.
     let isCartao = false;
-    if (transactionData.forma_pagamento_id) {
-      const { cartaoPfDoUsuario, resolverFaturaPf } = await import("../services/fatura-pf.service");
-      const cartao = await cartaoPfDoUsuario(Number(transactionData.forma_pagamento_id), userId);
-      if (cartao) {
-        if (transactionData.tipo !== "Despesa") {
-          return res.status(400).json({ message: "Cartão de crédito só pode ser usado em Despesa." });
-        }
-        isCartao = true;
-        const dataISO = String(transactionData.data_transacao).slice(0, 10);
-        const { fatura, competencia } = await resolverFaturaPf(userId, wallet.id, cartao, dataISO);
-        (transactionData as any).fatura_id = fatura.id;
-        (transactionData as any).competencia = competencia;
-        (transactionData as any).movimenta_caixa = false;
-        (transactionData as any).conta_bancaria_id = null;
-        if (!transactionData.status || transactionData.status === "Efetivada") {
-          transactionData.status = "Pendente";
-        }
-      }
-    }
-
-    // Conta bancária (saída/entrada de caixa). Body pode trazer conta_bancaria_id.
-    const contaBancariaId = req.body?.conta_bancaria_id != null ? Number(req.body.conta_bancaria_id) : null;
-    if (!isCartao && contaBancariaId) {
-      const { listarContasPf } = await import("../services/conta-bancaria.service");
-      const minhas = await listarContasPf(userId);
-      if (!minhas.find((c) => c.id === contaBancariaId)) {
-        return res.status(400).json({ message: "Conta bancária não encontrada." });
-      }
-      (transactionData as any).conta_bancaria_id = contaBancariaId;
-      (transactionData as any).movimenta_caixa = true;
-    } else if (!isCartao && !(transactionData as any).conta_bancaria_id) {
-      // Default: conta tipo carteira (ou primeira ativa) — não depende do nome.
-      const { contaPadraoPf } = await import("../services/conta-bancaria.service");
-      const padraoId = await contaPadraoPf(userId);
-      if (padraoId) (transactionData as any).conta_bancaria_id = padraoId;
-      (transactionData as any).movimenta_caixa = true;
+    try {
+      const { aplicarMeioPagamentoPf } = await import("../services/meio-pagamento-pf");
+      const meio = await aplicarMeioPagamentoPf({
+        userId,
+        walletId: wallet.id,
+        tipo: String(transactionData.tipo),
+        dataISO: String(transactionData.data_transacao).slice(0, 10),
+        forma_pagamento_id: transactionData.forma_pagamento_id ?? null,
+        conta_bancaria_id: req.body?.conta_bancaria_id != null ? Number(req.body.conta_bancaria_id) : null,
+        conta_bancaria_id_presente: Object.prototype.hasOwnProperty.call(req.body || {}, "conta_bancaria_id"),
+        statusAtual: transactionData.status,
+      });
+      isCartao = meio.isCartao;
+      (transactionData as any).forma_pagamento_id = meio.forma_pagamento_id;
+      (transactionData as any).conta_bancaria_id = meio.conta_bancaria_id;
+      (transactionData as any).fatura_id = meio.fatura_id;
+      (transactionData as any).competencia = meio.competencia;
+      (transactionData as any).movimenta_caixa = meio.movimenta_caixa;
+      if (meio.status) transactionData.status = meio.status as any;
+    } catch (e: any) {
+      return res.status(400).json({ message: e?.message || "Meio de pagamento inválido" });
     }
 
     // Parcelamento: N lançamentos amarrados a faturas por competência (se cartão).
@@ -465,6 +450,41 @@ export async function updateTransaction(req: Request, res: Response) {
         console.log(JSON.stringify(errorResponse, null, 2));
         console.log('============================================\n');
         return res.status(400).json(errorResponse);
+      }
+    }
+
+    // Reaplica a mesma regra de meio de pagamento do CREATE (fatura/caixa/conta).
+    const body = req.body || {};
+    const temForma = Object.prototype.hasOwnProperty.call(body, "forma_pagamento_id");
+    const temConta = Object.prototype.hasOwnProperty.call(body, "conta_bancaria_id");
+    if (temForma || temConta) {
+      try {
+        const { aplicarMeioPagamentoPf } = await import("../services/meio-pagamento-pf");
+        const dataISO = String(
+          transactionData.data_transacao ?? transaction.data_transacao
+        ).slice(0, 10);
+        const meio = await aplicarMeioPagamentoPf({
+          userId,
+          walletId: wallet.id,
+          tipo: String(tipoFinal),
+          dataISO,
+          forma_pagamento_id: temForma
+            ? (body.forma_pagamento_id != null ? Number(body.forma_pagamento_id) : null)
+            : (transaction.forma_pagamento_id ?? null),
+          conta_bancaria_id: temConta
+            ? (body.conta_bancaria_id != null ? Number(body.conta_bancaria_id) : null)
+            : ((transaction as any).conta_bancaria_id ?? null),
+          conta_bancaria_id_presente: temConta,
+          statusAtual: (transactionData.status ?? transaction.status) as string,
+        });
+        (transactionData as any).forma_pagamento_id = meio.forma_pagamento_id;
+        (transactionData as any).conta_bancaria_id = meio.conta_bancaria_id;
+        (transactionData as any).fatura_id = meio.fatura_id;
+        (transactionData as any).competencia = meio.competencia;
+        (transactionData as any).movimenta_caixa = meio.movimenta_caixa;
+        if (meio.isCartao && meio.status) (transactionData as any).status = meio.status;
+      } catch (e: any) {
+        return res.status(400).json({ message: e?.message || "Meio de pagamento inválido" });
       }
     }
     

@@ -3460,6 +3460,15 @@ export async function cadastrarOuAtualizarCartao(userId: number, data: {
   }
 
   const alvo = nomeLimpo.toLowerCase();
+  // Defaults: se só veio vencimento, fecha 5 dias antes (mín. 1).
+  let diaVenc = data.dia_vencimento != null ? Number(data.dia_vencimento) : null;
+  let diaFech = data.dia_fechamento != null ? Number(data.dia_fechamento) : null;
+  if (diaVenc != null && !(diaVenc >= 1 && diaVenc <= 31)) diaVenc = null;
+  if (diaFech != null && !(diaFech >= 1 && diaFech <= 31)) diaFech = null;
+  if (diaVenc != null && diaFech == null) {
+    diaFech = Math.max(1, diaVenc - 5);
+  }
+
   // Só cartões DO USUÁRIO (nunca atualiza o global genérico)
   const existentes = await db.execute(sql`
     SELECT id, nome FROM formas_pagamento
@@ -3471,8 +3480,8 @@ export async function cadastrarOuAtualizarCartao(userId: number, data: {
     await db.execute(sql`
       UPDATE formas_pagamento SET
         limite = COALESCE(${data.limite ?? null}, limite),
-        dia_fechamento = COALESCE(${data.dia_fechamento ?? null}, dia_fechamento),
-        dia_vencimento = COALESCE(${data.dia_vencimento ?? null}, dia_vencimento),
+        dia_fechamento = COALESCE(${diaFech}, dia_fechamento),
+        dia_vencimento = COALESCE(${diaVenc}, dia_vencimento),
         bandeira = COALESCE(${data.bandeira ?? null}, bandeira),
         ultimos_digitos = COALESCE(${data.ultimos_digitos ?? null}, ultimos_digitos),
         ativo = true
@@ -3483,7 +3492,7 @@ export async function cadastrarOuAtualizarCartao(userId: number, data: {
   const ins = await db.execute(sql`
     INSERT INTO formas_pagamento (nome, descricao, icone, cor, usuario_id, global, ativo, limite, dia_fechamento, dia_vencimento, bandeira, ultimos_digitos)
     VALUES (${nomeLimpo}, ${'Cartão'}, ${'💳'}, ${'#FF6B35'}, ${userId}, false, true,
-            ${data.limite ?? null}, ${data.dia_fechamento ?? null}, ${data.dia_vencimento ?? null}, ${data.bandeira ?? null}, ${data.ultimos_digitos ?? null})
+            ${data.limite ?? null}, ${diaFech}, ${diaVenc}, ${data.bandeira ?? null}, ${data.ultimos_digitos ?? null})
     RETURNING id, nome
   `);
   const created = (ins as any[])[0];

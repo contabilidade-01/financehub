@@ -29,6 +29,15 @@ type CartaoOpt = { id: number; nome: string };
 const hasLimite = (pm: PaymentMethod) =>
   pm.limite != null && String(pm.limite) !== "" && Number(pm.limite) > 0;
 
+const ehCartaoPm = (pm: PaymentMethod | undefined) =>
+  !!pm && pm.dia_fechamento != null && pm.dia_vencimento != null;
+
+/** Forma genérica "Cartão de Crédito" — não é cartão real. */
+const ehFormaCartaoGenerica = (nome: string | undefined | null) =>
+  /^(cart[aã]o([_\s-]?de)?[_\s-]?cr[eé]dito|cartao_credito|credit[_\s-]?card|cart[aã]o)$/i.test(
+    (nome || "").trim()
+  );
+
 const createTransactionFormSchema = (t: (key: string, fallback: string) => string) => z.object({
   descricao: z.string().min(2, t('validation.description_min_length', 'Description must be at least 2 characters')),
   valor: z.string().min(1, t('validation.amount_required', 'Amount is required')).refine(
@@ -81,12 +90,16 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
     queryKey: ["/api/wallet/current"]
   });
 
-  const formasSemLimite = useMemo(
-    () => (paymentMethods || []).filter(
+  const formasSemLimite = useMemo(() => {
+    const base = (paymentMethods || []).filter(
       (pm) => !hasLimite(pm) && pm.dia_fechamento == null && pm.dia_vencimento == null
-    ),
-    [paymentMethods]
-  );
+    );
+    // Se já há cartões reais, esconde a forma genérica "Cartão de Crédito".
+    if (cartoes.length > 0) {
+      return base.filter((pm) => !ehFormaCartaoGenerica(pm.nome));
+    }
+    return base;
+  }, [paymentMethods, cartoes]);
 
   const contasAtivas = useMemo(
     () => contas.filter((c) => c.ativo !== false),
@@ -134,11 +147,18 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
   }, [formasSemLimite, contasAtivas, opcoesPagoCom]);
 
   const resolvePagoComFromTransaction = (tx: Transaction): string => {
+    const fpId = tx.forma_pagamento_id;
+    // Cartão real ou forma genérica de cartão têm prioridade sobre conta_bancaria_id
+    // do backfill (senão toda edição aparece como "Carteira (principal)").
+    if (fpId && cartoes.some((c) => c.id === fpId)) return `cartao:${fpId}`;
+    if (fpId) {
+      const pm = paymentMethods?.find((p) => p.id === fpId);
+      if (ehCartaoPm(pm)) return `cartao:${fpId}`;
+      if (ehFormaCartaoGenerica(pm?.nome) && cartoes[0]) return `cartao:${cartoes[0].id}`;
+      if (fpId) return `forma:${fpId}`;
+    }
     const contaId = (tx as any).conta_bancaria_id;
     if (contaId) return `conta:${contaId}`;
-    const fpId = tx.forma_pagamento_id;
-    if (fpId && cartoes.some((c) => c.id === fpId)) return `cartao:${fpId}`;
-    if (fpId) return `forma:${fpId}`;
     return defaultPagoCom;
   };
 
@@ -157,7 +177,7 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
           : formatDate(transaction.data_transacao, "yyyy-MM-dd"),
       });
     }
-  }, [transaction, form, cartoes, defaultPagoCom]);
+  }, [transaction, form, cartoes, paymentMethods, defaultPagoCom]);
 
   useEffect(() => {
     if (!transaction && defaultPagoCom && !form.getValues("pago_com")) {
@@ -218,8 +238,15 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
         parcelas: data.tipo === TransactionType.EXPENSE ? Number(parcelas) || 1 : 1,
       };
 
-      if (forma_pagamento_id != null) transactionData.forma_pagamento_id = forma_pagamento_id;
-      if (conta_bancaria_id != null) transactionData.conta_bancaria_id = conta_bancaria_id;
+      if (kind === "cartao") {
+        transactionData.forma_pagamento_id = forma_pagamento_id;
+        transactionData.conta_bancaria_id = null;
+      } else if (kind === "conta") {
+        transactionData.conta_bancaria_id = conta_bancaria_id;
+        // Forma (PIX etc.) fica a cargo do backend se não enviada.
+      } else if (kind === "forma") {
+        transactionData.forma_pagamento_id = forma_pagamento_id;
+      }
 
       if (transaction) {
         await apiRequest(`/api/transactions/${transaction.id}`, {
