@@ -128,7 +128,7 @@ function TransacaoForm({
       </Select>
 
       <Select value={categoriaId} onValueChange={setCategoriaId}>
-        <SelectTrigger><SelectValue placeholder="Conta do plano" /></SelectTrigger>
+        <SelectTrigger><SelectValue placeholder="Classificação (plano de contas)" /></SelectTrigger>
         <SelectContent>
           {contasDoTipo.map((c) => (
             <SelectItem key={c.id} value={String(c.id)}>
@@ -139,7 +139,7 @@ function TransacaoForm({
       </Select>
 
       <Select value={pagamento} onValueChange={setPagamento}>
-        <SelectTrigger><SelectValue placeholder="Forma de pagamento" /></SelectTrigger>
+        <SelectTrigger><SelectValue placeholder="Pago com" /></SelectTrigger>
         <SelectContent>
           <SelectItem value="nenhuma">Sem forma</SelectItem>
           {formasAtivas.map((f) => (
@@ -149,7 +149,7 @@ function TransacaoForm({
             <>
               {cartoesAtivos.map((c) => (
                 <SelectItem key={`c-${c.id}`} value={`cartao:${c.id}`}>
-                  Cartão — {c.nome}
+                  CC {c.nome}
                 </SelectItem>
               ))}
             </>
@@ -407,9 +407,9 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
             </Select>
 
             <Select value={fConta} onValueChange={setFConta}>
-              <SelectTrigger><SelectValue placeholder="Conta" /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder="Classificação" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="todas">Todas as contas</SelectItem>
+                <SelectItem value="todas">Todas as classificações</SelectItem>
                 {contas.map((c) => (
                   <SelectItem key={c.id} value={String(c.id)}>
                     {c.codigo} — {c.nome}
@@ -485,7 +485,7 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
                 <tr>
                   <th className="text-left p-3">Data</th>
                   <th className="text-left p-3">Descrição</th>
-                  <th className="text-left p-3">Conta</th>
+                  <th className="text-left p-3">Classificação</th>
                   <th className="text-right p-3">Valor</th>
                   <th className="text-center p-3">Tipo</th>
                   <th className="text-center p-3">Ações</th>

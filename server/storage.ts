@@ -82,9 +82,16 @@ import { eq, and, or, desc, gte, lte, isNull, count, sum, sql, ne } from "drizzl
 // Pagar a fatura do cartão é QUITAÇÃO DE DÍVIDA, não despesa nova: a compra já
 // entrou por competência no dia em que foi feita. Sem excluir o pagamento, o
 // mesmo gasto conta duas vezes no DRE e no Resumo. Vale só onde a transação
-// estiver com o alias 't'.
+// estiver com o alias 't'. Cobre PF (faturas) e PJ (empresas_faturas).
 const NAO_E_PAGAMENTO_FATURA = sql`NOT EXISTS (
   SELECT 1 FROM empresas_faturas f WHERE f.transacao_pagamento_id = t.id
+) AND NOT EXISTS (
+  SELECT 1 FROM faturas f WHERE f.transacao_pagamento_id = t.id
+)`;
+
+// Mesma regra quando a query usa a tabela sem alias (FROM transacoes).
+const NAO_E_PAGAMENTO_FATURA_PF = sql`NOT EXISTS (
+  SELECT 1 FROM faturas f WHERE f.transacao_pagamento_id = transacoes.id
 )`;
 
 /**
@@ -414,16 +421,24 @@ export class DbStorage implements IStorage {
   
   async calculateWalletBalance(walletId: number): Promise<number> {
     try {
+      // Saldo PF = soma das contas bancárias (saldo_inicial + movimentos com movimenta_caixa).
+      const w = await db.execute(sql`SELECT usuario_id FROM carteiras WHERE id = ${walletId} LIMIT 1`);
+      const userId = (w as any[])[0]?.usuario_id;
+      if (userId) {
+        const { saldoGeralPf } = await import("./services/conta-bancaria.service");
+        return await saldoGeralPf(userId);
+      }
+      // Fallback legado (sem usuário): movimentos de caixa (qualquer status)
       const result = await db.execute(sql`
         SELECT COALESCE(SUM(
-          CASE WHEN tipo = 'Receita' THEN valor::numeric 
+          CASE WHEN tipo = 'Receita' THEN valor::numeric
                WHEN tipo = 'Despesa' AND COALESCE(reembolsavel, false) = false THEN -valor::numeric
                ELSE 0 END
         ), 0) as balance
         FROM transacoes
         WHERE carteira_id = ${walletId}
+          AND COALESCE(movimenta_caixa, true) = true
       `);
-      
       return parseFloat(result[0]?.balance || '0') || 0;
     } catch (error) {
       console.error('Error calculating wallet balance:', error);
@@ -700,7 +715,17 @@ export class DbStorage implements IStorage {
       metodo_pagamento: paymentMethods.nome,
       status: transactions.status,
       reembolsavel: transactions.reembolsavel,
-      categoria_name: categories.nome
+      categoria_name: categories.nome,
+      parcela_num: transactions.parcela_num,
+      parcela_total: transactions.parcela_total,
+      compra_grupo: transactions.compra_grupo,
+      conta_bancaria_id: transactions.conta_bancaria_id,
+      fatura_id: transactions.fatura_id,
+      competencia: transactions.competencia,
+      movimenta_caixa: transactions.movimenta_caixa,
+      forma_limite: paymentMethods.limite,
+      data_vencimento: transactions.data_vencimento,
+      data_pagamento: transactions.data_pagamento,
     })
       .from(transactions)
       .leftJoin(paymentMethods, eq(transactions.forma_pagamento_id, paymentMethods.id))
@@ -708,7 +733,7 @@ export class DbStorage implements IStorage {
       .where(eq(transactions.carteira_id, walletId))
       .orderBy(desc(transactions.data_transacao), desc(transactions.data_registro));
     
-    return result;
+    return result as any;
   }
   
   async getRecentTransactionsByWalletId(walletId: number, limit: number = 5): Promise<TransactionWithDetails[]> {
@@ -751,7 +776,13 @@ export class DbStorage implements IStorage {
       metodo_pagamento: paymentMethods.nome,
       status: transactions.status,
       reembolsavel: transactions.reembolsavel,
-      categoria_name: categories.nome
+      categoria_name: categories.nome,
+      parcela_num: transactions.parcela_num,
+      parcela_total: transactions.parcela_total,
+      conta_bancaria_id: transactions.conta_bancaria_id,
+      fatura_id: transactions.fatura_id,
+      movimenta_caixa: transactions.movimenta_caixa,
+      forma_limite: paymentMethods.limite,
     })
       .from(transactions)
       .leftJoin(paymentMethods, eq(transactions.forma_pagamento_id, paymentMethods.id))
@@ -759,7 +790,7 @@ export class DbStorage implements IStorage {
       .where(eq(transactions.id, id))
       .limit(1);
     
-    return result[0];
+    return result[0] as any;
   }
   
   async createTransaction(transactionData: InsertTransaction): Promise<Transaction> {
@@ -810,6 +841,7 @@ export class DbStorage implements IStorage {
           carteira_id = ${walletId}
           AND COALESCE(data_vencimento, data_transacao)::date >= ${range.from}::date
           AND COALESCE(data_vencimento, data_transacao)::date <= ${range.to}::date
+          AND ${NAO_E_PAGAMENTO_FATURA_PF}
         GROUP BY month, month_num, year
         ORDER BY year, month_num
       `);
@@ -840,6 +872,7 @@ export class DbStorage implements IStorage {
           AND COALESCE(t.reembolsavel, false) = false
           AND COALESCE(t.data_vencimento, t.data_transacao)::date >= ${range.from}::date
           AND COALESCE(t.data_vencimento, t.data_transacao)::date <= ${range.to}::date
+          AND ${NAO_E_PAGAMENTO_FATURA}
         GROUP BY c.id, c.nome, c.cor, c.icone
         ORDER BY total DESC
       `);
@@ -864,6 +897,7 @@ export class DbStorage implements IStorage {
           carteira_id = ${walletId}
           AND COALESCE(data_vencimento, data_transacao)::date >= ${range.from}::date
           AND COALESCE(data_vencimento, data_transacao)::date <= ${range.to}::date
+          AND ${NAO_E_PAGAMENTO_FATURA_PF}
       `);
 
       if (result && result[0]) {
@@ -2032,6 +2066,10 @@ export class DbStorage implements IStorage {
   // empresas_transacoes por conta (categoria_id → empresas_contas) × mês do ano,
   // com sinal (Receita +, Despesa −). O front monta a árvore e as linhas
   // calculadas a partir da classificacao. Mesmo escopo do DRE (empresas_transacoes).
+  //
+  // REALIZADO: só entra o que já se moveu (status Efetivada). Conta a pagar em
+  // aberto é previsão e vive no Fluxo Projetado — se entrasse aqui, o saldo do
+  // mês mostraria dinheiro que ainda não saiu.
   async getEmpresaFluxoCaixaMensal(empresaId: number, ano: number): Promise<EmpresaFluxoCaixaMensal> {
     const contas = await db.select().from(empresasContas)
       .where(eq(empresasContas.empresa_id, empresaId))
@@ -2044,6 +2082,7 @@ export class DbStorage implements IStorage {
       FROM empresas_transacoes t
       WHERE t.empresa_id = ${empresaId}
         AND COALESCE(t.movimenta_caixa, true) = true
+        AND t.status = 'Efetivada'
         AND EXTRACT(YEAR FROM t.data_transacao) = ${ano}
       GROUP BY t.categoria_id, mes
     `);
@@ -2074,6 +2113,7 @@ export class DbStorage implements IStorage {
       WHERE t.empresa_id = ${empresaId}
         AND t.conta_bancaria_id IS NOT NULL
         AND COALESCE(t.movimenta_caixa, true) = true
+        AND t.status = 'Efetivada'
         AND EXTRACT(YEAR FROM t.data_transacao) = ${ano}
       GROUP BY t.conta_bancaria_id, mes
     `);
@@ -2089,6 +2129,7 @@ export class DbStorage implements IStorage {
       WHERE t.empresa_id = ${empresaId}
         AND t.conta_bancaria_id IS NOT NULL
         AND COALESCE(t.movimenta_caixa, true) = true
+        AND t.status = 'Efetivada'
         AND EXTRACT(YEAR FROM t.data_transacao) < ${ano}
       GROUP BY t.conta_bancaria_id
     `);
@@ -2106,6 +2147,7 @@ export class DbStorage implements IStorage {
       FROM empresas_transacoes t
       WHERE t.empresa_id = ${empresaId}
         AND COALESCE(t.movimenta_caixa, true) = true
+        AND t.status = 'Efetivada'
         AND EXTRACT(YEAR FROM t.data_transacao) < ${ano}
     `);
     const movimentoAntesAno = parseFloat((antesTotalRows as any[])[0]?.total) || 0;
@@ -2294,64 +2336,20 @@ export async function verificarOrcamentos(userId: number, walletId: number): Pro
  * Calcula saldo usado de um cartão no período de fatura atual.
  * Período = dia_fechamento do mês anterior até dia_fechamento deste mês.
  */
-export async function getSaldoCartao(cartaoId: number, walletId: number): Promise<{
+export async function getSaldoCartao(cartaoId: number, _walletId?: number): Promise<{
   cartao_nome: string;
   limite: number;
   usado: number;
-  disponivel: number;
+  // Cartão sem limite cadastrado não tem "disponível": devolve null em vez de
+  // fingir zero — quem consome deve dizer "sem limite".
+  disponivel: number | null;
   percentual: number;
   dia_fechamento: number | null;
   dia_vencimento: number | null;
+  sem_limite: boolean;
 }> {
-  // Buscar dados do cartão
-  const cartaoRows = await db.select().from(paymentMethods).where(eq(paymentMethods.id, cartaoId)).limit(1);
-  const cartao = cartaoRows[0];
-  if (!cartao) throw new Error("Cartão não encontrado");
-
-  const limite = parseFloat(cartao.limite as string) || 0;
-  const diaFech = cartao.dia_fechamento || 1;
-
-  // Calcular período da fatura atual
-  const now = new Date();
-  let inicioFatura: string;
-  let fimFatura: string;
-
-  if (now.getDate() >= diaFech) {
-    // Já passou o fechamento — fatura atual vai de diaFech deste mês até diaFech próximo mês
-    inicioFatura = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(diaFech).padStart(2, '0')}`;
-    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, diaFech);
-    fimFatura = nextMonth.toISOString().slice(0, 10);
-  } else {
-    // Antes do fechamento — fatura vai de diaFech mês passado até diaFech deste mês
-    const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, diaFech);
-    inicioFatura = prevMonth.toISOString().slice(0, 10);
-    fimFatura = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(diaFech).padStart(2, '0')}`;
-  }
-
-  // Somar gastos no cartão no período
-  const rows = await db.execute(sql`
-    SELECT COALESCE(SUM(valor::numeric), 0) AS total
-    FROM transacoes
-    WHERE carteira_id = ${walletId}
-      AND forma_pagamento_id = ${cartaoId}
-      AND tipo = 'Despesa'
-      AND data_transacao >= ${inicioFatura}
-      AND data_transacao < ${fimFatura}
-  `);
-
-  const usado = parseFloat((rows as any[])[0]?.total) || 0;
-  const disponivel = Math.max(0, limite - usado);
-  const percentual = limite > 0 ? (usado / limite) * 100 : 0;
-
-  return {
-    cartao_nome: cartao.nome,
-    limite: Math.round(limite * 100) / 100,
-    usado: Math.round(usado * 100) / 100,
-    disponivel: Math.round(disponivel * 100) / 100,
-    percentual: Math.round(percentual * 10) / 10,
-    dia_fechamento: cartao.dia_fechamento,
-    dia_vencimento: cartao.dia_vencimento
-  };
+  const { getSaldoCartaoPf } = await import("./services/fatura-pf.service");
+  return getSaldoCartaoPf(cartaoId);
 }
 
 /**
@@ -2364,7 +2362,7 @@ export async function getCartoesComSaldo(userId: number, walletId: number): Prom
       and(
         eq(paymentMethods.usuario_id, userId),
         eq(paymentMethods.ativo, true),
-        sql`${paymentMethods.limite} IS NOT NULL AND ${paymentMethods.limite} > 0`
+        sql`${paymentMethods.dia_fechamento} IS NOT NULL AND ${paymentMethods.dia_vencimento} IS NOT NULL`
       )
     );
 
@@ -2504,6 +2502,16 @@ export async function marcarComoPaga(transacaoId: number): Promise<any> {
   return (result as any[])[0];
 }
 
+export async function reabrirTransacao(transacaoId: number): Promise<any> {
+  const result = await db.execute(sql`
+    UPDATE transacoes
+    SET status = 'Pendente', data_pagamento = NULL
+    WHERE id = ${transacaoId}
+    RETURNING *
+  `);
+  return (result as any[])[0];
+}
+
 export async function marcarRecorrente(transacaoId: number, recorrente: boolean): Promise<any> {
   const classificacao = recorrente ? 'fixa' : 'variavel';
   const result = await db.execute(sql`
@@ -2583,6 +2591,7 @@ export async function getFluxoCaixaResumo(walletId: number, mes?: number, ano?: 
       AND COALESCE(t.reembolsavel, false) = false
       AND (c.nome ILIKE '%dízimo%' OR c.nome ILIKE '%dizimo%' OR c.nome ILIKE '%oferta%')
       AND t.data_transacao >= ${de} AND t.data_transacao <= ${ate}
+      AND ${NAO_E_PAGAMENTO_FATURA}
   `);
   const dizimos = parseFloat((dizimosRows as any[])[0]?.total) || 0;
 
@@ -2599,11 +2608,13 @@ export async function getFluxoCaixaResumo(walletId: number, mes?: number, ano?: 
 
   // Despesas fixas (recorrente=true OU classificacao_despesa='fixa')
   const fixasRows = await db.execute(sql`
-    SELECT COALESCE(SUM(valor::numeric), 0) AS total
-    FROM transacoes WHERE carteira_id = ${walletId} AND tipo = 'Despesa'
-      AND COALESCE(reembolsavel, false) = false
-      AND (recorrente = true OR classificacao_despesa = 'fixa')
-      AND data_transacao >= ${de} AND data_transacao <= ${ate}
+    SELECT COALESCE(SUM(t.valor::numeric), 0) AS total
+    FROM transacoes t
+    WHERE t.carteira_id = ${walletId} AND t.tipo = 'Despesa'
+      AND COALESCE(t.reembolsavel, false) = false
+      AND (t.recorrente = true OR t.classificacao_despesa = 'fixa')
+      AND t.data_transacao >= ${de} AND t.data_transacao <= ${ate}
+      AND ${NAO_E_PAGAMENTO_FATURA}
   `);
   const fixas = parseFloat((fixasRows as any[])[0]?.total) || 0;
 
@@ -2618,6 +2629,7 @@ export async function getFluxoCaixaResumo(walletId: number, mes?: number, ano?: 
       AND (t.classificacao_despesa IS NULL OR t.classificacao_despesa = 'variavel')
       AND NOT (c.nome ILIKE '%dízimo%' OR c.nome ILIKE '%dizimo%' OR c.nome ILIKE '%oferta%')
       AND t.data_transacao >= ${de} AND t.data_transacao <= ${ate}
+      AND ${NAO_E_PAGAMENTO_FATURA}
   `);
   const variaveis = parseFloat((variaveisRows as any[])[0]?.total) || 0;
 
@@ -2666,6 +2678,7 @@ export async function getDailySummary(walletId: number, date: string): Promise<{
     WHERE carteira_id = ${walletId}
       AND data_transacao = ${date}
       AND (tipo <> 'Despesa' OR COALESCE(reembolsavel, false) = false)
+      AND ${NAO_E_PAGAMENTO_FATURA_PF}
   `);
   const row = (rows as any[])[0] || { receita: 0, despesa: 0, qtd: 0 };
   const receita = parseFloat(row.receita) || 0;
@@ -2684,6 +2697,7 @@ export async function getPeriodSummary(walletId: number, de: string, ate: string
       AND data_transacao >= ${de}
       AND data_transacao <= ${ate}
       AND (tipo <> 'Despesa' OR COALESCE(reembolsavel, false) = false)
+      AND ${NAO_E_PAGAMENTO_FATURA_PF}
   `);
   const row = (rows as any[])[0] || { receita: 0, despesa: 0, qtd: 0 };
   const receita = parseFloat(row.receita) || 0;
@@ -2719,6 +2733,7 @@ export async function getCategoryBreakdown(walletId: number, de: string, ate: st
       AND t.data_transacao >= ${de}
       AND t.data_transacao <= ${ate}
       AND (t.tipo <> 'Despesa' OR COALESCE(t.reembolsavel, false) = false)
+      AND ${NAO_E_PAGAMENTO_FATURA}
     GROUP BY c.nome, t.tipo
     ORDER BY total DESC
   `);
@@ -3029,21 +3044,40 @@ export async function resolveOuCriaFormaPagamento(
 }
 
 // Cria N parcelas de uma compra, agrupadas por compra_grupo (mesma compra).
+// No cartão: cada parcela vai para a fatura da sua competência e não mexe no caixa.
 export async function criarCompraParcelada(params: {
   walletId: number;
   categoriaId: number;
   descricao: string;
-  valorParcela: number;
+  valorParcela?: number;
+  valorTotal?: number;
   parcelas: number;
   formaPagamentoId?: number | null;
   dataInicio: string; // AAAA-MM-DD
+  contaBancariaId?: number | null;
+  usuarioId?: number;
+  status?: string;
 }): Promise<{ compra_grupo: string; ids: number[]; parcelas: number; valor_parcela: number }> {
-  const { walletId, categoriaId, descricao, valorParcela, parcelas, formaPagamentoId, dataInicio } = params;
+  const {
+    walletId, categoriaId, descricao, parcelas, formaPagamentoId, dataInicio,
+    contaBancariaId, usuarioId, status = "Efetivada",
+  } = params;
+  const { valoresParcelas } = await import("./services/fatura-core");
+  const total = params.valorTotal != null
+    ? Number(params.valorTotal)
+    : Number(params.valorParcela || 0) * parcelas;
+  const valores = valoresParcelas(total, parcelas);
   const grupo = randomUUID();
   const [y, m, d] = dataInicio.split("-").map(Number);
   const ids: number[] = [];
+
+  let cartao: any = null;
+  if (formaPagamentoId && usuarioId) {
+    const { cartaoPfDoUsuario } = await import("./services/fatura-pf.service");
+    cartao = await cartaoPfDoUsuario(formaPagamentoId, usuarioId);
+  }
+
   for (let i = 0; i < parcelas; i++) {
-    // avança i meses, ajustando ao último dia do mês quando necessário
     const mesTotal = (m - 1) + i;
     const ano = y + Math.floor(mesTotal / 12);
     const mes = (mesTotal % 12) + 1;
@@ -3051,17 +3085,37 @@ export async function criarCompraParcelada(params: {
     const dia = Math.min(d, ultimoDia);
     const dataISO = `${ano}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
     const descParcela = parcelas > 1 ? `${descricao} (${i + 1}/${parcelas})` : descricao;
+    const valorParcela = valores[i] ?? 0;
+
+    let faturaId: number | null = null;
+    let competencia: string | null = null;
+    let movimentaCaixa = true;
+    let contaId = contaBancariaId ?? null;
+    let statusParcela = status;
+
+    if (cartao && usuarioId) {
+      const { resolverFaturaPf } = await import("./services/fatura-pf.service");
+      const { fatura, competencia: comp } = await resolverFaturaPf(usuarioId, walletId, cartao, dataISO);
+      faturaId = fatura.id;
+      competencia = comp;
+      movimentaCaixa = false;
+      contaId = null;
+      statusParcela = "Pendente";
+    }
+
     const res = await db.execute(sql`
       INSERT INTO transacoes
-        (carteira_id, categoria_id, forma_pagamento_id, tipo, valor, data_transacao, descricao, status, compra_grupo, parcela_num, parcela_total)
+        (carteira_id, categoria_id, forma_pagamento_id, tipo, valor, data_transacao, descricao, status,
+         compra_grupo, parcela_num, parcela_total, conta_bancaria_id, fatura_id, competencia, movimenta_caixa)
       VALUES
         (${walletId}, ${categoriaId}, ${formaPagamentoId ?? null}, 'Despesa', ${valorParcela.toFixed(2)},
-         ${dataISO}, ${descParcela}, 'Efetivada', ${grupo}, ${i + 1}, ${parcelas})
+         ${dataISO}, ${descParcela}, ${statusParcela}, ${grupo}, ${i + 1}, ${parcelas},
+         ${contaId}, ${faturaId}, ${competencia}, ${movimentaCaixa})
       RETURNING id
     `);
     ids.push((res as any[])[0].id);
   }
-  return { compra_grupo: grupo, ids, parcelas, valor_parcela: valorParcela };
+  return { compra_grupo: grupo, ids, parcelas, valor_parcela: valores[0] ?? 0 };
 }
 
 // Identifica a "última compra" da carteira: pega a transação mais recente e

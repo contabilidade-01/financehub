@@ -40,6 +40,9 @@ import {
   PencilIcon,
   ChevronDown,
   Check,
+  CheckCircle2,
+  RotateCcw,
+  FileSpreadsheet,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -545,7 +548,8 @@ const ActionsDropdown = ({ onEdit, onDelete, t }: { onEdit: () => void; onDelete
   );
 };
 
-type Periodo = "all" | "current_month" | "next_month" | "custom";
+type Periodo = "all" | "current_month" | "previous_month" | "next_month" | "year" | "custom";
+type Ordenacao = "data_desc" | "data_asc" | "valor_desc" | "valor_asc";
 
 function PeriodFilterDropdown({
   value, onChange, t,
@@ -562,9 +566,11 @@ function PeriodFilterDropdown({
   }, [isOpen]);
 
   const opcoes: { id: Periodo; label: string }[] = [
-    { id: "all", label: t('transactions.filters.all_periods', 'Todo o período') },
-    { id: "current_month", label: t('transactions.filters.current_month', 'Mês atual') },
+    { id: "current_month", label: t('transactions.filters.current_month', 'Mês vigente') },
+    { id: "previous_month", label: 'Mês anterior' },
     { id: "next_month", label: t('transactions.filters.next_month', 'Próximo mês') },
+    { id: "year", label: 'Ano corrente' },
+    { id: "all", label: t('transactions.filters.all_periods', 'Tudo') },
     { id: "custom", label: t('transactions.filters.custom_period', 'Personalizado') },
   ];
   const atual = opcoes.find((o) => o.id === value) ?? opcoes[0];
@@ -584,6 +590,66 @@ function PeriodFilterDropdown({
 
         {isOpen && (
           <div className="absolute z-50 w-full mt-1 rounded-md border bg-popover text-popover-foreground shadow-md max-h-[300px] overflow-y-auto">
+            <div className="p-1">
+              {opcoes.map((o) => (
+                <button
+                  key={o.id}
+                  type="button"
+                  className="relative flex w-full items-center rounded-sm py-1.5 pl-8 pr-2 text-sm hover:bg-accent hover:text-accent-foreground"
+                  onClick={() => { onChange(o.id); setIsOpen(false); }}
+                >
+                  {value === o.id && (
+                    <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+                      <Check className="h-4 w-4" />
+                    </span>
+                  )}
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SortFilterDropdown({
+  value, onChange,
+}: { value: Ordenacao; onChange: (v: Ordenacao) => void }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const selectRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (selectRef.current && !selectRef.current.contains(event.target as Node)) setIsOpen(false);
+    };
+    if (isOpen) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen]);
+
+  const opcoes: { id: Ordenacao; label: string }[] = [
+    { id: "data_desc", label: "Data ↓" },
+    { id: "data_asc", label: "Data ↑" },
+    { id: "valor_desc", label: "Valor ↓" },
+    { id: "valor_asc", label: "Valor ↑" },
+  ];
+  const atual = opcoes.find((o) => o.id === value) ?? opcoes[0];
+
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-sm font-medium text-muted-foreground">Ordenação</label>
+      <div ref={selectRef} className="relative">
+        <button
+          type="button"
+          onClick={() => setIsOpen(!isOpen)}
+          className="flex h-10 w-[130px] items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm"
+        >
+          <span>{atual.label}</span>
+          <ChevronDown className="h-4 w-4 opacity-50" />
+        </button>
+        {isOpen && (
+          <div className="absolute z-50 w-full mt-1 rounded-md border bg-popover text-popover-foreground shadow-md">
             <div className="p-1">
               {opcoes.map((o) => (
                 <button
@@ -634,6 +700,16 @@ function limitesDoMes(offsetMeses: number): { de: string; ate: string } {
   return { de: iso(inicio), ate: iso(fim) };
 }
 
+function limitesDoAno(): { de: string; ate: string } {
+  const y = new Date().getFullYear();
+  return { de: `${y}-01-01`, ate: `${y}-12-31` };
+}
+
+function pmEhCartao(pm: PaymentMethod | undefined) {
+  if (!pm) return false;
+  return pm.dia_fechamento != null && pm.dia_vencimento != null;
+}
+
 // Data de referência da transação: vencimento quando existe (conta a pagar).
 function dataRef(t: Transaction): string {
   const v = (t as any).data_vencimento || t.data_transacao;
@@ -650,10 +726,13 @@ export default function Transactions() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [paymentMethodFilter, setPaymentMethodFilter] = useState<string>("all");
-  const [periodFilter, setPeriodFilter] = useState<Periodo>("all");
+  const [periodFilter, setPeriodFilter] = useState<Periodo>("current_month");
   const [customFrom, setCustomFrom] = useState<string>("");
   const [customTo, setCustomTo] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [valorMin, setValorMin] = useState("");
+  const [valorMax, setValorMax] = useState("");
+  const [ordenacao, setOrdenacao] = useState<Ordenacao>("data_desc");
   const { toast } = useToast();
   
   // WebSocket para atualizações em tempo real
@@ -696,13 +775,19 @@ export default function Transactions() {
   };
 
   const getPaymentMethodDisplay = (transaction: Transaction) => {
+    const method = paymentMethods?.find((m) => m.id === transaction.forma_pagamento_id);
+    if (method) {
+      const nome = translatePaymentMethodName(method.nome, t);
+      return pmEhCartao(method) ? `CC ${nome}` : nome;
+    }
     if (transaction.metodo_pagamento) {
       return translatePaymentMethodName(transaction.metodo_pagamento, t);
     }
     return getPaymentMethodName(transaction.forma_pagamento_id ?? null);
   };
 
-  const filteredTransactions = transactions?.filter(transaction => {
+  const filteredTransactions = (transactions || [])
+    .filter((transaction) => {
     const matchesType = typeFilter === "all" || transaction.tipo === typeFilter;
     const matchesStatus = statusFilter === "all" || transaction.status === statusFilter;
     const matchesCategory = categoryFilter === "all" || transaction.categoria_id?.toString() === categoryFilter;
@@ -728,29 +813,51 @@ export default function Transactions() {
     if (periodFilter !== "all") {
       const { de, ate } =
         periodFilter === "current_month" ? limitesDoMes(0)
+        : periodFilter === "previous_month" ? limitesDoMes(-1)
         : periodFilter === "next_month" ? limitesDoMes(1)
+        : periodFilter === "year" ? limitesDoAno()
         : { de: customFrom, ate: customTo };
       const d = dataRef(transaction);
       if (de && d < de) matchesPeriodo = false;
       if (ate && d > ate) matchesPeriodo = false;
     }
 
-    return matchesType && matchesStatus && matchesCategory && matchesPaymentMethod && matchesSearch && matchesPeriodo;
+    const absValor = Math.abs(Number(transaction.valor) || 0);
+    const minOk = valorMin === "" || absValor >= Number(valorMin);
+    const maxOk = valorMax === "" || absValor <= Number(valorMax);
+
+    return matchesType && matchesStatus && matchesCategory && matchesPaymentMethod && matchesSearch && matchesPeriodo && minOk && maxOk;
+  })
+  .slice()
+  .sort((a, b) => {
+    if (ordenacao === "data_asc" || ordenacao === "data_desc") {
+      const da = dataRef(a);
+      const db = dataRef(b);
+      return ordenacao === "data_asc" ? da.localeCompare(db) : db.localeCompare(da);
+    }
+    const va = Math.abs(Number(a.valor) || 0);
+    const vb = Math.abs(Number(b.valor) || 0);
+    return ordenacao === "valor_asc" ? va - vb : vb - va;
   });
 
   // Subtotais do que está visível na lista (respeita todos os filtros).
-  const subtotais = (filteredTransactions ?? []).reduce(
+  const subtotais = filteredTransactions.reduce(
     (acc, t) => {
       const v = Number(t.valor) || 0;
       if (t.tipo === TransactionType.INCOME) acc.receitas += v;
       else if ((t as any).reembolsavel) acc.aReceber += v;
       else acc.despesas += v;
+      if (t.status === TransactionStatus.PENDING || t.status === TransactionStatus.SCHEDULED) {
+        if (t.tipo === TransactionType.INCOME) acc.abertoReceitas += v;
+        else if (!(t as any).reembolsavel) acc.abertoDespesas += v;
+      }
       acc.qtd++;
       return acc;
     },
-    { receitas: 0, despesas: 0, aReceber: 0, qtd: 0 },
+    { receitas: 0, despesas: 0, aReceber: 0, abertoReceitas: 0, abertoDespesas: 0, qtd: 0 },
   );
   const saldoFiltrado = subtotais.receitas - subtotais.despesas;
+  const saldoEmAberto = subtotais.abertoReceitas - subtotais.abertoDespesas;
 
   const handleDeleteTransaction = async (id: number) => {
     try {
@@ -772,6 +879,55 @@ export default function Transactions() {
         description: t('transactions.delete_error', 'Não foi possível excluir a transação.'),
         variant: "destructive",
       });
+    }
+  };
+
+  const handlePagar = async (id: number) => {
+    try {
+      await apiRequest(`/api/transactions/${id}/pagar`, { method: "PUT" });
+      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/wallet/current"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/vencimentos"] });
+      toast({ title: "Baixa realizada" });
+    } catch (e: any) {
+      toast({ title: "Erro", description: e?.message || "Não foi possível baixar", variant: "destructive" });
+    }
+  };
+
+  const handleReabrir = async (id: number) => {
+    try {
+      await apiRequest(`/api/transactions/${id}/reabrir`, { method: "PUT" });
+      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/wallet/current"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/vencimentos"] });
+      toast({ title: "Lançamento reaberto" });
+    } catch (e: any) {
+      toast({ title: "Erro", description: e?.message || "Não foi possível reabrir", variant: "destructive" });
+    }
+  };
+
+  const exportXlsx = async () => {
+    try {
+      const XLSX = await import("xlsx");
+      const rows = filteredTransactions.map((t) => ({
+        Data: formatDate(t.data_transacao),
+        Descrição: t.descricao,
+        Tipo: t.tipo,
+        Valor: Number(t.valor) || 0,
+        Status: getStatusLabel(t.status),
+        Forma: getPaymentMethodDisplay(t),
+        Classificação: getCategoryName(t.categoria_id ?? null),
+        Parcela:
+          (t as any).parcela_num && (t as any).parcela_total
+            ? `${(t as any).parcela_num}/${(t as any).parcela_total}`
+            : "",
+      }));
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Lançamentos");
+      XLSX.writeFile(wb, `lancamentos-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    } catch (e: any) {
+      toast({ title: "Erro ao exportar", description: e?.message, variant: "destructive" });
     }
   };
 
@@ -831,6 +987,10 @@ export default function Transactions() {
             <p className="text-gray-400">{t('transactions.subtitle', 'Gerencie suas transações financeiras')}</p>
           </div>
           <div className="flex gap-2">
+            <Button variant="outline" onClick={exportXlsx} disabled={filteredTransactions.length === 0}>
+              <FileSpreadsheet className="mr-2 h-4 w-4" />
+              XLSX
+            </Button>
             <Button onClick={() => {
               setEditingTransaction(null);
               setIsTransactionFormOpen(true);
@@ -908,6 +1068,33 @@ export default function Transactions() {
 
               <PeriodFilterDropdown value={periodFilter} onChange={setPeriodFilter} t={t} />
 
+              <SortFilterDropdown value={ordenacao} onChange={setOrdenacao} />
+
+              <div className="flex flex-col gap-1">
+                <label className="text-sm font-medium text-muted-foreground">Valor mín</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0"
+                  value={valorMin}
+                  onChange={(e) => setValorMin(e.target.value)}
+                  className="h-10 w-[110px] bg-dark-purple/10"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-sm font-medium text-muted-foreground">Valor máx</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="∞"
+                  value={valorMax}
+                  onChange={(e) => setValorMax(e.target.value)}
+                  className="h-10 w-[110px] bg-dark-purple/10"
+                />
+              </div>
+
               <div className="flex flex-col gap-1">
                 <label className="text-sm font-medium text-muted-foreground">{t('transactions.table.actions', 'Ações')}</label>
                 <div className="h-10 flex items-center justify-end">
@@ -918,10 +1105,13 @@ export default function Transactions() {
                       setStatusFilter("all");
                       setCategoryFilter("all");
                       setPaymentMethodFilter("all");
-                      setPeriodFilter("all");
+                      setPeriodFilter("current_month");
                       setCustomFrom("");
                       setCustomTo("");
                       setSearchQuery("");
+                      setValorMin("");
+                      setValorMax("");
+                      setOrdenacao("data_desc");
                     }}
                     className="bg-dark-purple/10"
                   >
@@ -946,19 +1136,37 @@ export default function Transactions() {
           )}
 
           {/* Subtotais do resultado filtrado */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
             <SubtotalCard
-              label={t('transactions.subtotal.count', 'Lançamentos')}
-              value={String(subtotais.qtd)}
-              tone="neutral"
-            />
-            <SubtotalCard
-              label={t('transactions.subtotal.income', 'Receitas')}
+              label="Total Receitas"
               value={formatCurrency(subtotais.receitas)}
               tone="income"
             />
             <SubtotalCard
-              label={t('transactions.subtotal.expense', 'Despesas')}
+              label="Total Despesas"
+              value={formatCurrency(subtotais.despesas)}
+              tone="expense"
+            />
+            <SubtotalCard
+              label="Saldo em aberto"
+              value={formatCurrency(saldoEmAberto)}
+              tone={saldoEmAberto >= 0 ? "income" : "expense"}
+              hint="Somente não baixados"
+            />
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+            <SubtotalCard
+              label="Lançamentos (incl. baixados)"
+              value={String(subtotais.qtd)}
+              tone="neutral"
+            />
+            <SubtotalCard
+              label="Receitas (incl. baixados)"
+              value={formatCurrency(subtotais.receitas)}
+              tone="income"
+            />
+            <SubtotalCard
+              label="Despesas (incl. baixados)"
               value={formatCurrency(subtotais.despesas)}
               tone="expense"
               hint={subtotais.aReceber > 0
@@ -966,7 +1174,7 @@ export default function Transactions() {
                 : undefined}
             />
             <SubtotalCard
-              label={t('transactions.subtotal.balance', 'Saldo do filtro')}
+              label="Saldo (incl. baixados)"
               value={formatCurrency(saldoFiltrado)}
               tone={saldoFiltrado >= 0 ? "income" : "expense"}
             />
@@ -979,6 +1187,7 @@ export default function Transactions() {
                 <thead>
                   <tr>
                     <th className="text-left pb-4 text-xs font-label text-gray-400">{t('transactions.table.description', 'DESCRIÇÃO')}</th>
+                    <th className="text-left pb-4 text-xs font-label text-gray-400">FORMA</th>
                     <th className="text-left pb-4 text-xs font-label text-gray-400">{t('transactions.table.category', 'CATEGORIA')}</th>
                     <th className="text-left pb-4 text-xs font-label text-gray-400">{t('transactions.table.date', 'DATA')}</th>
                     <th className="text-left pb-4 text-xs font-label text-gray-400">{t('transactions.table.value', 'VALOR')}</th>
@@ -989,14 +1198,14 @@ export default function Transactions() {
                 <tbody>
                   {isLoading ? (
                     <tr>
-                      <td colSpan={6} className="py-4 text-center">{t('common.loading', 'Carregando...')}</td>
+                      <td colSpan={7} className="py-4 text-center">{t('common.loading', 'Carregando...')}</td>
                     </tr>
-                  ) : filteredTransactions?.length === 0 ? (
+                  ) : filteredTransactions.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-4 text-center">{t('transactions.table.no_transactions', 'Nenhuma transação encontrada')}</td>
+                      <td colSpan={7} className="py-4 text-center">{t('transactions.table.no_transactions', 'Nenhuma transação encontrada')}</td>
                     </tr>
                   ) : (
-                    filteredTransactions?.map((transaction) => (
+                    filteredTransactions.map((transaction) => (
                       <TransactionRow 
                         key={transaction.id} 
                         isShaking={shakingTransactions.has(transaction.id)}
@@ -1018,9 +1227,16 @@ export default function Transactions() {
                                   <span className="ml-2 rounded bg-blue-500/10 px-2 py-0.5 text-[10px] text-blue-500">A receber</span>
                                 )}
                               </div>
-                              <div className="text-xs text-gray-400">{getPaymentMethodDisplay(transaction)}</div>
+                              {(transaction as any).parcela_num && (transaction as any).parcela_total ? (
+                                <div className="text-xs text-gray-400">
+                                  {(transaction as any).parcela_num}/{(transaction as any).parcela_total}
+                                </div>
+                              ) : null}
                             </div>
                           </div>
+                        </td>
+                        <td className="py-4 whitespace-nowrap text-sm text-muted-foreground">
+                          {getPaymentMethodDisplay(transaction)}
                         </td>
                         <td className="py-4 whitespace-nowrap">
                           <span className="px-2 py-1 rounded-lg bg-primary/10 text-primary text-xs">
@@ -1051,11 +1267,34 @@ export default function Transactions() {
                           </span>
                         </td>
                         <td className="py-4 whitespace-nowrap text-right">
-                          <ActionsDropdown
-                            onEdit={() => editTransaction(transaction)}
-                            onDelete={() => setDeletingTransaction(transaction)}
-                            t={t}
-                          />
+                          <div className="inline-flex items-center gap-1">
+                            {(transaction.status === TransactionStatus.PENDING ||
+                              transaction.status === TransactionStatus.SCHEDULED) && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                title="Dar baixa"
+                                onClick={() => handlePagar(transaction.id)}
+                              >
+                                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                              </Button>
+                            )}
+                            {transaction.status === TransactionStatus.COMPLETED && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                title="Reabrir"
+                                onClick={() => handleReabrir(transaction.id)}
+                              >
+                                <RotateCcw className="h-4 w-4" />
+                              </Button>
+                            )}
+                            <ActionsDropdown
+                              onEdit={() => editTransaction(transaction)}
+                              onDelete={() => setDeletingTransaction(transaction)}
+                              t={t}
+                            />
+                          </div>
                         </td>
                       </TransactionRow>
                     ))
@@ -1069,12 +1308,12 @@ export default function Transactions() {
           <div className="md:hidden space-y-4">
             {isLoading ? (
               <div className="text-center py-8 text-gray-400">{t('common.loading', 'Carregando...')}</div>
-            ) : filteredTransactions?.length === 0 ? (
+            ) : filteredTransactions.length === 0 ? (
               <div className="text-center py-8 text-gray-400">
                 {t('transactions.table.no_transactions', 'Nenhuma transação encontrada')}
               </div>
             ) : (
-              filteredTransactions?.map((transaction) => (
+              filteredTransactions.map((transaction) => (
                 <TransactionCard 
                   key={transaction.id} 
                   isShaking={shakingTransactions.has(transaction.id)}
@@ -1096,10 +1335,26 @@ export default function Transactions() {
                         {transaction.reembolsavel && (
                           <span className="inline-block rounded bg-blue-500/10 px-2 py-0.5 text-[10px] text-blue-500">A receber</span>
                         )}
+                        {(transaction as any).parcela_num && (transaction as any).parcela_total ? (
+                          <div className={`text-xs ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>
+                            {(transaction as any).parcela_num}/{(transaction as any).parcela_total}
+                          </div>
+                        ) : null}
                         <div className={`text-sm ${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>{getPaymentMethodDisplay(transaction)}</div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 ml-2">
+                    <div className="flex items-center gap-1 ml-2">
+                      {(transaction.status === TransactionStatus.PENDING ||
+                        transaction.status === TransactionStatus.SCHEDULED) && (
+                        <Button size="sm" variant="ghost" onClick={() => handlePagar(transaction.id)}>
+                          <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                        </Button>
+                      )}
+                      {transaction.status === TransactionStatus.COMPLETED && (
+                        <Button size="sm" variant="ghost" onClick={() => handleReabrir(transaction.id)}>
+                          <RotateCcw className="h-4 w-4" />
+                        </Button>
+                      )}
                       <ActionsDropdown
                         onEdit={() => editTransaction(transaction)}
                         onDelete={() => setDeletingTransaction(transaction)}

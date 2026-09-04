@@ -63,6 +63,7 @@ import ExternalCheckout from "@/pages/checkout/ExternalCheckout";
 import PjRouter from "@/pages/pj/PjRouter";
 import MetasPage from "@/pages/metas";
 import ContasPagarPage from "@/pages/contas-pagar";
+import ContasCartoesPage from "@/pages/contas-cartoes";
 import ImportarLancamentos from "@/pages/importar";
 import FluxoProjetadoPF from "@/pages/fluxo-projetado";
 import ReembolsosPage from "@/pages/reembolsos";
@@ -213,6 +214,11 @@ function Router() {
             <Route path="/contas-pagar">
               <MainLayout>
                 <ContasPagarPage />
+              </MainLayout>
+            </Route>
+            <Route path="/contas-cartoes">
+              <MainLayout>
+                <ContasCartoesPage />
               </MainLayout>
             </Route>
             <Route path="/reembolsos">

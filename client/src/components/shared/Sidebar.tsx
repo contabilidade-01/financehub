@@ -108,13 +108,14 @@ function Sidebar() {
     items: [
       { icon: <LayoutDashboard className="mr-3 h-4 w-4" />, text: t('navigation.dashboard', 'Dashboard'), path: "/" },
       { icon: <PlusCircle className="mr-3 h-4 w-4" />, text: t('navigation.transactions', 'Transações'), path: "/transactions" },
-      { icon: <TrendingUp className="mr-3 h-4 w-4" />, text: 'Contas a Pagar', path: "/contas-pagar" },
+      { icon: <Wallet className="mr-3 h-4 w-4" />, text: 'Contas e Cartões', path: "/contas-cartoes" },
+      { icon: <TrendingUp className="mr-3 h-4 w-4" />, text: 'Vencimentos', path: "/contas-pagar" },
       { icon: <HandCoins className="mr-3 h-4 w-4" />, text: 'A Receber', path: "/reembolsos" },
       { icon: <FileUp className="mr-3 h-4 w-4" />, text: 'Importar Lançamentos', path: "/importar" },
       { icon: <Building2 className="mr-3 h-4 w-4" />, text: 'Metas e Sonhos', path: "/metas" },
       { icon: <BarChart3 className="mr-3 h-4 w-4" />, text: t('navigation.reports', 'Relatórios'), path: "/reports" },
       { icon: <LineChart className="mr-3 h-4 w-4" />, text: 'Fluxo Projetado', path: "/fluxo-projetado" },
-      { icon: <CreditCard className="mr-3 h-4 w-4" />, text: t('navigation.payment_methods', 'Cartões e Pagamentos'), path: "/payment-methods" },
+      { icon: <CreditCard className="mr-3 h-4 w-4" />, text: 'Formas de pagamento', path: "/payment-methods" },
       { icon: <CalendarDays className="mr-3 h-4 w-4" />, text: t('navigation.reminders', 'Lembretes'), path: "/reminders" },
     ]
   };
@@ -128,7 +129,8 @@ function Sidebar() {
       { icon: <PlusCircle className="mr-3 h-4 w-4" />, text: 'Transações', path: "/p/transacoes" },
       { icon: <BarChart3 className="mr-3 h-4 w-4" />, text: 'Relatórios', path: "/p/relatorios" },
       { icon: <Tag className="mr-3 h-4 w-4" />, text: 'Plano de Contas', path: "/p/categorias" },
-      { icon: <CreditCard className="mr-3 h-4 w-4" />, text: 'Faturas de Cartão', path: "/p/faturas" },
+      { icon: <Wallet className="mr-3 h-4 w-4" />, text: 'Contas bancárias', path: "/p/conciliacao" },
+      { icon: <CreditCard className="mr-3 h-4 w-4" />, text: 'Cartões e Faturas', path: "/p/faturas" },
       { icon: <CreditCard className="mr-3 h-4 w-4" />, text: 'Formas de Pagamento', path: "/p/formas-pagamento" },
       { icon: <FileUp className="mr-3 h-4 w-4" />, text: 'Conciliação', path: "/p/conciliacao" },
       { icon: <FileUp className="mr-3 h-4 w-4" />, text: 'Importar Lançamentos', path: "/p/importar" },

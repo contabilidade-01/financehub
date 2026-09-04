@@ -1,0 +1,161 @@
+/**
+ * Contas bancárias — PF (usuario_id, empresa_id NULL) e helpers de saldo.
+ */
+import { db } from "../db";
+import { sql } from "drizzle-orm";
+import { num } from "./fatura-core";
+
+/** Isolamento puro: PF = empresa_id null; PJ = empresa concreta. */
+export function filtrarContasPorEscopo<T extends { empresa_id?: number | null; usuario_id?: number | null }>(
+  contas: T[],
+  escopo: { usuarioId: number; empresaId?: number | null },
+): T[] {
+  if (escopo.empresaId != null) {
+    return contas.filter((c) => c.empresa_id === escopo.empresaId);
+  }
+  return contas.filter((c) => c.usuario_id === escopo.usuarioId && (c.empresa_id == null));
+}
+
+/** Conta padrão: tipo carteira ativa, senão a primeira ativa (não depende do nome). */
+export function escolherContaPadraoPf(
+  contas: { id: number; tipo: string; ativo?: boolean | null }[],
+): number | null {
+  const ativas = contas.filter((c) => c.ativo !== false);
+  const carteira = ativas.find((c) => c.tipo === "carteira");
+  return (carteira || ativas[0])?.id ?? null;
+}
+
+export async function listarContasPf(userId: number): Promise<any[]> {
+  const r = await db.execute(sql`
+    SELECT * FROM contas_bancarias
+    WHERE usuario_id = ${userId} AND empresa_id IS NULL
+    ORDER BY ativo DESC, tipo = 'carteira' DESC, nome NULLS LAST, banco
+  `);
+  return r as any[];
+}
+
+export async function contaPadraoPf(userId: number): Promise<number | null> {
+  const contas = await listarContasPf(userId);
+  return escolherContaPadraoPf(contas);
+}
+
+export async function saldoConta(contaId: number): Promise<number> {
+  const contaRows = await db.execute(sql`
+    SELECT saldo_inicial FROM contas_bancarias WHERE id = ${contaId} LIMIT 1
+  `);
+  const ini = num((contaRows as any[])[0]?.saldo_inicial);
+
+  // SALDO ATUAL = só dinheiro que JÁ se moveu (status Efetivada). Conta a pagar
+  // em aberto é PREVISÃO e nunca entra aqui — ela aparece no Fluxo Projetado e
+  // no "Saldo em aberto" da tela de Lançamentos. Regra idêntica para PF e PJ.
+  const pf = await db.execute(sql`
+    SELECT COALESCE(SUM(
+      CASE WHEN tipo = 'Receita' THEN valor::numeric
+           WHEN tipo = 'Despesa' AND COALESCE(reembolsavel, false) = false THEN -valor::numeric
+           ELSE 0 END
+    ), 0) AS mov
+    FROM transacoes
+    WHERE conta_bancaria_id = ${contaId}
+      AND COALESCE(movimenta_caixa, true) = true
+      AND status = 'Efetivada'
+  `);
+
+  const pj = await db.execute(sql`
+    SELECT COALESCE(SUM(
+      CASE WHEN tipo = 'Receita' THEN valor::numeric
+           WHEN tipo = 'Despesa' THEN -valor::numeric
+           ELSE 0 END
+    ), 0) AS mov
+    FROM empresas_transacoes
+    WHERE conta_bancaria_id = ${contaId}
+      AND COALESCE(movimenta_caixa, true) = true
+      AND status = 'Efetivada'
+  `);
+
+  return Math.round((ini + num((pf as any[])[0]?.mov) + num((pj as any[])[0]?.mov)) * 100) / 100;
+}
+
+export async function listarContasComSaldoPf(userId: number): Promise<any[]> {
+  const contas = await listarContasPf(userId);
+  return Promise.all(contas.map(async (c) => ({
+    ...c,
+    nome: c.nome || c.banco,
+    saldo: await saldoConta(c.id),
+  })));
+}
+
+export async function criarContaPf(userId: number, b: {
+  nome: string;
+  tipo?: string;
+  banco?: string;
+  saldo_inicial?: number;
+  cor?: string;
+  agencia?: string;
+  numero?: string;
+}): Promise<any> {
+  const nome = String(b.nome || "").trim();
+  if (!nome) throw new Error("Nome é obrigatório");
+  const tipo = b.tipo || "corrente";
+  const banco = (b.banco || nome).trim();
+  const r = await db.execute(sql`
+    INSERT INTO contas_bancarias
+      (empresa_id, usuario_id, banco, nome, tipo, saldo_inicial, ativo, cor, agencia, numero)
+    VALUES
+      (NULL, ${userId}, ${banco}, ${nome}, ${tipo},
+       ${(Number(b.saldo_inicial) || 0).toFixed(2)}, true,
+       ${b.cor || null}, ${b.agencia || null}, ${b.numero || null})
+    RETURNING *
+  `);
+  return (r as any[])[0];
+}
+
+export async function atualizarContaPf(userId: number, contaId: number, b: any): Promise<any | null> {
+  const atual = await db.execute(sql`
+    SELECT * FROM contas_bancarias
+    WHERE id = ${contaId} AND usuario_id = ${userId} AND empresa_id IS NULL
+    LIMIT 1
+  `);
+  if (!(atual as any[])[0]) return null;
+
+  const a = (atual as any[])[0];
+  const nome = b.nome != null ? String(b.nome).trim() : a.nome;
+  const banco = b.banco != null ? String(b.banco).trim() : a.banco;
+  const tipo = b.tipo != null ? b.tipo : a.tipo;
+  const cor = b.cor !== undefined ? b.cor : a.cor;
+  const ativo = b.ativo != null ? !!b.ativo : a.ativo;
+  const saldoIni = b.saldo_inicial != null ? Number(b.saldo_inicial).toFixed(2) : a.saldo_inicial;
+
+  const r = await db.execute(sql`
+    UPDATE contas_bancarias
+    SET nome = ${nome}, banco = ${banco}, tipo = ${tipo}, cor = ${cor},
+        ativo = ${ativo}, saldo_inicial = ${saldoIni}
+    WHERE id = ${contaId} AND usuario_id = ${userId}
+    RETURNING *
+  `);
+  return (r as any[])[0] || null;
+}
+
+export async function excluirContaPf(userId: number, contaId: number): Promise<{ ok: boolean; error?: string }> {
+  const usada = await db.execute(sql`
+    SELECT 1 FROM transacoes WHERE conta_bancaria_id = ${contaId} LIMIT 1
+  `);
+  if ((usada as any[]).length > 0) {
+    await db.execute(sql`
+      UPDATE contas_bancarias SET ativo = false
+      WHERE id = ${contaId} AND usuario_id = ${userId} AND empresa_id IS NULL
+    `);
+    return { ok: true };
+  }
+  const r = await db.execute(sql`
+    DELETE FROM contas_bancarias
+    WHERE id = ${contaId} AND usuario_id = ${userId} AND empresa_id IS NULL
+    RETURNING id
+  `);
+  return { ok: (r as any[]).length > 0 };
+}
+
+/** Soma dos saldos das contas ativas do usuário (= novo "saldo geral" PF). */
+export async function saldoGeralPf(userId: number): Promise<number> {
+  const contas = await listarContasComSaldoPf(userId);
+  return Math.round(contas.filter((c) => c.ativo !== false).reduce((s, c) => s + Number(c.saldo || 0), 0) * 100) / 100;
+}

@@ -10,23 +10,9 @@
  */
 import { db } from "../db";
 import { sql } from "drizzle-orm";
+import { competenciaDaCompra, num } from "./fatura-core";
 
-const num = (v: any) => (v == null ? 0 : parseFloat(v) || 0);
-const pad2 = (n: number) => String(n).padStart(2, "0");
-
-// A qual fatura (competência) uma compra pertence, dado o dia de fechamento.
-export function competenciaDaCompra(dataISO: string, diaFech: number, diaVenc: number) {
-  const d = new Date(String(dataISO).slice(0, 10) + "T00:00:00");
-  let ano = d.getFullYear();
-  let mes = d.getMonth(); // 0-11
-  if (d.getDate() > diaFech) { mes += 1; if (mes > 11) { mes = 0; ano += 1; } }
-  const competencia = `${ano}-${pad2(mes + 1)}`;
-  const dataFech = `${ano}-${pad2(mes + 1)}-${pad2(Math.min(diaFech, 28))}`;
-  let vMes = mes, vAno = ano;
-  if (diaVenc < diaFech) { vMes += 1; if (vMes > 11) { vMes = 0; vAno += 1; } }
-  const dataVenc = `${vAno}-${pad2(vMes + 1)}-${pad2(Math.min(diaVenc, 28))}`;
-  return { competencia, dataFech, dataVenc };
-}
+export { competenciaDaCompra };
 
 // Valida que o cartão pertence a uma empresa do usuário. Retorna o cartão + empresa_id.
 export async function cartaoDoUsuario(cartaoId: number, userId: number): Promise<any | null> {

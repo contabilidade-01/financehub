@@ -1253,12 +1253,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Marcar transação como paga
   app.put("/api/transactions/:id/pagar", combinedAuth, async (req: Request, res: Response) => {
     try {
-      const { marcarComoPaga } = await import("./storage");
-      const result = await marcarComoPaga(parseInt(req.params.id));
+      const { marcarComoPaga, transacaoPertenceAoWallet } = await import("./storage");
+      const wallet = await storage.getWalletByUserId(req.user!.id);
+      if (!wallet) return res.status(404).json({ error: "Carteira não encontrada" });
+      const id = parseInt(req.params.id);
+      if (!(await transacaoPertenceAoWallet(id, wallet.id))) {
+        return res.status(404).json({ error: "Transação não encontrada" });
+      }
+      const result = await marcarComoPaga(id);
       if (!result) return res.status(404).json({ error: "Transação não encontrada" });
       res.json(result);
     } catch (err: any) { res.status(400).json({ error: err.message }); }
   });
+
+  app.put("/api/transactions/:id/reabrir", combinedAuth, async (req: Request, res: Response) => {
+    try {
+      const { reabrirTransacao, transacaoPertenceAoWallet } = await import("./storage");
+      const wallet = await storage.getWalletByUserId(req.user!.id);
+      if (!wallet) return res.status(404).json({ error: "Carteira não encontrada" });
+      const id = parseInt(req.params.id);
+      if (!(await transacaoPertenceAoWallet(id, wallet.id))) {
+        return res.status(404).json({ error: "Transação não encontrada" });
+      }
+      const result = await reabrirTransacao(id);
+      if (!result) return res.status(404).json({ error: "Transação não encontrada" });
+      res.json(result);
+    } catch (err: any) { res.status(400).json({ error: err.message }); }
+  });
+
+  // Contas, cartões e faturas PF
+  const contasCartoesCtrl = await import("./controllers/contas-cartoes.controller");
+  app.get("/api/contas", combinedAuth, checkImpersonation, contasCartoesCtrl.listarContas);
+  app.post("/api/contas", combinedAuth, checkImpersonation, contasCartoesCtrl.criarConta);
+  app.put("/api/contas/:id", combinedAuth, checkImpersonation, contasCartoesCtrl.atualizarConta);
+  app.delete("/api/contas/:id", combinedAuth, checkImpersonation, contasCartoesCtrl.excluirConta);
+  app.get("/api/cartoes", combinedAuth, checkImpersonation, contasCartoesCtrl.listarCartoes);
+  app.post("/api/cartoes", combinedAuth, checkImpersonation, contasCartoesCtrl.criarCartao);
+  app.put("/api/cartoes/:id", combinedAuth, checkImpersonation, contasCartoesCtrl.atualizarCartao);
+  app.delete("/api/cartoes/:id", combinedAuth, checkImpersonation, contasCartoesCtrl.excluirCartao);
+  app.get("/api/cartoes/:id/faturas", combinedAuth, checkImpersonation, contasCartoesCtrl.listarFaturas);
+  app.get("/api/cartoes/:id/saldo", combinedAuth, checkImpersonation, contasCartoesCtrl.saldoCartao);
+  app.get("/api/faturas/:id", combinedAuth, checkImpersonation, contasCartoesCtrl.detalheFatura);
+  app.post("/api/faturas/:id/pagar", combinedAuth, checkImpersonation, contasCartoesCtrl.pagarFatura);
+  app.post("/api/faturas/:id/reabrir", combinedAuth, checkImpersonation, contasCartoesCtrl.reabrirFatura);
+  app.get("/api/vencimentos", combinedAuth, checkImpersonation, contasCartoesCtrl.listarVencimentos);
 
   // Marcar como recorrente
   app.put("/api/transactions/:id/recorrente", combinedAuth, async (req: Request, res: Response) => {

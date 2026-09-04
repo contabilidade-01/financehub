@@ -25,7 +25,8 @@
     "import:locale:list": "tsx import_locales.js --list",
     "superadmin:reset-pass": "tsx scripts/reset-superadmin-password.ts",
     "test:classificacao": "tsx scripts/testar-classificacao-pj.ts",
-    "test:planos": "tsx scripts/testar-planos-por-tipo.ts"
+    "test:planos": "tsx scripts/testar-planos-por-tipo.ts",
+    "test:isolamento-contas": "tsx scripts/testar-isolamento-contas.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

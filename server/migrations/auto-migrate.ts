@@ -708,6 +708,84 @@ const STEPS: Step[] = [
       }
     },
   },
+  {
+    // Contas bancárias compartilhadas PF+PJ: empresa_id opcional (PF = null).
+    // Novas colunas de apresentação + vínculo das transações PF a conta/fatura.
+    name: "contas PF + cols transacoes (conta_bancaria, fatura, competencia, movimenta_caixa)",
+    run: async () => {
+      // Relaxa empresa_id para permitir contas só de usuário (PF).
+      await db.execute(sql`ALTER TABLE contas_bancarias ALTER COLUMN empresa_id DROP NOT NULL`);
+      await db.execute(sql`ALTER TABLE contas_bancarias ADD COLUMN IF NOT EXISTS nome VARCHAR(120)`);
+      await db.execute(sql`ALTER TABLE contas_bancarias ADD COLUMN IF NOT EXISTS cor VARCHAR(30)`);
+      // Backfill nome a partir do banco quando ainda vazio.
+      await db.execute(sql`UPDATE contas_bancarias SET nome = banco WHERE nome IS NULL OR nome = ''`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_contas_banc_usuario ON contas_bancarias(usuario_id)`);
+
+      await db.execute(sql`ALTER TABLE transacoes ADD COLUMN IF NOT EXISTS conta_bancaria_id INTEGER`);
+      await db.execute(sql`ALTER TABLE transacoes ADD COLUMN IF NOT EXISTS fatura_id INTEGER`);
+      await db.execute(sql`ALTER TABLE transacoes ADD COLUMN IF NOT EXISTS competencia VARCHAR(7)`);
+      await db.execute(sql`ALTER TABLE transacoes ADD COLUMN IF NOT EXISTS movimenta_caixa BOOLEAN NOT NULL DEFAULT true`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_transacoes_conta_banc ON transacoes(conta_bancaria_id)`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_transacoes_fatura ON transacoes(fatura_id)`);
+    },
+  },
+  {
+    // Faturas de cartão PF (espelho de empresas_faturas).
+    name: "faturas PF (competencia × caixa)",
+    run: async () => {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS faturas (
+          id                     SERIAL PRIMARY KEY,
+          usuario_id             INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+          carteira_id            INTEGER NOT NULL REFERENCES carteiras(id) ON DELETE CASCADE,
+          forma_pagamento_id     INTEGER NOT NULL REFERENCES formas_pagamento(id) ON DELETE CASCADE,
+          competencia            VARCHAR(7) NOT NULL,
+          data_fechamento        DATE NOT NULL,
+          data_vencimento        DATE NOT NULL,
+          status                 VARCHAR(10) NOT NULL DEFAULT 'aberta',
+          transacao_pagamento_id INTEGER,
+          conta_bancaria_id      INTEGER REFERENCES contas_bancarias(id) ON DELETE SET NULL,
+          data_pagamento         TIMESTAMPTZ,
+          criado_em              TIMESTAMPTZ DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')
+        )
+      `);
+      await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS fatura_pf_uq ON faturas(forma_pagamento_id, competencia)`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_faturas_usuario ON faturas(usuario_id)`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_faturas_carteira ON faturas(carteira_id)`);
+    },
+  },
+  {
+    // Backfill: uma conta "Carteira (principal)" por usuário PF, vinculando
+    // todas as transações existentes — o saldo exibido na virada permanece igual.
+    name: "backfill Carteira (principal) PF",
+    run: async () => {
+      // Cria a conta principal onde ainda não existe (idempotente via nome+usuario).
+      await db.execute(sql`
+        INSERT INTO contas_bancarias (empresa_id, usuario_id, banco, nome, tipo, saldo_inicial, ativo, cor)
+        SELECT NULL, u.id, 'Carteira', 'Carteira (principal)', 'carteira', 0, true, '#64748b'
+        FROM usuarios u
+        WHERE COALESCE(u.tipo_pessoa, 'fisica') <> 'juridica'
+          AND NOT EXISTS (
+            SELECT 1 FROM contas_bancarias c
+            WHERE c.usuario_id = u.id AND c.empresa_id IS NULL AND c.tipo = 'carteira'
+              AND c.nome = 'Carteira (principal)'
+          )
+      `);
+
+      // Vincula transações sem conta à carteira principal do dono da carteira.
+      await db.execute(sql`
+        UPDATE transacoes t
+        SET conta_bancaria_id = c.id
+        FROM carteiras w
+        JOIN contas_bancarias c ON c.usuario_id = w.usuario_id
+          AND c.empresa_id IS NULL
+          AND c.tipo = 'carteira'
+          AND c.nome = 'Carteira (principal)'
+        WHERE t.carteira_id = w.id
+          AND t.conta_bancaria_id IS NULL
+      `);
+    },
+  },
 ];
 
 export async function runAutoMigrations(): Promise<void> {

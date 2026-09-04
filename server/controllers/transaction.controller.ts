@@ -236,6 +236,67 @@ export async function createTransaction(req: Request, res: Response) {
       return res.status(400).json(errorResponse);
     }
     
+    // Cartão de crédito (forma com limite): compra vai para fatura, não mexe no caixa.
+    let isCartao = false;
+    if (transactionData.forma_pagamento_id) {
+      const { cartaoPfDoUsuario, resolverFaturaPf } = await import("../services/fatura-pf.service");
+      const cartao = await cartaoPfDoUsuario(Number(transactionData.forma_pagamento_id), userId);
+      if (cartao) {
+        if (transactionData.tipo !== "Despesa") {
+          return res.status(400).json({ message: "Cartão de crédito só pode ser usado em Despesa." });
+        }
+        isCartao = true;
+        const dataISO = String(transactionData.data_transacao).slice(0, 10);
+        const { fatura, competencia } = await resolverFaturaPf(userId, wallet.id, cartao, dataISO);
+        (transactionData as any).fatura_id = fatura.id;
+        (transactionData as any).competencia = competencia;
+        (transactionData as any).movimenta_caixa = false;
+        (transactionData as any).conta_bancaria_id = null;
+        if (!transactionData.status || transactionData.status === "Efetivada") {
+          transactionData.status = "Pendente";
+        }
+      }
+    }
+
+    // Conta bancária (saída/entrada de caixa). Body pode trazer conta_bancaria_id.
+    const contaBancariaId = req.body?.conta_bancaria_id != null ? Number(req.body.conta_bancaria_id) : null;
+    if (!isCartao && contaBancariaId) {
+      const { listarContasPf } = await import("../services/conta-bancaria.service");
+      const minhas = await listarContasPf(userId);
+      if (!minhas.find((c) => c.id === contaBancariaId)) {
+        return res.status(400).json({ message: "Conta bancária não encontrada." });
+      }
+      (transactionData as any).conta_bancaria_id = contaBancariaId;
+      (transactionData as any).movimenta_caixa = true;
+    } else if (!isCartao && !(transactionData as any).conta_bancaria_id) {
+      // Default: conta tipo carteira (ou primeira ativa) — não depende do nome.
+      const { contaPadraoPf } = await import("../services/conta-bancaria.service");
+      const padraoId = await contaPadraoPf(userId);
+      if (padraoId) (transactionData as any).conta_bancaria_id = padraoId;
+      (transactionData as any).movimenta_caixa = true;
+    }
+
+    // Parcelamento: N lançamentos amarrados a faturas por competência (se cartão).
+    const parcelasN = Number(req.body?.parcelas) || 1;
+    if (parcelasN > 1 && transactionData.tipo === "Despesa") {
+      const { criarCompraParcelada } = await import("../storage");
+      const valorTotal = Number(transactionData.valor);
+      const result = await criarCompraParcelada({
+        walletId: wallet.id,
+        categoriaId: transactionData.categoria_id,
+        descricao: transactionData.descricao,
+        valorTotal,
+        parcelas: parcelasN,
+        formaPagamentoId: transactionData.forma_pagamento_id,
+        dataInicio: String(transactionData.data_transacao).slice(0, 10),
+        contaBancariaId: isCartao ? null : (transactionData as any).conta_bancaria_id,
+        usuarioId: userId,
+        status: isCartao ? "Pendente" : (transactionData.status || "Efetivada"),
+      });
+      const first = await storage.getTransactionById(result.ids[0]);
+      return res.status(201).json({ ...first, compra_grupo: result.compra_grupo, parcelas_criadas: result.ids.length });
+    }
+
     // Create transaction
     const newTransaction = await storage.createTransaction(transactionData);
     

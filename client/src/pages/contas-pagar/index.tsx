@@ -1,220 +1,326 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, CheckCircle2, AlertTriangle, Clock, Calendar } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { CheckCircle2, CreditCard, FileText } from "lucide-react";
 
-interface ContaPagar {
+type Conta = { id: number; nome: string; banco?: string; saldo?: number; ativo?: boolean };
+
+type FaturaVenc = {
+  id: number;
+  competencia: string;
+  data_vencimento: string;
+  status: string;
+  total: number | string;
+  cartao_nome: string;
+  cartao_cor?: string | null;
+};
+
+type BoletoVenc = {
   id: number;
   descricao: string;
-  valor: string;
-  data_vencimento: string;
+  valor: string | number;
+  data_vencimento: string | null;
   data_transacao: string;
   status: string;
-  recorrente: boolean;
-  classificacao_despesa: string | null;
-  categoria: string;
-  urgencia: string;
+  forma_pagamento?: string | null;
+  categoria?: string | null;
+};
+
+const money = (v: number) =>
+  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
+
+const iso = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+function limitesMesAtual() {
+  const hoje = new Date();
+  const de = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+  const ate = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+  return { de: iso(de), ate: iso(ate) };
+}
+
+function diasAte(data: string | null | undefined): number | null {
+  if (!data) return null;
+  const d = new Date(String(data).slice(0, 10) + "T00:00:00");
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  return Math.round((d.getTime() - hoje.getTime()) / 86400000);
+}
+
+function badgeDias(dias: number | null) {
+  if (dias == null) return { label: "—", className: "bg-muted text-muted-foreground" };
+  if (dias < 0) return { label: `${Math.abs(dias)}d vencido`, className: "bg-red-500/15 text-red-600" };
+  if (dias === 0) return { label: "Hoje", className: "bg-red-500/15 text-red-600" };
+  if (dias <= 3) return { label: `${dias}d`, className: "bg-amber-500/15 text-amber-600" };
+  return { label: `${dias}d`, className: "bg-emerald-500/15 text-emerald-600" };
+}
+
+function fmtData(d: string | null | undefined) {
+  if (!d) return "—";
+  try {
+    return new Date(String(d).slice(0, 10) + "T00:00:00").toLocaleDateString("pt-BR");
+  } catch {
+    return String(d);
+  }
 }
 
 export default function ContasPagarPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const [showForm, setShowForm] = useState(false);
+  const mes = limitesMesAtual();
+  const [tab, setTab] = useState<"aberta" | "paga">("aberta");
+  const [de, setDe] = useState(mes.de);
+  const [ate, setAte] = useState(mes.ate);
+  const [contaPorFatura, setContaPorFatura] = useState<Record<number, string>>({});
 
-  const { data: contas = [], isLoading, error } = useQuery<ContaPagar[]>({
-    queryKey: ["/api/contas-pagar"],
+  const { data, isLoading } = useQuery<{ faturas: FaturaVenc[]; boletos: BoletoVenc[] }>({
+    queryKey: ["/api/vencimentos", tab, de, ate],
+    queryFn: () =>
+      apiRequest(`/api/vencimentos?status=${tab}&de=${encodeURIComponent(de)}&ate=${encodeURIComponent(ate)}`),
   });
 
-  const createMut = useMutation({
-    mutationFn: (data: any) => apiRequest("/api/transactions", { method: "POST", data }),
+  const { data: contas = [] } = useQuery<Conta[]>({
+    queryKey: ["/api/contas"],
+  });
+  const contasAtivas = useMemo(() => contas.filter((c) => c.ativo !== false), [contas]);
+
+  const faturas = data?.faturas ?? [];
+  const boletos = data?.boletos ?? [];
+
+  const totalFaturas = faturas.reduce((s, f) => s + (Number(f.total) || 0), 0);
+  const totalBoletos = boletos.reduce((s, b) => s + (Number(b.valor) || 0), 0);
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["/api/vencimentos"] });
+    qc.invalidateQueries({ queryKey: ["/api/cartoes"] });
+    qc.invalidateQueries({ queryKey: ["/api/contas"] });
+    qc.invalidateQueries({ queryKey: ["/api/transactions"] });
+    qc.invalidateQueries({ queryKey: ["/api/wallet/current"] });
+  };
+
+  const pagarFatura = useMutation({
+    mutationFn: ({ id, conta_bancaria_id }: { id: number; conta_bancaria_id: number }) =>
+      apiRequest(`/api/faturas/${id}/pagar`, { method: "POST", data: { conta_bancaria_id } }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/contas-pagar"] });
-      toast({ title: "Conta a pagar criada! 📋" });
-      setShowForm(false);
+      invalidate();
+      toast({ title: "Fatura paga" });
     },
-    onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
+    onError: (e: any) => toast({ title: "Erro", description: e?.message || e?.error, variant: "destructive" }),
   });
 
-  const pagarMut = useMutation({
+  const baixarBoleto = useMutation({
     mutationFn: (id: number) => apiRequest(`/api/transactions/${id}/pagar`, { method: "PUT" }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/contas-pagar"] });
-      qc.invalidateQueries({ queryKey: ["/api/wallet/current"] });
-      qc.invalidateQueries({ queryKey: ["/api/transactions"] });
-      toast({ title: "Conta paga! ✅" });
+      invalidate();
+      toast({ title: "Lançamento baixado" });
     },
-    onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
+    onError: (e: any) => toast({ title: "Erro", description: e?.message || e?.error, variant: "destructive" }),
   });
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const fd = new FormData(e.currentTarget);
-    createMut.mutate({
-      descricao: fd.get("descricao"),
-      valor: Number(fd.get("valor")),
-      tipo: "Despesa",
-      data_transacao: fd.get("data_vencimento"),
-      data_vencimento: fd.get("data_vencimento"),
-      status: "Pendente",
-      recorrente: fd.get("recorrente") === "true",
-      classificacao_despesa: fd.get("recorrente") === "true" ? "fixa" : "variavel",
-      categoria_id: 1, // TODO: seletor de categoria
-    });
-  };
-
-  const fmt = (n: string | number) =>
-    Number(n).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-
-  const urgenciaConfig: Record<string, { icon: any; color: string; label: string }> = {
-    atrasada: { icon: AlertTriangle, color: "text-red-500", label: "Atrasada" },
-    proxima: { icon: Clock, color: "text-amber-500", label: "Próxima" },
-    futura: { icon: Calendar, color: "text-blue-500", label: "Futura" },
-  };
-
-  const totalPendente = contas.reduce((s, c) => s + Number(c.valor), 0);
-  const atrasadas = contas.filter(c => c.urgencia === "atrasada");
-  const proximas = contas.filter(c => c.urgencia === "proxima");
-  const futuras = contas.filter(c => c.urgencia === "futura");
+  const reabrirBoleto = useMutation({
+    mutationFn: (id: number) => apiRequest(`/api/transactions/${id}/reabrir`, { method: "PUT" }),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Lançamento reaberto" });
+    },
+    onError: (e: any) => toast({ title: "Erro", description: e?.message || e?.error, variant: "destructive" }),
+  });
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-3xl font-bold">📋 Contas a Pagar</h1>
-          <p className="text-muted-foreground">
-            {contas.length} conta(s) pendente(s) — Total: {fmt(totalPendente)}
-          </p>
+          <h1 className="text-3xl font-bold">Vencimentos</h1>
+          <p className="text-muted-foreground">Faturas de cartão e boletos/PIX do período</p>
         </div>
-        <Button onClick={() => setShowForm(!showForm)}>
-          <Plus className="h-4 w-4 mr-2" /> Nova Conta
-        </Button>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-muted-foreground">De</label>
+            <Input type="date" value={de} onChange={(e) => setDe(e.target.value)} className="h-10 w-[160px]" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-muted-foreground">Até</label>
+            <Input type="date" value={ate} onChange={(e) => setAte(e.target.value)} className="h-10 w-[160px]" />
+          </div>
+        </div>
       </div>
 
-      {/* Resumo rápido */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="border-red-200 dark:border-red-900/50">
-          <CardContent className="flex items-center gap-3 pt-6">
-            <AlertTriangle className="h-8 w-8 text-red-500" />
-            <div>
-              <p className="text-2xl font-bold text-red-600">{atrasadas.length}</p>
-              <p className="text-sm text-muted-foreground">Atrasadas</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-amber-200 dark:border-amber-900/50">
-          <CardContent className="flex items-center gap-3 pt-6">
-            <Clock className="h-8 w-8 text-amber-500" />
-            <div>
-              <p className="text-2xl font-bold text-amber-600">{proximas.length}</p>
-              <p className="text-sm text-muted-foreground">Próximos 3 dias</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-blue-200 dark:border-blue-900/50">
-          <CardContent className="flex items-center gap-3 pt-6">
-            <Calendar className="h-8 w-8 text-blue-500" />
-            <div>
-              <p className="text-2xl font-bold text-blue-600">{futuras.length}</p>
-              <p className="text-sm text-muted-foreground">Futuras</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Form nova conta */}
-      {showForm && (
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card>
           <CardContent className="pt-6">
-            <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Input name="descricao" placeholder="Descrição (ex: Aluguel, Internet)" required />
-              <Input name="valor" type="number" step="0.01" placeholder="Valor (R$)" required />
-              <Input name="data_vencimento" type="date" required />
-              <Select name="recorrente" defaultValue="false">
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="true">🔒 Fixa (todo mês)</SelectItem>
-                  <SelectItem value="false">🔄 Pontual</SelectItem>
-                </SelectContent>
-              </Select>
-              <div className="col-span-full flex justify-end">
-                <Button type="submit" disabled={createMut.isPending}>Criar Conta</Button>
-              </div>
-            </form>
+            <p className="text-xs text-muted-foreground">Faturas</p>
+            <p className="text-2xl font-numeric font-semibold">{money(totalFaturas)}</p>
           </CardContent>
         </Card>
-      )}
-
-      {/* Lista de contas */}
-      {isLoading ? (
-        <p className="text-muted-foreground">Carregando...</p>
-      ) : error ? (
         <Card>
-          <CardContent className="flex flex-col items-center gap-4 py-12">
-            <AlertTriangle className="h-12 w-12 text-amber-500" />
-            <p className="text-muted-foreground">Erro ao carregar contas. Tente recarregar a página.</p>
+          <CardContent className="pt-6">
+            <p className="text-xs text-muted-foreground">Boletos/PIX</p>
+            <p className="text-2xl font-numeric font-semibold">{money(totalBoletos)}</p>
           </CardContent>
         </Card>
-      ) : contas.length === 0 ? (
         <Card>
-          <CardContent className="flex flex-col items-center gap-4 py-12">
-            <CheckCircle2 className="h-12 w-12 text-emerald-500" />
-            <p className="text-lg font-medium">Nenhuma conta pendente! 🎉</p>
-            <p className="text-sm text-muted-foreground">Ou cadastre pelo WhatsApp: "tenho conta de R$200 vence dia 25"</p>
+          <CardContent className="pt-6">
+            <p className="text-xs text-muted-foreground">Total</p>
+            <p className="text-2xl font-numeric font-semibold">{money(totalFaturas + totalBoletos)}</p>
           </CardContent>
         </Card>
-      ) : (
-        <div className="space-y-3">
-          {contas.map((conta) => {
-            const config = urgenciaConfig[conta.urgencia] || urgenciaConfig.futura;
-            const Icon = config.icon;
-            const diasVencimento = Math.ceil(
-              (new Date(conta.data_vencimento).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-            );
+      </div>
 
-            return (
-              <Card key={conta.id} className={`${conta.urgencia === 'atrasada' ? 'border-red-300 dark:border-red-800' : ''}`}>
-                <CardContent className="flex items-center justify-between py-4">
-                  <div className="flex items-center gap-3">
-                    <Icon className={`h-5 w-5 ${config.color}`} />
-                    <div>
-                      <p className="font-medium">{conta.descricao}</p>
-                      <div className="flex gap-2 text-xs text-muted-foreground">
-                        <span>Vence: {new Date(conta.data_vencimento).toLocaleDateString("pt-BR")}</span>
-                        {conta.recorrente && <Badge variant="outline" className="text-[10px]">Fixa</Badge>}
-                        {conta.categoria && <span>• {conta.categoria}</span>}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="text-right">
-                      <p className="font-bold">{fmt(conta.valor)}</p>
-                      <p className={`text-xs ${config.color}`}>
-                        {diasVencimento < 0 ? `${Math.abs(diasVencimento)} dias atrasada` :
-                         diasVencimento === 0 ? "Vence HOJE" :
-                         `em ${diasVencimento} dia(s)`}
-                      </p>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant={conta.urgencia === "atrasada" ? "destructive" : "default"}
-                      onClick={() => pagarMut.mutate(conta.id)}
-                      disabled={pagarMut.isPending}
-                    >
-                      <CheckCircle2 className="h-4 w-4 mr-1" /> Pagar
-                    </Button>
-                  </div>
+      <Tabs value={tab} onValueChange={(v) => setTab(v as "aberta" | "paga")}>
+        <TabsList>
+          <TabsTrigger value="aberta">Em aberto</TabsTrigger>
+          <TabsTrigger value="paga">Pagos</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value={tab} className="space-y-6 mt-4">
+          {isLoading ? (
+            <p className="text-muted-foreground">Carregando…</p>
+          ) : (
+            <>
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <CreditCard className="h-4 w-4" /> Faturas de cartão
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {faturas.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-4 text-center">Nenhuma fatura no período</p>
+                  ) : (
+                    faturas.map((f) => {
+                      const dias = diasAte(f.data_vencimento);
+                      const bd = badgeDias(dias);
+                      const contaId = contaPorFatura[f.id] || (contasAtivas[0] ? String(contasAtivas[0].id) : "");
+                      return (
+                        <div
+                          key={f.id}
+                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-border/60 px-3 py-3"
+                        >
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-medium">{f.cartao_nome}</span>
+                              <Badge variant="outline" className="text-[10px]">{f.competencia}</Badge>
+                              <Badge className={`${bd.className} text-[10px]`}>{bd.label}</Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              Vence {fmtData(f.data_vencimento)}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-numeric font-semibold">{money(Number(f.total) || 0)}</span>
+                            {tab === "aberta" ? (
+                              <>
+                                <Select
+                                  value={contaId}
+                                  onValueChange={(v) =>
+                                    setContaPorFatura((prev) => ({ ...prev, [f.id]: v }))
+                                  }
+                                >
+                                  <SelectTrigger className="w-[180px] h-9">
+                                    <SelectValue placeholder="Pagar com..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {contasAtivas.map((c) => (
+                                      <SelectItem key={c.id} value={String(c.id)}>
+                                        {c.nome}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <Button
+                                  size="sm"
+                                  disabled={!contaId || pagarFatura.isPending}
+                                  onClick={() =>
+                                    pagarFatura.mutate({
+                                      id: f.id,
+                                      conta_bancaria_id: Number(contaId),
+                                    })
+                                  }
+                                >
+                                  Pagar
+                                </Button>
+                              </>
+                            ) : (
+                              <Badge className="bg-emerald-500/15 text-emerald-600">Paga</Badge>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
                 </CardContent>
               </Card>
-            );
-          })}
-        </div>
-      )}
+
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <FileText className="h-4 w-4" /> Boletos / PIX / outros
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {boletos.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-4 text-center">
+                      Nenhum boleto/PIX no período
+                    </p>
+                  ) : (
+                    boletos.map((b) => {
+                      const dataRef = b.data_vencimento || b.data_transacao;
+                      return (
+                        <div
+                          key={b.id}
+                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-border/60 px-3 py-3"
+                        >
+                          <div className="min-w-0">
+                            <p className="font-medium">{b.descricao}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {fmtData(dataRef)} · {b.forma_pagamento || "—"}
+                              {b.categoria ? ` · ${b.categoria}` : ""}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-numeric font-semibold">{money(Number(b.valor) || 0)}</span>
+                            {tab === "aberta" ? (
+                              <Button
+                                size="sm"
+                                disabled={baixarBoleto.isPending}
+                                onClick={() => baixarBoleto.mutate(b.id)}
+                              >
+                                <CheckCircle2 className="h-4 w-4 mr-1" /> Baixar
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={reabrirBoleto.isPending}
+                                onClick={() => reabrirBoleto.mutate(b.id)}
+                              >
+                                Reabrir
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </CardContent>
+              </Card>
+            </>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

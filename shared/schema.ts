@@ -103,14 +103,20 @@ export const transactions = pgTable("transacoes", {
   metodo_pagamento: varchar("metodo_pagamento", { length: 100 }),
   status: varchar("status", { length: 20 }).notNull().default("Pendente"),
   // Contas a pagar / Fluxo de caixa
-  data_vencimento: date("data_vencimento"),                                    // quando a conta vence
-  data_pagamento: date("data_pagamento"),                                      // quando foi efetivamente paga
-  recorrente: boolean("recorrente").notNull().default(false),                  // despesa fixa mensal
-  classificacao_despesa: varchar("classificacao_despesa", { length: 20 }),     // 'fixa' | 'variavel' | null
-  // Reembolsável: está no cartão (compõe a fatura), mas NÃO é passivo do usuário
-  // — fica fora do "saldo a pagar"/fluxo e dos relatórios de despesa; é rastreada
-  // como "a receber" (ex.: gasto da Nescon que será reembolsado).
-  reembolsavel: boolean("reembolsavel").notNull().default(false)
+  data_vencimento: date("data_vencimento"),
+  data_pagamento: date("data_pagamento"),
+  recorrente: boolean("recorrente").notNull().default(false),
+  classificacao_despesa: varchar("classificacao_despesa", { length: 20 }),
+  reembolsavel: boolean("reembolsavel").notNull().default(false),
+  // Parcelamento (colunas já existiam no banco; agora no Drizzle)
+  compra_grupo: varchar("compra_grupo", { length: 40 }),
+  parcela_num: integer("parcela_num"),
+  parcela_total: integer("parcela_total"),
+  // Conta / fatura / caixa (paridade com empresas_transacoes)
+  conta_bancaria_id: integer("conta_bancaria_id"),
+  fatura_id: integer("fatura_id"),
+  competencia: varchar("competencia", { length: 7 }),
+  movimenta_caixa: boolean("movimenta_caixa").notNull().default(true),
 });
 
 // API Tokens table
@@ -285,6 +291,7 @@ export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
 export type TransactionWithDetails = Transaction & {
   categoria_name?: string;
   metodo_pagamento?: string;
+  forma_limite?: string | number | null;
 };
 export type UpdateTransaction = z.infer<typeof updateTransactionSchema>;
 
@@ -715,6 +722,40 @@ export const empresas = pgTable("empresas", {
   created_at: timestamp("created_at", { withTimezone: true }).default(sql`(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')`),
   updated_at: timestamp("updated_at", { withTimezone: true })
 });
+
+// Contas bancárias compartilhadas (PF: empresa_id NULL; PJ: empresa_id preenchido)
+export const contasBancarias = pgTable("contas_bancarias", {
+  id: serial("id").primaryKey(),
+  empresa_id: integer("empresa_id").references(() => empresas.id, { onDelete: 'cascade' }),
+  usuario_id: integer("usuario_id").references(() => users.id, { onDelete: 'set null' }),
+  banco: varchar("banco", { length: 120 }).notNull(),
+  nome: varchar("nome", { length: 120 }),
+  agencia: varchar("agencia", { length: 20 }),
+  numero: varchar("numero", { length: 30 }),
+  tipo: varchar("tipo", { length: 20 }).notNull().default('corrente'),
+  saldo_inicial: decimal("saldo_inicial", { precision: 14, scale: 2 }).notNull().default('0'),
+  ativo: boolean("ativo").notNull().default(true),
+  cor: varchar("cor", { length: 30 }),
+  criado_em: timestamp("criado_em", { withTimezone: true }).default(sql`(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')`),
+});
+
+// Faturas de cartão PF (espelho de empresas_faturas)
+export const faturas = pgTable("faturas", {
+  id: serial("id").primaryKey(),
+  usuario_id: integer("usuario_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  carteira_id: integer("carteira_id").notNull().references(() => wallets.id, { onDelete: 'cascade' }),
+  forma_pagamento_id: integer("forma_pagamento_id").notNull().references(() => paymentMethods.id, { onDelete: 'cascade' }),
+  competencia: varchar("competencia", { length: 7 }).notNull(),
+  data_fechamento: date("data_fechamento").notNull(),
+  data_vencimento: date("data_vencimento").notNull(),
+  status: varchar("status", { length: 10 }).notNull().default('aberta'),
+  transacao_pagamento_id: integer("transacao_pagamento_id"),
+  conta_bancaria_id: integer("conta_bancaria_id"),
+  data_pagamento: timestamp("data_pagamento", { withTimezone: true }),
+  criado_em: timestamp("criado_em", { withTimezone: true }).default(sql`(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')`),
+}, (table) => [
+  unique().on(table.forma_pagamento_id, table.competencia),
+]);
 
 // Tabela: empresas_contas — plano de contas PJ por empresa (modelo Yampa-like).
 // 'classificacao' (FIXA | VARIAVEL | OUTRA) é o que viabiliza Margem de Contribuição.

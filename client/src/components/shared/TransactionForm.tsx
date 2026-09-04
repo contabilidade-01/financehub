@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
@@ -9,7 +9,7 @@ import { useTheme } from "next-themes";
 import { Category, Transaction, TransactionStatus, TransactionType, PaymentMethod } from "@shared/schema";
 import { formatDate } from "@/lib/utils";
 import { useTranslation } from "@/contexts/LocalizationContext";
-import { translatePaymentMethodName, translateCategoryName } from "@/utils/localization";
+import { translateCategoryName } from "@/utils/localization";
 
 import {
   Form,
@@ -19,19 +19,16 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-// Removed Dialog imports as they're not needed when used in animated modal
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Loader2, ArrowUpIcon, ArrowDownIcon, Check, ChevronDown, X } from "lucide-react";
+import { Loader2, ArrowUpIcon, ArrowDownIcon, Check, ChevronDown } from "lucide-react";
 
-// Custom schema for form validation - will be created dynamically with translations
+type ContaOpt = { id: number; nome: string; ativo?: boolean };
+type CartaoOpt = { id: number; nome: string };
+
+const hasLimite = (pm: PaymentMethod) =>
+  pm.limite != null && String(pm.limite) !== "" && Number(pm.limite) > 0;
+
 const createTransactionFormSchema = (t: (key: string, fallback: string) => string) => z.object({
   descricao: z.string().min(2, t('validation.description_min_length', 'Description must be at least 2 characters')),
   valor: z.string().min(1, t('validation.amount_required', 'Amount is required')).refine(
@@ -42,13 +39,11 @@ const createTransactionFormSchema = (t: (key: string, fallback: string) => strin
     required_error: t('validation.category_required', 'Category is required'),
     invalid_type_error: t('validation.category_required', 'Category is required'),
   }),
-  forma_pagamento_id: z.number({
-    required_error: t('validation.payment_method_required', 'Payment method is required'),
-    invalid_type_error: t('validation.payment_method_required', 'Payment method is required'),
-  }),
+  pago_com: z.string().min(1, t('validation.payment_method_required', 'Payment method is required')),
   tipo: z.string().min(1, t('validation.type_required', 'Type is required')),
   data_transacao: z.string().min(1, t('validation.date_required', 'Date is required')),
   reembolsavel: z.boolean().default(false),
+  parcelas: z.coerce.number().int().min(1).default(1),
 });
 
 type TransactionFormValues = z.infer<ReturnType<typeof createTransactionFormSchema>>;
@@ -63,138 +58,212 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
   const { toast } = useToast();
   const { theme } = useTheme();
   const { t } = useTranslation();
-  
-  // Create schema with translations
+
   const transactionFormSchema = createTransactionFormSchema(t);
-  
-  // Fetch categories
+
   const { data: categories, isLoading: isCategoriesLoading } = useQuery<Category[]>({
     queryKey: ["/api/categories"]
   });
-  
-  // Fetch payment methods
+
   const { data: paymentMethods, isLoading: isPaymentMethodsLoading } = useQuery<PaymentMethod[]>({
     queryKey: ["/api/payment-methods"]
   });
-  
-  // Fetch wallets
+
+  const { data: contas = [] } = useQuery<ContaOpt[]>({
+    queryKey: ["/api/contas"]
+  });
+
+  const { data: cartoes = [] } = useQuery<CartaoOpt[]>({
+    queryKey: ["/api/cartoes"]
+  });
+
   const { data: wallet } = useQuery<{ id: number }>({
     queryKey: ["/api/wallet/current"]
   });
-  
-  // Find PIX payment method for default
-  const pixPaymentMethod = paymentMethods?.find(pm => pm.nome.toLowerCase().includes('pix'));
-  
+
+  const formasSemLimite = useMemo(
+    () => (paymentMethods || []).filter(
+      (pm) => !hasLimite(pm) && pm.dia_fechamento == null && pm.dia_vencimento == null
+    ),
+    [paymentMethods]
+  );
+
+  const contasAtivas = useMemo(
+    () => contas.filter((c) => c.ativo !== false),
+    [contas]
+  );
+
   const form = useForm<TransactionFormValues>({
     resolver: zodResolver(transactionFormSchema),
     defaultValues: {
       descricao: "",
       valor: "",
       categoria_id: undefined,
-      forma_pagamento_id: pixPaymentMethod?.id || undefined,
+      pago_com: "",
       tipo: TransactionType.EXPENSE,
       data_transacao: formatDate(new Date(), "yyyy-MM-dd"),
       reembolsavel: false,
+      parcelas: 1,
     },
   });
-  
-  // Update form when editing a transaction
+
+  const tipoAtual = form.watch("tipo");
+
+  const opcoesPagoCom = useMemo(() => {
+    const opts: { value: string; label: string; group: string }[] = [];
+    for (const c of contasAtivas) {
+      opts.push({ value: `conta:${c.id}`, label: c.nome, group: "Contas" });
+    }
+    if (tipoAtual === TransactionType.EXPENSE) {
+      for (const c of cartoes) {
+        opts.push({ value: `cartao:${c.id}`, label: `CC ${c.nome}`, group: "Cartões" });
+      }
+    }
+    for (const pm of formasSemLimite) {
+      opts.push({ value: `forma:${pm.id}`, label: pm.nome, group: "Formas" });
+    }
+    return opts;
+  }, [contasAtivas, cartoes, formasSemLimite, tipoAtual]);
+
+  const defaultPagoCom = useMemo(() => {
+    const pix = formasSemLimite.find((pm) => pm.nome.toLowerCase().includes("pix"));
+    if (pix) return `forma:${pix.id}`;
+    if (contasAtivas[0]) return `conta:${contasAtivas[0].id}`;
+    if (opcoesPagoCom[0]) return opcoesPagoCom[0].value;
+    return "";
+  }, [formasSemLimite, contasAtivas, opcoesPagoCom]);
+
+  const resolvePagoComFromTransaction = (tx: Transaction): string => {
+    const contaId = (tx as any).conta_bancaria_id;
+    if (contaId) return `conta:${contaId}`;
+    const fpId = tx.forma_pagamento_id;
+    if (fpId && cartoes.some((c) => c.id === fpId)) return `cartao:${fpId}`;
+    if (fpId) return `forma:${fpId}`;
+    return defaultPagoCom;
+  };
+
   useEffect(() => {
     if (transaction) {
       form.reset({
         descricao: transaction.descricao,
         valor: String(transaction.valor),
         categoria_id: transaction.categoria_id,
-        forma_pagamento_id: transaction.forma_pagamento_id || pixPaymentMethod?.id || undefined,
+        pago_com: resolvePagoComFromTransaction(transaction),
         tipo: transaction.tipo,
         reembolsavel: transaction.reembolsavel ?? false,
-        data_transacao: typeof transaction.data_transacao === 'string' 
-          ? transaction.data_transacao.split('T')[0]
+        parcelas: (transaction as any).parcela_total || 1,
+        data_transacao: typeof transaction.data_transacao === "string"
+          ? transaction.data_transacao.split("T")[0]
           : formatDate(transaction.data_transacao, "yyyy-MM-dd"),
       });
     }
-  }, [transaction, form, pixPaymentMethod]);
+  }, [transaction, form, cartoes, defaultPagoCom]);
 
-  // Set PIX as default when payment methods load
   useEffect(() => {
-    if (pixPaymentMethod && !transaction && !form.getValues('forma_pagamento_id')) {
-      form.setValue('forma_pagamento_id', pixPaymentMethod.id);
+    if (!transaction && defaultPagoCom && !form.getValues("pago_com")) {
+      form.setValue("pago_com", defaultPagoCom);
     }
-  }, [pixPaymentMethod, transaction, form]);
-  
-  // Filter categories based on selected transaction type
+  }, [defaultPagoCom, transaction, form]);
+
   const filteredCategories = categories?.filter(
-    category => category.tipo === form.watch("tipo")
+    (category) => category.tipo === form.watch("tipo")
   );
-  
+
   const onSubmit = async (data: TransactionFormValues) => {
     if (!wallet?.id) {
       toast({
-        title: t('common.error', 'Error'),
-        description: t('transactions.no_wallet_available', 'No wallet available'),
+        title: t("common.error", "Error"),
+        description: t("transactions.no_wallet_available", "No wallet available"),
         variant: "destructive",
       });
       return;
     }
-    
+
     try {
       setIsSubmitting(true);
-      
-      // Find the selected payment method name
-      const selectedPaymentMethod = paymentMethods?.find(pm => pm.id === data.forma_pagamento_id);
-      
-      const transactionData = {
-        ...data,
+
+      const [kind, idStr] = data.pago_com.split(":");
+      const id = Number(idStr);
+
+      let forma_pagamento_id: number | undefined;
+      let conta_bancaria_id: number | undefined;
+      let metodo_pagamento = "PIX";
+
+      if (kind === "conta") {
+        conta_bancaria_id = id;
+        const conta = contasAtivas.find((c) => c.id === id);
+        metodo_pagamento = conta?.nome || "Conta";
+      } else if (kind === "cartao") {
+        forma_pagamento_id = id;
+        const cartao = cartoes.find((c) => c.id === id);
+        metodo_pagamento = cartao?.nome || "Cartão";
+      } else if (kind === "forma") {
+        forma_pagamento_id = id;
+        const pm = paymentMethods?.find((p) => p.id === id);
+        metodo_pagamento = pm?.nome || "PIX";
+      }
+
+      const { pago_com, parcelas, ...rest } = data;
+      const transactionData: Record<string, unknown> = {
+        ...rest,
         reembolsavel: data.tipo === TransactionType.EXPENSE && data.reembolsavel,
-        valor: data.valor, // Manter como string como esperado pelo schema
+        valor: data.valor,
         carteira_id: wallet.id,
-        metodo_pagamento: selectedPaymentMethod?.nome || "PIX", // Use selected payment method name
+        metodo_pagamento,
         status: transaction
           ? transaction.status
           : data.reembolsavel
             ? TransactionStatus.PENDING
-            : TransactionStatus.COMPLETED
+            : TransactionStatus.COMPLETED,
+        parcelas: data.tipo === TransactionType.EXPENSE ? Number(parcelas) || 1 : 1,
       };
-      
-      console.log("Dados enviados:", transactionData);
-      
+
+      if (forma_pagamento_id != null) transactionData.forma_pagamento_id = forma_pagamento_id;
+      if (conta_bancaria_id != null) transactionData.conta_bancaria_id = conta_bancaria_id;
+
       if (transaction) {
-        const response = await apiRequest(`/api/transactions/${transaction.id}`, {
+        await apiRequest(`/api/transactions/${transaction.id}`, {
           method: "PUT",
-          data: transactionData
+          data: transactionData,
         });
-        console.log("Resposta da atualização:", response);
         toast({
-          title: t('transactions.transaction_updated', 'Transaction updated'),
-          description: t('transactions.update_success', 'Transaction was successfully updated.'),
+          title: t("transactions.transaction_updated", "Transaction updated"),
+          description: t("transactions.update_success", "Transaction was successfully updated."),
         });
       } else {
-        const response = await apiRequest("/api/transactions", {
+        await apiRequest("/api/transactions", {
           method: "POST",
-          data: transactionData
+          data: transactionData,
         });
-        console.log("Resposta da criação:", response);
         toast({
-          title: t('transactions.transaction_created', 'Transaction created'),
-          description: t('transactions.create_success', 'Transaction was successfully created.'),
+          title: t("transactions.transaction_created", "Transaction created"),
+          description: t("transactions.create_success", "Transaction was successfully created."),
         });
       }
-      
-      // Invalidate payment method totals cache
+
       queryClient.invalidateQueries({ queryKey: ["/api/payment-methods/totals"] });
-      
-      if (onSuccess) {
-        onSuccess();
-      }
-      
-      form.reset();
+      queryClient.invalidateQueries({ queryKey: ["/api/contas"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/cartoes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+
+      if (onSuccess) onSuccess();
+      form.reset({
+        descricao: "",
+        valor: "",
+        categoria_id: undefined as any,
+        pago_com: defaultPagoCom,
+        tipo: TransactionType.EXPENSE,
+        data_transacao: formatDate(new Date(), "yyyy-MM-dd"),
+        reembolsavel: false,
+        parcelas: 1,
+      });
     } catch (error: any) {
       console.error("Erro ao salvar transação:", error);
-      const errorMessage = error?.message || t('transactions.save_error', 'Could not save the transaction.');
+      const errorMessage = error?.message || t("transactions.save_error", "Could not save the transaction.");
       const detailedError = error?.errors ? JSON.stringify(error.errors) : "";
-      
+
       toast({
-        title: t('common.error', 'Error'),
+        title: t("common.error", "Error"),
         description: `${errorMessage} ${detailedError}`,
         variant: "destructive",
       });
@@ -202,20 +271,20 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
       setIsSubmitting(false);
     }
   };
-  
 
-  
   return (
     <>
       <div className="modal-header-sticky">
         <div className="flex flex-col items-center w-full">
           <h2 className="text-2xl font-semibold">
-            {transaction ? t('transactions.edit_transaction', 'Edit Transaction') : t('transactions.new_transaction', 'New Transaction')}
+            {transaction
+              ? t("transactions.edit_transaction", "Edit Transaction")
+              : t("transactions.new_transaction", "New Transaction")}
           </h2>
           <p className="text-sm text-muted-foreground mt-1">
             {transaction
-              ? t('transactions.edit_description', 'Edit the transaction details below.')
-              : t('transactions.fill_details', 'Fill in the details to record a new transaction.')}
+              ? t("transactions.edit_description", "Edit the transaction details below.")
+              : t("transactions.fill_details", "Fill in the details to record a new transaction.")}
           </p>
         </div>
       </div>
@@ -227,31 +296,44 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
               name="tipo"
               render={({ field }) => (
                 <FormItem className="flex-1">
-                  <FormLabel>{t('transactions.type', 'Type')}</FormLabel>
+                  <FormLabel>{t("transactions.type", "Type")}</FormLabel>
                   <div className="flex space-x-2">
                     <Button
                       type="button"
                       variant={field.value === TransactionType.EXPENSE ? "default" : "outline"}
-                      className={`flex-1 ${field.value === TransactionType.EXPENSE ? (theme === 'light' ? "bg-red-500 text-white hover:bg-red-600" : "bg-red-500/20 text-red-400") : ""}`}
+                      className={`flex-1 ${
+                        field.value === TransactionType.EXPENSE
+                          ? theme === "light"
+                            ? "bg-red-500 text-white hover:bg-red-600"
+                            : "bg-red-500/20 text-red-400"
+                          : ""
+                      }`}
                       onClick={() => {
                         field.onChange(TransactionType.EXPENSE);
-                        form.setValue("categoria_id", 0); // Usar 0 em vez de undefined
+                        form.setValue("categoria_id", 0);
                       }}
                     >
                       <ArrowDownIcon className="mr-2 h-4 w-4" />
-                      {t('transactions.type_labels.expense', 'Despesa')}
+                      {t("transactions.type_labels.expense", "Despesa")}
                     </Button>
                     <Button
                       type="button"
                       variant={field.value === TransactionType.INCOME ? "default" : "outline"}
-                      className={`flex-1 ${field.value === TransactionType.INCOME ? (theme === 'light' ? "bg-green-500 text-white hover:bg-green-600" : "bg-green-500/20 text-green-400") : ""}`}
+                      className={`flex-1 ${
+                        field.value === TransactionType.INCOME
+                          ? theme === "light"
+                            ? "bg-green-500 text-white hover:bg-green-600"
+                            : "bg-green-500/20 text-green-400"
+                          : ""
+                      }`}
                       onClick={() => {
                         field.onChange(TransactionType.INCOME);
-                        form.setValue("categoria_id", 0); // Usar 0 em vez de undefined
+                        form.setValue("categoria_id", 0);
+                        form.setValue("parcelas", 1);
                       }}
                     >
                       <ArrowUpIcon className="mr-2 h-4 w-4" />
-                      {t('transactions.type_labels.income', 'Receita')}
+                      {t("transactions.type_labels.income", "Receita")}
                     </Button>
                   </div>
                   <FormMessage />
@@ -259,48 +341,45 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
               )}
             />
           </div>
-          
+
           <FormField
             control={form.control}
             name="descricao"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>{t('transactions.description', 'Description')}</FormLabel>
+                <FormLabel>{t("transactions.description", "Description")}</FormLabel>
                 <FormControl>
-                  <Input placeholder={t('transactions.description_placeholder', 'Transaction description')} {...field} />
+                  <Input
+                    placeholder={t("transactions.description_placeholder", "Transaction description")}
+                    {...field}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
-          
+
           <div className="flex flex-col md:flex-row gap-4">
             <FormField
               control={form.control}
               name="valor"
               render={({ field }) => (
                 <FormItem className="flex-1">
-                  <FormLabel>{t('transactions.amount', 'Amount')}</FormLabel>
+                  <FormLabel>{t("transactions.amount", "Amount")}</FormLabel>
                   <FormControl>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min="0.01"
-                      placeholder="0,00"
-                      {...field}
-                    />
+                    <Input type="number" step="0.01" min="0.01" placeholder="0,00" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
-            
+
             <FormField
               control={form.control}
               name="data_transacao"
               render={({ field }) => (
                 <FormItem className="flex-1">
-                  <FormLabel>{t('transactions.date', 'Date')}</FormLabel>
+                  <FormLabel>{t("transactions.date", "Date")}</FormLabel>
                   <FormControl>
                     <Input type="date" {...field} />
                   </FormControl>
@@ -308,41 +387,52 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
                 </FormItem>
               )}
             />
+
+            {form.watch("tipo") === TransactionType.EXPENSE && (
+              <FormField
+                control={form.control}
+                name="parcelas"
+                render={({ field }) => (
+                  <FormItem className="w-full md:w-28">
+                    <FormLabel>Parcelas</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={1}
+                        step={1}
+                        {...field}
+                        value={field.value ?? 1}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
           </div>
-          
+
           <FormField
             control={form.control}
             name="categoria_id"
             render={({ field }) => {
-              // Implementação personalizada sem animações
               const [isOpen, setIsOpen] = useState(false);
               const selectRef = useRef<HTMLDivElement>(null);
-              
-              // Fechamento ao clicar fora do componente
+
               useEffect(() => {
                 const handleClickOutside = (event: MouseEvent) => {
                   if (selectRef.current && !selectRef.current.contains(event.target as Node)) {
                     setIsOpen(false);
                   }
                 };
-                
-                if (isOpen) {
-                  document.addEventListener('mousedown', handleClickOutside);
-                }
-                
-                return () => {
-                  document.removeEventListener('mousedown', handleClickOutside);
-                };
+                if (isOpen) document.addEventListener("mousedown", handleClickOutside);
+                return () => document.removeEventListener("mousedown", handleClickOutside);
               }, [isOpen]);
-              
-              // Determinar categoria selecionada
-              const selectedCategory = filteredCategories?.find(
-                category => category.id === field.value
-              );
-              
+
+              const selectedCategory = filteredCategories?.find((category) => category.id === field.value);
+
               return (
                 <FormItem className="relative">
-                  <FormLabel>{t('transactions.category', 'Categoria')}</FormLabel>
+                  <FormLabel>Classificação</FormLabel>
                   <div ref={selectRef} className="relative">
                     <FormControl>
                       <button
@@ -352,31 +442,33 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
                       >
                         {selectedCategory ? (
                           <div className="flex items-center">
-                            <div 
-                              className="w-3 h-3 rounded-full mr-2" 
+                            <div
+                              className="w-3 h-3 rounded-full mr-2"
                               style={{ backgroundColor: selectedCategory.cor || "#6C63FF" }}
-                            ></div>
+                            />
                             {translateCategoryName(selectedCategory.nome, t)}
                           </div>
                         ) : (
-                          <span className="text-muted-foreground">{t('transactions.select_category', 'Selecione uma categoria')}</span>
+                          <span className="text-muted-foreground">Selecione uma classificação</span>
                         )}
                         <ChevronDown className="h-4 w-4 opacity-50" />
                       </button>
                     </FormControl>
-                    
+
                     {isOpen && (
-                      <div className={`relative z-50 w-full mt-1 rounded-md border shadow-md max-h-[300px] overflow-y-auto ${theme === 'light' ? 'bg-white border-gray-200' : 'bg-popover border-gray-700'} text-popover-foreground`}>
+                      <div
+                        className={`relative z-50 w-full mt-1 rounded-md border shadow-md max-h-[300px] overflow-y-auto ${
+                          theme === "light" ? "bg-white border-gray-200" : "bg-popover border-gray-700"
+                        } text-popover-foreground`}
+                      >
                         <div className="p-1">
                           {isCategoriesLoading ? (
                             <div className="flex items-center justify-center p-2">
                               <Loader2 className="h-4 w-4" />
-                              <span className="ml-2">{t('common.loading', 'Loading...')}</span>
+                              <span className="ml-2">{t("common.loading", "Loading...")}</span>
                             </div>
                           ) : filteredCategories?.length === 0 ? (
-                            <div className="p-2 text-center text-sm">
-                              Nenhuma categoria disponível
-                            </div>
+                            <div className="p-2 text-center text-sm">Nenhuma classificação disponível</div>
                           ) : (
                             filteredCategories?.map((category) => (
                               <button
@@ -394,10 +486,10 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
                                   </span>
                                 )}
                                 <div className="flex items-center">
-                                  <div 
-                                    className="w-3 h-3 rounded-full mr-2" 
+                                  <div
+                                    className="w-3 h-3 rounded-full mr-2"
                                     style={{ backgroundColor: category.cor || "#6C63FF" }}
-                                  ></div>
+                                  />
                                   {translateCategoryName(category.nome, t)}
                                 </div>
                               </button>
@@ -412,75 +504,88 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
               );
             }}
           />
-          
+
           <FormField
             control={form.control}
-            name="forma_pagamento_id"
+            name="pago_com"
             render={({ field }) => {
-              // Custom payment method selector without animations
               const [isOpen, setIsOpen] = useState(false);
               const selectRef = useRef<HTMLDivElement>(null);
-              
-              // Close when clicking outside
+
               useEffect(() => {
                 function handleClickOutside(event: MouseEvent) {
                   if (selectRef.current && !selectRef.current.contains(event.target as Node)) {
                     setIsOpen(false);
                   }
                 }
-                document.addEventListener('mousedown', handleClickOutside);
-                return () => document.removeEventListener('mousedown', handleClickOutside);
+                document.addEventListener("mousedown", handleClickOutside);
+                return () => document.removeEventListener("mousedown", handleClickOutside);
               }, []);
-              
-              const selectedPaymentMethod = paymentMethods?.find(pm => pm.id === field.value);
-              
+
+              const selected = opcoesPagoCom.find((o) => o.value === field.value);
+              const loadingOpts = isPaymentMethodsLoading;
+
               return (
                 <FormItem>
-                  <FormLabel>{t('transactions.payment_method.label', 'Forma de Pagamento')}</FormLabel>
+                  <FormLabel>Pago com</FormLabel>
                   <div className="relative" ref={selectRef}>
                     <FormControl>
                       <button
                         type="button"
                         className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                         onClick={() => setIsOpen(!isOpen)}
-                        disabled={isPaymentMethodsLoading}
+                        disabled={loadingOpts}
                       >
-                        <span className={selectedPaymentMethod ? "" : "text-muted-foreground"}>
-                          {selectedPaymentMethod
-                            ? translatePaymentMethodName(selectedPaymentMethod.nome, t)
-                            : t('transactions.payment_method.placeholder', 'Selecione uma forma de pagamento')}
+                        <span className={selected ? "" : "text-muted-foreground"}>
+                          {selected ? selected.label : "Selecione conta, cartão ou forma"}
                         </span>
                         <ChevronDown className="h-4 w-4 opacity-50" />
                       </button>
                     </FormControl>
                     {isOpen && (
-                      <div className={`relative top-full left-0 right-0 z-50 mt-1 max-h-60 overflow-auto rounded-md border p-1 shadow-md ${theme === 'light' ? 'bg-white border-gray-200' : 'bg-popover border-gray-700'} text-popover-foreground`}>
-                        {isPaymentMethodsLoading ? (
+                      <div
+                        className={`relative top-full left-0 right-0 z-50 mt-1 max-h-60 overflow-auto rounded-md border p-1 shadow-md ${
+                          theme === "light" ? "bg-white border-gray-200" : "bg-popover border-gray-700"
+                        } text-popover-foreground`}
+                      >
+                        {loadingOpts ? (
                           <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                            {t('common.loading', 'Carregando...')}
+                            {t("common.loading", "Carregando...")}
                           </div>
-                        ) : paymentMethods && paymentMethods.length > 0 ? (
-                          paymentMethods.map((pm) => (
-                            <div
-                              key={pm.id}
-                              className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
-                              onClick={() => {
-                                field.onChange(pm.id);
-                                setIsOpen(false);
-                              }}
-                            >
-                              <Check className={`mr-2 h-4 w-4 ${field.value === pm.id ? "opacity-100" : "opacity-0"}`} />
-                              <span>{translatePaymentMethodName(pm.nome, t)}</span>
-                              {pm.global && (
-                                <span className="ml-auto text-xs text-muted-foreground">
-                                  ({t('transactions.payment_method.global_badge', 'Global')})
-                                </span>
-                              )}
-                            </div>
-                          ))
+                        ) : opcoesPagoCom.length > 0 ? (
+                          <>
+                            {(["Contas", "Cartões", "Formas"] as const).map((group) => {
+                              const items = opcoesPagoCom.filter((o) => o.group === group);
+                              if (items.length === 0) return null;
+                              return (
+                                <div key={group}>
+                                  <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+                                    {group}
+                                  </div>
+                                  {items.map((o) => (
+                                    <div
+                                      key={o.value}
+                                      className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
+                                      onClick={() => {
+                                        field.onChange(o.value);
+                                        setIsOpen(false);
+                                      }}
+                                    >
+                                      <Check
+                                        className={`mr-2 h-4 w-4 ${
+                                          field.value === o.value ? "opacity-100" : "opacity-0"
+                                        }`}
+                                      />
+                                      <span>{o.label}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              );
+                            })}
+                          </>
                         ) : (
                           <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                            {t('transactions.payment_method.empty', 'Nenhuma forma de pagamento disponível')}
+                            Nenhuma opção disponível
                           </div>
                         )}
                       </div>
@@ -510,7 +615,8 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
                     <span>
                       <span className="block text-sm font-medium">Despesa reembolsável</span>
                       <span className="block text-xs text-muted-foreground">
-                        Continua na fatura do cartão, mas vai para A Receber e não reduz seu saldo nem entra nos relatórios de despesas.
+                        Continua na fatura do cartão, mas vai para A Receber e não reduz seu saldo nem entra nos
+                        relatórios de despesas.
                       </span>
                     </span>
                   </label>
@@ -523,8 +629,8 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
             <Button type="submit" disabled={isSubmitting} className="w-full md:w-auto">
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4" />}
               {transaction
-                ? t('transactions.submit.update', 'Salvar alterações')
-                : t('transactions.submit.create', 'Criar transação')}
+                ? t("transactions.submit.update", "Salvar alterações")
+                : t("transactions.submit.create", "Criar transação")}
             </Button>
           </div>
         </form>
