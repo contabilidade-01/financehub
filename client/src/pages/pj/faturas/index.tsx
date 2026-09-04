@@ -89,7 +89,7 @@ export default function PjFaturas({ empresaId }: { empresaId: number }) {
   });
   const pagarF = useMutation({
     mutationFn: ({ id, data }: { id: number; data: any }) => apiRequest(`${base}/faturas/${id}/pagar`, { method: "POST", data }),
-    onSuccess: () => { inval(); setPagando(null); setFaturaAberta(null); toast({ title: "Fatura paga", description: "Saída lançada no caixa." }); },
+    onSuccess: () => { inval(); setPagando(null); setFaturaAberta(null); toast({ title: "Fatura paga", description: "Compras baixadas e saldo do cartão atualizado." }); },
     onError: (e: any) => toast({ title: "Erro", description: e?.error || e?.message, variant: "destructive" }),
   });
 

@@ -42,6 +42,7 @@ const fmt = (n: number | string) =>
 function TransacaoForm({
   contas,
   formas,
+  cartoes,
   inicial,
   salvando,
   onSubmit,
@@ -49,42 +50,54 @@ function TransacaoForm({
 }: {
   contas: EmpresaConta[];
   formas: EmpresaFormaPagamento[];
+  cartoes: { id: number; nome: string; ativo?: boolean }[];
   inicial?: EmpresaTransacaoWithDetails | null;
   salvando: boolean;
   onSubmit: (dados: any) => void;
   onCancel?: () => void;
 }) {
+  const pagamentoInicial = () => {
+    if (inicial?.cartao_id) return `cartao:${inicial.cartao_id}`;
+    if (inicial?.empresa_forma_pagamento_id) return `forma:${inicial.empresa_forma_pagamento_id}`;
+    return "nenhuma";
+  };
+
   const [tipo, setTipo] = useState<string>(inicial?.tipo ?? "Despesa");
   const [categoriaId, setCategoriaId] = useState<string>(inicial ? String(inicial.categoria_id) : "");
   const [status, setStatus] = useState<string>(inicial?.status ?? "Efetivada");
-  const [formaId, setFormaId] = useState<string>(
-    inicial?.empresa_forma_pagamento_id ? String(inicial.empresa_forma_pagamento_id) : "nenhuma",
-  );
+  const [pagamento, setPagamento] = useState<string>(pagamentoInicial());
 
   const contasDoTipo = contas.filter((c) => c.tipo === tipo);
   const formasAtivas = formas.filter((f) => f.ativo);
+  const cartoesAtivos = cartoes.filter((c) => c.ativo !== false);
 
   const trocarTipo = (novo: string) => {
     setTipo(novo);
-    // Se a conta escolhida não serve para o novo tipo, zera para o usuário escolher.
     const atual = contas.find((c) => String(c.id) === categoriaId);
     if (atual && atual.tipo !== novo) setCategoriaId("");
+    // Cartão só faz sentido em Despesa.
+    if (novo !== "Despesa" && pagamento.startsWith("cartao:")) setPagamento("nenhuma");
   };
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const forma = formaId !== "nenhuma" ? formas.find((f) => String(f.id) === formaId) : null;
+    const isCartao = pagamento.startsWith("cartao:");
+    const isForma = pagamento.startsWith("forma:");
+    const cartao = isCartao ? cartoes.find((c) => String(c.id) === pagamento.slice(7)) : null;
+    const forma = isForma ? formas.find((f) => String(f.id) === pagamento.slice(6)) : null;
+
     onSubmit({
       descricao: fd.get("descricao"),
       valor: Number(fd.get("valor")),
       tipo,
       categoria_id: Number(categoriaId),
       data_transacao: fd.get("data_transacao"),
-      status,
+      status: isCartao ? "Efetivada" : status,
       data_vencimento: (fd.get("data_vencimento") as string) || null,
+      cartao_id: cartao ? cartao.id : null,
       empresa_forma_pagamento_id: forma ? forma.id : null,
-      metodo_pagamento: forma?.nome ?? null,
+      metodo_pagamento: cartao?.nome ?? forma?.nome ?? null,
     });
   };
 
@@ -125,23 +138,40 @@ function TransacaoForm({
         </SelectContent>
       </Select>
 
-      <Select value={formaId} onValueChange={setFormaId}>
+      <Select value={pagamento} onValueChange={setPagamento}>
         <SelectTrigger><SelectValue placeholder="Forma de pagamento" /></SelectTrigger>
         <SelectContent>
           <SelectItem value="nenhuma">Sem forma</SelectItem>
           {formasAtivas.map((f) => (
-            <SelectItem key={f.id} value={String(f.id)}>{f.nome}</SelectItem>
+            <SelectItem key={`f-${f.id}`} value={`forma:${f.id}`}>{f.nome}</SelectItem>
           ))}
+          {tipo === "Despesa" && cartoesAtivos.length > 0 && (
+            <>
+              {cartoesAtivos.map((c) => (
+                <SelectItem key={`c-${c.id}`} value={`cartao:${c.id}`}>
+                  Cartão — {c.nome}
+                </SelectItem>
+              ))}
+            </>
+          )}
         </SelectContent>
       </Select>
 
-      <Select value={status} onValueChange={setStatus}>
-        <SelectTrigger><SelectValue /></SelectTrigger>
-        <SelectContent>
-          <SelectItem value="Efetivada">Efetivada</SelectItem>
-          <SelectItem value="Pendente">Pendente</SelectItem>
-        </SelectContent>
-      </Select>
+      {!pagamento.startsWith("cartao:") && (
+        <Select value={status} onValueChange={setStatus}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="Efetivada">Efetivada</SelectItem>
+            <SelectItem value="Pendente">Pendente</SelectItem>
+          </SelectContent>
+        </Select>
+      )}
+
+      {pagamento.startsWith("cartao:") && (
+        <p className="text-xs text-muted-foreground md:col-span-1 self-center">
+          Compra no cartão: entra na fatura da competência e compõe o saldo até a fatura ser paga.
+        </p>
+      )}
 
       <Input
         name="data_vencimento"
@@ -194,10 +224,17 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
     enabled: !!empresaId,
   });
 
+  const { data: cartoes = [] } = useQuery<{ id: number; nome: string; ativo?: boolean }[]>({
+    queryKey: [`/api/empresas/${empresaId}/cartoes`],
+    enabled: !!empresaId,
+  });
+
   const invalidar = () => {
     qc.invalidateQueries({ queryKey: [`/api/empresas/${empresaId}/transacoes?todos=1`] });
     qc.invalidateQueries({ queryKey: [`/api/empresas/${empresaId}/transacoes`] });
     qc.invalidateQueries({ queryKey: [`/api/empresas/${empresaId}/dashboard/resumo`] });
+    qc.invalidateQueries({ queryKey: [`/api/empresas/${empresaId}/cartoes-com-saldo`] });
+    qc.invalidateQueries({ queryKey: [`/api/empresas/${empresaId}/cartoes`] });
   };
 
   const createMut = useMutation({
@@ -266,15 +303,16 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
     onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
   });
 
-  // Formas de pagamento distintas na lista (só as que existem nos lançamentos).
+  // Formas + nomes de cartão usados nos lançamentos (filtro).
   const formasPagamento = useMemo(() => {
     const set = new Map<string, string>();
     for (const t of transacoes) {
       const nome = (t as any).metodo_pagamento_nome || t.metodo_pagamento;
       if (nome) set.set(String(nome), String(nome));
     }
+    for (const c of cartoes) set.set(c.nome, c.nome);
     return [...set.values()].sort((a, b) => a.localeCompare(b, "pt-BR"));
-  }, [transacoes]);
+  }, [transacoes, cartoes]);
 
   const filtradas = useMemo(() => {
     const { de, ate } = janelaDoPeriodo(fPeriodo, fDe, fAte);
@@ -336,6 +374,7 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
             <TransacaoForm
               contas={contas}
               formas={formas}
+              cartoes={cartoes}
               salvando={createMut.isPending}
               onSubmit={(dados) => createMut.mutate(dados)}
               onCancel={() => setShowForm(false)}
@@ -473,6 +512,14 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
                         {t.status === "Pendente" && (
                           <Badge variant="outline" className="ml-2 text-[10px]">Pendente</Badge>
                         )}
+                        {(t as any).cartao_id && (
+                          <Badge variant="outline" className="ml-2 text-[10px]">
+                            Cartão · {t.metodo_pagamento || "crédito"}
+                          </Badge>
+                        )}
+                        {!(t as any).cartao_id && t.metodo_pagamento && (
+                          <Badge variant="outline" className="ml-2 text-[10px]">{t.metodo_pagamento}</Badge>
+                        )}
                       </td>
                       <td className="p-3 text-xs">
                         {trocandoConta === t.id ? (
@@ -557,6 +604,7 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
             <TransacaoForm
               contas={contas}
               formas={formas}
+              cartoes={cartoes}
               inicial={editando}
               salvando={updateMut.isPending}
               onSubmit={(dados) => updateMut.mutate({ id: editando.id, dados })}

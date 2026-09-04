@@ -859,6 +859,9 @@ export const updateEmpresaTransacaoSchema = z.object({
   data_vencimento: z.string().optional().nullable(),
   data_pagamento: z.string().optional().nullable(),
   movimenta_caixa: z.boolean().optional(),
+  cartao_id: flexibleNumberSchema.optional().nullable(),
+  fatura_id: flexibleNumberSchema.optional().nullable(),
+  competencia: z.string().optional().nullable(),
 });
 
 export const insertEmpresaFormaPagamentoSchema = z.object({

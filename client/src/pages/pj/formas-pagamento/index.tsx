@@ -67,7 +67,7 @@ export default function PjFormasPagamento({ empresaId }: { empresaId: number }) 
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Formas de pagamento</h1>
-          <p className="text-sm text-muted-foreground">PIX, boleto, débito… Cartões ficam em Faturas.</p>
+          <p className="text-sm text-muted-foreground">PIX, boleto, débito… Cartões de crédito são escolhidos em Transações (e geridos em Faturas).</p>
         </div>
         <Button onClick={() => setShowForm(!showForm)} size="sm">
           <Plus className="h-4 w-4 mr-1" /> Nova

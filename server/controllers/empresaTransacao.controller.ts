@@ -59,7 +59,36 @@ export const createEmpresaTransacao = async (req: Request, res: Response) => {
       });
     }
 
-    // Forma PJ: resolve nome para metodo_pagamento (filtro/exibição).
+    // Cartão de crédito: mesma regra do "Registrar compra" em Faturas —
+    // competência, fatura da competência, não mexe no caixa, compõe o saldo.
+    const cartaoIdBody = req.body?.cartao_id != null ? Number(req.body.cartao_id) : (parsed.data.cartao_id != null ? Number(parsed.data.cartao_id) : null);
+    if (cartaoIdBody) {
+      if (tipoNorm !== "Despesa") {
+        return res.status(400).json({ error: "Cartão de crédito só pode ser usado em Despesa." });
+      }
+      const { cartaoDoUsuario, resolverFaturaDoCartao } = await import("../services/fatura-pj.service");
+      const cartao = await cartaoDoUsuario(cartaoIdBody, userId);
+      if (!cartao || cartao.empresa_id !== empresaId) {
+        return res.status(400).json({ error: "Cartão não encontrado nesta empresa." });
+      }
+      const dataISO = String(parsed.data.data_transacao).slice(0, 10);
+      const { fatura, competencia, metodo } = await resolverFaturaDoCartao(empresaId, cartao, dataISO);
+      const transacao = await storage.createEmpresaTransacao({
+        ...parsed.data,
+        empresa_id: empresaId,
+        tipo: "Despesa",
+        cartao_id: cartao.id,
+        fatura_id: fatura.id,
+        competencia,
+        movimenta_caixa: false,
+        empresa_forma_pagamento_id: null,
+        metodo_pagamento: metodo,
+        origem: (req.body.origem as string) ?? "manual",
+      } as any);
+      return res.status(201).json(transacao);
+    }
+
+    // Forma PJ (PIX/boleto/débito…): resolve nome para metodo_pagamento.
     let metodoPagamento = parsed.data.metodo_pagamento ?? null;
     let empresaFormaId = parsed.data.empresa_forma_pagamento_id ?? null;
     if (empresaFormaId) {
@@ -71,10 +100,13 @@ export const createEmpresaTransacao = async (req: Request, res: Response) => {
     const transacao = await storage.createEmpresaTransacao({
       ...parsed.data,
       empresa_id: empresaId,
+      cartao_id: null,
+      fatura_id: null,
+      competencia: null,
       empresa_forma_pagamento_id: empresaFormaId,
       metodo_pagamento: metodoPagamento,
       origem: (req.body.origem as string) ?? 'manual'
-    });
+    } as any);
 
     return res.status(201).json(transacao);
   } catch (err) {

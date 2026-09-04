@@ -75,17 +75,34 @@ async function getOrCreateFatura(empresaId: number, cartaoId: number, competenci
   return (r as any[])[0];
 }
 
+/**
+ * Resolve cartão + fatura da competência para uma compra.
+ * Usado por registrarCompra e pelo create/update de Transações PJ.
+ */
+export async function resolverFaturaDoCartao(
+  empresaId: number,
+  cartao: { id: number; dia_fechamento: number; dia_vencimento: number; nome: string },
+  dataISO: string,
+): Promise<{ fatura: any; competencia: string; metodo: string }> {
+  const { competencia, dataFech, dataVenc } = competenciaDaCompra(
+    dataISO,
+    Number(cartao.dia_fechamento),
+    Number(cartao.dia_vencimento),
+  );
+  const fatura = await getOrCreateFatura(empresaId, cartao.id, competencia, dataFech, dataVenc);
+  return { fatura, competencia, metodo: cartao.nome };
+}
+
 // Registra uma compra no cartão (competência, não mexe no caixa).
 export async function registrarCompra(empresaId: number, cartao: any, b: any): Promise<any> {
   const dataISO = String(b.data_transacao).slice(0, 10);
-  const { competencia, dataFech, dataVenc } = competenciaDaCompra(dataISO, cartao.dia_fechamento, cartao.dia_vencimento);
-  const fatura = await getOrCreateFatura(empresaId, cartao.id, competencia, dataFech, dataVenc);
+  const { fatura, competencia, metodo } = await resolverFaturaDoCartao(empresaId, cartao, dataISO);
   const valor = Number(b.valor).toFixed(2);
   const r = await db.execute(sql`
     INSERT INTO empresas_transacoes
-      (empresa_id, categoria_id, descricao, valor, tipo, data_transacao, status, origem, movimenta_caixa, cartao_id, fatura_id, competencia)
+      (empresa_id, categoria_id, descricao, valor, tipo, data_transacao, status, origem, movimenta_caixa, cartao_id, fatura_id, competencia, metodo_pagamento)
     VALUES
-      (${empresaId}, ${Number(b.categoria_id)}, ${b.descricao}, ${valor}, 'Despesa', ${dataISO}, 'Efetivada', 'manual', false, ${cartao.id}, ${fatura.id}, ${competencia})
+      (${empresaId}, ${Number(b.categoria_id)}, ${b.descricao}, ${valor}, 'Despesa', ${dataISO}, 'Efetivada', 'manual', false, ${cartao.id}, ${fatura.id}, ${competencia}, ${metodo})
     RETURNING *
   `);
   return { compra: (r as any[])[0], fatura };
@@ -201,6 +218,14 @@ export async function pagarFatura(
   const upd = await db.execute(sql`
     UPDATE empresas_faturas SET status = 'paga', transacao_pagamento_id = ${txId}, data_pagamento = NOW()
     WHERE id = ${fatura.id} RETURNING *
+  `);
+  // Baixa as compras da fatura: marcam data_pagamento (saem do "usado" do cartão
+  // porque a fatura agora está paga — getSaldoCartaoEmpresa filtra status paga).
+  await db.execute(sql`
+    UPDATE empresas_transacoes
+    SET status = 'Efetivada', data_pagamento = ${dataPg}
+    WHERE fatura_id = ${fatura.id}
+      AND COALESCE(movimenta_caixa, false) = false
   `);
   return { fatura: (upd as any[])[0], transacao_id: txId, total };
 }
