@@ -1,5 +1,8 @@
 import { useAuth } from "@/hooks/use-auth";
 
+const MS_DIA = 1000 * 60 * 60 * 24;
+const AVISO_VENCIMENTO_DIAS = 7;
+
 export function useSubscriptionStatus() {
   const { user } = useAuth();
 
@@ -8,34 +11,51 @@ export function useSubscriptionStatus() {
     return tipo === 'super_admin' || tipo === 'admin';
   };
 
+  const expirationDate = user?.data_expiracao_assinatura || null;
+
+  const daysRemaining = ((): number | null => {
+    if (!expirationDate) return null;
+    const ms = new Date(expirationDate).getTime() - Date.now();
+    return Math.ceil(ms / MS_DIA);
+  })();
+
+  const isAdminUser = isAdmin();
+
   const isSubscriptionExpired = (): boolean => {
     if (!user) return false;
-    if (isAdmin()) return false; // admin nunca expira
-
-    // Fonte única: expirado = sem data futura de expiração.
-    if (user.data_expiracao_assinatura) {
-      return new Date(user.data_expiracao_assinatura) <= new Date();
+    if (isAdminUser) return false;
+    if (expirationDate) {
+      return new Date(expirationDate) <= new Date();
     }
-    // Sem data de expiração = sem plano → tratar como expirado (mostra a tela de assinar).
     return true;
   };
 
   const hasActiveAccess = (): boolean => {
     if (!user) return false;
-    if (isAdmin()) return true; // admin sempre tem acesso
-
-    // Acesso = tem data de expiração no futuro.
-    if (user.data_expiracao_assinatura) {
-      return new Date(user.data_expiracao_assinatura) > new Date();
+    if (isAdminUser) return true;
+    if (expirationDate) {
+      return new Date(expirationDate) > new Date();
     }
-    // Sem data = sem acesso.
     return false;
   };
 
+  const status = String((user as any)?.status_assinatura || "");
+  const isTrial = status.startsWith("degustacao");
+  const showExpiringSoonBanner =
+    !isAdminUser &&
+    hasActiveAccess() &&
+    daysRemaining != null &&
+    daysRemaining >= 0 &&
+    daysRemaining <= AVISO_VENCIMENTO_DIAS;
+
   return {
     user,
+    isAdmin: isAdminUser,
     isSubscriptionExpired: isSubscriptionExpired(),
     hasActiveAccess: hasActiveAccess(),
-    expirationDate: user?.data_expiracao_assinatura
+    expirationDate,
+    daysRemaining,
+    isTrial,
+    showExpiringSoonBanner,
   };
 }

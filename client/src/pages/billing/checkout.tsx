@@ -4,7 +4,8 @@ import { usePlans } from '@/hooks/use-plans';
 import { useCheckout } from '@/hooks/use-billing';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { PlanCard } from '@/components/billing/PlanCard';
-import { CreditCardForm } from '@/components/billing/CreditCardForm';
+// CARTÃO NO SITE — descomente para religar o formulário de cartão
+// import { CreditCardForm } from '@/components/billing/CreditCardForm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -49,7 +50,8 @@ export default function CheckoutPage({
 
   const [step, setStep] = useState(1);
   const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
-  const [isCardValid, setIsCardValid] = useState(false);
+  // CARTÃO NO SITE — descomente para religar
+  // const [isCardValid, setIsCardValid] = useState(false);
 
   // Estados para espera de confirmação de pagamento
   const [waitingConfirmation, setWaitingConfirmation] = useState(false);
@@ -66,13 +68,14 @@ export default function CheckoutPage({
     addressComplement: ''
   });
 
-  const [creditCard, setCreditCard] = useState({
-    holderName: '',
-    number: '',
-    expiryMonth: '',
-    expiryYear: '',
-    ccv: ''
-  });
+  // CARTÃO NO SITE — descomente para religar
+  // const [creditCard, setCreditCard] = useState({
+  //   holderName: '',
+  //   number: '',
+  //   expiryMonth: '',
+  //   expiryYear: '',
+  //   ccv: ''
+  // });
 
   // Validar CPF
   const validateCPF = (cpf: string): boolean => {
@@ -126,7 +129,8 @@ export default function CheckoutPage({
 
   const canGoToStep2 = selectedPlanId !== null;
   const canGoToStep3 = personalInfo.name && personalInfo.email && validateCPF(personalInfo.cpfCnpj) && personalInfo.phone && personalInfo.postalCode && personalInfo.addressNumber;
-  const canSubmit = isCardValid;
+  // CARTÃO NO SITE: canSubmit era isCardValid. Sem cartão no site, basta ter chegado no passo 3.
+  const canSubmit = canGoToStep3;
 
   // Escutar notificações WebSocket para confirmação de pagamento
   useEffect(() => {
@@ -181,83 +185,35 @@ export default function CheckoutPage({
       const result = await checkout.mutateAsync({
         planId: selectedPlanId,
         cpfCnpj: personalInfo.cpfCnpj.replace(/\D/g, ''),
-        creditCard: {
-          holderName: creditCard.holderName,
-          number: creditCard.number.replace(/\s/g, ''),
-          expiryMonth: creditCard.expiryMonth,
-          expiryYear: creditCard.expiryYear,
-          ccv: creditCard.ccv
-        },
-        creditCardHolderInfo: {
-          name: personalInfo.name,
-          email: personalInfo.email,
-          cpfCnpj: personalInfo.cpfCnpj.replace(/\D/g, ''),
-          postalCode: personalInfo.postalCode.replace(/\D/g, ''),
-          addressNumber: personalInfo.addressNumber,
-          addressComplement: personalInfo.addressComplement,
-          phone: personalInfo.phone.replace(/\D/g, ''),
-          mobilePhone: personalInfo.phone.replace(/\D/g, '')
-        },
-        // Incluir checkoutToken se em modo externo
         ...(externalMode && checkoutToken ? { checkoutToken } : {})
       });
 
-      // Buscar informações do plano selecionado
+      if (result?.url) {
+        window.location.href = result.url;
+        return;
+      }
+
+      toast({
+        title: 'Erro no checkout',
+        description: 'O Asaas não retornou o link de pagamento.',
+        variant: 'destructive'
+      });
+
+      /* CARTÃO NO SITE — descomente este fluxo (e creditCard no mutateAsync) para religar:
       const selectedPlan = plans?.find(p => p.id === selectedPlanId);
-
-      console.log('[Checkout] Resultado:', result);
-
-      // Verificar se pagamento já está confirmado (resposta imediata)
       if (result.status === 'confirmed') {
-        console.log('[Checkout] Pagamento confirmado imediatamente!');
-        // Redirecionar para página de sucesso imediatamente
-        setLocation('/billing/success', {
-          state: {
-            status: 'confirmed',
-            subscription: result.subscription,
-            payment: result.payment,
-            plan: selectedPlan ? {
-              name: selectedPlan.name,
-              priceMonthly: selectedPlan.priceMonthly
-            } : undefined
-          }
-        });
+        setLocation('/billing/success', { state: { status: 'confirmed', subscription: result.subscription, payment: result.payment, plan: selectedPlan } });
       } else if (result.waitForWebhook) {
-        console.log('[Checkout] Aguardando confirmação via webhook...', result.paymentId);
-        // Pagamento pendente - aguardar webhook por até 30 segundos
         setWaitingConfirmation(true);
         setWaitingPaymentId(result.paymentId);
-
-        // Timeout de 30 segundos
         timeoutRef.current = setTimeout(() => {
-          console.log('[Checkout] Timeout de 30s atingido - redirecionando para pendente');
           setWaitingConfirmation(false);
-          setLocation('/billing/success', {
-            state: {
-              status: 'pending',
-              subscription: result.subscription,
-              payment: result.payment,
-              plan: selectedPlan ? {
-                name: selectedPlan.name,
-                priceMonthly: selectedPlan.priceMonthly
-              } : undefined
-            }
-          });
-        }, 30000); // 30 segundos
+          setLocation('/billing/success', { state: { status: 'pending', subscription: result.subscription, payment: result.payment, plan: selectedPlan } });
+        }, 30000);
       } else {
-        // Caso padrão - redirecionar com dados
-        setLocation('/billing/success', {
-          state: {
-            status: result.status || 'pending',
-            subscription: result.subscription,
-            payment: result.payment,
-            plan: selectedPlan ? {
-              name: selectedPlan.name,
-              priceMonthly: selectedPlan.priceMonthly
-            } : undefined
-          }
-        });
+        setLocation('/billing/success', { state: { status: result.status || 'pending', subscription: result.subscription, payment: result.payment, plan: selectedPlan } });
       }
+      */
     } catch (error: any) {
       toast({
         title: 'Erro no checkout',
@@ -444,18 +400,27 @@ export default function CheckoutPage({
         </Card>
       )}
 
-      {/* Step 3: Payment */}
+      {/* Step 3: Payment — cartão no site COMENTADO (religar: CreditCardForm). */}
       {step === 3 && (
         <Card>
           <CardHeader>
             <CardTitle>Pagamento</CardTitle>
-            <CardDescription>Insira os dados do seu cartão de crédito</CardDescription>
+            <CardDescription>
+              Você paga na página segura do Asaas (cartão, Pix ou boleto). Não coletamos cartão neste site.
+            </CardDescription>
           </CardHeader>
           <CardContent>
+            {/*
             <CreditCardForm
               onCardChange={setCreditCard}
               onValidChange={setIsCardValid}
             />
+            */}
+            <Alert>
+              <AlertDescription>
+                Ao continuar, você será levado ao Asaas para escolher a forma de pagamento. O acesso libera sozinho quando o pagamento confirmar.
+              </AlertDescription>
+            </Alert>
           </CardContent>
           <div className="flex justify-between p-6">
             <Button variant="outline" onClick={() => setStep(2)}>
@@ -468,11 +433,11 @@ export default function CheckoutPage({
               {checkout.isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Processando...
+                  Gerando cobrança…
                 </>
               ) : (
                 <>
-                  Finalizar Assinatura
+                  Pagar no Asaas
                 </>
               )}
             </Button>

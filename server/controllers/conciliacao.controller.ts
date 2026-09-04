@@ -14,6 +14,7 @@ import {
   conciliarMovimentoComTransacao,
   aprenderMemoriaContaPJ,
   getUltimoSaldoInformado,
+  transacaoPjPertenceAEmpresa,
 } from "../storage";
 import { processarImportacaoOfx, processarImportacaoPlanilha } from "../services/conciliacao.service";
 
@@ -118,10 +119,13 @@ export class ConciliacaoController {
     if (!mov || mov.empresa_id !== emp.id) return res.status(404).json({ error: "Movimento não encontrado" });
     const contaContabilId = Number(req.body?.conta_contabil_id);
     if (!contaContabilId) return res.status(400).json({ error: "Informe conta_contabil_id" });
+    // Isolamento: a conta contábil precisa ser do plano de contas DESTA empresa.
+    const contas = await storage.getEmpresasContasByEmpresaId(emp.id) as any[];
+    const contaAlvo = contas.find((c: any) => c.id === contaContabilId);
+    if (!contaAlvo) return res.status(400).json({ error: "Conta contábil inválida para esta empresa" });
     const tx = await lancarMovimentoComoTransacao(mov, contaContabilId);
     // Aprende: essa descrição -> essa conta (para as próximas importações)
-    const contas = await storage.getEmpresasContasByEmpresaId(emp.id) as any[];
-    const nome = contas.find((c: any) => c.id === contaContabilId)?.nome;
+    const nome = contaAlvo.nome;
     await aprenderMemoriaContaPJ((req as any).user.id, mov.descricao || "", contaContabilId, nome);
     res.json({ success: true, transacao: tx });
   }
@@ -133,6 +137,10 @@ export class ConciliacaoController {
     if (!mov || mov.empresa_id !== emp.id) return res.status(404).json({ error: "Movimento não encontrado" });
     const txId = Number(req.body?.transacao_id) || mov.transacao_id;
     if (!txId) return res.status(400).json({ error: "Informe transacao_id" });
+    // Isolamento: a transação precisa pertencer a ESTA empresa (evita IDOR cross-tenant).
+    if (!(await transacaoPjPertenceAEmpresa(txId, emp.id))) {
+      return res.status(404).json({ error: "Transação não encontrada" });
+    }
     await conciliarMovimentoComTransacao(mov.id, txId);
     res.json({ success: true });
   }

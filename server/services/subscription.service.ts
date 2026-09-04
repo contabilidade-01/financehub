@@ -469,14 +469,10 @@ export class SubscriptionService {
       const userTokens = await this.storage.getApiTokensByUserId(user.id);
       const userToken = userTokens && userTokens.length > 0 ? userTokens[0].token : null;
 
-      // Gerar nova senha aleatória (mesmo comportamento da ativação manual)
-      const newPassword = generateRandomPassword(8);
-
-      // Atualizar a senha do usuário
-      const hashedPassword = await bcrypt.hash(newPassword, 10);
-      await this.storage.updateUser(user.id, { senha: hashedPassword });
-
-      console.log(`[SubscriptionService] Nova senha gerada para usuário ${user.nome}: ${newPassword}`);
+      // IMPORTANTE: NÃO resetar a senha na confirmação de pagamento.
+      // O cliente já usa o sistema (degustação) e a senha atual deve permanecer.
+      // Resetar aqui (e não entregar) trancava o cliente para fora. A liberação
+      // de acesso é feita por activateUserSubscription (data_expiracao_assinatura).
 
       // Enviar webhook de ativação com payload COMPLETO
       const webhookData = {
@@ -491,8 +487,7 @@ export class SubscriptionService {
         data_cadastro: user.data_cadastro,
         token: userToken,
         acesso_web: {
-          usuario: user.email,
-          senha: newPassword
+          usuario: user.email
         },
         mensagem_ativacao: {
           titulo: activationMessage.title,
@@ -501,8 +496,7 @@ export class SubscriptionService {
         }
       };
 
-      console.log('[SubscriptionService] Sending activation webhook');
-      console.log('[SubscriptionService] Webhook payload:', JSON.stringify(webhookData, null, 2));
+      console.log('[SubscriptionService] Sending activation webhook (payload com PII omitido do log)');
 
       // === N8N DESATIVADO — pipeline agora roda via app (POST /api/webhook/uazapi) ===
       // const webhookResponse = await fetch(
@@ -540,11 +534,15 @@ export class SubscriptionService {
         status: 'past_due'
       });
 
-      // Atualizar usuário
+      // Atualizar usuário. IMPORTANTE: o acesso do app é regido por
+      // data_expiracao_assinatura — para o corte ter efeito, retroagi-la para
+      // agora. Usado em estorno/chargeback/pagamento desfeito/3 falhas (corte
+      // imediato). Cancelamento voluntário é tratado à parte (mantém o ciclo pago).
       await this.storage.updateUser(userId, {
         subscriptionActive: false,
-        status_assinatura: 'inativa'
-      });
+        status_assinatura: 'inativa',
+        data_expiracao_assinatura: new Date(),
+      } as any);
 
       // Enviar notificação
       const user = await this.storage.getUserById(userId);
@@ -560,28 +558,25 @@ export class SubscriptionService {
   }
 
   /**
-   * Cancelar assinatura (usuário solicita cancelamento)
+   * Cancelar assinatura (usuário pede para sair).
+   * Política: NÃO corta o acesso na hora — mantém data_expiracao_assinatura
+   * (ciclo já pago). Só impede a próxima cobrança no Asaas.
    */
   async cancelSubscription(userId: number, reason: string): Promise<void> {
     try {
       const subscription = await this.storage.getActiveSubscriptionByUserId(userId);
-      if (!subscription) {
-        throw new Error('Nenhuma assinatura ativa encontrada');
+
+      if (subscription) {
+        if (subscription.asaasSubscriptionId) {
+          await (await this.getAsaas()).cancelSubscription(subscription.asaasSubscriptionId);
+        }
+        await this.storage.updateUserSubscription(subscription.id, {
+          status: 'canceled',
+          canceledAt: new Date(),
+          cancellationReason: reason
+        });
       }
 
-      // Cancelar no Asaas
-      if (subscription.asaasSubscriptionId) {
-        await (await this.getAsaas()).cancelSubscription(subscription.asaasSubscriptionId);
-      }
-
-      // Atualizar no banco
-      await this.storage.updateUserSubscription(subscription.id, {
-        status: 'canceled',
-        canceledAt: new Date(),
-        cancellationReason: reason
-      });
-
-      // Atualizar usuário
       await this.storage.updateUser(userId, {
         subscriptionActive: false,
         status_assinatura: 'cancelada',
@@ -589,20 +584,18 @@ export class SubscriptionService {
         motivo_cancelamento: reason
       });
 
-      // Registrar no histórico
       await this.storage.createCancellationHistory({
         usuario_id: userId,
         motivo_cancelamento: reason,
         tipo_cancelamento: 'voluntario'
       });
 
-      // Enviar notificação
       const user = await this.storage.getUserById(userId);
       if (user) {
         await this.notificationService.sendSubscriptionCanceled(user, reason);
       }
 
-      console.log(`[SubscriptionService] User ${userId} subscription canceled`);
+      console.log(`[SubscriptionService] User ${userId} subscription canceled (acesso até o fim do ciclo)`);
     } catch (error) {
       console.error('[SubscriptionService] Error canceling subscription:', error);
       throw error;

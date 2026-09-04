@@ -205,37 +205,20 @@ export async function login(req: Request, res: Response) {
       return res.status(401).json({ message: "Usuário ou senha incorretos ou inexistentes!" });
     }
 
-    // Check subscription expiration BEFORE checking if user is active
-    if (user.data_expiracao_assinatura) {
-      const now = new Date();
-      const expirationDate = new Date(user.data_expiracao_assinatura);
-      
-      console.log("=== SUBSCRIPTION EXPIRATION CHECK ===");
-      console.log(`Current date: ${now.toISOString()}`);
-      console.log(`Expiration date: ${expirationDate.toISOString()}`);
-      console.log(`Is expired: ${now > expirationDate}`);
-      console.log("====================================");
-      
-      if (now > expirationDate) {
-        console.log("LOGIN DENIED: Subscription expired - ensuring user is deactivated");
-        
-        // Ensure user is deactivated if subscription expired
-        if (user.ativo) {
-          await storage.updateUser(user.id, { 
-            ativo: false,
-            ultimo_acesso: new Date()
-          });
-        }
-        
-        return res.status(401).json({ 
-          message: "Sua assinatura expirou. Entre em contato com o administrador.",
-          subscriptionExpired: true
-        });
-      }
-    }
+    // Expirado NÃO impede o login: o overlay + /subscription/renew deixam o
+    // cliente pagar sozinho no Asaas. Só bloqueia conta desligada pelo admin
+    // (ativo=false) quando ainda não venceu — nesses casos não é self-service.
+    const expiradoPorData = !!(
+      user.data_expiracao_assinatura &&
+      new Date(user.data_expiracao_assinatura) <= new Date()
+    );
+    const statusAssinatura = String((user as any).status_assinatura || "");
+    const expiradoParaPagar =
+      expiradoPorData ||
+      statusAssinatura.startsWith("degustacao_expirada") ||
+      statusAssinatura === "inativa";
 
-    // Check if user is active - AFTER subscription check
-    if (user.ativo !== true) {
+    if (!expiradoParaPagar && user.ativo !== true) {
       console.log("LOGIN DENIED: User is not active. Status:", user.ativo);
       return res.status(401).json({ message: "Usuário ou senha incorretos ou inexistentes!" });
     }

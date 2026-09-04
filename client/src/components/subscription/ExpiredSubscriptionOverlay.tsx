@@ -69,7 +69,7 @@ export function ExpiredSubscriptionOverlay({ expirationDate }: ExpiredSubscripti
           
           <div className="text-center space-y-4">
             <p className="text-sm text-muted-foreground leading-relaxed">
-              {t("subscription.overlay.renew_prompt", `Para continuar usando todos os recursos do ${systemConfig.system_name} Premium, renove sua assinatura ou entre em contato com o suporte.`)}
+              {t("subscription.overlay.renew_prompt", `Para continuar usando o ${systemConfig.system_name}, pague na página segura do Asaas. O acesso volta sozinho quando o pagamento confirmar.`)}
             </p>
             
             <div className="space-y-3">

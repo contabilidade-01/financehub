@@ -95,21 +95,30 @@ async function ensureAdminUserExists() {
       console.log('👤 Usuário admin já existe: teste@teste.com');
       adminId = existingAdmin[0].id;
     } else {
-    console.log('👤 Criando usuário admin padrão...');
-    const hashedPassword = await bcrypt.hash('admin123', 12);
-    const result = await client`
-      INSERT INTO usuarios (email, senha, nome, telefone, ativo, tipo_usuario, status_assinatura, data_expiracao_assinatura)
-      VALUES ('teste@teste.com', ${hashedPassword}, 'Administrador', '(00) 00000-0000', true, 'super_admin', 'ativa', ${new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)})
-      RETURNING id
-    `;
-      adminId = result[0].id;
-    await client`
-      INSERT INTO carteiras (nome, usuario_id, descricao)
-      VALUES ('Carteira Principal', ${adminId}, 'Carteira principal do administrador')
-    `;
-    console.log('✅ Usuário admin criado com sucesso!');
-    console.log('📧 Email: teste@teste.com');
-    console.log('🔑 Senha: admin123');
+      // SEGURANÇA: não criar admin com senha padrão conhecida.
+      // Só cria o admin de bootstrap quando explicitamente habilitado por env,
+      // e com a senha vinda de DEFAULT_ADMIN_PASSWORD (nunca hardcoded/logada).
+      // Instalações novas devem usar o assistente de setup (/api/setup).
+      const permitirBootstrap = process.env.CREATE_DEFAULT_ADMIN === 'true';
+      const senhaBootstrap = process.env.DEFAULT_ADMIN_PASSWORD;
+      const emailBootstrap = process.env.DEFAULT_ADMIN_EMAIL || 'teste@teste.com';
+      if (!permitirBootstrap || !senhaBootstrap) {
+        console.log('👤 Nenhum admin encontrado. Criação automática desabilitada (defina CREATE_DEFAULT_ADMIN=true e DEFAULT_ADMIN_PASSWORD, ou use o assistente de setup).');
+      } else {
+        console.log('👤 Criando usuário admin de bootstrap...');
+        const hashedPassword = await bcrypt.hash(senhaBootstrap, 12);
+        const result = await client`
+          INSERT INTO usuarios (email, senha, nome, telefone, ativo, tipo_usuario, status_assinatura, data_expiracao_assinatura)
+          VALUES (${emailBootstrap}, ${hashedPassword}, 'Administrador', '(00) 00000-0000', true, 'super_admin', 'ativa', ${new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)})
+          RETURNING id
+        `;
+        adminId = result[0].id;
+        await client`
+          INSERT INTO carteiras (nome, usuario_id, descricao)
+          VALUES ('Carteira Principal', ${adminId}, 'Carteira principal do administrador')
+        `;
+        console.log(`✅ Usuário admin de bootstrap criado: ${emailBootstrap} (senha definida via env).`);
+      }
     }
     // Verificar se existem categorias globais
     const globalCategories = await client`SELECT id FROM categorias WHERE global = true LIMIT 1`;

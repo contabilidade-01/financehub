@@ -3450,14 +3450,17 @@ export async function updateMovimento(id: number, patch: any): Promise<any> {
 }
 
 // Casamento determinístico: transação PJ não conciliada, mesmo valor absoluto,
-// data dentro de ±tolDias.
+// MESMO sentido (crédito↔Receita, débito↔Despesa) e data dentro de ±tolDias.
+// O sentido evita casar um crédito de +100 com uma despesa de 100.
 export async function buscarCandidatosConciliacao(empresaId: number, valor: number, data: string, tolDias = 3): Promise<any[]> {
   const abs = Math.abs(valor).toFixed(2);
+  const tipoEsperado = valor >= 0 ? "Receita" : "Despesa";
   return (await db.execute(sql`
     SELECT id, descricao, valor, tipo, data_transacao
     FROM empresas_transacoes
     WHERE empresa_id = ${empresaId}
       AND conciliado = false
+      AND LOWER(tipo) = LOWER(${tipoEsperado})
       AND ABS(valor::numeric) = ${abs}
       AND data_transacao BETWEEN (${data}::date - ${tolDias} * INTERVAL '1 day') AND (${data}::date + ${tolDias} * INTERVAL '1 day')
     ORDER BY ABS(data_transacao - ${data}::date) ASC

@@ -9,6 +9,15 @@
  */
 
 import axios, { AxiosInstance, AxiosError } from 'axios';
+import { timingSafeEqual } from 'crypto';
+
+// Comparação de segredo resistente a timing attack (comprimentos diferentes → false).
+function segredosIguais(a: string, b: string): boolean {
+  const ba = Buffer.from(String(a ?? ''), 'utf8');
+  const bb = Buffer.from(String(b ?? ''), 'utf8');
+  if (ba.length !== bb.length) return false;
+  return timingSafeEqual(ba, bb);
+}
 
 // ============================================
 // INTERFACES - Asaas API Types
@@ -455,7 +464,7 @@ export class AsaasService {
         .limit(1);
 
       if (settings.length > 0 && settings[0].webhookSecret) {
-        const isValid = requestToken === settings[0].webhookSecret;
+        const isValid = segredosIguais(requestToken, settings[0].webhookSecret);
         if (isValid) {
           console.log('[AsaasService] Webhook validated with database token');
         } else {
@@ -475,7 +484,7 @@ export class AsaasService {
       return false;
     }
 
-    const isValid = requestToken === webhookSecret;
+    const isValid = segredosIguais(requestToken, webhookSecret);
     if (isValid) {
       console.log('[AsaasService] Webhook validated with environment variable');
     } else {

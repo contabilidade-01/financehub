@@ -1,34 +1,37 @@
 import { useState } from 'react';
 import { useSubscription, useCancelSubscription } from '@/hooks/use-subscription';
 import { useSubscriptionStatus } from '@/hooks/use-subscription-status';
-import { useUpdateCard } from '@/hooks/use-billing';
-import { CreditCardForm } from '@/components/billing/CreditCardForm';
+// CARTÃO NO SITE — descomente para religar "Atualizar Cartão"
+// import { useUpdateCard } from '@/hooks/use-billing';
+// import { CreditCardForm } from '@/components/billing/CreditCardForm';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, CreditCard as CreditCardIcon } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export default function BillingSettingsPage() {
   const { data, isLoading } = useSubscription();
-  const { hasActiveAccess, expirationDate } = useSubscriptionStatus();
-  const updateCard = useUpdateCard();
+  const { hasActiveAccess, expirationDate, daysRemaining, isTrial } = useSubscriptionStatus();
+  // CARTÃO NO SITE — descomente para religar
+  // const updateCard = useUpdateCard();
   const cancelSub = useCancelSubscription();
   const { toast } = useToast();
 
-  const [showUpdateCard, setShowUpdateCard] = useState(false);
+  // const [showUpdateCard, setShowUpdateCard] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
-  const [isCardValid, setIsCardValid] = useState(false);
-  const [creditCard, setCreditCard] = useState({
-    holderName: '',
-    number: '',
-    expiryMonth: '',
-    expiryYear: '',
-    ccv: ''
-  });
+  // const [isCardValid, setIsCardValid] = useState(false);
+  // const [creditCard, setCreditCard] = useState({
+  //   holderName: '',
+  //   number: '',
+  //   expiryMonth: '',
+  //   expiryYear: '',
+  //   ccv: ''
+  // });
 
+  /* CARTÃO NO SITE — descomente para religar a atualização de cartão:
   const handleUpdateCard = async () => {
     try {
       await updateCard.mutateAsync({
@@ -59,6 +62,7 @@ export default function BillingSettingsPage() {
       });
     }
   };
+  */
 
   const handleCancelSubscription = async () => {
     if (!cancelReason.trim()) {
@@ -96,15 +100,24 @@ export default function BillingSettingsPage() {
     // carência com acesso válido — nesse caso a mensagem é positiva, não "sem
     // assinatura". Fonte única: hasActiveAccess (data_expiracao no futuro).
     const vencFmt = expirationDate ? new Date(expirationDate).toLocaleDateString('pt-BR') : null;
+    const diasTxt =
+      daysRemaining == null
+        ? null
+        : daysRemaining <= 0
+          ? "termina hoje"
+          : daysRemaining === 1
+            ? "falta 1 dia"
+            : `faltam ${daysRemaining} dias`;
     return (
       <div className="container max-w-4xl mx-auto py-8">
         <Card>
           <CardHeader>
             {hasActiveAccess ? (
               <>
-                <CardTitle>Acesso ativo — período de degustação</CardTitle>
+                <CardTitle>Acesso ativo — {isTrial ? "período de degustação" : "assinatura"}</CardTitle>
                 <CardDescription>
-                  Você está com acesso liberado{vencFmt ? ` até ${vencFmt}` : ''}. Assine para continuar sem interrupção quando o período terminar.
+                  Você está com acesso liberado{vencFmt ? ` até ${vencFmt}` : ""}
+                  {diasTxt ? ` (${diasTxt})` : ""}. Assine para continuar sem interrupção quando o período terminar.
                 </CardDescription>
               </>
             ) : (
@@ -116,7 +129,7 @@ export default function BillingSettingsPage() {
           </CardHeader>
           <CardContent>
             <Button asChild>
-              <a href="/billing/checkout">Assinar Agora</a>
+              <a href="/subscription/renew">Assinar Agora</a>
             </Button>
           </CardContent>
         </Card>
@@ -141,6 +154,11 @@ export default function BillingSettingsPage() {
             <p className="text-sm text-muted-foreground">Próxima cobrança</p>
             <p className="text-lg">
               {new Date(data.subscription?.currentPeriodEnd || '').toLocaleDateString('pt-BR')}
+              {daysRemaining != null && daysRemaining >= 0 && (
+                <span className="ml-2 text-sm font-normal text-muted-foreground">
+                  ({daysRemaining === 0 ? "vence hoje" : daysRemaining === 1 ? "falta 1 dia" : `faltam ${daysRemaining} dias`})
+                </span>
+              )}
             </p>
           </div>
           <div>
@@ -152,6 +170,7 @@ export default function BillingSettingsPage() {
         </CardContent>
       </Card>
 
+      {/* CARTÃO NO SITE — descomente o card abaixo para religar "Atualizar Cartão"
       <Card>
         <CardHeader>
           <CardTitle>Forma de Pagamento</CardTitle>
@@ -185,11 +204,18 @@ export default function BillingSettingsPage() {
           )}
         </CardContent>
       </Card>
+      */}
 
       <Card className="border-red-200">
         <CardHeader>
           <CardTitle className="text-red-600">Cancelar Assinatura</CardTitle>
-          <CardDescription>Esta ação não pode ser desfeita</CardDescription>
+          <CardDescription>
+            A cobrança para de renovar. Você continua com acesso até{" "}
+            {expirationDate
+              ? new Date(expirationDate).toLocaleDateString("pt-BR")
+              : "o fim do período já pago"}
+            .
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
@@ -200,7 +226,11 @@ export default function BillingSettingsPage() {
               <DialogHeader>
                 <DialogTitle>Tem certeza?</DialogTitle>
                 <DialogDescription>
-                  Você perderá acesso a todos os recursos premium
+                  A assinatura não será renovada. Você mantém o acesso até{" "}
+                  {expirationDate
+                    ? new Date(expirationDate).toLocaleDateString("pt-BR")
+                    : "o fim do ciclo já pago"}
+                  .
                 </DialogDescription>
               </DialogHeader>
               <div>

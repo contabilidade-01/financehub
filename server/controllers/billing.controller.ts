@@ -17,27 +17,29 @@ import { decodeCheckoutToken, validateCheckoutToken } from "../utils/checkout-to
  * - Ver assinatura atual
  */
 
-// Schema de validação para checkout
+// Schema de validação para checkout (hosted Asaas — sem cartão no nosso site).
+// CARTÃO NO SITE: para religar, descomente creditCard + creditCardHolderInfo
+// (obrigatórios) e volte o createSubscription no handler checkout().
 const checkoutSchema = z.object({
   planId: z.number(),
   cpfCnpj: z.string().min(11).max(14),
-  creditCard: z.object({
-    holderName: z.string(),
-    number: z.string(),
-    expiryMonth: z.string(),
-    expiryYear: z.string(),
-    ccv: z.string()
-  }),
-  creditCardHolderInfo: z.object({
-    name: z.string(),
-    email: z.string().email(),
-    cpfCnpj: z.string(),
-    postalCode: z.string(),
-    addressNumber: z.string(),
-    addressComplement: z.string().optional(),
-    phone: z.string(),
-    mobilePhone: z.string().optional()
-  }),
+  // creditCard: z.object({
+  //   holderName: z.string(),
+  //   number: z.string(),
+  //   expiryMonth: z.string(),
+  //   expiryYear: z.string(),
+  //   ccv: z.string()
+  // }),
+  // creditCardHolderInfo: z.object({
+  //   name: z.string(),
+  //   email: z.string().email(),
+  //   cpfCnpj: z.string(),
+  //   postalCode: z.string(),
+  //   addressNumber: z.string(),
+  //   addressComplement: z.string().optional(),
+  //   phone: z.string(),
+  //   mobilePhone: z.string().optional()
+  // }),
   remoteIp: z.string().optional(),
   checkoutToken: z.string().optional(), // Token para checkout externo
   ciclo: z.enum(['mensal', 'trimestral', 'anual']).optional() // ciclo da assinatura
@@ -204,10 +206,29 @@ export async function checkout(req: Request, res: Response) {
       userId = user.id;
     }
 
-    // Obter IP do request
-    const remoteIp = req.ip || req.headers['x-forwarded-for'] as string || '127.0.0.1';
+    // CARTÃO NO SITE DESLIGADO: não aceitamos dados de cartão neste endpoint.
+    // O cliente paga na página do Asaas (Pix / boleto / cartão lá).
+    if ((req.body as any)?.creditCard) {
+      return res.status(400).json({
+        error: "Não coletamos cartão neste site. O pagamento é feito na página do Asaas."
+      });
+    }
 
-    // Criar assinatura via SubscriptionService
+    const hosted = await getSubscriptionService(storage).createHostedCheckout(
+      userId,
+      ((ciclo as any) || 'mensal'),
+      validatedData.cpfCnpj
+    );
+
+    return res.status(201).json({
+      success: true,
+      message: "Redirecionando para o Asaas",
+      url: hosted.url,
+      ciclo: hosted.ciclo,
+    });
+
+    /* CARTÃO NO SITE — descomente este bloco (e o schema creditCard) para religar:
+    const remoteIp = req.ip || req.headers['x-forwarded-for'] as string || '127.0.0.1';
     const subscriptionService = getSubscriptionService(storage);
     const result = await subscriptionService.createSubscription({
       userId: userId,
@@ -218,17 +239,14 @@ export async function checkout(req: Request, res: Response) {
       remoteIp: validatedData.remoteIp || remoteIp,
       ciclo: (ciclo as any) || undefined
     });
-
-    // Determinar se deve aguardar webhook
     const isPending = result.payment.status === 'pending';
-
     res.status(201).json({
       success: result.success,
       message: result.message,
-      status: result.payment.status, // 'pending' ou 'confirmed'
-      waitForWebhook: isPending, // true se deve aguardar webhook
-      paymentId: result.payment.id, // ID interno para correlação
-      asaasPaymentId: result.payment.asaasPaymentId, // ID do Asaas (debug)
+      status: result.payment.status,
+      waitForWebhook: isPending,
+      paymentId: result.payment.id,
+      asaasPaymentId: result.payment.asaasPaymentId,
       subscription: result.subscription,
       payment: {
         id: result.payment.id,
@@ -238,6 +256,7 @@ export async function checkout(req: Request, res: Response) {
         invoiceUrl: result.payment.asaasInvoiceUrl
       }
     });
+    */
 
   } catch (error: any) {
     if (error instanceof z.ZodError) {
@@ -638,6 +657,13 @@ export async function cancelSubscription(req: Request, res: Response) {
  *         description: Cartão atualizado com sucesso
  */
 export async function updateCreditCard(req: Request, res: Response) {
+  // CARTÃO NO SITE DESLIGADO — descomente o bloco abaixo para religar
+  // a atualização de cartão pelo nosso formulário.
+  return res.status(400).json({
+    error: "Atualização de cartão neste site está desativada. Altere o pagamento na página do Asaas."
+  });
+
+  /* CARTÃO NO SITE — descomente para religar:
   try {
     const user = (req as any).user;
     if (!user) {
@@ -682,6 +708,7 @@ export async function updateCreditCard(req: Request, res: Response) {
       error: error.message || "Erro ao atualizar cartão de crédito"
     });
   }
+  */
 }
 
 /**
@@ -765,12 +792,30 @@ export async function getBillingMetrics(req: Request, res: Response) {
       .filter(p => p.status === 'confirmed')
       .reduce((sum, p) => sum + parseFloat(p.amount.toString()), 0);
 
-    // Calcular MRR (Monthly Recurring Revenue)
+    // Calcular MRR (Monthly Recurring Revenue) — assinaturas Asaas
     const plans = await storage.getAllSubscriptionPlans();
-    const mrr = activeSubscriptions.reduce((sum, sub) => {
+    const mrrAsaas = activeSubscriptions.reduce((sum, sub) => {
       const plan = plans.find(p => p.id === sub.planId);
       return sum + (plan ? parseFloat(plan.priceMonthly.toString()) : 0);
     }, 0);
+
+    // Clientes ativados MANUALMENTE pelo admin (só gravam data_expiracao_assinatura
+    // na tabela usuarios, sem linha em user_subscriptions) — não entravam no MRR/ativos.
+    // Incluí-los para o painel refletir o negócio real (ex.: clientes-chave que pagam
+    // a mensalidade junto com honorários). Preço assumido = mensal do plano base.
+    const agoraMs = Date.now();
+    const idsComAssinaturaAtiva = new Set(activeSubscriptions.map((s) => s.usuarioId));
+    const precoBase = plans.find((p) => (p as any).active) || plans[0];
+    const precoMensalBase = precoBase ? parseFloat(precoBase.priceMonthly.toString()) : 0;
+    const allUsers = await storage.getAllUsers();
+    const manuaisAtivos = allUsers.filter((u: any) =>
+      (u.tipo_usuario === 'normal' || u.tipo_usuario === 'usuario') &&
+      u.data_expiracao_assinatura &&
+      new Date(u.data_expiracao_assinatura).getTime() > agoraMs &&
+      !idsComAssinaturaAtiva.has(u.id)
+    );
+    const mrrManual = manuaisAtivos.length * precoMensalBase;
+    const mrr = mrrAsaas + mrrManual;
 
     // Calcular taxa de churn (últimos 30 dias)
     const thirtyDaysAgo = new Date();
@@ -807,9 +852,14 @@ export async function getBillingMetrics(req: Request, res: Response) {
     );
 
     res.json({
-      totalActiveSubscriptions: activeSubscriptions.length,
+      // Total de ativos = assinaturas Asaas + clientes liberados manualmente.
+      totalActiveSubscriptions: activeSubscriptions.length + manuaisAtivos.length,
+      totalActiveAsaas: activeSubscriptions.length,
+      totalActiveManual: manuaisAtivos.length,
       totalRevenue,
       mrr,
+      mrrAsaas,
+      mrrManual,
       churnRate: parseFloat(churnRate.toFixed(2)),
       recentPayments: recentPaymentsWithUsers
     });

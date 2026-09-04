@@ -41,7 +41,8 @@ import { broadcastNotification, broadcastToRole } from "../websocket";
  */
 export async function handleAsaasWebhook(req: Request, res: Response) {
   try {
-    console.log('[AsaasWebhook] Received webhook:', JSON.stringify(req.body, null, 2));
+    // Não logar o corpo inteiro (contém PII do cliente). Só o essencial.
+    console.log('[AsaasWebhook] Received webhook:', req.body?.event, req.body?.payment?.id || '');
 
     // 1. Verificar autenticidade do webhook
     const webhookToken = req.headers['asaas-access-token'] as string;
@@ -97,9 +98,10 @@ export async function handleAsaasWebhook(req: Request, res: Response) {
         errorMessage: processingError.message || 'Erro desconhecido'
       });
 
-      // Retornar 200 mesmo assim para não retryar automaticamente
-      // O job de background vai reprocessar eventos não processados
-      res.status(200).json({ message: "Erro ao processar, será retentado" });
+      // Devolver ≠2xx para o Asaas REENVIAR o evento (retry nativo do gateway).
+      // O evento fica gravado como não-processado (log acima) e o próprio Asaas
+      // reentrega até processarmos com sucesso — sem depender de job manual.
+      res.status(500).json({ message: "Erro ao processar; o Asaas irá reenviar." });
     }
 
   } catch (error: any) {
@@ -306,8 +308,7 @@ async function processWebhookEvent(eventType: string, paymentData: any, webhookI
           }
         };
 
-        console.log('[AsaasWebhook] Sending activation webhook with custom message');
-        console.log('[AsaasWebhook] Webhook payload:', JSON.stringify(webhookData, null, 2));
+        console.log('[AsaasWebhook] Sending activation webhook with custom message (payload com PII omitido do log)');
 
         // === N8N DESATIVADO — pipeline agora roda via app (POST /api/webhook/uazapi) ===
         // const webhookResponse = await fetch(
@@ -472,6 +473,37 @@ async function processWebhookEvent(eventType: string, paymentData: any, webhookI
         message: `${user.nome} - R$ ${payment.amount} desfeito`,
         timestamp: new Date().toISOString(),
         autoClose: 5000
+      }, 'super_admin');
+      break;
+
+    case 'PAYMENT_CHARGEBACK_REQUESTED':
+    case 'PAYMENT_CHARGEBACK_DISPUTE':
+    case 'PAYMENT_AWAITING_CHARGEBACK_REVERSAL':
+      // Contestação de cartão (chargeback): o dinheiro é retirado à força.
+      // Defesa contra fraude — corta o acesso IMEDIATAMENTE.
+      console.log(`[AsaasWebhook] Chargeback (${eventType}): ${paymentData.id}`);
+
+      await storage.updatePaymentTransaction(payment.id, {
+        status: 'overdue',
+        metadata: JSON.stringify(paymentData)
+      });
+
+      if (payment.subscriptionId) {
+        await subscriptionService.deactivateUserSubscription(
+          payment.usuarioId,
+          payment.subscriptionId,
+          'Chargeback (contestação de cartão)'
+        );
+      }
+
+      // Notificar admins (chargeback exige atenção humana)
+      broadcastToRole({
+        id: `payment-chargeback-admin-${payment.id}`,
+        type: 'error',
+        title: 'Chargeback recebido',
+        message: `${user.nome} - R$ ${payment.amount} contestado (chargeback). Acesso cortado.`,
+        timestamp: new Date().toISOString(),
+        persistent: true
       }, 'super_admin');
       break;
 

@@ -154,7 +154,7 @@ function Router() {
         ) : (
           <>
             {/* Expired Subscription Overlay */}
-            {isAuthenticated && isSubscriptionExpired && !hasActiveAccess && !location.startsWith("/subscription/renew") && (
+            {isAuthenticated && isSubscriptionExpired && !hasActiveAccess && !location.startsWith("/subscription/renew") && !location.startsWith("/billing/checkout") && (
               <ExpiredSubscriptionOverlay 
                 expirationDate={expirationDate ? expirationDate.toString() : undefined} 
               />

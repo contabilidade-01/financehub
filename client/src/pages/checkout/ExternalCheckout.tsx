@@ -221,7 +221,7 @@ export default function ExternalCheckout() {
                 </div>
                 <h3 className="font-semibold mb-1">Múltiplas Formas</h3>
                 <p className="text-sm text-muted-foreground">
-                  Cartão de crédito aceito
+                  Cartão, Pix ou boleto no Asaas
                 </p>
               </div>
             </CardContent>

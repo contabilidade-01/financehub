@@ -41,7 +41,7 @@ export default function InvoicesPage() {
                   <TableCell>
                     {new Date(payment.dueDate).toLocaleDateString('pt-BR')}
                   </TableCell>
-                  <TableCell>{payment.description || 'Assinatura Mensal'}</TableCell>
+                  <TableCell>{payment.description || 'Assinatura'}</TableCell>
                   <TableCell>R$ {parseFloat(payment.amount).toFixed(2)}</TableCell>
                   <TableCell>
                     <PaymentStatusBadge status={payment.status} />

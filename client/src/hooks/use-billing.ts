@@ -23,23 +23,25 @@ interface InvoicesResponse {
 interface CheckoutData {
   planId: number;
   cpfCnpj: string;
-  creditCard: {
-    holderName: string;
-    number: string;
-    expiryMonth: string;
-    expiryYear: string;
-    ccv: string;
-  };
-  creditCardHolderInfo: {
-    name: string;
-    email: string;
-    cpfCnpj: string;
-    postalCode: string;
-    addressNumber: string;
-    addressComplement?: string;
-    phone: string;
-    mobilePhone?: string;
-  };
+  // CARTÃO NO SITE — descomente para religar
+  // creditCard: {
+  //   holderName: string;
+  //   number: string;
+  //   expiryMonth: string;
+  //   expiryYear: string;
+  //   ccv: string;
+  // };
+  // creditCardHolderInfo: {
+  //   name: string;
+  //   email: string;
+  //   cpfCnpj: string;
+  //   postalCode: string;
+  //   addressNumber: string;
+  //   addressComplement?: string;
+  //   phone: string;
+  //   mobilePhone?: string;
+  // };
+  checkoutToken?: string;
 }
 
 interface UpdateCardData {

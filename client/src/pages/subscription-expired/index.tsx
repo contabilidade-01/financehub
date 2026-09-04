@@ -1,14 +1,24 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertTriangle, Clock, Mail, ArrowLeft } from "lucide-react";
+import { AlertTriangle, CreditCard, ArrowLeft } from "lucide-react";
 import { useLocation } from "wouter";
 import { useTranslation } from "@/contexts/LocalizationContext";
 import { useSystemConfig } from "@/contexts/SystemConfigContext";
+import { useAuth } from "@/hooks/use-auth";
 
 export default function SubscriptionExpired() {
   const [, navigate] = useLocation();
   const { t } = useTranslation();
   const { config: systemConfig } = useSystemConfig();
+  const { isAuthenticated } = useAuth();
+
+  const irPagar = () => {
+    if (isAuthenticated) {
+      navigate("/subscription/renew");
+      return;
+    }
+    navigate("/");
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-pattern">
@@ -20,34 +30,28 @@ export default function SubscriptionExpired() {
             </div>
             <CardTitle className="text-red-400">{t('subscription.expired.title', 'Assinatura Expirada')}</CardTitle>
             <CardDescription className="text-gray-300">
-              {t('subscription.expired.description', `Sua assinatura do ${systemConfig.system_name} expirou e o acesso foi suspenso`)}
+              {t('subscription.expired.description', `Sua assinatura do ${systemConfig.system_name} expirou. Pague no Asaas para voltar a usar.`)}
             </CardDescription>
           </CardHeader>
           
           <CardContent className="space-y-6">
-            <div className="space-y-4">
-              <div className="flex items-start gap-3 p-3 bg-red-500/5 rounded-lg border border-red-500/20">
-                <Clock className="h-5 w-5 text-red-400 mt-0.5 flex-shrink-0" />
-                <div className="space-y-1">
-                  <h3 className="font-medium text-red-300">{t('subscription.expired.access_suspended', 'Acesso Suspenso')}</h3>
-                  <p className="text-sm text-gray-400">
-                    {t('subscription.expired.access_suspended_desc', 'Sua conta foi automaticamente desativada devido ao vencimento da assinatura.')}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3 p-3 bg-blue-500/5 rounded-lg border border-blue-500/20">
-                <Mail className="h-5 w-5 text-blue-400 mt-0.5 flex-shrink-0" />
-                <div className="space-y-1">
-                  <h3 className="font-medium text-blue-300">{t('subscription.expired.how_to_renew', 'Como Renovar')}</h3>
-                  <p className="text-sm text-gray-400">
-                    {t('subscription.expired.how_to_renew_desc', 'Entre em contato com o administrador para renovar sua assinatura e reativar o acesso.')}
-                  </p>
-                </div>
-              </div>
-            </div>
+            <p className="text-sm text-gray-400 text-center">
+              {t(
+                'subscription.expired.how_to_renew_desc',
+                isAuthenticated
+                  ? 'Clique abaixo para informar CPF/CNPJ e pagar na página segura do Asaas.'
+                  : 'Entre na sua conta e pague no Asaas (cartão, Pix ou boleto). O acesso volta sozinho depois da confirmação.'
+              )}
+            </p>
 
             <div className="space-y-3">
+              <Button onClick={irPagar} className="w-full">
+                <CreditCard className="h-4 w-4 mr-2" />
+                {isAuthenticated
+                  ? t('subscription.expired.pay_button', 'Pagar no Asaas')
+                  : t('subscription.expired.login_to_pay', 'Entrar para pagar')}
+              </Button>
+
               <Button 
                 onClick={() => navigate("/")}
                 className="w-full"
@@ -56,12 +60,6 @@ export default function SubscriptionExpired() {
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 {t('subscription.expired.back_to_login', 'Voltar ao Login')}
               </Button>
-              
-              <div className="text-center">
-                <p className="text-xs text-gray-500">
-                  {t('subscription.expired.support', 'Para suporte, entre em contato com o administrador do sistema')}
-                </p>
-              </div>
             </div>
           </CardContent>
         </Card>

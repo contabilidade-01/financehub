@@ -18,6 +18,16 @@ interface SetupData {
   adminName: string;
 }
 
+// SEGURANÇA: os endpoints de setup mutam o sistema (criam admin, trocam a
+// DATABASE_URL, rodam migração). Só podem operar quando o app está em modo
+// setup (SETUP=true) — que é ligado deliberadamente numa instalação nova.
+// Em produção (SETUP != true) qualquer chamada é recusada.
+function setupBloqueado(res: Response): boolean {
+  if (process.env.SETUP === 'true') return false;
+  res.status(403).json({ success: false, message: 'Setup desabilitado.' });
+  return true;
+}
+
 export async function getSetupStatus(req: Request, res: Response) {
   try {
     console.log('🔍 Setup Controller Debug:', {
@@ -64,6 +74,7 @@ export async function getSetupStatus(req: Request, res: Response) {
 }
 
 export async function testDatabaseConnection(req: Request, res: Response) {
+  if (setupBloqueado(res)) return;
   try {
     const { databaseUrl } = req.body;
 
@@ -101,6 +112,7 @@ export async function testDatabaseConnection(req: Request, res: Response) {
 }
 
 export async function saveDbUrl(req: Request, res: Response) {
+  if (setupBloqueado(res)) return;
   try {
     const { databaseUrl } = req.body;
 
@@ -141,6 +153,7 @@ export async function saveDbUrl(req: Request, res: Response) {
 }
 
 export async function runSetup(req: Request, res: Response) {
+  if (setupBloqueado(res)) return;
   try {
     const { databaseUrl, adminEmail, adminPassword, adminName }: SetupData = req.body;
 
@@ -279,6 +292,7 @@ export async function runSetup(req: Request, res: Response) {
 }
 
 export async function createAdmin(req: Request, res: Response) {
+  if (setupBloqueado(res)) return;
   try {
     const { adminName, adminEmail, adminPassword } = req.body;
     if (!adminName || !adminEmail || !adminPassword) {
@@ -328,6 +342,7 @@ export async function createAdmin(req: Request, res: Response) {
 }
 
 export async function finishSetup(req: Request, res: Response) {
+  if (setupBloqueado(res)) return;
   try {
     const { adminEmail } = req.body;
     if (!adminEmail) {

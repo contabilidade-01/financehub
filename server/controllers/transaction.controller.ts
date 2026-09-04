@@ -218,7 +218,13 @@ export async function createTransaction(req: Request, res: Response) {
       console.log('============================================\n');
       return res.status(404).json(errorResponse);
     }
-    
+
+    // Isolamento: aceitar apenas categoria global ou do próprio usuário
+    // (impede referenciar categoria privada de outro usuário).
+    if (!category.global && category.usuario_id !== req.user.id) {
+      return res.status(404).json({ message: "Categoria não encontrada" });
+    }
+
     // Ensure transaction tipo matches category tipo
     if (transactionData.tipo !== category.tipo) {
       const errorResponse = { 
@@ -372,7 +378,12 @@ export async function updateTransaction(req: Request, res: Response) {
         console.log('============================================\n');
         return res.status(404).json(errorResponse);
       }
-      
+
+      // Isolamento: aceitar apenas categoria global ou do próprio usuário.
+      if (!category.global && category.usuario_id !== userId) {
+        return res.status(404).json({ message: "Categoria não encontrada" });
+      }
+
       // If changing category but not type, ensure they match
       if (!transactionData.tipo && category.tipo !== transaction.tipo) {
         const errorResponse = { 

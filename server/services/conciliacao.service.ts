@@ -147,43 +147,50 @@ async function _processarMovimentos(
   });
 
   const planoContas = (await storage.getEmpresasContasByEmpresaId(empresaId)) as any[];
-  let conciliados = 0, aClassificar = 0, duplicados = 0;
+  let conciliados = 0, aClassificar = 0, duplicados = 0, erros = 0;
 
   for (const mov of movimentos) {
-    // Casamento determinístico
-    const candidatos = await buscarCandidatosConciliacao(empresaId, mov.valor, mov.data);
-    let status = "pendente", transacaoId: number | null = null;
-    let sug: SugestaoClassificacao = { conta_id: null, origem: null, confianca: null };
+    // Resiliência: uma linha com erro não aborta a importação inteira nem
+    // devolve 500 no meio; segue processando as demais e conta os erros.
+    try {
+      // Casamento determinístico
+      const candidatos = await buscarCandidatosConciliacao(empresaId, mov.valor, mov.data);
+      let status = "pendente", transacaoId: number | null = null;
+      let sug: SugestaoClassificacao = { conta_id: null, origem: null, confianca: null };
 
-    if (candidatos.length === 1) {
-      status = "conciliado";
-      transacaoId = candidatos[0].id;
-    } else {
-      // Sem casamento claro -> sugerir classificação (IA/memória)
-      sug = await sugerirClassificacao(usuarioId, mov.descricao, planoContas);
-    }
+      if (candidatos.length === 1) {
+        status = "conciliado";
+        transacaoId = candidatos[0].id;
+      } else {
+        // Sem casamento claro -> sugerir classificação (IA/memória)
+        sug = await sugerirClassificacao(usuarioId, mov.descricao, planoContas);
+      }
 
-    const criado = await criarExtratoMovimento({
-      importacao_id: importacao.id, conta_bancaria_id: contaBancariaId, empresa_id: empresaId,
-      fitid: mov.fitid, data: mov.data, valor: mov.valor, tipo: mov.tipo,
-      descricao: mov.descricao, memo: mov.memo, status,
-      transacao_id: transacaoId, sugestao_conta_id: sug.conta_id,
-      sugestao_origem: sug.origem, sugestao_confianca: sug.confianca,
-    });
+      const criado = await criarExtratoMovimento({
+        importacao_id: importacao.id, conta_bancaria_id: contaBancariaId, empresa_id: empresaId,
+        fitid: mov.fitid, data: mov.data, valor: mov.valor, tipo: mov.tipo,
+        descricao: mov.descricao, memo: mov.memo, status,
+        transacao_id: transacaoId, sugestao_conta_id: sug.conta_id,
+        sugestao_origem: sug.origem, sugestao_confianca: sug.confianca,
+      });
 
-    if (!criado) { duplicados++; continue; }
-    if (status === "conciliado" && transacaoId) {
-      await conciliarMovimentoComTransacao(criado.id, transacaoId);
-      conciliados++;
-    } else {
-      aClassificar++;
+      if (!criado) { duplicados++; continue; }
+      if (status === "conciliado" && transacaoId) {
+        await conciliarMovimentoComTransacao(criado.id, transacaoId);
+        conciliados++;
+      } else {
+        aClassificar++;
+      }
+    } catch (err: any) {
+      erros++;
+      console.error("[Conciliação] falha ao processar movimento:", err?.message);
     }
   }
 
   return {
     importacao_id: importacao.id,
     total: movimentos.length,
-    conciliados, a_classificar: aClassificar, duplicados,
+    conciliados, a_classificar: aClassificar, duplicados, erros,
     saldo_final_informado: meta.saldoFinal ?? null,
   };
 }

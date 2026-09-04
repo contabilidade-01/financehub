@@ -73,10 +73,10 @@ export async function checkActiveSubscription(req: Request, res: Response, next:
     // Usuário sem assinatura ativa - bloquear acesso
     return res.status(403).json({
       error: "Assinatura inativa",
-      message: "Sua assinatura está inativa. Por favor, atualize sua forma de pagamento para continuar usando o serviço.",
+      message: "Sua assinatura está inativa. Renove em /subscription/renew para continuar.",
       code: "SUBSCRIPTION_INACTIVE",
       actions: {
-        billing: "/billing/settings",
+        billing: "/subscription/renew",
         support: "/support"
       }
     });

@@ -524,7 +524,7 @@ export async function updateUserStatus(req: Request, res: Response) {
         const hashedPassword = await bcrypt.hash(newPassword, 10);
         await storage.updateUser(updatedUser.id, { senha: hashedPassword });
         
-        console.log(`Nova senha gerada para o usuário ${updatedUser.nome}: ${newPassword}`);
+        console.log(`Nova senha gerada para o usuário ${updatedUser.nome} (valor não registrado em log).`);
         
         // Buscar mensagem de ativação personalizada
         let activationMessage = {
@@ -1179,7 +1179,7 @@ export async function updateUser(req: Request, res: Response) {
           accessPassword = generateRandomPassword(8);
           const hashedPassword = await bcrypt.hash(accessPassword, 10);
           await storage.updateUser(updatedUser.id, { senha: hashedPassword });
-          console.log(`Nova senha gerada para o usuário ${updatedUser.nome}: ${accessPassword}`);
+          console.log(`Nova senha gerada para o usuário ${updatedUser.nome} (valor não registrado em log).`);
         }
 
         let activationMessage = {

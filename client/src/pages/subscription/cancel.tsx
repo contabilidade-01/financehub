@@ -5,11 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { AlertTriangle, CreditCard, Calendar, User, MessageSquare } from "lucide-react";
+import { AlertTriangle, CreditCard, MessageSquare } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useTranslation } from "@/contexts/LocalizationContext";
 import { useSystemConfig } from "@/contexts/SystemConfigContext";
+import { useSubscriptionStatus } from "@/hooks/use-subscription-status";
 
 export default function CancelSubscription() {
   const [cancellationReason, setCancellationReason] = useState("");
@@ -18,6 +19,8 @@ export default function CancelSubscription() {
   const queryClient = useQueryClient();
   const { t } = useTranslation();
   const { config: systemConfig } = useSystemConfig();
+  const { expirationDate } = useSubscriptionStatus();
+  const vencFmt = expirationDate ? new Date(expirationDate).toLocaleDateString("pt-BR") : null;
 
   const cancelSubscriptionMutation = useMutation({
     mutationFn: async (data: { motivo: string }) => {
@@ -205,7 +208,12 @@ export default function CancelSubscription() {
                       </span>
                     </div>
                     <p className="text-red-300 text-sm">
-                      {t("subscription.cancel.confirmation.message", "Esta ação cancelará sua assinatura imediatamente. Você perderá acesso a todos os recursos premium.")}
+                      {t(
+                        "subscription.cancel.confirmation.message",
+                        vencFmt
+                          ? `A cobrança para de renovar. Você continua com acesso até ${vencFmt}.`
+                          : "A cobrança para de renovar. Você continua com acesso até o fim do período já pago."
+                      )}
                     </p>
                   </div>
                   
@@ -234,51 +242,7 @@ export default function CancelSubscription() {
           </Card>
         </div>
 
-        {/* Alternativas */}
-        <Card className="glass-card border-blue-500/30">
-          <CardHeader>
-            <CardTitle className="text-white flex items-center gap-2">
-              <User className="h-5 w-5" />
-              {t("subscription.cancel.alternatives.title", "Antes de cancelar...")}
-            </CardTitle>
-            <CardDescription className="text-gray-400">
-              {t("subscription.cancel.alternatives.description", "Considere estas alternativas")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="text-center p-4 rounded-lg bg-blue-500/10 border border-blue-500/30">
-                <Calendar className="h-6 w-6 text-blue-400 mx-auto mb-2" />
-                <h4 className="text-white font-medium mb-1">
-                  {t("subscription.cancel.alternatives.pause.title", "Pausar Assinatura")}
-                </h4>
-                <p className="text-gray-300 text-sm">
-                  {t("subscription.cancel.alternatives.pause.description", "Pause por até 3 meses sem perder seus dados")}
-                </p>
-              </div>
-              
-              <div className="text-center p-4 rounded-lg bg-green-500/10 border border-green-500/30">
-                <CreditCard className="h-6 w-6 text-green-400 mx-auto mb-2" />
-                <h4 className="text-white font-medium mb-1">
-                  {t("subscription.cancel.alternatives.change_plan.title", "Alterar Plano")}
-                </h4>
-                <p className="text-gray-300 text-sm">
-                  {t("subscription.cancel.alternatives.change_plan.description", "Mude para um plano mais adequado")}
-                </p>
-              </div>
-              
-              <div className="text-center p-4 rounded-lg bg-purple-500/10 border border-purple-500/30">
-                <MessageSquare className="h-6 w-6 text-purple-400 mx-auto mb-2" />
-                <h4 className="text-white font-medium mb-1">
-                  {t("subscription.cancel.alternatives.contact.title", "Falar Conosco")}
-                </h4>
-                <p className="text-gray-300 text-sm">
-                  {t("subscription.cancel.alternatives.contact.description", "Nossa equipe pode ajudar com suas dúvidas")}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        </div>
       </div>
     </div>
   );

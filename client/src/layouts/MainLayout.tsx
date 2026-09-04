@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { User } from "@shared/schema";
 import AdminStickyHeader from "@/components/admin/AdminStickyHeader";
 import { GuidedTourModal } from "@/components/shared/GuidedTourModal";
+import { ExpiringSoonBanner } from "@/components/subscription/ExpiringSoonBanner";
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -39,6 +40,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
         transition={{ duration: 0.3 }}
       >
         <div className="max-w-7xl mx-auto">
+          <ExpiringSoonBanner />
           {children}
         </div>
       </motion.main>

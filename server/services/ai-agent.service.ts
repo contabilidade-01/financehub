@@ -1120,6 +1120,9 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           targetId = metas[0].id;
         }
 
+        // Isolamento: só age em meta do próprio usuário (nunca id cru vindo do modelo).
+        if (targetId != null && !metas.some(m => m.id === Number(targetId))) targetId = undefined;
+
         if (!targetId) {
           return JSON.stringify({
             error: "Meta não encontrada. Por favor, forneça o nome exato ou o ID da meta.",
@@ -1165,6 +1168,9 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         if (!targetId && metas.length === 1) {
           targetId = metas[0].id;
         }
+
+        // Isolamento: só age em meta do próprio usuário (nunca id cru vindo do modelo).
+        if (targetId != null && !metas.some(m => m.id === Number(targetId))) targetId = undefined;
 
         if (!targetId) {
           return JSON.stringify({
@@ -1212,6 +1218,9 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           targetId = metas[0].id;
         }
 
+        // Isolamento: só age em meta do próprio usuário (nunca id cru vindo do modelo).
+        if (targetId != null && !metas.some(m => m.id === Number(targetId))) targetId = undefined;
+
         if (!targetId) {
           return JSON.stringify({
             error: "Meta não encontrada. Por favor, forneça o nome exato ou o ID da meta.",
@@ -1245,6 +1254,8 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           const found = metas.find(m => m.titulo.toLowerCase().includes(args.titulo.toLowerCase()));
           if (found) targetId = found.id;
         }
+        // Isolamento: só exclui meta do próprio usuário (nunca id cru vindo do modelo).
+        if (targetId != null && !metas.some(m => m.id === Number(targetId))) targetId = undefined;
         if (!targetId) {
           return JSON.stringify({ error: "Meta não encontrada para exclusão." });
         }
@@ -1729,12 +1740,14 @@ ${ctx.categories.map(c => `- ${c.nome} (${c.tipo})`).join("\n")}`;
 
       if (finalFnName === "deleteMeta") {
         const { id, titulo } = fnArgs;
+        const metas = await getMetasByUsuarioId(ctx.userId);
         let metaId = id;
         if (titulo && !metaId) {
-           const metas = await getMetasByUsuarioId(ctx.userId);
            const meta = metas.find(m => m.titulo.toLowerCase().includes(titulo.toLowerCase()));
            if (meta) metaId = meta.id;
         }
+        // Isolamento: só exclui meta do próprio usuário (nunca id cru vindo do modelo).
+        if (metaId != null && !metas.some(m => m.id === Number(metaId))) metaId = undefined;
         if (!metaId) {
           const resStr = JSON.stringify({ error: "Meta não encontrada para exclusão." });
           ultimaToolExecutada = fnName;
@@ -1758,6 +1771,8 @@ ${ctx.categories.map(c => `- ${c.nome} (${c.tipo})`).join("\n")}`;
           if (meta) targetId = meta.id;
         }
         if (!targetId && metas.length === 1) targetId = metas[0].id;
+        // Isolamento: só ajusta meta do próprio usuário (nunca id cru vindo do modelo).
+        if (targetId != null && !metas.some(m => m.id === Number(targetId))) targetId = undefined;
         if (!targetId) {
           const resStr = JSON.stringify({ error: `Meta '${titulo}' não encontrada.` });
           ultimaToolExecutada = fnName;
@@ -1781,6 +1796,8 @@ ${ctx.categories.map(c => `- ${c.nome} (${c.tipo})`).join("\n")}`;
           if (meta) targetId = meta.id;
         }
         if (!targetId && metas.length === 1) targetId = metas[0].id;
+        // Isolamento: só deposita em meta do próprio usuário (nunca id cru vindo do modelo).
+        if (targetId != null && !metas.some(m => m.id === Number(targetId))) targetId = undefined;
         if (!targetId) {
           const resStr = JSON.stringify({ error: `Meta '${titulo}' não encontrada.` });
           ultimaToolExecutada = fnName;
