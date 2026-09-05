@@ -81,6 +81,41 @@ const fail = (nome: string, detalhe: string) => {
   const um = valoresParcelas(50.5, 1);
   if (um[0] !== 50.5) fail("1 parcela", JSON.stringify(um));
   else ok("1 parcela preserva o total");
+
+  // A última parcela deve DESCER, nunca subir: truncar empilhava a sobra nela
+  // e virava R$ 4,24 no meio de onze de R$ 4,16 — o cliente lê como acréscimo.
+  const doze = valoresParcelas(50, 12);
+  const somaDoze = Math.round(doze.reduce((s, x) => s + x, 0) * 100) / 100;
+  if (somaDoze !== 50 || doze[0] !== 4.17 || doze[11] !== 4.13) {
+    fail("50/12 — última deve ser menor", JSON.stringify(doze));
+  } else ok("parcelas 50/12 → onze de 4,17 e a última 4,13 (menor)");
+
+  const seis = valoresParcelas(1000, 6);
+  if (seis[0] !== 166.67 || seis[5] !== 166.65) {
+    fail("1000/6", JSON.stringify(seis));
+  } else ok("parcelas 1000/6 → cinco de 166,67 e a última 166,65");
+
+  // Nenhuma parcela pode ser negativa, nem no caso absurdo.
+  const centavos = valoresParcelas(0.1, 12);
+  const somaCentavos = Math.round(centavos.reduce((s, x) => s + x, 0) * 100) / 100;
+  if (centavos.some((x) => x < 0) || somaCentavos !== 0.1) {
+    fail("0,10 em 12x não pode ter parcela negativa", JSON.stringify(centavos));
+  } else ok("0,10 em 12x sem parcela negativa e fecha no total");
+
+  // Invariante geral: a soma sempre fecha, em qualquer combinação.
+  let somaOk = true;
+  for (const total of [0.05, 9.99, 33.33, 100, 999.97, 1234.56]) {
+    for (let n = 1; n <= 24; n++) {
+      const p = valoresParcelas(total, n);
+      const s = Math.round(p.reduce((a, b) => a + b, 0) * 100) / 100;
+      if (s !== total || p.some((x) => x < 0)) {
+        somaOk = false;
+        fail(`soma não fecha em ${total}/${n}x`, JSON.stringify(p));
+        break;
+      }
+    }
+  }
+  if (somaOk) ok("soma fecha e nada fica negativo em 144 combinações");
 }
 
 // --- Competência ---

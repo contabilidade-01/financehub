@@ -40,13 +40,23 @@ export function competenciaMaisMeses(competencia: string, meses: number): string
 
 /**
  * Divide um valor em N parcelas em centavos; a última absorve o resto
- * (R$ 100 / 3 → 33,33 + 33,33 + 33,34).
+ * (R$ 100 / 3 → 33,33 + 33,33 + 33,34). A soma SEMPRE fecha no total.
+ *
+ * Cada parcela vai para o centavo MAIS PRÓXIMO. Truncar empilhava a diferença
+ * inteira na última — R$ 50 em 12x dava onze de 4,16 e uma de 4,24, que o
+ * cliente lê como acréscimo. Arredondando, a última cai um pouco em vez de
+ * subir, que é o que cartão e loja mostram.
  */
 export function valoresParcelas(total: number, parcelas: number): number[] {
   const n = Math.floor(Number(parcelas));
   if (!Number.isFinite(total) || n < 1) return [];
   const cents = Math.round(Number(total) * 100);
-  const base = Math.floor(cents / n);
+
+  let base = Math.round(cents / n);
+  // Valor minúsculo em muitas parcelas (R$ 0,10 em 12x) faria base×(n−1) passar
+  // do total e a última virar NEGATIVA. Nesse canto, truncar é o certo.
+  if (base * (n - 1) > cents) base = Math.floor(cents / n);
+
   const out: number[] = [];
   let alocado = 0;
   for (let i = 0; i < n; i++) {
