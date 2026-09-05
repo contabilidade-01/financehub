@@ -107,6 +107,9 @@ function TransacaoForm({
   const rotuloBanco = rotuloContaBanc;
   const isCartaoSel = pagamento.startsWith("cartao:");
   const podeParcelar = tipo === "Despesa" && isCartaoSel && !inicial && !reembolsoReceber;
+  // Só o que ainda vai acontecer tem vencimento — mais o que já foi salvo com um.
+  const mostrarVencimento =
+    !isCartaoSel && (status === "Pendente" || reembolsoReceber || !!inicial?.data_vencimento);
   const nParc = Math.max(1, Number(parcelas) || 1);
   const valorNum = Number(valorDigitado) || 0;
   const valorParcelaPreview =
@@ -205,12 +208,17 @@ function TransacaoForm({
           </p>
         )}
       </div>
-      <Input
-        name="data_transacao"
-        type="date"
-        required
-        defaultValue={inicial?.data_transacao ?? new Date().toISOString().slice(0, 10)}
-      />
+      {/* Input de data não aceita placeholder: sem rótulo, as duas datas do
+          formulário viram dois retângulos idênticos. */}
+      <div className="space-y-1">
+        <label className="text-xs text-muted-foreground">Data do lançamento</label>
+        <Input
+          name="data_transacao"
+          type="date"
+          required
+          defaultValue={inicial?.data_transacao ?? new Date().toISOString().slice(0, 10)}
+        />
+      </div>
 
       <Select value={tipo} onValueChange={trocarTipo}>
         <SelectTrigger><SelectValue /></SelectTrigger>
@@ -293,12 +301,22 @@ function TransacaoForm({
         </>
       )}
 
-      <Input
-        name="data_vencimento"
-        type="date"
-        title="Vencimento (opcional)"
-        defaultValue={inicial?.data_vencimento ?? ""}
-      />
+      {/* Vencimento só faz sentido no que ainda vai ser pago/recebido. Em compra
+          no cartão quem vence é a fatura, e em lançamento efetivado não vence nada.
+          Quando some da tela, o valor que já existia viaja num campo oculto para
+          não ser apagado ao salvar. */}
+      {mostrarVencimento ? (
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">Vencimento (opcional)</label>
+          <Input
+            name="data_vencimento"
+            type="date"
+            defaultValue={inicial?.data_vencimento ?? ""}
+          />
+        </div>
+      ) : (
+        <input type="hidden" name="data_vencimento" value={inicial?.data_vencimento ?? ""} />
+      )}
 
       <label className="md:col-span-3 flex cursor-pointer items-start gap-3 rounded-lg border border-blue-200 bg-blue-50/60 p-3 dark:border-blue-900 dark:bg-blue-950/30">
         <input
