@@ -1811,7 +1811,11 @@ export class DbStorage implements IStorage {
     empresaId: number,
     opts: { de?: string; ate?: string; limit?: number } = {}
   ): Promise<EmpresaTransacaoWithDetails[]> {
-    const conditions: any[] = [eq(empresasTransacoes.empresa_id, empresaId)];
+    const conditions: any[] = [
+      eq(empresasTransacoes.empresa_id, empresaId),
+      // Reembolso a receber (pendente) vive só na tela de Reembolsos até marcar recebido.
+      sql`NOT (COALESCE(${empresasTransacoes.reembolso_pessoal}, false) = true AND ${empresasTransacoes.status} = 'Pendente')`,
+    ];
     if (opts.de) conditions.push(gte(empresasTransacoes.data_transacao, opts.de));
     if (opts.ate) conditions.push(lte(empresasTransacoes.data_transacao, opts.ate));
 
@@ -1943,7 +1947,7 @@ export class DbStorage implements IStorage {
       WHERE t.empresa_id = ${empresaId}
         AND t.data_transacao >= ${de}
         AND t.data_transacao <= ${ate}
-        AND COALESCE(t.reembolso_pessoal, false) = false
+        AND NOT (COALESCE(t.reembolso_pessoal, false) = true AND t.status = 'Pendente')
         AND ${NAO_E_PAGAMENTO_FATURA}
       GROUP BY t.tipo, c.classificacao
     `);
@@ -2023,7 +2027,7 @@ export class DbStorage implements IStorage {
         AND t.tipo = 'Despesa'
         AND t.data_transacao >= ${de}
         AND t.data_transacao <= ${ate}
-        AND COALESCE(t.reembolso_pessoal, false) = false
+        AND NOT (COALESCE(t.reembolso_pessoal, false) = true AND t.status = 'Pendente')
         AND ${NAO_E_PAGAMENTO_FATURA}
       GROUP BY c.classificacao
     `);
@@ -2041,6 +2045,7 @@ export class DbStorage implements IStorage {
         AND tipo = 'Receita'
         AND data_transacao >= ${de}
         AND data_transacao <= ${ate}
+        AND NOT (COALESCE(reembolso_pessoal, false) = true AND status = 'Pendente')
     `);
     receita = parseFloat((recRows as any[])[0]?.total) || 0;
 

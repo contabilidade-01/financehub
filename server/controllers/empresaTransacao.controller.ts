@@ -61,6 +61,7 @@ export const createEmpresaTransacao = async (req: Request, res: Response) => {
     }
 
     const dataISO = String(parsed.data.data_transacao).slice(0, 10);
+    const ehReembolso = !!(parsed.data as any).reembolso_pessoal || !!req.body?.reembolso_pessoal;
     const cartaoIdBody =
       req.body?.cartao_id != null
         ? Number(req.body.cartao_id)
@@ -70,6 +71,8 @@ export const createEmpresaTransacao = async (req: Request, res: Response) => {
         ? Number(req.body.conta_bancaria_id)
         : (parsed.data.conta_bancaria_id != null ? Number(parsed.data.conta_bancaria_id) : null);
 
+    // Reembolso a receber: fica Pendente, fora do caixa/Transações até marcar recebido.
+    // Meio só é obrigatório se o usuário informou conta/cartão no form.
     let meio;
     try {
       meio = await aplicarMeioPagamentoPj({
@@ -79,15 +82,15 @@ export const createEmpresaTransacao = async (req: Request, res: Response) => {
         dataISO,
         cartao_id: cartaoIdBody,
         conta_bancaria_id: contaBancariaBody,
-        exigirMeio: true,
-        statusAtual: parsed.data.status,
+        exigirMeio: ehReembolso ? !!(cartaoIdBody || contaBancariaBody) : true,
+        statusAtual: ehReembolso ? "Pendente" : parsed.data.status,
       });
     } catch (meioErr: any) {
       return res.status(400).json({ error: meioErr?.message || "Meio de pagamento inválido." });
     }
 
     const parcelasN = Math.min(60, Math.max(1, Number(req.body?.parcelas) || 1));
-    if (parcelasN > 1 && tipoNorm === "Despesa") {
+    if (parcelasN > 1 && tipoNorm === "Despesa" && !ehReembolso) {
       const { criarCompraParceladaPj } = await import("../storage");
       // Aceita valor total OU valor da parcela (ex.: 5x de 35 → valor_parcela=35).
       const valorInformado = Number(parsed.data.valor) || 0;
@@ -151,11 +154,13 @@ export const createEmpresaTransacao = async (req: Request, res: Response) => {
       ...parsed.data,
       empresa_id: empresaId,
       tipo: tipoNorm,
+      reembolso_pessoal: ehReembolso,
+      status: ehReembolso ? "Pendente" : (parsed.data.status || "Efetivada"),
       cartao_id: meio.cartao_id,
       conta_bancaria_id: meio.conta_bancaria_id,
       fatura_id: meio.fatura_id,
       competencia: meio.competencia,
-      movimenta_caixa: meio.movimenta_caixa,
+      movimenta_caixa: ehReembolso ? false : meio.movimenta_caixa,
       empresa_forma_pagamento_id: meio.empresa_forma_pagamento_id,
       metodo_pagamento: meio.metodo_pagamento ?? parsed.data.metodo_pagamento ?? null,
       origem: (req.body.origem as string) ?? "manual",

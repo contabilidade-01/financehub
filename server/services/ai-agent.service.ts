@@ -184,6 +184,7 @@ const TOOLS_PJ = new Set([
   "criar_conta_empresa",
   "criar_conta_e_mover_empresa",
   "cadastrar_cartao_empresa",
+  "criar_conta_bancaria_empresa",
   "listar_cartoes_empresa",
   "fatura_cartao_empresa",
   "saldo_cartao_empresa",
@@ -799,7 +800,7 @@ function buildTools(ctx?: ToolContext) {
       type: "function" as const,
       function: {
         name: "lancar_empresa",
-        description: "Lança uma receita ou despesa NA EMPRESA (PJ) à vista. Se a compra for PARCELADA no cartão, use 'parcelar_compra_empresa'. forma_pagamento = conta bancária, Caixinha (dinheiro) OU cartão. PIX/boleto/débito/TED sozinhos NÃO bastam — informe a conta. Sem forma, a tool devolve precisa_meio para você perguntar (NÃO assuma Caixinha).",
+        description: "Lança uma receita ou despesa NA EMPRESA (PJ) à vista. Se a compra for PARCELADA no cartão, use 'parcelar_compra_empresa'. forma_pagamento = conta bancária, Caixinha (dinheiro) OU cartão. Se a mensagem já disser dinheiro/espécie/caixa, a tool usa a Caixinha sozinha. PIX/boleto/débito/TED sozinhos pedem a conta (ou cadastro se não houver). Sem meio na frase nem no arg, devolve precisa_meio.",
         parameters: {
           type: "object",
           properties: {
@@ -811,7 +812,7 @@ function buildTools(ctx?: ToolContext) {
             data_transacao: { type: "string", description: "AAAA-MM-DD (default hoje)" },
             forma_pagamento: {
               type: "string",
-              description: "Conta bancária, Caixinha ou cartão (ex.: 'Itaú PJ', 'Caixinha', 'Nubank'). Obrigatório salvo se a tool já devolveu precisa_meio e o usuário respondeu.",
+              description: "Conta bancária, Caixinha/dinheiro ou cartão. Pode omitir se a frase do usuário já trouxer (ex.: 'em dinheiro', 'pix').",
             },
             parcelas: {
               type: "number",
@@ -822,7 +823,7 @@ function buildTools(ctx?: ToolContext) {
               description: "Valor de CADA parcela (ex.: 35). Use com parcelas quando o usuário disser '5x de 35'.",
             },
           },
-          required: ["empresa", "tipo", "forma_pagamento"],
+          required: ["empresa", "tipo"],
         },
       },
     },
@@ -1040,6 +1041,24 @@ function buildTools(ctx?: ToolContext) {
             bandeira: { type: "string", description: "Visa, Mastercard, Elo... (opcional)" },
           },
           required: ["empresa", "nome", "dia_fechamento", "dia_vencimento"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "criar_conta_bancaria_empresa",
+        description: "Cadastra uma CONTA BANCÁRIA da empresa (Itaú, Bradesco, etc.) — NÃO é conta do plano de contas. Use quando o usuário quiser cadastrar conta para Pix/TED/boleto, ou quando a tool devolver precisa=cadastrar_conta. Confirme banco/nome com o usuário ANTES de chamar. Para dinheiro use a Caixinha (não precisa cadastrar).",
+        parameters: {
+          type: "object",
+          properties: {
+            empresa: { type: "string", description: "Nome (ou parte) da empresa." },
+            nome: { type: "string", description: "Como o usuário chama (ex.: 'Conta corrente Itaú')." },
+            banco: { type: "string", description: "Banco (ex.: 'Itaú', 'Bradesco'). Se omitir, usa o nome." },
+            tipo: { type: "string", enum: ["corrente", "poupanca", "caixa"], description: "Default corrente." },
+            saldo_inicial: { type: "number", description: "Saldo inicial em R$ (default 0)." },
+          },
+          required: ["empresa", "nome"],
         },
       },
     },
@@ -2080,9 +2099,14 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         const empresa = await resolverEmpresa(ctx.userId, args.empresa);
         if ("erro" in empresa) return JSON.stringify(empresa);
 
-        const meioTexto = String(args.forma_pagamento || "").trim();
+        const { detectarMeio, textoMeioDeDetect } = await import("./parse-meio");
         const { resolverMeioPorNomePj, aplicarMeioPagamentoPj } = await import("./meio-pagamento-pj");
-        // Sem forma → pergunta (não assume Caixinha).
+
+        // Meio: arg da tool OU frase original do usuário (como o parcelamento já faz).
+        let meioTexto = String(args.forma_pagamento || "").trim();
+        if (!meioTexto) {
+          meioTexto = textoMeioDeDetect(detectarMeio(ctx.userMessage || ""));
+        }
         if (!meioTexto) {
           const resolvidoVazio = await resolverMeioPorNomePj(empresa.id, ctx.userId, "");
           if (!resolvidoVazio.ok) {
@@ -2115,7 +2139,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
             valor_parcela: args.valor_parcela ?? doTexto.valorParcela ?? undefined,
             valor_total: args.valor_total ?? (doTexto.modo === "total" ? doTexto.valorTotal : undefined),
             parcelas: parcelasN > 1 ? parcelasN : (doTexto.parcelas || undefined),
-            forma_pagamento: args.forma_pagamento || doTexto.cartaoHint || undefined,
+            forma_pagamento: args.forma_pagamento || doTexto.cartaoHint || meioTexto || undefined,
             data_inicio: args.data_transacao || args.data_inicio,
             descricao: args.descricao || "Compra parcelada",
           }, ctx);
@@ -2125,7 +2149,14 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           return JSON.stringify({ error: "Informe o valor do lançamento." });
         }
 
-        const resolvido = await resolverMeioPorNomePj(empresa.id, ctx.userId, meioTexto);
+        let resolvido = await resolverMeioPorNomePj(empresa.id, ctx.userId, meioTexto);
+        // Se o arg falhou, tenta de novo com a frase do usuário.
+        if (!resolvido.ok && msgUser) {
+          const doMsg = textoMeioDeDetect(detectarMeio(msgUser));
+          if (doMsg && doMsg !== meioTexto) {
+            resolvido = await resolverMeioPorNomePj(empresa.id, ctx.userId, doMsg);
+          }
+        }
         if (!resolvido.ok) {
           return JSON.stringify({
             error: resolvido.mensagem,
@@ -2224,11 +2255,14 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           conta: `${conta.codigo} — ${conta.nome}`, valor: args.valor, tipo, data: dataISO,
           pago_com: resolvido.rotulo,
           meio: meio.isCartao ? "cartao" : "conta_bancaria",
+          aviso_meio: resolvido.aviso || undefined,
           usou_outras: usouOutras,
           pendente_criar_conta,
           dica: usouOutras
             ? `Lancei em Outras. OFEREÇA criar a conta *${pendente_criar_conta.nome_sugerido}* e mover o lançamento. Quando o usuário confirmar (sim/pode/ok/claro/fechou/cria...), chame 'criar_conta_e_mover_empresa' com id_transacao=${criada.id} e nome=${pendente_criar_conta.nome_sugerido} — NÃO peça confirmação de novo. Se recusar (não/deixa/cancela), não crie.`
-            : "Se a conta não for essa, dá para mudar depois em Transações PJ no app.",
+            : (resolvido.aviso
+              ? resolvido.aviso
+              : "Se a conta não for essa, dá para mudar depois em Transações PJ no app."),
           orcamento,
         });
       }
@@ -2257,7 +2291,14 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         }
 
         const cartoes = await listarCartoes(empresa.id);
+        const { detectarMeio, textoMeioDeDetect } = await import("./parse-meio");
         let cartaoTexto = String(args.forma_pagamento || doTexto.cartaoHint || "").trim();
+        if (!cartaoTexto) {
+          const detMsg = textoMeioDeDetect(detectarMeio(ctx.userMessage || ""));
+          if (detMsg && detMsg !== "dinheiro" && detMsg !== "pix" && detMsg !== "boleto" && detMsg !== "ted" && detMsg !== "debito" && detMsg !== "doc") {
+            cartaoTexto = detMsg;
+          }
+        }
         let cartaoAuto = false;
 
         if (!cartaoTexto) {
@@ -2691,6 +2732,41 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         });
       }
 
+      case "criar_conta_bancaria_empresa": {
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        if ("erro" in empresa) return JSON.stringify(empresa);
+        const nome = String(args.nome || "").trim();
+        if (!nome) {
+          return JSON.stringify({ error: "Informe o nome da conta (ex.: Conta corrente Itaú)." });
+        }
+        const banco = String(args.banco || nome).trim();
+        const tipoRaw = String(args.tipo || "corrente").toLowerCase();
+        const tipo =
+          tipoRaw === "poupanca" || tipoRaw === "poupança"
+            ? "poupanca"
+            : tipoRaw === "caixa"
+              ? "caixa"
+              : "corrente";
+        const { createContaBancaria } = await import("../storage");
+        const criada = await createContaBancaria({
+          empresa_id: empresa.id,
+          usuario_id: ctx.userId,
+          banco,
+          nome,
+          tipo,
+          saldo_inicial: Number(args.saldo_inicial) || 0,
+        });
+        return JSON.stringify({
+          success: true,
+          id: criada.id,
+          nome: criada.nome || criada.banco,
+          banco: criada.banco,
+          tipo: criada.tipo,
+          mensagem: `Conta bancária *${criada.nome || criada.banco}* cadastrada. Já pode lançar Pix/TED/boleto nela.`,
+          dica: "Se havia um lançamento pendente de meio, chame lancar_empresa de novo com forma_pagamento = nome desta conta.",
+        });
+      }
+
       case "listar_cartoes_empresa": {
         const empresa = await resolverEmpresa(ctx.userId, args.empresa);
         if ("erro" in empresa) return JSON.stringify(empresa);
@@ -2756,9 +2832,10 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           success: false,
           obsoleto: true,
           error:
-            "Forma solta (PIX/boleto/débito) não é mais meio. Cadastre conta bancária no app, use Caixinha para dinheiro, ou cadastrar_cartao_empresa com fechamento e vencimento.",
+            "Forma solta (PIX/boleto) não é meio. Para dinheiro use Caixinha; para Pix cadastre conta com criar_conta_bancaria_empresa; para cartão use cadastrar_cartao_empresa.",
+          precisa: "cadastrar_conta",
+          ferramenta: "criar_conta_bancaria_empresa",
           precisa_meio: true,
-          precisa: "meio",
         });
       }
 
@@ -2917,7 +2994,12 @@ export async function runAgent(
 - Este usuário é PJ (Empresa: ${emp.nome}). ${seg}
 - TODAS as transações financeiras (receitas e despesas) enviadas por ele DEVEM ser lançadas na empresa utilizando a ferramenta 'lancar_empresa' (informando empresa: "${emp.nome}"). NUNCA use 'insere_transacao' (pessoal) para este usuário, a menos que ele especifique explicitamente que é uma transação pessoal.
 - Fale em frases curtas e simples.
-- **Meio de pagamento:** 'forma_pagamento' = CONTA BANCÁRIA, Caixinha (só dinheiro em espécie) ou CARTÃO. PIX/débito/TED/boleto sozinhos NÃO bastam — pergunte "de qual conta?". **Exceção:** se houver só **1** conta ativa, a tool pode usá-la e avisar. Caixinha só quando o usuário disser dinheiro/espécie/caixa. Sem meio identificado → PERGUNTE (use listar_cartoes_empresa: campos cartoes + contas). NUNCA assuma Caixinha em silêncio. Se a tool devolver precisa_meio, use contas/cartoes/sugestões.
+- **Meio de pagamento (decida na tool; perguntar é exceção):**
+  1. Disse dinheiro / espécie / caixinha / "via caixa" / "em dinheiro" → é **Caixinha**. Chame 'lancar_empresa' (pode omitir forma_pagamento — a tool lê a frase). Avise "Lancei na Caixinha". NÃO pergunte conta.
+  2. Disse Pix / débito / TED / boleto → pergunte **qual conta bancária** (liste as contas). Se a tool devolver precisa=cadastrar_conta (não há conta bancária, só Caixinha ou nenhuma), ofereça cadastrar com 'criar_conta_bancaria_empresa' (confirme banco/nome antes). **Não** grave Pix na Caixinha.
+  3. Não disse nada → pergunte as **três** opções: conta bancária, Caixinha (dinheiro) ou cartão. Use listar_cartoes_empresa (campos cartoes + contas).
+  4. Se a mesma pergunta já foi feita e a resposta veio parecida (ex.: "em dinheiro" de novo), **não repita** — use o que ele disse e chame a tool.
+  5. Se a tool devolver precisa_meio / aviso_meio, use mensagem/sugestões/contas/cartoes.
 - **NÃO CHUTE a conta.** Só preencha 'conta' quando o usuário NOMEAR a conta ("lança no aluguel", "isso é folha") ou quando a descrição disser exatamente o que é ("compra de mercadoria", "paguei o DAS"). Nos demais casos, OMITA 'conta': o sistema classifica lendo a descrição e o plano inteiro da empresa, e acerta mais do que um palpite.
 
 ### Compra PARCELADA (cartão) — OBRIGATÓRIO seguir
@@ -2971,7 +3053,8 @@ Este usuário NÃO tem carteira pessoal ativa. Toda consulta, edição e cadastr
 - Criar conta no plano → 'criar_conta_empresa'. Para criar E mover lançamento que caiu em Outras → 'criar_conta_e_mover_empresa'. O CÓDIGO é gerado automaticamente: não peça nem invente.
 - Cartão de crédito da empresa → 'cadastrar_cartao_empresa' (peça dia de fechamento e dia de vencimento numa pergunta só; nunca invente esses dias), 'listar_cartoes_empresa', 'fatura_cartao_empresa', 'saldo_cartao_empresa' (limite/usado/disponível).
 - Compra parcelada no cartão → 'parcelar_compra_empresa' (NÃO use parcelar_compra do PF).
-- Meio de pagamento = CONTA BANCÁRIA, Caixinha (dinheiro) ou CARTÃO. Use 'listar_cartoes_empresa' (campos cartoes + contas). PIX/boleto/débito não são meio. Cartão novo → 'cadastrar_cartao_empresa' (fechamento + vencimento obrigatórios; nunca invente nem cadastre sozinho).
+- Meio de pagamento = CONTA BANCÁRIA, Caixinha (dinheiro) ou CARTÃO. Dinheiro na frase → Caixinha sem perguntar. Pix/boleto → conta bancária (ou 'criar_conta_bancaria_empresa' se não houver). Cartão novo → 'cadastrar_cartao_empresa' (fechamento + vencimento; nunca invente).
+- Conta bancária nova (Itaú, Bradesco…) → 'criar_conta_bancaria_empresa' (confirme antes). NÃO confundir com 'criar_conta_empresa' (plano de contas).
 - Baixar / marcar como paga uma conta Pendente → 'pagar_transacao_empresa' (depois de confirmar o lançamento).
 - NÃO ofereça gráfico nem lembrete no modo empresa (ainda não existem no PJ). Responda com os números e, se couber, indique a tela de Relatórios PJ no app.
 

@@ -70,7 +70,7 @@ export default function ImportarLancamentosPj({ empresaId }: { empresaId: number
         <h1 className="text-3xl font-bold">Importar lançamentos PJ</h1>
         <p className="text-muted-foreground">
           Planilha do fluxo da empresa (Data, Descrição, Categoria, Forma, Valor).
-          Despesas em aberto viram contas a pagar. O grupo <b>Reembolsos a Pagar — Pessoal</b> vai para uma tela à parte.
+          Despesas em aberto viram contas a pagar. O grupo de reembolsos pessoais vai para <b>Reembolsos a Receber</b>.
         </p>
         <p className="text-sm text-amber-700 dark:text-amber-300 mt-2">
           Na coluna forma, use o nome real do cartão (ex.: <code>CC Inter PJ · Venc. 25</code>), não só “Cartão de Crédito”.
@@ -150,8 +150,8 @@ export default function ImportarLancamentosPj({ empresaId }: { empresaId: number
               <div className="flex items-start gap-2 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-lg p-3 text-sm">
                 <HandCoins className="h-4 w-4 mt-0.5" />
                 <span>
-                  {preview.reembolsosPessoais} grupo(s) de reembolso à pessoa, {fmt(preview.totalReembolsos)}.
-                  Ficam em <b>Reembolsos a Pagar</b>, separados das despesas operacionais do dia a dia.
+                  {preview.reembolsosPessoais} grupo(s) de reembolso, {fmt(preview.totalReembolsos)}.
+                  Ficam em <b>Reembolsos a Receber</b> até marcar como recebido.
                 </span>
               </div>
             )}
@@ -178,7 +178,7 @@ export default function ImportarLancamentosPj({ empresaId }: { empresaId: number
                   {preview.amostra.map((l, i) => (
                     <tr key={i} className="border-t">
                       <td className="p-2 whitespace-nowrap">{l.vencimento}</td>
-                      <td className="p-2">{l.descricao}{l.reembolsoPessoal && <Badge className="ml-2 text-[10px]" variant="secondary">A pagar à pessoa</Badge>}</td>
+                      <td className="p-2">{l.descricao}{l.reembolsoPessoal && <Badge className="ml-2 text-[10px]" variant="secondary">A receber</Badge>}</td>
                       <td className="p-2">{l.categoria}</td>
                       <td className="p-2">{l.forma}</td>
                       <td className="p-2 text-right font-numeric">{fmt(l.valor)}</td>

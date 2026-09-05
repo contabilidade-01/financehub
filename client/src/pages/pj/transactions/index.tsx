@@ -94,13 +94,14 @@ function TransacaoForm({
   /** No crédito: informar o total da compra ou o valor de cada parcela. */
   const [valorModo, setValorModo] = useState<"total" | "parcela">("parcela");
   const [valorDigitado, setValorDigitado] = useState<string>(inicial ? String(inicial.valor) : "");
+  const [reembolsoReceber, setReembolsoReceber] = useState<boolean>(!!(inicial as any)?.reembolso_pessoal);
 
   const contasDoTipo = contas.filter((c) => c.tipo === tipo);
   const bancosAtivos = bancos.filter((b) => b.ativo !== false);
   const cartoesAtivos = cartoes.filter((c) => c.ativo !== false);
   const rotuloBanco = rotuloContaBanc;
   const isCartaoSel = pagamento.startsWith("cartao:");
-  const podeParcelar = tipo === "Despesa" && isCartaoSel && !inicial;
+  const podeParcelar = tipo === "Despesa" && isCartaoSel && !inicial && !reembolsoReceber;
   const nParc = Math.max(1, Number(parcelas) || 1);
   const valorNum = Number(valorDigitado) || 0;
   const valorParcelaPreview =
@@ -112,15 +113,15 @@ function TransacaoForm({
       ? Math.round(valorNum * nParc * 100) / 100
       : valorNum;
 
-  // Sem meio escolhido: pré-seleciona Caixinha (ou primeira conta).
+  // Sem meio escolhido: pré-seleciona Caixinha (ou primeira conta). Reembolso a receber pode ficar sem meio.
   useEffect(() => {
-    if (inicial || pagamento) return;
+    if (inicial || pagamento || reembolsoReceber) return;
     const caixa =
       bancosAtivos.find((b) => /^caixinha$/i.test(rotuloContaBanc(b))) ||
       bancosAtivos.find((b) => b.tipo === "caixa");
     if (caixa) setPagamento(`conta:${caixa.id}`);
     else if (bancosAtivos[0]) setPagamento(`conta:${bancosAtivos[0].id}`);
-  }, [bancosAtivos, inicial, pagamento]);
+  }, [bancosAtivos, inicial, pagamento, reembolsoReceber]);
 
   const trocarTipo = (novo: string) => {
     setTipo(novo);
@@ -139,7 +140,8 @@ function TransacaoForm({
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!pagamento || !valorNum) return;
+    if (!valorNum) return;
+    if (!reembolsoReceber && !pagamento) return;
     const fd = new FormData(e.currentTarget);
     const isCartao = pagamento.startsWith("cartao:");
     const isConta = pagamento.startsWith("conta:");
@@ -160,12 +162,13 @@ function TransacaoForm({
       tipo,
       categoria_id: Number(categoriaId),
       data_transacao: fd.get("data_transacao"),
-      status: isCartao ? "Efetivada" : status,
+      status: reembolsoReceber ? "Pendente" : (isCartao ? "Efetivada" : status),
       data_vencimento: (fd.get("data_vencimento") as string) || null,
       cartao_id: cartao ? cartao.id : null,
       conta_bancaria_id: banco ? banco.id : null,
       empresa_forma_pagamento_id: null,
       metodo_pagamento: cartao?.nome ?? (banco ? rotuloBanco(banco) : null),
+      reembolso_pessoal: reembolsoReceber,
       parcelas: parcelar ? nParc : 1,
       valor_modo: parcelar ? valorModo : undefined,
       valor_parcela: parcelar ? valorParcela : undefined,
@@ -292,8 +295,29 @@ function TransacaoForm({
         defaultValue={inicial?.data_vencimento ?? ""}
       />
 
+      <label className="md:col-span-3 flex cursor-pointer items-start gap-3 rounded-lg border border-blue-200 bg-blue-50/60 p-3 dark:border-blue-900 dark:bg-blue-950/30">
+        <input
+          type="checkbox"
+          className="mt-1 h-4 w-4 rounded border-input accent-primary"
+          checked={reembolsoReceber}
+          onChange={(e) => {
+            setReembolsoReceber(e.target.checked);
+            if (e.target.checked) {
+              setParcelas(1);
+              setStatus("Pendente");
+            }
+          }}
+        />
+        <span>
+          <span className="block text-sm font-medium">Reembolso a receber</span>
+          <span className="block text-xs text-muted-foreground">
+            Pedágio e gastos do bolso pessoal: fica em Reembolsos a Receber (não entra em Transações nem nos relatórios) até marcar como recebido — aí vira receita.
+          </span>
+        </span>
+      </label>
+
       <div className="flex gap-2 md:col-span-2">
-        <Button type="submit" disabled={salvando || !categoriaId || !pagamento || !valorNum}>
+        <Button type="submit" disabled={salvando || !categoriaId || !valorNum || (!reembolsoReceber && !pagamento)}>
           {inicial ? "Salvar alterações" : "Salvar"}
         </Button>
         {onCancel && (
@@ -348,6 +372,7 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
     qc.invalidateQueries({ queryKey: [`/api/empresas/${empresaId}/cartoes-com-saldo`] });
     qc.invalidateQueries({ queryKey: [`/api/empresas/${empresaId}/cartoes`] });
     qc.invalidateQueries({ queryKey: [`/api/empresas/${empresaId}/contas-bancarias`] });
+    qc.invalidateQueries({ predicate: (q) => String(q.queryKey[0]).includes("/reembolsos-pessoais") });
   };
 
   const createMut = useMutation({
@@ -358,11 +383,15 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
         body: JSON.stringify(data),
       });
       if (!res.ok) throw new Error((await res.json()).error);
-      return res.json();
+      return { data: await res.json(), reembolso: !!data?.reembolso_pessoal };
     },
-    onSuccess: () => {
+    onSuccess: (r) => {
       invalidar();
-      toast({ title: "Transação criada com sucesso." });
+      toast({
+        title: r.reembolso
+          ? "Salvo em Reembolsos a Receber (não aparece em Transações até receber)."
+          : "Transação criada com sucesso.",
+      });
       setShowForm(false);
     },
     onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
@@ -625,7 +654,7 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
                       <td className="p-3">
                         {t.descricao}
                         {(t as any).reembolso_pessoal && (
-                          <Badge variant="secondary" className="ml-2 text-[10px]">A pagar à pessoa</Badge>
+                          <Badge variant="secondary" className="ml-2 text-[10px]">Reembolso recebido</Badge>
                         )}
                         {t.status === "Pendente" && (
                           <Badge variant="outline" className="ml-2 text-[10px]">Pendente</Badge>

@@ -63,14 +63,14 @@ export const ReembolsosPjController = {
       const empresa = await resolveEmpresa(empresaId, req.user!.id, res);
       if (!empresa) return;
 
-      // Reembolso é conta a pagar: a data que importa é o vencimento.
+      // A receber: data de referência = vencimento (previsão) ou lançamento.
       const ref = sql`COALESCE(t.data_vencimento, t.data_transacao)`;
       const de = dataISO(req.query.de);
       const ate = dataISO(req.query.ate);
       const status = typeof req.query.status === "string" ? req.query.status : "";
 
       const rows = await db.execute(sql`
-        SELECT t.id, t.descricao, t.valor, t.data_transacao, t.data_vencimento, t.status,
+        SELECT t.id, t.descricao, t.valor, t.data_transacao, t.data_vencimento, t.status, t.tipo,
                t.itens_agrupados, t.metodo_pagamento, c.nome AS categoria, c.codigo AS categoria_codigo
         FROM empresas_transacoes t
         JOIN empresas_contas c ON c.id = t.categoria_id
@@ -88,24 +88,71 @@ export const ReembolsosPjController = {
     }
   },
 
-  async pagar(req: Request, res: Response) {
+  /** Marca recebido → vira Receita efetivada e passa a entrar em Transações/relatórios. */
+  async receber(req: Request, res: Response) {
     try {
       const empresaId = parseInt(req.params.id);
       const transacaoId = parseInt(req.params.transacaoId);
       if (isNaN(empresaId) || isNaN(transacaoId)) return res.status(400).json({ error: "ID inválido." });
       const empresa = await resolveEmpresa(empresaId, req.user!.id, res);
       if (!empresa) return;
+
+      const atual = await db.execute(sql`
+        SELECT id, tipo, categoria_id, conta_bancaria_id, cartao_id
+        FROM empresas_transacoes
+        WHERE id = ${transacaoId} AND empresa_id = ${empresaId} AND reembolso_pessoal = true
+        LIMIT 1
+      `);
+      const row = (atual as any[])[0];
+      if (!row) return res.status(404).json({ error: "Reembolso não encontrado." });
+
+      let categoriaId = Number(row.categoria_id);
+      const catAtual = await storage.getEmpresaContaById(categoriaId);
+      if (!catAtual || catAtual.tipo !== "Receita") {
+        const contas = await storage.getEmpresasContasByEmpresaId(empresaId);
+        const receita =
+          contas.find((c: any) => c.codigo === "1.03") ||
+          contas.find((c: any) => c.tipo === "Receita" && /outras/i.test(String(c.nome || ""))) ||
+          contas.find((c: any) => c.tipo === "Receita");
+        if (!receita) {
+          return res.status(400).json({
+            error: "Cadastre uma conta de Receita no plano de contas para receber o reembolso.",
+          });
+        }
+        categoriaId = receita.id;
+      }
+
+      let contaBancariaId = row.conta_bancaria_id != null ? Number(row.conta_bancaria_id) : null;
+      if (!contaBancariaId) {
+        const { garantirCaixinhaPj } = await import("../services/meio-pagamento-pj");
+        const caixa = await garantirCaixinhaPj(empresaId, req.user!.id);
+        contaBancariaId = caixa.id;
+      }
+
       const upd = await db.execute(sql`
         UPDATE empresas_transacoes
-        SET status = 'Efetivada', movimenta_caixa = true
+        SET status = 'Efetivada',
+            tipo = 'Receita',
+            categoria_id = ${categoriaId},
+            movimenta_caixa = true,
+            cartao_id = NULL,
+            fatura_id = NULL,
+            competencia = NULL,
+            conta_bancaria_id = ${contaBancariaId},
+            data_pagamento = CURRENT_DATE
         WHERE id = ${transacaoId} AND empresa_id = ${empresaId} AND reembolso_pessoal = true
-        RETURNING id, status
+        RETURNING id, status, tipo, categoria_id, conta_bancaria_id
       `);
       if (!(upd as any[])[0]) return res.status(404).json({ error: "Reembolso não encontrado." });
       return res.json((upd as any[])[0]);
     } catch (err) {
-      console.error("[ReembolsosPj] pagar:", err);
+      console.error("[ReembolsosPj] receber:", err);
       return res.status(500).json({ error: "Erro interno." });
     }
+  },
+
+  /** Alias legado — mesmo comportamento de receber. */
+  async pagar(req: Request, res: Response) {
+    return ReembolsosPjController.receber(req, res);
   },
 };

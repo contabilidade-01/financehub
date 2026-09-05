@@ -1494,6 +1494,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/empresas/:id/importacao/lancamentos/preview", combinedAuth, uploadMemoria.single("arquivo"), ImportLancamentosPjController.preview);
   app.post("/api/empresas/:id/importacao/lancamentos", combinedAuth, uploadMemoria.single("arquivo"), ImportLancamentosPjController.importar);
   app.get("/api/empresas/:id/reembolsos-pessoais", combinedAuth, ReembolsosPjController.listar);
+  app.put("/api/empresas/:id/reembolsos-pessoais/:transacaoId/receber", combinedAuth, ReembolsosPjController.receber);
   app.put("/api/empresas/:id/reembolsos-pessoais/:transacaoId/pagar", combinedAuth, ReembolsosPjController.pagar);
 
   // ==========================================
