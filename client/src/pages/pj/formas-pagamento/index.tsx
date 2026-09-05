@@ -11,7 +11,6 @@ import type { EmpresaFormaPagamento } from "@shared/schema";
 
 const TIPOS = [
   { value: "pix", label: "PIX" },
-  { value: "boleto", label: "Boleto" },
   { value: "debito", label: "Débito" },
   { value: "transferencia", label: "Transferência" },
   { value: "dinheiro", label: "Dinheiro" },
@@ -67,7 +66,10 @@ export default function PjFormasPagamento({ empresaId }: { empresaId: number }) 
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Formas de pagamento</h1>
-          <p className="text-sm text-muted-foreground">PIX, boleto, débito… Cartões de crédito são escolhidos em Transações (e geridos em Faturas).</p>
+          <p className="text-sm text-muted-foreground">
+            Cadastro legado (PIX, débito…). Em Transações o meio é a conta bancária ou o cartão.
+            Boleto não é meio — o pagamento sai de uma conta em Contas Bancárias.
+          </p>
         </div>
         <Button onClick={() => setShowForm(!showForm)} size="sm">
           <Plus className="h-4 w-4 mr-1" /> Nova

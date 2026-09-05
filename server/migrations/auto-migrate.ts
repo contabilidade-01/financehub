@@ -799,6 +799,15 @@ const STEPS: Step[] = [
       }
     },
   },
+  {
+    name: "empresas_transacoes: compra_grupo + parcelas",
+    run: async () => {
+      await db.execute(sql`ALTER TABLE empresas_transacoes ADD COLUMN IF NOT EXISTS compra_grupo VARCHAR(40)`);
+      await db.execute(sql`ALTER TABLE empresas_transacoes ADD COLUMN IF NOT EXISTS parcela_num INTEGER`);
+      await db.execute(sql`ALTER TABLE empresas_transacoes ADD COLUMN IF NOT EXISTS parcela_total INTEGER`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_emp_tx_compra_grupo ON empresas_transacoes(compra_grupo)`);
+    },
+  },
 ];
 
 export async function runAutoMigrations(): Promise<void> {

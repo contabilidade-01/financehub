@@ -43,9 +43,29 @@ export class ConciliacaoController {
   // ---- Contas bancárias ----
   static async listarContas(req: Request, res: Response) {
     const emp = await empresaDoUsuario(req, res); if (!emp) return;
-    const contas = await getContasBancariasByEmpresa(emp.id);
-    const comSaldo = await Promise.all(contas.map(async (c: any) => ({ ...c, saldo_sistema: await getSaldoSistemaConta(c.id) })));
-    res.json(comSaldo);
+    const de = (req.query.de as string) || undefined;
+    const ate = (req.query.ate as string) || undefined;
+    const { listarContasComSaldoPj } = await import("../services/conta-bancaria.service");
+    res.json(await listarContasComSaldoPj(emp.id, de, ate));
+  }
+
+  static async lancamentosConta(req: Request, res: Response) {
+    const emp = await empresaDoUsuario(req, res); if (!emp) return;
+    const conta = await contaDaEmpresa(Number(req.params.contaId), emp.id, res); if (!conta) return;
+    const de = (req.query.de as string) || undefined;
+    const ate = (req.query.ate as string) || undefined;
+    const { listarLancamentosContaPj, movimentoContaPeriodo } = await import("../services/conta-bancaria.service");
+    const lista = await listarLancamentosContaPj(emp.id, conta.id, de, ate);
+    const mov = await movimentoContaPeriodo(conta.id, de, ate);
+    res.json({
+      conta_id: conta.id,
+      banco: conta.banco,
+      periodo: { de: de || null, ate: ate || null },
+      saldo: mov.movimento,
+      entradas: mov.entradas,
+      saidas: mov.saidas,
+      lancamentos: lista,
+    });
   }
   static async criarConta(req: Request, res: Response) {
     const emp = await empresaDoUsuario(req, res); if (!emp) return;

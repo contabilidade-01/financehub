@@ -97,11 +97,23 @@ export default function ImportarLancamentosPj({ empresaId }: { empresaId: number
               <Stat n={result.cartoesCriados} label="Cartões criados" />
               <Stat n={result.duplicadasPuladas} label="Duplicadas (puladas)" />
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button variant="outline" className="flex-1" onClick={reset}>Importar outra</Button>
-              <Button className="flex-1" onClick={() => (window.location.href = result.reembolsosCriados ? "/p/reembolsos" : "/p/transacoes")}>
-                {result.reembolsosCriados ? "Ver reembolsos a pagar" : "Ver transações"}
-              </Button>
+              {result.reembolsosCriados > 0 && (
+                <Button className="flex-1" variant="secondary" onClick={() => (window.location.href = "/p/reembolsos")}>
+                  Ver reembolsos
+                </Button>
+              )}
+              {result.contasCriadas > 0 && (
+                <Button className="flex-1" onClick={() => (window.location.href = "/p/vencimentos")}>
+                  Ver vencimentos
+                </Button>
+              )}
+              {result.contasCriadas === 0 && result.reembolsosCriados === 0 && (
+                <Button className="flex-1" onClick={() => (window.location.href = "/p/transacoes")}>
+                  Ver transações
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>

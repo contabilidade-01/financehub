@@ -1838,6 +1838,10 @@ export class DbStorage implements IStorage {
       fatura_id: empresasTransacoes.fatura_id,
       movimenta_caixa: empresasTransacoes.movimenta_caixa,
       competencia: empresasTransacoes.competencia,
+      conta_bancaria_id: empresasTransacoes.conta_bancaria_id,
+      compra_grupo: empresasTransacoes.compra_grupo,
+      parcela_num: empresasTransacoes.parcela_num,
+      parcela_total: empresasTransacoes.parcela_total,
       categoria_nome: empresasContas.nome,
       categoria_classificacao: empresasContas.classificacao,
       categoria_codigo: empresasContas.codigo,
@@ -1884,6 +1888,10 @@ export class DbStorage implements IStorage {
       fatura_id: empresasTransacoes.fatura_id,
       movimenta_caixa: empresasTransacoes.movimenta_caixa,
       competencia: empresasTransacoes.competencia,
+      conta_bancaria_id: empresasTransacoes.conta_bancaria_id,
+      compra_grupo: empresasTransacoes.compra_grupo,
+      parcela_num: empresasTransacoes.parcela_num,
+      parcela_total: empresasTransacoes.parcela_total,
       categoria_nome: empresasContas.nome,
       categoria_classificacao: empresasContas.classificacao,
       categoria_codigo: empresasContas.codigo,
@@ -3115,6 +3123,103 @@ export async function criarCompraParcelada(params: {
         (${walletId}, ${categoriaId}, ${formaPagamentoId ?? null}, 'Despesa', ${valorParcela.toFixed(2)},
          ${dataISO}, ${descParcela}, ${statusParcela}, ${grupo}, ${i + 1}, ${parcelas},
          ${contaId}, ${faturaId}, ${competencia}, ${movimentaCaixa})
+      RETURNING id
+    `);
+    ids.push((res as any[])[0].id);
+  }
+  return { compra_grupo: grupo, ids, parcelas, valor_parcela: valores[0] ?? 0 };
+}
+
+/** Parcelamento PJ — cada parcela no cartão vai para a fatura da competência. */
+export async function criarCompraParceladaPj(params: {
+  empresaId: number;
+  userId: number;
+  categoriaId: number;
+  descricao: string;
+  valorTotal: number;
+  parcelas: number;
+  dataInicio: string;
+  cartaoId?: number | null;
+  contaBancariaId?: number | null;
+  status?: string;
+  origem?: string;
+  dataVencimentoBase?: string | null;
+}): Promise<{ compra_grupo: string; ids: number[]; parcelas: number; valor_parcela: number }> {
+  const {
+    empresaId, userId, categoriaId, descricao, parcelas, dataInicio,
+    cartaoId, contaBancariaId, status = "Efetivada", origem = "manual",
+  } = params;
+  const { valoresParcelas } = await import("./services/fatura-core");
+  const valores = valoresParcelas(Number(params.valorTotal) || 0, parcelas);
+  const grupo = randomUUID();
+  const [y, m, d] = dataInicio.split("-").map(Number);
+  const ids: number[] = [];
+
+  let cartao: any = null;
+  if (cartaoId) {
+    const { cartaoDoUsuario } = await import("./services/fatura-pj.service");
+    cartao = await cartaoDoUsuario(cartaoId, userId);
+    if (!cartao || cartao.empresa_id !== empresaId) {
+      throw new Error("Cartão não encontrado nesta empresa.");
+    }
+  }
+
+  for (let i = 0; i < parcelas; i++) {
+    const mesTotal = (m - 1) + i;
+    const ano = y + Math.floor(mesTotal / 12);
+    const mes = (mesTotal % 12) + 1;
+    const ultimoDia = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+    const dia = Math.min(d, ultimoDia);
+    const dataISO = `${ano}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+    const descParcela = parcelas > 1 ? `${descricao} (${i + 1}/${parcelas})` : descricao;
+    const valorParcela = valores[i] ?? 0;
+
+    let faturaId: number | null = null;
+    let competencia: string | null = null;
+    let movimentaCaixa = true;
+    let contaId = contaBancariaId ?? null;
+    let cartaoFinal: number | null = null;
+    let metodo: string | null = null;
+    let statusParcela = status;
+
+    if (cartao) {
+      const { resolverFaturaDoCartao } = await import("./services/fatura-pj.service");
+      const r = await resolverFaturaDoCartao(empresaId, cartao, dataISO);
+      faturaId = r.fatura.id;
+      competencia = r.competencia;
+      metodo = r.metodo;
+      movimentaCaixa = false;
+      contaId = null;
+      cartaoFinal = cartao.id;
+      statusParcela = "Efetivada";
+    } else if (contaId) {
+      const contas = await getContasBancariasByEmpresa(empresaId);
+      const c = (contas as any[]).find((x) => x.id === contaId);
+      metodo = c ? (c.nome || c.banco || "Conta") : null;
+    }
+
+    // Vencimento: mesma lógica de mês da parcela (boletos parcelados).
+    let dataVenc: string | null = null;
+    if (params.dataVencimentoBase && /^\d{4}-\d{2}-\d{2}/.test(params.dataVencimentoBase)) {
+      const [vy, vm, vd] = params.dataVencimentoBase.slice(0, 10).split("-").map(Number);
+      const mesV = (vm - 1) + i;
+      const anoV = vy + Math.floor(mesV / 12);
+      const mesVV = (mesV % 12) + 1;
+      const ultV = new Date(Date.UTC(anoV, mesVV, 0)).getUTCDate();
+      dataVenc = `${anoV}-${String(mesVV).padStart(2, "0")}-${String(Math.min(vd, ultV)).padStart(2, "0")}`;
+    } else if (!cartao) {
+      dataVenc = dataISO;
+    }
+
+    const res = await db.execute(sql`
+      INSERT INTO empresas_transacoes
+        (empresa_id, categoria_id, descricao, valor, tipo, data_transacao, status, origem,
+         compra_grupo, parcela_num, parcela_total, conta_bancaria_id, cartao_id, fatura_id,
+         competencia, movimenta_caixa, metodo_pagamento, data_vencimento)
+      VALUES
+        (${empresaId}, ${categoriaId}, ${descParcela}, ${valorParcela.toFixed(2)}, 'Despesa', ${dataISO},
+         ${statusParcela}, ${origem}, ${grupo}, ${i + 1}, ${parcelas}, ${contaId}, ${cartaoFinal},
+         ${faturaId}, ${competencia}, ${movimentaCaixa}, ${metodo}, ${dataVenc})
       RETURNING id
     `);
     ids.push((res as any[])[0].id);
