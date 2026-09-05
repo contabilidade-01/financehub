@@ -8,11 +8,13 @@
  * - "Pix" / "no pix" / "boleto" → conta_necessaria
  * - "pelo Itaú" → nome
  * - "Caixa Econômica" / "cartão Caixa" → nome (não é dinheiro)
+ * - "no cartão de crédito" / "no cartão" (sem nome) → cartao_generico
  */
 
 export type MeioDetectado =
   | { tipo: "dinheiro" }
   | { tipo: "conta_necessaria"; termo: string }
+  | { tipo: "cartao_generico" } // "cartão" / "crédito" sem nome do cartão
   | { tipo: "nome"; termo: string }
   | { tipo: "nenhum" };
 
@@ -33,6 +35,7 @@ export function stripPrepMeio(s: string): string {
 export function textoMeioDeDetect(d: MeioDetectado): string {
   if (d.tipo === "dinheiro") return "dinheiro";
   if (d.tipo === "conta_necessaria") return d.termo;
+  if (d.tipo === "cartao_generico") return "cartao";
   if (d.tipo === "nome") return d.termo;
   return "";
 }
@@ -45,6 +48,13 @@ function ehCaixaBanco(n: string): boolean {
     /\bcartao\s+(da\s+|do\s+)?caixa\b/.test(n) ||
     /\bcc\s+caixa\b/.test(n) ||
     /\bcaixa\s+(pj|empresarial|business)\b/.test(n)
+  );
+}
+
+/** Nome próprio de cartão/banco na frase (não só "cartão de crédito"). */
+function temNomeCartaoEspecifico(n: string): boolean {
+  return /\b(nubank|inter|c6|itau|bradesco|santander|bb|banco\s+do\s+brasil|magalu|magazine|hipercard|amex|american\s+express|visa|mastercard|elo|neon|will|digio|porto|sicoob|sicredi|original|pan|safra)\b/.test(
+    n,
   );
 }
 
@@ -81,6 +91,25 @@ export function detectarMeio(texto: string): MeioDetectado {
   const mConta = n.match(/\b(pix|debito|ted|doc|boleto|transferencia|transferencias)\b/);
   if (mConta) {
     return { tipo: "conta_necessaria", termo: mConta[1] };
+  }
+
+  // "cartão" / "cartão de crédito" / "no crédito" SEM nome → perguntar qual.
+  if (
+    /\b(cartao(\s+de)?\s+credito|cartao\s+credito|no\s+credito|no\s+cartao|cartao)\b/.test(n) &&
+    !temNomeCartaoEspecifico(n)
+  ) {
+    return { tipo: "cartao_generico" };
+  }
+
+  // Nome de banco/cartão na frase (mesmo em "compra de 20 no Nubank").
+  if (temNomeCartaoEspecifico(n)) {
+    const m =
+      n.match(
+        /\b(nubank|inter|c6|itau|bradesco|santander|magalu|magazine|hipercard|amex|neon|will|digio|porto|sicoob|sicredi|original|pan|safra)\b/,
+      ) ||
+      n.match(/\bbanco\s+do\s+brasil\b/) ||
+      n.match(/\bamerican\s+express\b/);
+    if (m) return { tipo: "nome", termo: m[0] };
   }
 
   // Nome curto (resposta solta: "Itaú", "pelo Nubank") — não frase longa de compra.

@@ -57,11 +57,20 @@ expectTipo("conta Caixa", "nome", "caixa");
 expectTipo("Compra de mercadorias no valor de 142,41", "nenhum");
 expectTipo("", "nenhum");
 
+// Cartão genérico (sem inventar nome)
+expectTipo("Compra no cartão de crédito: vinte reais", "cartao_generico");
+expectTipo("no cartão", "cartao_generico");
+expectTipo("no crédito", "cartao_generico");
+expectTipo("compra de 20 no Nubank", "nome", "nubank");
+
 // textoMeioDeDetect
 {
   const t = textoMeioDeDetect(detectarMeio("142,41 em dinheiro"));
   if (t !== "dinheiro") fail("textoMeioDeDetect dinheiro", t);
   else ok("textoMeioDeDetect → dinheiro");
+  const tc = textoMeioDeDetect(detectarMeio("no cartão de crédito"));
+  if (tc !== "cartao") fail("textoMeioDeDetect cartao", tc);
+  else ok("textoMeioDeDetect → cartao");
 }
 
 // Substring: "via caixa" NÃO engole "Caixa Econômica"

@@ -255,7 +255,7 @@ function buildTools(ctx?: ToolContext) {
             tipo: { type: "string", enum: ["Receita", "Despesa"], description: "Tipo da transação" },
             data_transacao: { type: "string", description: "Data no formato YYYY-MM-DD" },
             categoria: { type: "string", description: "Nome da categoria (ex: Alimentação, Transporte)" },
-            forma_pagamento: { type: "string", description: "Como pagou/recebeu: 'Pix', 'Boleto', 'Dinheiro', 'Nubank', etc. Obrigatório." },
+            forma_pagamento: { type: "string", description: "Como pagou/recebeu: 'Pix', 'Boleto', 'Dinheiro', nome da conta ou do cartão. Obrigatório. NUNCA invente nome de cartão/banco que o usuário não disse." },
           },
           required: ["descricao", "valor", "tipo", "data_transacao", "categoria", "forma_pagamento"],
         },
@@ -647,11 +647,11 @@ function buildTools(ctx?: ToolContext) {
       type: "function" as const,
       function: {
         name: "cadastrar_cartao",
-        description: "Cadastra um cartão de crédito para o usuário (com nome, limite, dia de fechamento e vencimento). Use quando disserem 'cadastra meu Nubank', 'tenho um cartão Inter limite 3000'.",
+        description: "Cadastra um cartão de crédito para o usuário (com nome, limite, dia de fechamento e vencimento). Use quando disserem 'cadastra meu cartão', 'tenho um cartão limite X'.",
         parameters: {
           type: "object",
           properties: {
-            nome: { type: "string", description: "Nome do cartão (ex: 'Nubank', 'Inter', 'C6 Bank', 'Itaú Platinum')" },
+            nome: { type: "string", description: "Nome do cartão (como o usuário chama). NÃO invente." },
             limite: { type: "number", description: "Limite do cartão em R$" },
             dia_fechamento: { type: "number", description: "Dia do mês que fecha a fatura (1-31)" },
             dia_vencimento: { type: "number", description: "Dia do mês para pagar a fatura (1-31)" },
@@ -666,11 +666,11 @@ function buildTools(ctx?: ToolContext) {
       type: "function" as const,
       function: {
         name: "saldo_cartao",
-        description: "Mostra o saldo disponível de um cartão de crédito (limite - gastos do período). Use quando perguntarem 'quanto tenho no Nubank', 'meu cartão tá no limite?', 'disponível do Inter'.",
+        description: "Mostra o saldo disponível de um cartão de crédito (limite - gastos do período). Use quando perguntarem 'quanto tenho no cartão', 'meu cartão tá no limite?'.",
         parameters: {
           type: "object",
           properties: {
-            nome_cartao: { type: "string", description: "Nome do cartão (ex: 'Nubank', 'Inter'). Se omitido, mostra todos." },
+            nome_cartao: { type: "string", description: "Nome do cartão (como cadastrado). Se omitido, mostra todos." },
           },
         },
       },
@@ -679,7 +679,7 @@ function buildTools(ctx?: ToolContext) {
       type: "function" as const,
       function: {
         name: "fatura_cartao",
-        description: "Lista todas as transações da fatura atual de um cartão (conciliação). Use quando pedirem 'fatura do Nubank', 'o que gastei no Inter', 'detalhes do cartão'.",
+        description: "Lista todas as transações da fatura atual de um cartão (conciliação). Use quando pedirem 'fatura do cartão', 'o que gastei no cartão'.",
         parameters: {
           type: "object",
           properties: {
@@ -720,7 +720,7 @@ function buildTools(ctx?: ToolContext) {
             valor_total: { type: "number", description: "Valor TOTAL da compra (será dividido pelas parcelas)" },
             valor_parcela: { type: "number", description: "Valor de CADA parcela (use este OU valor_total)" },
             parcelas: { type: "number", description: "Número de parcelas (ex.: 10)" },
-            forma_pagamento: { type: "string", description: "Cartão/forma (ex.: 'Nubank', 'Magazine Luiza'). Obrigatório." },
+            forma_pagamento: { type: "string", description: "Cartão/forma (nome que o usuário disse). Obrigatório. NUNCA invente." },
             categoria: { type: "string" },
             data_inicio: { type: "string", description: "AAAA-MM-DD (default hoje)" },
             confirmar_sem_cartao: {
@@ -752,7 +752,7 @@ function buildTools(ctx?: ToolContext) {
       function: {
         name: "mover_lancamentos",
         description:
-          "Move lancamentos JA REGISTRADOS (pelos codigos) para outra conta bancaria ou cartao de credito. Use para 'coloque esses lancamentos no CC Nubank PF', 'essa compra foi no cartao X e nao no Y', 'joga tudo isso para a conta Itau'. Ajusta fatura, competencia e caixa junto. Confirme os codigos com o usuario antes de chamar.",
+          "Move lancamentos JA REGISTRADOS (pelos codigos) para outra conta bancaria ou cartao de credito. Use para 'coloque esses lancamentos no cartao X', 'essa compra foi no cartao X e nao no Y'. Ajusta fatura, competencia e caixa junto. Confirme os codigos com o usuario antes de chamar.",
         parameters: {
           type: "object",
           properties: {
@@ -763,7 +763,7 @@ function buildTools(ctx?: ToolContext) {
             },
             destino: {
               type: "string",
-              description: "Nome do cartao ou da conta de destino (ex.: 'CC Nubank PF', 'Itau').",
+              description: "Nome do cartao ou da conta de destino (como o usuario chama).",
             },
           },
           required: ["ids", "destino"],
@@ -831,7 +831,7 @@ function buildTools(ctx?: ToolContext) {
       type: "function" as const,
       function: {
         name: "parcelar_compra_empresa",
-        description: "Compra PARCELADA (2+ vezes) no CARTÃO da empresa. NÃO use se o usuário só disse 'no cartão'/'no Nubank' sem falar em parcelas — nesse caso use lancar_empresa (à vista 1x na fatura). Use quando houver '3x', 'em 5 vezes', 'parcelada em Nx'. Cria N lançamentos; 1ª na fatura vigente. Informe valor_parcela OU valor_total.",
+        description: "Compra PARCELADA (2+ vezes) no CARTÃO da empresa. NÃO use se o usuário só disse 'no cartão' sem falar em parcelas — nesse caso use lancar_empresa (à vista 1x na fatura). Use quando houver '3x', 'em 5 vezes', 'parcelada em Nx'. Cria N lançamentos; 1ª na fatura vigente. Informe valor_parcela OU valor_total.",
         parameters: {
           type: "object",
           properties: {
@@ -1029,12 +1029,12 @@ function buildTools(ctx?: ToolContext) {
       type: "function" as const,
       function: {
         name: "cadastrar_cartao_empresa",
-        description: "Cadastra OU atualiza um cartão de crédito DA EMPRESA (upsert pelo nome: 'Nubank' = 'CC Nubank'). Se já existir, só atualiza dias/limite — NÃO cria duplicata. Precisa do dia de fechamento e do dia de vencimento — pergunte os dois de uma vez se o usuário não disser. NUNCA invente esses dias. Chame no máximo UMA vez por cartão no fluxo.",
+        description: "Cadastra OU atualiza um cartão de crédito DA EMPRESA (upsert pelo nome). Se já existir, só atualiza dias/limite — NÃO cria duplicata. Precisa do dia de fechamento e do dia de vencimento — pergunte os dois de uma vez se o usuário não disser. NUNCA invente esses dias nem o nome do cartão. Chame no máximo UMA vez por cartão no fluxo.",
         parameters: {
           type: "object",
           properties: {
             empresa: { type: "string", description: "Nome (ou parte) da empresa." },
-            nome: { type: "string", description: "Nome do cartão (ex.: 'Nubank PJ', 'Inter Empresa')." },
+            nome: { type: "string", description: "Nome do cartão (como o usuário disse). NÃO invente." },
             dia_fechamento: { type: "number", description: "Dia do mês em que a fatura fecha (1-31)." },
             dia_vencimento: { type: "number", description: "Dia do mês em que a fatura vence (1-31)." },
             limite: { type: "number", description: "Limite do cartão em R$ (opcional)." },
@@ -1936,7 +1936,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
             precisa_forma: true,
             error: "Forma de pagamento não informada.",
             mensagem: "Pergunte em qual cartão/forma foi a compra parcelada. Não invente.",
-            sugestoes: nomesCartoes.length ? nomesCartoes : ["Nubank", "Inter", "outro cartão"],
+            sugestoes: nomesCartoes.length ? nomesCartoes : ["nome do cartão"],
             exemplo: nomesCartoes.length
               ? `Em qual cartão? Você tem: ${nomesCartoes.join(", ")}.`
               : "Em qual cartão foi essa compra parcelada?",
@@ -2102,10 +2102,16 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         const { detectarMeio, textoMeioDeDetect } = await import("./parse-meio");
         const { resolverMeioPorNomePj, aplicarMeioPagamentoPj } = await import("./meio-pagamento-pj");
 
-        // Meio: arg da tool OU frase original do usuário (como o parcelamento já faz).
-        let meioTexto = String(args.forma_pagamento || "").trim();
-        if (!meioTexto) {
-          meioTexto = textoMeioDeDetect(detectarMeio(ctx.userMessage || ""));
+        // Meio: frase do usuário manda — se disse "cartão" sem nome, ignore forma inventada (ex. Nubank).
+        const detUser = detectarMeio(ctx.userMessage || "");
+        let meioTexto = "";
+        if (detUser.tipo === "cartao_generico") {
+          meioTexto = "cartao";
+        } else if (detUser.tipo === "dinheiro" || detUser.tipo === "conta_necessaria") {
+          meioTexto = textoMeioDeDetect(detUser);
+        } else {
+          meioTexto = String(args.forma_pagamento || "").trim();
+          if (!meioTexto) meioTexto = textoMeioDeDetect(detUser);
         }
         if (!meioTexto) {
           const resolvidoVazio = await resolverMeioPorNomePj(empresa.id, ctx.userId, "");
@@ -2155,7 +2161,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
             precisa: "parcelas",
             mensagem:
               "Você falou em parcelado — em quantas vezes? (ex.: 3x, 5x de 35). Se foi à vista no cartão, diga \"à vista\" ou \"1x\".",
-            exemplos: ["3x de 100 no Nubank", "à vista no Nubank"],
+            exemplos: ["3x de 100 no Cartão Exemplo", "à vista no cartão"],
           });
         }
 
@@ -2269,6 +2275,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         }
         return JSON.stringify({
           success: true, id: criada.id, empresa: empresaNome,
+          descricao: args.descricao || "Lançamento",
           conta: `${conta.codigo} — ${conta.nome}`, valor: args.valor, tipo, data: dataISO,
           pago_com: resolvido.rotulo,
           meio: meio.isCartao ? "cartao" : "conta_bancaria",
@@ -2303,17 +2310,23 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
             error: valores.incompleto,
             precisa_valor: true,
             mensagem: valores.incompleto,
-            exemplos: ["3x de 100 no Itaú", "compra parcelada de 300 em 3x no Magalu"],
+            exemplos: ["3x de 100 no Cartão Exemplo", "compra parcelada de 300 em 3x"],
           });
         }
 
         const cartoes = await listarCartoes(empresa.id);
         const { detectarMeio, textoMeioDeDetect } = await import("./parse-meio");
-        let cartaoTexto = String(args.forma_pagamento || doTexto.cartaoHint || "").trim();
-        if (!cartaoTexto) {
-          const detMsg = textoMeioDeDetect(detectarMeio(ctx.userMessage || ""));
-          if (detMsg && detMsg !== "dinheiro" && detMsg !== "pix" && detMsg !== "boleto" && detMsg !== "ted" && detMsg !== "debito" && detMsg !== "doc") {
-            cartaoTexto = detMsg;
+        const detParc = detectarMeio(ctx.userMessage || "");
+        let cartaoTexto = "";
+        if (detParc.tipo === "cartao_generico") {
+          cartaoTexto = ""; // força listar / único — ignora forma inventada
+        } else {
+          cartaoTexto = String(args.forma_pagamento || doTexto.cartaoHint || "").trim();
+          if (!cartaoTexto) {
+            const detMsg = textoMeioDeDetect(detParc);
+            if (detMsg && detMsg !== "dinheiro" && detMsg !== "pix" && detMsg !== "boleto" && detMsg !== "ted" && detMsg !== "debito" && detMsg !== "doc" && detMsg !== "cartao") {
+              cartaoTexto = detMsg;
+            }
           }
         }
         let cartaoAuto = false;
@@ -3034,7 +3047,8 @@ export async function runAgent(
 - **NÃO CHUTE a conta.** Só preencha 'conta' quando o usuário NOMEAR a conta ("lança no aluguel", "isso é folha") ou quando a descrição disser exatamente o que é ("compra de mercadoria", "paguei o DAS"). Nos demais casos, OMITA 'conta': o sistema classifica lendo a descrição e o plano inteiro da empresa, e acerta mais do que um palpite.
 
 ### Cartão de crédito — à vista é o padrão
-- Disse "no cartão" / "no Nubank" / "no crédito" **sem** falar em parcelas (3x, em 5 vezes, parcelada em…) → é **à vista (1x)** na fatura. Use **só** 'lancar_empresa' com forma_pagamento = nome do cartão. NÃO pergunte quantas parcelas. NÃO use 'parcelar_compra_empresa'. NÃO invente a descrição "Compra parcelada".
+- Disse "no cartão" / "no crédito" / "cartão de crédito" **sem nome** → a tool pergunta qual (ou usa o único). **NUNCA invente** nome de cartão/banco nos args (ex.: não coloque forma_pagamento inventada).
+- Disse o nome do cartão **sem** falar em parcelas (3x, em 5 vezes…) → **à vista (1x)** na fatura com 'lancar_empresa'. NÃO pergunte quantas parcelas. NÃO invente a descrição "Compra parcelada".
 - Só dispare 'parcelar_compra_empresa' quando o usuário **disse** que é parcelado com quantidade (ou "parcelada" sem Nx — aí pergunte "em quantas vezes?").
 
 ### Compra PARCELADA (cartão) — só quando o usuário parcelou
@@ -3045,9 +3059,9 @@ Dispare 'parcelar_compra_empresa' (NUNCA 'parcelar_compra' do PF, NUNCA várias 
 **Como montar os args (eficiência — não invente):**
 | Frase do usuário | parcelas | valor_parcela | valor_total |
 |---|---|---|---|
-| "3x100 no Itaú" / "3x de 100" | 3 | 100 | (omitir) |
+| "3x100 no cartão" / "3x de 100" | 3 | 100 | (omitir) |
 | "compra parcelada de 300 em 3x" | 3 | (omitir) | 300 |
-| "5x de 35 no Magalu" | 5 | 35 | (omitir) |
+| "5x de 35" | 5 | 35 | (omitir) |
 | "parcelada em 10x de 50" | 10 | 50 | (omitir) |
 
 **1ª parcela = fatura vigente:** omita data_inicio (o sistema usa HOJE → competência atual do cartão). As demais parcelas vão para os meses seguintes automaticamente.
@@ -3055,7 +3069,7 @@ Dispare 'parcelar_compra_empresa' (NUNCA 'parcelar_compra' do PF, NUNCA várias 
 **Cenários incompletos — PERGUNTE, não grave:**
 1. Sem cartão + vários cartões → pergunte "Em qual cartão?" (listar_cartoes_empresa / sugestões da tool).
 2. Sem cartão + **só 1** cartão → chame a tool sem forma_pagamento; o sistema usa esse cartão e avisa.
-3. Tool devolve precisa=cadastrar_cartao (cartão citado ainda não existe, ex. Nubank) → peça **fechamento e vencimento numa pergunta só**. Ao receber, chame 'cadastrar_cartao_empresa' e **EM SEGUIDA** 'lancar_empresa' ou 'parcelar_compra_empresa'. NÃO faça fila de perguntas (fechamento → parcelas → confirmar → confirmar de novo).
+3. Tool devolve precisa=cadastrar_cartao (cartão citado ainda não existe) → peça **fechamento e vencimento numa pergunta só**. Ao receber, chame 'cadastrar_cartao_empresa' e **EM SEGUIDA** 'lancar_empresa' ou 'parcelar_compra_empresa'. NÃO faça fila de perguntas.
 4. Usuário respondeu sim/isso/pode depois que você ofereceu registrar → **chame a tool agora**; não peça "Confirmando?" de novo.
 5. Compra no cartão **sem** o usuário falar em parcelas → 'lancar_empresa' à vista (1x). Nunca pergunte "quantas parcelas?" nem use parcelar com 1x.
 6. Só "compra parcelada" / "parcelado" sem Nx → pergunte "Em quantas vezes?" (não invente 1x nem 3x).
@@ -3152,6 +3166,13 @@ ${ctx.categories.map(c => `- ${c.nome} (${c.tipo})`).join("\n")}`;
   const maxIterations = 8; // safety net
   let ultimaToolExecutada: string | null = null;
   let ultimoResultadoTool: string | null = null;
+  const escritasNestaRodada: import("./recibo-agente").EscritaRodada[] = [];
+  const { extrairEscritaOk, finalizarRespostaAgente } = await import("./recibo-agente");
+
+  const registrarEscrita = (fnName: string, result: string) => {
+    const e = extrairEscritaOk(fnName, result);
+    if (e) escritasNestaRodada.push(e);
+  };
 
   for (let i = 0; i < maxIterations; i++) {
     let response;
@@ -3173,6 +3194,10 @@ ${ctx.categories.map(c => `- ${c.nome} (${c.tipo})`).join("\n")}`;
           }
         } catch {}
       }
+      // Se já gravou nesta rodada, devolve recibo em vez de falhar sem feedback.
+      if (escritasNestaRodada.length > 0) {
+        return finalizarRespostaAgente({ content: "", escritas: escritasNestaRodada });
+      }
       throw chatErr;
     }
 
@@ -3180,9 +3205,12 @@ ${ctx.categories.map(c => `- ${c.nome} (${c.tipo})`).join("\n")}`;
     const assistantMessage = choice.message;
     messages.push(assistantMessage);
 
-    // Se não há tool calls, retorna resposta final
+    // Se não há tool calls, resposta final — recibo só se houve gravação.
     if (!assistantMessage.tool_calls || assistantMessage.tool_calls.length === 0) {
-      return assistantMessage.content || "Pronto!";
+      return finalizarRespostaAgente({
+        content: assistantMessage.content || "Pronto!",
+        escritas: escritasNestaRodada,
+      });
     }
 
     // Executar cada tool call
@@ -3224,6 +3252,7 @@ ${ctx.categories.map(c => `- ${c.nome} (${c.tipo})`).join("\n")}`;
         const resStr = JSON.stringify({ success: ok, id: metaId });
         ultimaToolExecutada = fnName;
         ultimoResultadoTool = resStr;
+        registrarEscrita(fnName, resStr);
         messages.push({ role: "tool", tool_call_id: toolCall.id, content: resStr });
         continue;
       }
@@ -3249,6 +3278,7 @@ ${ctx.categories.map(c => `- ${c.nome} (${c.tipo})`).join("\n")}`;
         const resStr = JSON.stringify({ success: true, meta: updated });
         ultimaToolExecutada = fnName;
         ultimoResultadoTool = resStr;
+        registrarEscrita(fnName, resStr);
         messages.push({ role: "tool", tool_call_id: toolCall.id, content: resStr });
         continue;
       }
@@ -3274,6 +3304,7 @@ ${ctx.categories.map(c => `- ${c.nome} (${c.tipo})`).join("\n")}`;
         const resStr = JSON.stringify({ success: true, meta: updated });
         ultimaToolExecutada = fnName;
         ultimoResultadoTool = resStr;
+        registrarEscrita(fnName, resStr);
         messages.push({ role: "tool", tool_call_id: toolCall.id, content: resStr });
         continue;
       }
@@ -3282,6 +3313,7 @@ ${ctx.categories.map(c => `- ${c.nome} (${c.tipo})`).join("\n")}`;
       const result = await executeTool(fnName, fnArgs, ctx);
       ultimaToolExecutada = fnName;
       ultimoResultadoTool = result;
+      registrarEscrita(fnName, result);
 
       messages.push({
         role: "tool",
@@ -3289,6 +3321,10 @@ ${ctx.categories.map(c => `- ${c.nome} (${c.tipo})`).join("\n")}`;
         content: result,
       });
     }
+  }
+
+  if (escritasNestaRodada.length > 0) {
+    return finalizarRespostaAgente({ content: "", escritas: escritasNestaRodada });
   }
 
   if (ultimoResultadoTool && ultimaToolExecutada === "listar_metas") {

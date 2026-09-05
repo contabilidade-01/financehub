@@ -290,6 +290,42 @@ export async function resolverMeioPorNomePj(
     return resolverContaNecessaria(det.termo, bancarias, nomesBancarias, nomesCartoes);
   }
 
+  // "cartão" / "cartão de crédito" sem nome — nunca inventar Nubank/etc.
+  if (det.tipo === "cartao_generico" || /^(cartao|cartao\s+de\s+credito|credito)$/.test(norm(raw))) {
+    if (cartoes.length === 1) {
+      return {
+        ok: true,
+        cartao_id: cartoes[0].id,
+        rotulo: cartoes[0].nome,
+        aviso: `Usei o cartão ${cartoes[0].nome} (único cadastrado).`,
+      };
+    }
+    if (cartoes.length === 0) {
+      return {
+        ok: false,
+        precisa: "cadastrar_cartao",
+        mensagem:
+          "Compra no cartão — qual o nome do cartão? Ainda não há nenhum cadastrado. Diga o nome + dia de fechamento e vencimento numa resposta só.",
+        sugestoes: [],
+        contas: nomesBancarias,
+        cartoes: [],
+        faltando: ["nome", "dia_fechamento", "dia_vencimento"],
+        instrucao_agente:
+          "Pergunte o nome do cartão e fechamento+vencimento. NÃO invente nome (ex. Nubank). Ao receber, cadastrar_cartao_empresa e lancar.",
+      } as ResolverMeioPjFail;
+    }
+    return {
+      ok: false,
+      precisa: "cartao",
+      mensagem: `Em qual cartão? Você tem: ${nomesCartoes.join(", ")}.`,
+      sugestoes: nomesCartoes,
+      contas: nomesBancarias,
+      cartoes: nomesCartoes,
+      instrucao_agente:
+        "Pergunte qual cartão da lista. NÃO invente nome que o usuário não disse.",
+    } as ResolverMeioPjFail;
+  }
+
   if (!raw || det.tipo === "nenhum") {
     return {
       ok: false,
