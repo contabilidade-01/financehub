@@ -305,13 +305,96 @@ export async function getSaldoCartaoPf(cartaoId: number): Promise<{
   };
 }
 
-export async function listarCartoesComSaldoPf(userId: number): Promise<any[]> {
+/** Gastos do cartão no intervalo civil [de, ate] (compras, não pagamento de fatura). */
+export async function movimentoCartaoPeriodo(
+  cartaoId: number,
+  de?: string,
+  ate?: string,
+): Promise<{ usado: number; qtd: number }> {
+  const filtroDe = de ? sql`AND t.data_transacao >= ${de}` : sql``;
+  const filtroAte = ate ? sql`AND t.data_transacao <= ${ate}` : sql``;
+  const rows = await db.execute(sql`
+    SELECT
+      COALESCE(SUM(ABS(t.valor::numeric)), 0) AS total,
+      COUNT(*)::int AS qtd
+    FROM transacoes t
+    WHERE t.forma_pagamento_id = ${cartaoId}
+      AND t.tipo = 'Despesa'
+      AND NOT EXISTS (SELECT 1 FROM faturas fp WHERE fp.transacao_pagamento_id = t.id)
+      AND (
+        COALESCE(t.movimenta_caixa, false) = false
+        OR t.fatura_id IS NOT NULL
+      )
+      ${filtroDe}
+      ${filtroAte}
+  `);
+  return {
+    usado: Math.round(num((rows as any[])[0]?.total) * 100) / 100,
+    qtd: Number((rows as any[])[0]?.qtd || 0),
+  };
+}
+
+export async function listarLancamentosCartaoPf(
+  userId: number,
+  cartaoId: number,
+  de?: string,
+  ate?: string,
+): Promise<any[]> {
+  const cartao = await cartaoPfDoUsuario(cartaoId, userId);
+  if (!cartao || Number(cartao.usuario_id) !== userId) return [];
+
+  const filtroDe = de ? sql`AND t.data_transacao >= ${de}` : sql``;
+  const filtroAte = ate ? sql`AND t.data_transacao <= ${ate}` : sql``;
+
+  const rows = await db.execute(sql`
+    SELECT t.id, t.descricao, t.valor, t.tipo, t.data_transacao, t.status,
+           t.parcela_num, t.parcela_total, t.competencia, t.fatura_id,
+           c.nome AS categoria
+    FROM transacoes t
+    LEFT JOIN categorias c ON c.id = t.categoria_id
+    WHERE t.forma_pagamento_id = ${cartaoId}
+      AND t.tipo = 'Despesa'
+      AND NOT EXISTS (SELECT 1 FROM faturas fp WHERE fp.transacao_pagamento_id = t.id)
+      AND (
+        COALESCE(t.movimenta_caixa, false) = false
+        OR t.fatura_id IS NOT NULL
+      )
+      ${filtroDe}
+      ${filtroAte}
+    ORDER BY t.data_transacao DESC, t.id DESC
+  `);
+  return rows as any[];
+}
+
+export async function listarCartoesComSaldoPf(
+  userId: number,
+  de?: string,
+  ate?: string,
+): Promise<any[]> {
   const cartoes = await listarCartoesPf(userId);
+  const comPeriodo = Boolean(de || ate);
   return Promise.all(cartoes.map(async (c) => {
     try {
       const saldo = await getSaldoCartaoPf(c.id);
       const faturas = (await listarFaturasPf(c.id)).slice(0, 3);
-      return { ...c, ...saldo, faturas_recentes: faturas };
+      if (comPeriodo) {
+        const mov = await movimentoCartaoPeriodo(c.id, de, ate);
+        const limite = saldo.limite;
+        const semLimite = saldo.sem_limite;
+        const disponivel = semLimite ? null : Math.max(0, limite - mov.usado);
+        const percentual = semLimite || !(limite > 0) ? 0 : (mov.usado / limite) * 100;
+        return {
+          ...c,
+          ...saldo,
+          usado: mov.usado,
+          disponivel,
+          percentual: Math.round(percentual * 10) / 10,
+          qtd_lancamentos: mov.qtd,
+          periodo: { de: de || null, ate: ate || null },
+          faturas_recentes: faturas,
+        };
+      }
+      return { ...c, ...saldo, periodo: { de: null, ate: null }, faturas_recentes: faturas };
     } catch {
       return {
         ...c,
@@ -320,6 +403,8 @@ export async function listarCartoesComSaldoPf(userId: number): Promise<any[]> {
         disponivel: num(c.limite) > 0 ? num(c.limite) : null,
         percentual: 0,
         sem_limite: !(num(c.limite) > 0),
+        qtd_lancamentos: 0,
+        periodo: { de: de || null, ate: ate || null },
         faturas_recentes: [],
       };
     }

@@ -13,9 +13,31 @@ import { storage } from "../storage";
 
 export async function listarContas(req: Request, res: Response) {
   try {
-    return res.json(await contas.listarContasComSaldoPf(req.user!.id));
+    const de = (req.query.de as string) || undefined;
+    const ate = (req.query.ate as string) || undefined;
+    return res.json(await contas.listarContasComSaldoPf(req.user!.id, de, ate));
   } catch (e: any) {
     return res.status(500).json({ error: e?.message || "Erro ao listar contas" });
+  }
+}
+
+export async function lancamentosConta(req: Request, res: Response) {
+  try {
+    const contaId = Number(req.params.id);
+    const de = (req.query.de as string) || undefined;
+    const ate = (req.query.ate as string) || undefined;
+    const lista = await contas.listarLancamentosContaPf(req.user!.id, contaId, de, ate);
+    const mov = await contas.movimentoContaPeriodo(contaId, de, ate);
+    return res.json({
+      conta_id: contaId,
+      periodo: { de: de || null, ate: ate || null },
+      saldo: mov.movimento,
+      entradas: mov.entradas,
+      saidas: mov.saidas,
+      lancamentos: lista,
+    });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || "Erro ao listar lançamentos" });
   }
 }
 
@@ -52,9 +74,35 @@ export async function excluirConta(req: Request, res: Response) {
 
 export async function listarCartoes(req: Request, res: Response) {
   try {
-    return res.json(await faturaPf.listarCartoesComSaldoPf(req.user!.id));
+    const de = (req.query.de as string) || undefined;
+    const ate = (req.query.ate as string) || undefined;
+    return res.json(await faturaPf.listarCartoesComSaldoPf(req.user!.id, de, ate));
   } catch (e: any) {
     return res.status(500).json({ error: e?.message || "Erro ao listar cartões" });
+  }
+}
+
+export async function lancamentosCartao(req: Request, res: Response) {
+  try {
+    const cartaoId = Number(req.params.id);
+    const cartao = await faturaPf.cartaoPfDoUsuario(cartaoId, req.user!.id);
+    if (!cartao || Number(cartao.usuario_id) !== req.user!.id) {
+      return res.status(404).json({ error: "Cartão não encontrado" });
+    }
+    const de = (req.query.de as string) || undefined;
+    const ate = (req.query.ate as string) || undefined;
+    const lista = await faturaPf.listarLancamentosCartaoPf(req.user!.id, cartaoId, de, ate);
+    const mov = await faturaPf.movimentoCartaoPeriodo(cartaoId, de, ate);
+    return res.json({
+      cartao_id: cartaoId,
+      cartao_nome: cartao.nome,
+      periodo: { de: de || null, ate: ate || null },
+      saldo: mov.usado,
+      usado: mov.usado,
+      lancamentos: lista,
+    });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || "Erro ao listar lançamentos" });
   }
 }
 

@@ -1285,10 +1285,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const contasCartoesCtrl = await import("./controllers/contas-cartoes.controller");
   app.get("/api/contas", combinedAuth, checkImpersonation, contasCartoesCtrl.listarContas);
   app.post("/api/contas", combinedAuth, checkImpersonation, contasCartoesCtrl.criarConta);
+  app.get("/api/contas/:id/lancamentos", combinedAuth, checkImpersonation, contasCartoesCtrl.lancamentosConta);
   app.put("/api/contas/:id", combinedAuth, checkImpersonation, contasCartoesCtrl.atualizarConta);
   app.delete("/api/contas/:id", combinedAuth, checkImpersonation, contasCartoesCtrl.excluirConta);
   app.get("/api/cartoes", combinedAuth, checkImpersonation, contasCartoesCtrl.listarCartoes);
   app.post("/api/cartoes", combinedAuth, checkImpersonation, contasCartoesCtrl.criarCartao);
+  app.get("/api/cartoes/:id/lancamentos", combinedAuth, checkImpersonation, contasCartoesCtrl.lancamentosCartao);
   app.put("/api/cartoes/:id", combinedAuth, checkImpersonation, contasCartoesCtrl.atualizarCartao);
   app.delete("/api/cartoes/:id", combinedAuth, checkImpersonation, contasCartoesCtrl.excluirCartao);
   app.get("/api/cartoes/:id/faturas", combinedAuth, checkImpersonation, contasCartoesCtrl.listarFaturas);

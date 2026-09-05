@@ -8,6 +8,14 @@ import { resolverContaPj } from "./classificar-conta-pj";
 import { atualizarTransacaoEmpresa, baixarTransacaoEmpresa } from "./empresa-transacao.service";
 import { listarCartoes as listarCartoesPj, criarCartao as criarCartaoPj, listarFaturas as listarFaturasPj, getSaldoCartaoEmpresa } from "./fatura-pj.service";
 import { garantirFormasPadrao, criarForma as criarFormaPj } from "./empresa-forma.service";
+import { sugerirNomeConta } from "./confirmacao-usuario";
+import {
+  registrarOfertaCriarConta,
+  limparOfertaCriarConta,
+  criarContaEMoverLancamento,
+  tentarResolverOfertaCriarConta,
+  obterOfertaCriarConta,
+} from "./oferta-criar-conta-pj";
 
 /**
  * AI Agent Service — processa mensagens financeiras com function calling.
@@ -173,6 +181,7 @@ const TOOLS_PJ = new Set([
   "atualiza_transacao_empresa",
   "pagar_transacao_empresa",
   "criar_conta_empresa",
+  "criar_conta_e_mover_empresa",
   "cadastrar_cartao_empresa",
   "listar_cartoes_empresa",
   "fatura_cartao_empresa",
@@ -905,7 +914,7 @@ function buildTools(ctx?: ToolContext) {
       type: "function" as const,
       function: {
         name: "criar_conta_empresa",
-        description: "Cria uma nova conta no plano de contas da empresa. O CÓDIGO é gerado automaticamente na sequência — NÃO peça nem invente código. Use quando o usuário disser 'cria uma conta', 'preciso de uma categoria para X'.",
+        description: "Cria uma nova conta no plano de contas da empresa. O CÓDIGO é gerado automaticamente na sequência — NÃO peça nem invente código. Use quando o usuário disser 'cria uma conta', 'preciso de uma categoria para X'. Se for para criar E mover um lançamento que caiu em Outras, prefira 'criar_conta_e_mover_empresa'.",
         parameters: {
           type: "object",
           properties: {
@@ -916,6 +925,25 @@ function buildTools(ctx?: ToolContext) {
             grupo_gerencial: { type: "string", description: "Grupo do fluxo de caixa (opcional): receita, custo_variavel, despesa_fixa, investimento, nao_operacional, outras." },
           },
           required: ["empresa", "nome", "tipo"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "criar_conta_e_mover_empresa",
+        description: "Cria (ou reusa) uma conta no plano E move um lançamento para ela em um único passo. Use quando o usuário confirmar a oferta após cair em Outras (sim/pode/ok) ou pedir explicitamente criar a conta e mover. NÃO peça confirmação de novo — a resposta do usuário JÁ é a confirmação.",
+        parameters: {
+          type: "object",
+          properties: {
+            empresa: { type: "string", description: "Nome (ou parte) da empresa." },
+            id_transacao: { type: "number", description: "Código/ID do lançamento a mover." },
+            nome: { type: "string", description: "Nome da conta a criar (ex.: 'Alimentação')." },
+            tipo: { type: "string", enum: ["Receita", "Despesa"] },
+            classificacao: { type: "string", enum: ["FIXA", "VARIAVEL", "OUTRA"], description: "Default VARIAVEL para despesa se omitir." },
+            resposta_usuario: { type: "string", description: "Texto exato da confirmação do usuário (sim, pode, ok...). O sistema valida se é afirmação ou recusa." },
+          },
+          required: ["empresa", "id_transacao", "nome", "tipo"],
         },
       },
     },
@@ -1993,12 +2021,40 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         const orcamento = tipo === "Despesa"
           ? await getStatusOrcamentoContaPJ(empresa.id, conta.id)
           : null;
+        const empresaNome = empresa.nome_fantasia || empresa.razao_social;
+        let pendente_criar_conta: any = null;
+        if (usouOutras) {
+          const nomeSugerido = sugerirNomeConta(
+            String(args.descricao || ""),
+            ctx.userMessage,
+            args.conta,
+          );
+          const classificacao = tipo === "Receita" ? "OUTRA" : "VARIAVEL";
+          await registrarOfertaCriarConta({
+            userId: ctx.userId,
+            empresaId: empresa.id,
+            empresaNome: String(empresaNome),
+            idTransacao: criada.id,
+            nomeConta: nomeSugerido,
+            tipo,
+            classificacao,
+          });
+          pendente_criar_conta = {
+            acao: "criar_conta_e_mover",
+            id_transacao: criada.id,
+            nome_sugerido: nomeSugerido,
+            tipo,
+            classificacao_sugerida: classificacao,
+            ferramenta: "criar_conta_e_mover_empresa",
+          };
+        }
         return JSON.stringify({
-          success: true, id: criada.id, empresa: empresa.nome_fantasia || empresa.razao_social,
+          success: true, id: criada.id, empresa: empresaNome,
           conta: `${conta.codigo} — ${conta.nome}`, valor: args.valor, tipo, data: args.data_transacao || today,
           usou_outras: usouOutras,
+          pendente_criar_conta,
           dica: usouOutras
-            ? "Não existe conta específica para isso no plano desta empresa. Lancei em Outras e AVISE o usuário, oferecendo criar a conta certa com 'criar_conta_empresa' (o código sai automático) — ex.: \"Lancei em Outras Despesas. Quer que eu crie a conta *Combustível* e mova para lá?\"."
+            ? `Lancei em Outras. OFEREÇA criar a conta *${pendente_criar_conta.nome_sugerido}* e mover o lançamento. Quando o usuário confirmar (sim/pode/ok/claro/fechou/cria...), chame 'criar_conta_e_mover_empresa' com id_transacao=${criada.id} e nome=${pendente_criar_conta.nome_sugerido} — NÃO peça confirmação de novo. Se recusar (não/deixa/cancela), não crie.`
             : "Se a conta não for essa, dá para mudar depois em Transações PJ no app.",
           orcamento,
         });
@@ -2204,6 +2260,52 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           codigo: conta.codigo,
           tipo: conta.tipo,
           classificacao: conta.classificacao,
+        });
+      }
+
+      case "criar_conta_e_mover_empresa": {
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        if ("erro" in empresa) return JSON.stringify(empresa);
+
+        if (args.resposta_usuario) {
+          const { interpretarConfirmacao } = await import("./confirmacao-usuario");
+          const v = interpretarConfirmacao(String(args.resposta_usuario));
+          if (v === "nao") {
+            await limparOfertaCriarConta(ctx.userId);
+            return JSON.stringify({
+              success: false,
+              cancelado: true,
+              mensagem: "Usuário recusou. Não crie a conta; mantenha o lançamento onde está.",
+            });
+          }
+          if (v === "ambiguo") {
+            return JSON.stringify({
+              success: false,
+              precisa_clarificar: true,
+              mensagem: `Não deu para entender se é sim ou não. Pergunte só: "Pode criar a conta *${args.nome}* e mover o lançamento 🔍 ${args.id_transacao}? Responda *sim* ou *não*."`,
+            });
+          }
+        }
+
+        const r = await criarContaEMoverLancamento({
+          userId: ctx.userId,
+          empresaId: empresa.id,
+          idTransacao: Number(args.id_transacao),
+          nomeConta: String(args.nome || ""),
+          tipo: args.tipo === "Receita" ? "Receita" : "Despesa",
+          classificacao: args.classificacao || null,
+        });
+        await limparOfertaCriarConta(ctx.userId);
+        if (!r.ok) return JSON.stringify({ success: false, error: r.error });
+        return JSON.stringify({
+          success: true,
+          conta_criada: r.contaCriada,
+          conta: `${r.conta.codigo} — ${r.conta.nome}`,
+          codigo: r.conta.codigo,
+          id_transacao: args.id_transacao,
+          mensagem: r.contaCriada
+            ? `Conta criada e lançamento ${args.id_transacao} movido.`
+            : `Conta já existia; lançamento ${args.id_transacao} movido.`,
         });
       }
 
@@ -2426,6 +2528,12 @@ export async function runAgent(
   // Disponibiliza o texto atual para os handlers (ex.: casar meta pelo contexto).
   ctx.userMessage = userMessage;
 
+  // Oferta "criar conta e mover" (PJ): respostas curtas sim/não executam sem depender do LLM.
+  if (emModoPj(ctx)) {
+    const resolved = await tentarResolverOfertaCriarConta(ctx.userId, userMessage);
+    if (resolved.handled) return resolved.reply;
+  }
+
   let pjInstructions = "";
   if (ctx.tipoPessoa === "juridica" && (ctx as any).empresaAtiva) {
     const emp = (ctx as any).empresaAtiva as { id: number; nome: string; segmento?: string | null };
@@ -2446,7 +2554,18 @@ export async function runAgent(
 - Fale em frases curtas e simples.
 - **NÃO CHUTE a conta.** Só preencha 'conta' quando o usuário NOMEAR a conta ("lança no aluguel", "isso é folha") ou quando a descrição disser exatamente o que é ("compra de mercadoria", "paguei o DAS"). Nos demais casos, OMITA 'conta': o sistema classifica lendo a descrição e o plano inteiro da empresa, e acerta mais do que um palpite.
 - Cuidado com armadilhas comuns: gasto com veículo (abastecimento, oficina, pneu, pedágio, cartório, despachante) NÃO é compra de mercadoria/CMV e NÃO é imposto. Imposto é só imposto mesmo (DAS, IPVA, licenciamento, taxa).
-- Se não tiver certeza, mesmo assim LANCE. O sistema escolhe a melhor conta; se não achar, usa Outras Receitas ou Outras Despesas. Diga a conta usada. Se cair em Outras, avise o usuário e OFEREÇA criar a conta certa com 'criar_conta_empresa' (o código é gerado automático).
+- Se não tiver certeza, mesmo assim LANCE. O sistema escolhe a melhor conta; se não achar, usa Outras Receitas ou Outras Despesas. Diga a conta usada. Se cair em Outras (campo usou_outras / pendente_criar_conta), avise e OFEREÇA criar a conta sugerida e mover o lançamento.
+
+### Oferta criar conta (após cair em Outras) — OBRIGATÓRIO
+Quando 'lancar_empresa' devolver pendente_criar_conta:
+1. Confirme o lançamento normalmente e pergunte, ex.: "Quer que eu crie a conta *Alimentação* e mova para lá?"
+2. Na PRÓXIMA mensagem do usuário, interprete a resposta:
+   - AFIRMAÇÃO (vale como SIM): sim, s, ss, pode, pode criar, ok, okay, blz, beleza, claro, fechou, isso, uhum, aham, confirmo, manda, vai, cria, crie, quero, yes, positivo, com certeza.
+   - RECUSA (vale como NÃO): não, nao, n, nn, deixa, cancela, esquece, agora não, melhor não, não quero, não precisa, nope, nops, negativo.
+   - Se misturar ou ficar dúbio → pergunte só: "Pode criar? Responda *sim* ou *não*."
+3. Se for afirmação → chame IMEDIATAMENTE 'criar_conta_e_mover_empresa' com id_transacao e nome_sugerido do pendente (classificacao VARIAVEL se despesa e não disserem o contrário). NÃO peça confirmação de novo. NÃO use só 'criar_conta_empresa' sem mover.
+4. Se for recusa → diga que manteve em Outras e NÃO chame criação.
+5. A ferramenta 'criar_conta_e_mover_empresa' cria a conta E move o lançamento de uma vez — use sempre que a oferta for aceita.
 
 ### Ferramentas desta empresa (use SEMPRE as versões _empresa)
 Este usuário NÃO tem carteira pessoal ativa. Toda consulta, edição e cadastro é da EMPRESA:
@@ -2454,7 +2573,7 @@ Este usuário NÃO tem carteira pessoal ativa. Toda consulta, edição e cadastr
 - DRE, margem, lucro → 'dre_empresa'. Comparar dois meses → 'comparar_periodos_empresa'.
 - Onde a empresa mais gasta / gasto por conta → 'gastos_por_conta_empresa'. Evolução do ano → 'fluxo_caixa_empresa'.
 - Editar/corrigir um lançamento → 'buscar_transacao_empresa_por_filtro' → 'atualiza_transacao_empresa' (siga o fluxo da seção 5, sempre confirmando antes).
-- Criar conta no plano → 'criar_conta_empresa'. O CÓDIGO é gerado automaticamente na sequência: não peça código ao usuário nem invente um. Pergunte só o nome e, se for despesa e não der para deduzir, se é FIXA ou VARIÁVEL. Depois informe o código que saiu.
+- Criar conta no plano → 'criar_conta_empresa'. Para criar E mover lançamento que caiu em Outras → 'criar_conta_e_mover_empresa'. O CÓDIGO é gerado automaticamente: não peça nem invente.
 - Cartão de crédito da empresa → 'cadastrar_cartao_empresa' (peça dia de fechamento e dia de vencimento numa pergunta só; nunca invente esses dias), 'listar_cartoes_empresa', 'fatura_cartao_empresa', 'saldo_cartao_empresa' (limite/usado/disponível).
 - Formas de pagamento (PIX, boleto, débito) → 'listar_formas_empresa', 'cadastrar_forma_empresa'. Cartão NÃO é forma — é 'cadastrar_cartao_empresa'.
 - Baixar / marcar como paga uma conta Pendente → 'pagar_transacao_empresa' (depois de confirmar o lançamento).
@@ -2463,6 +2582,16 @@ Este usuário NÃO tem carteira pessoal ativa. Toda consulta, edição e cadastr
 ### Plano de contas desta empresa
 ${planoLinhas || "(não foi possível listar as contas)"}
 `;
+    const ofertaPend = await obterOfertaCriarConta(ctx.userId);
+    if (ofertaPend) {
+      pjInstructions += `
+### OFERTA PENDENTE (aguardando resposta do usuário)
+Você ofereceu criar a conta *${ofertaPend.nomeConta}* (${ofertaPend.tipo}) e mover o lançamento 🔍 ${ofertaPend.idTransacao} da empresa ${ofertaPend.empresaNome}.
+Se a mensagem atual for afirmação → chame 'criar_conta_e_mover_empresa' AGORA (empresa: "${ofertaPend.empresaNome}", id_transacao: ${ofertaPend.idTransacao}, nome: "${ofertaPend.nomeConta}", tipo: "${ofertaPend.tipo}", classificacao: "${ofertaPend.classificacao}", resposta_usuario: texto do usuário). Não peça confirmação de novo.
+Se for recusa → confirme que manteve em Outras e não crie.
+Se for ambíguo → pergunte só sim ou não.
+`;
+    }
   }
 
   // Quando o conteúdo veio de imagem/áudio/documento, o texto é uma EXTRAÇÃO

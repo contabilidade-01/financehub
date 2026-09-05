@@ -39,7 +39,7 @@ export async function contaPadraoPf(userId: number): Promise<number | null> {
   return escolherContaPadraoPf(contas);
 }
 
-export async function saldoConta(contaId: number): Promise<number> {
+export async function saldoConta(contaId: number, ate?: string): Promise<number> {
   const contaRows = await db.execute(sql`
     SELECT saldo_inicial FROM contas_bancarias WHERE id = ${contaId} LIMIT 1
   `);
@@ -48,6 +48,8 @@ export async function saldoConta(contaId: number): Promise<number> {
   // SALDO ATUAL = só dinheiro que JÁ se moveu (status Efetivada). Conta a pagar
   // em aberto é PREVISÃO e nunca entra aqui — ela aparece no Fluxo Projetado e
   // no "Saldo em aberto" da tela de Lançamentos. Regra idêntica para PF e PJ.
+  const filtroAte = ate ? sql`AND data_transacao <= ${ate}` : sql``;
+
   const pf = await db.execute(sql`
     SELECT COALESCE(SUM(
       CASE WHEN tipo = 'Receita' THEN valor::numeric
@@ -58,6 +60,7 @@ export async function saldoConta(contaId: number): Promise<number> {
     WHERE conta_bancaria_id = ${contaId}
       AND COALESCE(movimenta_caixa, true) = true
       AND status = 'Efetivada'
+      ${filtroAte}
   `);
 
   const pj = await db.execute(sql`
@@ -70,18 +73,114 @@ export async function saldoConta(contaId: number): Promise<number> {
     WHERE conta_bancaria_id = ${contaId}
       AND COALESCE(movimenta_caixa, true) = true
       AND status = 'Efetivada'
+      ${filtroAte}
   `);
 
   return Math.round((ini + num((pf as any[])[0]?.mov) + num((pj as any[])[0]?.mov)) * 100) / 100;
 }
 
-export async function listarContasComSaldoPf(userId: number): Promise<any[]> {
+/** Movimento líquido da conta no intervalo [de, ate] (só Efetivada + caixa). */
+export async function movimentoContaPeriodo(
+  contaId: number,
+  de?: string,
+  ate?: string,
+): Promise<{ movimento: number; entradas: number; saidas: number; qtd: number }> {
+  const filtroDe = de ? sql`AND data_transacao >= ${de}` : sql``;
+  const filtroAte = ate ? sql`AND data_transacao <= ${ate}` : sql``;
+
+  const pf = await db.execute(sql`
+    SELECT
+      COALESCE(SUM(CASE WHEN tipo = 'Receita' THEN valor::numeric ELSE 0 END), 0) AS entradas,
+      COALESCE(SUM(CASE WHEN tipo = 'Despesa' AND COALESCE(reembolsavel, false) = false THEN valor::numeric ELSE 0 END), 0) AS saidas,
+      COUNT(*)::int AS qtd
+    FROM transacoes
+    WHERE conta_bancaria_id = ${contaId}
+      AND COALESCE(movimenta_caixa, true) = true
+      AND status = 'Efetivada'
+      ${filtroDe}
+      ${filtroAte}
+  `);
+
+  const pj = await db.execute(sql`
+    SELECT
+      COALESCE(SUM(CASE WHEN tipo = 'Receita' THEN valor::numeric ELSE 0 END), 0) AS entradas,
+      COALESCE(SUM(CASE WHEN tipo = 'Despesa' THEN valor::numeric ELSE 0 END), 0) AS saidas,
+      COUNT(*)::int AS qtd
+    FROM empresas_transacoes
+    WHERE conta_bancaria_id = ${contaId}
+      AND COALESCE(movimenta_caixa, true) = true
+      AND status = 'Efetivada'
+      ${filtroDe}
+      ${filtroAte}
+  `);
+
+  const entradas = num((pf as any[])[0]?.entradas) + num((pj as any[])[0]?.entradas);
+  const saidas = num((pf as any[])[0]?.saidas) + num((pj as any[])[0]?.saidas);
+  const qtd = Number((pf as any[])[0]?.qtd || 0) + Number((pj as any[])[0]?.qtd || 0);
+  return {
+    entradas: Math.round(entradas * 100) / 100,
+    saidas: Math.round(saidas * 100) / 100,
+    movimento: Math.round((entradas - saidas) * 100) / 100,
+    qtd,
+  };
+}
+
+export async function listarLancamentosContaPf(
+  userId: number,
+  contaId: number,
+  de?: string,
+  ate?: string,
+): Promise<any[]> {
+  const conta = await db.execute(sql`
+    SELECT id FROM contas_bancarias
+    WHERE id = ${contaId} AND usuario_id = ${userId} AND empresa_id IS NULL
+    LIMIT 1
+  `);
+  if (!(conta as any[])[0]) return [];
+
+  const filtroDe = de ? sql`AND t.data_transacao >= ${de}` : sql``;
+  const filtroAte = ate ? sql`AND t.data_transacao <= ${ate}` : sql``;
+
+  const rows = await db.execute(sql`
+    SELECT t.id, t.descricao, t.valor, t.tipo, t.data_transacao, t.status,
+           t.movimenta_caixa, c.nome AS categoria, fp.nome AS forma_pagamento
+    FROM transacoes t
+    LEFT JOIN categorias c ON c.id = t.categoria_id
+    LEFT JOIN formas_pagamento fp ON fp.id = t.forma_pagamento_id
+    WHERE t.conta_bancaria_id = ${contaId}
+      AND COALESCE(t.movimenta_caixa, true) = true
+      AND t.status = 'Efetivada'
+      ${filtroDe}
+      ${filtroAte}
+    ORDER BY t.data_transacao DESC, t.id DESC
+  `);
+  return rows as any[];
+}
+
+export async function listarContasComSaldoPf(
+  userId: number,
+  de?: string,
+  ate?: string,
+): Promise<any[]> {
   const contas = await listarContasPf(userId);
-  return Promise.all(contas.map(async (c) => ({
-    ...c,
-    nome: c.nome || c.banco,
-    saldo: await saldoConta(c.id),
-  })));
+  const comPeriodo = Boolean(de || ate);
+  return Promise.all(contas.map(async (c) => {
+    const mov = await movimentoContaPeriodo(c.id, de, ate);
+    const saldoFechamento = await saldoConta(c.id, ate);
+    return {
+      ...c,
+      nome: c.nome || c.banco,
+      // Com período: saldo exibido = movimento líquido do intervalo.
+      // Sem período: saldo acumulado atual.
+      saldo: comPeriodo ? mov.movimento : saldoFechamento,
+      saldo_atual: saldoFechamento,
+      movimento: mov.movimento,
+      entradas: mov.entradas,
+      saidas: mov.saidas,
+      qtd_lancamentos: mov.qtd,
+      periodo: { de: de || null, ate: ate || null },
+    };
+  }));
 }
 
 export async function criarContaPf(userId: number, b: {

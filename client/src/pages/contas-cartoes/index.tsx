@@ -22,6 +22,8 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import PeriodoSelector from "@/components/shared/PeriodoSelector";
+import { Periodo, rangeDoPeriodo, rotuloPeriodo } from "@/lib/period";
 import {
   CreditCard,
   Edit,
@@ -41,6 +43,9 @@ type Conta = {
   saldo: number;
   saldo_inicial?: number | string;
   ativo?: boolean;
+  entradas?: number;
+  saidas?: number;
+  qtd_lancamentos?: number;
 };
 
 type FaturaRecente = {
@@ -62,11 +67,38 @@ type Cartao = {
   percentual: number;
   dia_fechamento: number | null;
   dia_vencimento: number | null;
+  qtd_lancamentos?: number;
   faturas_recentes?: FaturaRecente[];
 };
 
+type Lancamento = {
+  id: number;
+  descricao: string;
+  valor: number | string;
+  tipo: string;
+  data_transacao: string;
+  status?: string;
+  categoria?: string | null;
+  forma_pagamento?: string | null;
+  parcela_num?: number | null;
+  parcela_total?: number | null;
+};
+
+type DetalheAberto =
+  | { kind: "conta"; id: number; nome: string }
+  | { kind: "cartao"; id: number; nome: string }
+  | null;
+
+const OPCOES_PERIODO: Periodo[] = ["current_month", "last_month", "next_month", "custom"];
+
 const money = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
+
+const dataBR = (s: string) => {
+  const [y, m, d] = String(s).slice(0, 10).split("-");
+  if (!y || !m || !d) return s;
+  return `${d}/${m}/${y}`;
+};
 
 const hasLimite = (limite: number | string | null | undefined) =>
   limite != null && limite !== "" && Number(limite) > 0;
@@ -97,6 +129,20 @@ export default function ContasCartoesPage() {
   const { toast } = useToast();
   const qc = useQueryClient();
 
+  const [periodo, setPeriodo] = useState<Periodo>("current_month");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  const range = rangeDoPeriodo(periodo, customFrom, customTo);
+  const periodoPronto = periodo !== "custom" || Boolean(range.de && range.ate);
+  const periodoLabel = rotuloPeriodo(periodo, range.de, range.ate);
+  const qs = useMemo(() => {
+    const p = new URLSearchParams();
+    if (range.de) p.set("de", range.de);
+    if (range.ate) p.set("ate", range.ate);
+    const s = p.toString();
+    return s ? `?${s}` : "";
+  }, [range.de, range.ate]);
+
   const [contaOpen, setContaOpen] = useState(false);
   const [cartaoOpen, setCartaoOpen] = useState(false);
   const [editingConta, setEditingConta] = useState<Conta | null>(null);
@@ -106,20 +152,40 @@ export default function ContasCartoesPage() {
 
   const [pagarOpen, setPagarOpen] = useState<{ fatura: FaturaRecente; cartaoNome: string } | null>(null);
   const [contaPagamentoId, setContaPagamentoId] = useState<string>("");
+  const [detalhe, setDetalhe] = useState<DetalheAberto>(null);
 
   const { data: contas = [], isLoading: loadingContas } = useQuery<Conta[]>({
-    queryKey: ["/api/contas"],
+    queryKey: [`/api/contas${qs}`],
+    enabled: periodoPronto,
   });
 
   const { data: cartoes = [], isLoading: loadingCartoes } = useQuery<Cartao[]>({
-    queryKey: ["/api/cartoes"],
+    queryKey: [`/api/cartoes${qs}`],
+    enabled: periodoPronto,
+  });
+
+  const detalheUrl = detalhe
+    ? detalhe.kind === "conta"
+      ? `/api/contas/${detalhe.id}/lancamentos${qs}`
+      : `/api/cartoes/${detalhe.id}/lancamentos${qs}`
+    : null;
+
+  const { data: detalheData, isLoading: loadingDetalhe } = useQuery<{
+    saldo?: number;
+    usado?: number;
+    entradas?: number;
+    saidas?: number;
+    lancamentos: Lancamento[];
+  }>({
+    queryKey: [detalheUrl || "/api/noop"],
+    enabled: !!detalheUrl && periodoPronto,
   });
 
   const contasAtivas = useMemo(() => contas.filter((c) => c.ativo !== false), [contas]);
 
   const invalidate = () => {
-    qc.invalidateQueries({ queryKey: ["/api/contas"] });
-    qc.invalidateQueries({ queryKey: ["/api/cartoes"] });
+    qc.invalidateQueries({ predicate: (q) => String(q.queryKey[0] || "").startsWith("/api/contas") });
+    qc.invalidateQueries({ predicate: (q) => String(q.queryKey[0] || "").startsWith("/api/cartoes") });
     qc.invalidateQueries({ queryKey: ["/api/vencimentos"] });
     qc.invalidateQueries({ queryKey: ["/api/wallet/current"] });
   };
@@ -295,7 +361,9 @@ export default function ContasCartoesPage() {
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-3xl font-bold">Contas e Cartões</h1>
-          <p className="text-muted-foreground">Saldos bancários e limites dos cartões de crédito</p>
+          <p className="text-muted-foreground">
+            Movimento do período · toque no saldo para ver os lançamentos
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={openNewConta}>
@@ -307,13 +375,26 @@ export default function ContasCartoesPage() {
         </div>
       </div>
 
+      <div className="space-y-2">
+        <PeriodoSelector
+          periodo={periodo}
+          onPeriodoChange={setPeriodo}
+          customFrom={customFrom}
+          customTo={customTo}
+          onCustomFromChange={setCustomFrom}
+          onCustomToChange={setCustomTo}
+          opcoes={OPCOES_PERIODO}
+        />
+        <p className="text-sm text-muted-foreground capitalize">{periodoLabel}</p>
+      </div>
+
       {/* Contas */}
       <section className="space-y-4">
         <div className="flex items-center gap-2">
           <Landmark className="h-5 w-5 text-muted-foreground" />
           <h2 className="text-xl font-semibold">Contas</h2>
         </div>
-        {loading ? (
+        {!periodoPronto || loading ? (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 3 }).map((_, i) => (
               <Skeleton key={i} className="h-36 w-full rounded-xl" />
@@ -366,16 +447,26 @@ export default function ContasCartoesPage() {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="flex items-center gap-2">
-                      <Wallet className="h-4 w-4 text-muted-foreground" />
-                      <span
-                        className={`text-2xl font-numeric font-semibold ${
-                          saldo < 0 ? "text-red-500" : "text-foreground"
-                        }`}
-                      >
-                        {money(saldo)}
-                      </span>
-                    </div>
+                    <button
+                      type="button"
+                      className="w-full text-left rounded-lg -mx-1 px-1 py-1 hover:bg-muted/50 transition-colors"
+                      onClick={() => setDetalhe({ kind: "conta", id: c.id, nome: c.nome })}
+                    >
+                      <p className="text-[11px] text-muted-foreground mb-1">Saldo do período</p>
+                      <div className="flex items-center gap-2">
+                        <Wallet className="h-4 w-4 text-muted-foreground" />
+                        <span
+                          className={`text-2xl font-numeric font-semibold ${
+                            saldo < 0 ? "text-red-500" : "text-foreground"
+                          }`}
+                        >
+                          {money(saldo)}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {c.qtd_lancamentos ?? 0} lançamento{(c.qtd_lancamentos ?? 0) === 1 ? "" : "s"} · ver detalhes
+                      </p>
+                    </button>
                   </CardContent>
                 </Card>
               );
@@ -390,7 +481,7 @@ export default function ContasCartoesPage() {
           <CreditCard className="h-5 w-5 text-muted-foreground" />
           <h2 className="text-xl font-semibold">Cartões</h2>
         </div>
-        {loading ? (
+        {!periodoPronto || loading ? (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 2 }).map((_, i) => (
               <Skeleton key={i} className="h-56 w-full rounded-xl" />
@@ -409,6 +500,7 @@ export default function ContasCartoesPage() {
               const limiteOk = hasLimite(c.limite);
               const pct = Math.min(100, Number(c.percentual) || 0);
               const faturas = c.faturas_recentes || [];
+              const usado = Number(c.usado) || 0;
               return (
                 <Card key={c.id} className="overflow-hidden">
                   <div
@@ -443,36 +535,40 @@ export default function ContasCartoesPage() {
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    {limiteOk ? (
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>Usado {money(Number(c.usado) || 0)}</span>
-                          <span>Limite {money(Number(c.limite))}</span>
+                    <button
+                      type="button"
+                      className="w-full text-left rounded-lg -mx-1 px-1 py-1 hover:bg-muted/50 transition-colors space-y-1.5"
+                      onClick={() => setDetalhe({ kind: "cartao", id: c.id, nome: c.nome })}
+                    >
+                      <p className="text-[11px] text-muted-foreground">Gasto do período</p>
+                      {limiteOk ? (
+                        <>
+                          <div className="flex justify-between text-xs text-muted-foreground">
+                            <span>Usado {money(usado)}</span>
+                            <span>Limite {money(Number(c.limite))}</span>
+                          </div>
+                          <div className="h-2 rounded-full bg-muted overflow-hidden">
+                            <div
+                              className="h-full rounded-full transition-all"
+                              style={{
+                                width: `${pct}%`,
+                                backgroundColor: pct >= 90 ? "#ef4444" : pct >= 70 ? "#f59e0b" : cor,
+                              }}
+                            />
+                          </div>
+                          <p className="text-sm text-emerald-600 font-medium">
+                            Disponível {money(Number(c.disponivel) || 0)}
+                          </p>
+                        </>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <span className="text-2xl font-numeric font-semibold">{money(usado)}</span>
                         </div>
-                        <div className="h-2 rounded-full bg-muted overflow-hidden">
-                          <div
-                            className="h-full rounded-full transition-all"
-                            style={{
-                              width: `${pct}%`,
-                              backgroundColor: pct >= 90 ? "#ef4444" : pct >= 70 ? "#f59e0b" : cor,
-                            }}
-                          />
-                        </div>
-                        <p className="text-sm text-emerald-600 font-medium">
-                          Disponível {money(Number(c.disponivel) || 0)}
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>Usado {money(Number(c.usado) || 0)}</span>
-                          <span>Sem limite</span>
-                        </div>
-                        <div className="h-2 rounded-full bg-muted overflow-hidden">
-                          <div className="h-full w-full rounded-full bg-muted-foreground/25" />
-                        </div>
-                      </div>
-                    )}
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        {c.qtd_lancamentos ?? 0} lançamento{(c.qtd_lancamentos ?? 0) === 1 ? "" : "s"} · ver detalhes
+                      </p>
+                    </button>
 
                     <div>
                       <p className="text-xs font-medium text-muted-foreground mb-2">Faturas recentes</p>
@@ -531,6 +627,92 @@ export default function ContasCartoesPage() {
           </div>
         )}
       </section>
+
+      {/* Detalhe dos lançamentos do período */}
+      <Dialog open={!!detalhe} onOpenChange={(o) => { if (!o) setDetalhe(null); }}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>
+              {detalhe?.kind === "conta" ? "Conta" : "Cartão"} · {detalhe?.nome}
+            </DialogTitle>
+            <p className="text-sm text-muted-foreground capitalize">{periodoLabel}</p>
+          </DialogHeader>
+          {loadingDetalhe ? (
+            <div className="space-y-2 py-4">
+              <Skeleton className="h-8 w-40" />
+              <Skeleton className="h-16 w-full" />
+              <Skeleton className="h-16 w-full" />
+            </div>
+          ) : (
+            <>
+              <div className="rounded-lg border border-border/60 px-3 py-2 mb-2">
+                <p className="text-xs text-muted-foreground">
+                  {detalhe?.kind === "conta" ? "Saldo do período" : "Gasto do período"}
+                </p>
+                <p
+                  className={`text-xl font-numeric font-semibold ${
+                    Number(detalheData?.saldo ?? detalheData?.usado ?? 0) < 0 ? "text-red-500" : ""
+                  }`}
+                >
+                  {money(Number(detalheData?.saldo ?? detalheData?.usado ?? 0))}
+                </p>
+                {detalhe?.kind === "conta" && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Entradas {money(Number(detalheData?.entradas) || 0)} · Saídas{" "}
+                    {money(Number(detalheData?.saidas) || 0)}
+                  </p>
+                )}
+              </div>
+              <div className="overflow-y-auto flex-1 min-h-0 space-y-2 pr-1">
+                {(detalheData?.lancamentos || []).length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">
+                    Nenhum lançamento neste período.
+                  </p>
+                ) : (
+                  (detalheData?.lancamentos || []).map((l) => {
+                    const valor = Number(l.valor) || 0;
+                    const receita = l.tipo === "Receita";
+                    const parcela =
+                      l.parcela_num && l.parcela_total
+                        ? ` (${l.parcela_num}/${l.parcela_total})`
+                        : "";
+                    return (
+                      <div
+                        key={l.id}
+                        className="flex items-start justify-between gap-3 rounded-lg border border-border/60 px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">
+                            {l.descricao}
+                            {parcela}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {dataBR(l.data_transacao)}
+                            {l.categoria ? ` · ${l.categoria}` : ""}
+                          </p>
+                        </div>
+                        <span
+                          className={`text-sm font-numeric font-semibold shrink-0 ${
+                            receita ? "text-emerald-600" : "text-red-500"
+                          }`}
+                        >
+                          {receita ? "+" : "−"}
+                          {money(Math.abs(valor))}
+                        </span>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDetalhe(null)}>
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog conta */}
       <Dialog open={contaOpen} onOpenChange={setContaOpen}>
