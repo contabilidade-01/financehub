@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { storage } from "../storage";
 import { softDeleteEmpresaTransacao } from "../storage";
 import { insertEmpresaTransacaoSchema } from "../../shared/schema";
-import { atualizarTransacaoEmpresa, baixarTransacaoEmpresa } from "../services/empresa-transacao.service";
+import { atualizarTransacaoEmpresa, baixarTransacaoEmpresa, reabrirTransacaoEmpresa } from "../services/empresa-transacao.service";
 import { aplicarMeioPagamentoPj } from "../services/meio-pagamento-pj";
 import * as formas from "../services/empresa-forma.service";
 
@@ -290,6 +290,25 @@ export const pagarEmpresaTransacao = async (req: Request, res: Response) => {
     return res.json(resultado.transacao);
   } catch (err) {
     console.error("pagarEmpresaTransacao:", err);
+    return res.status(500).json({ error: "Erro interno." });
+  }
+};
+
+// PUT /api/empresas/:id/transacoes/:transacaoId/reabrir
+export const reabrirEmpresaTransacao = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const empresaId = parseInt(req.params.id);
+    const transacaoId = parseInt(req.params.transacaoId);
+    if (isNaN(empresaId) || isNaN(transacaoId)) return res.status(400).json({ error: "ID inválido." });
+
+    const resultado = await reabrirTransacaoEmpresa(empresaId, transacaoId, userId);
+    if (!resultado.ok) {
+      return res.status(resultado.status).json({ error: resultado.error });
+    }
+    return res.json(resultado.transacao);
+  } catch (err) {
+    console.error("reabrirEmpresaTransacao:", err);
     return res.status(500).json({ error: "Erro interno." });
   }
 };

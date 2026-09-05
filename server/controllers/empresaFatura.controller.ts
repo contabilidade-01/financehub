@@ -127,6 +127,19 @@ export async function fecharFatura(req: Request, res: Response) {
   return res.json(await fatura.fecharFatura(f.id));
 }
 
+// POST /api/empresas/:id/faturas/:faturaId/reabrir
+export async function reabrirFatura(req: Request, res: Response) {
+  try {
+    const empresaId = await guardEmpresa(req, res); if (!empresaId) return;
+    const f = await fatura.getFaturaById(Number(req.params.faturaId));
+    if (!f || f.empresa_id !== empresaId) return res.status(404).json({ error: "Fatura não encontrada" });
+    if (f.status === "aberta") return res.json(f);
+    return res.json(await fatura.reabrirFatura(f));
+  } catch (e: any) {
+    return res.status(400).json({ error: e?.message || "Erro ao reabrir fatura" });
+  }
+}
+
 // POST /api/empresas/:id/faturas/:faturaId/conciliar  (multipart: arquivo OFX/CSV/XLSX)
 export async function conciliarFatura(req: Request, res: Response) {
   try {

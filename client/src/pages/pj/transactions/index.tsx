@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, Edit2, Search, X, CheckCircle2 } from "lucide-react";
+import { Plus, Trash2, Edit2, Search, X, CheckCircle2, RotateCcw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { EmpresaTransacaoWithDetails, EmpresaConta } from "@shared/schema";
 
@@ -57,6 +57,11 @@ function janelaDoPeriodo(periodo: Periodo, de: string, ate: string): { de?: stri
 
 const fmt = (n: number | string) =>
   Number(n).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+const stBadgePj = (s: string) =>
+  s === "Efetivada"
+    ? { t: "Efetivada", c: "bg-emerald-500/15 text-emerald-600" }
+    : { t: "Pendente", c: "bg-amber-500/15 text-amber-700" };
 
 /**
  * Formulário de lançamento PJ — o mesmo para criar e editar.
@@ -440,7 +445,24 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
     },
     onSuccess: () => {
       invalidar();
-      toast({ title: "Conta baixada (paga)." });
+      toast({ title: "Conta baixada (efetivada)." });
+    },
+    onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
+  });
+
+  const reabrirMut = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`/api/empresas/${empresaId}/transacoes/${id}/reabrir`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || "Erro ao reabrir");
+      return res.json();
+    },
+    onSuccess: () => {
+      invalidar();
+      toast({ title: "Lançamento reaberto (pendente)." });
     },
     onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
   });
@@ -635,29 +657,29 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
                   <th className="text-left p-3">Classificação</th>
                   <th className="text-right p-3">Valor</th>
                   <th className="text-center p-3">Tipo</th>
+                  <th className="text-center p-3">Status</th>
                   <th className="text-center p-3">Ações</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
-                  <tr><td colSpan={7} className="text-center p-4">Carregando...</td></tr>
+                  <tr><td colSpan={8} className="text-center p-4">Carregando...</td></tr>
                 ) : filtradas.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="text-center p-4 text-muted-foreground">
+                    <td colSpan={8} className="text-center p-4 text-muted-foreground">
                       {transacoes.length === 0 ? "Nenhuma transação ainda." : "Nenhum lançamento com esses filtros."}
                     </td>
                   </tr>
                 ) : (
-                  filtradas.map((t) => (
+                  filtradas.map((t) => {
+                    const sb = stBadgePj(t.status || "Efetivada");
+                    return (
                     <tr key={t.id} className="border-b hover:bg-muted/30">
-                      <td className="p-3">{t.data_transacao}</td>
+                      <td className="p-3 whitespace-nowrap">{t.data_transacao}</td>
                       <td className="p-3">
                         {t.descricao}
                         {(t as any).reembolso_pessoal && (
                           <Badge variant="secondary" className="ml-2 text-[10px]">Reembolso recebido</Badge>
-                        )}
-                        {t.status === "Pendente" && (
-                          <Badge variant="outline" className="ml-2 text-[10px]">Pendente</Badge>
                         )}
                         {(t as any).parcela_num && (t as any).parcela_total && (t as any).parcela_total > 1 && (
                           <Badge variant="secondary" className="ml-2 text-[10px]">
@@ -705,15 +727,29 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
                         </Badge>
                       </td>
                       <td className="p-3 text-center">
+                        <span className={`px-2 py-1 rounded-lg text-xs ${sb.c}`}>{sb.t}</span>
+                      </td>
+                      <td className="p-3 text-center whitespace-nowrap">
                         {t.status === "Pendente" && (
                           <Button
                             variant="ghost"
                             size="icon"
-                            title="Baixar (marcar como pago)"
+                            title="Dar baixa (efetivar)"
                             onClick={() => pagarMut.mutate(t.id)}
                             disabled={pagarMut.isPending}
                           >
                             <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                          </Button>
+                        )}
+                        {t.status === "Efetivada" && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Reabrir (voltar a pendente)"
+                            onClick={() => reabrirMut.mutate(t.id)}
+                            disabled={reabrirMut.isPending}
+                          >
+                            <RotateCcw className="h-4 w-4 text-muted-foreground" />
                           </Button>
                         )}
                         <Button
@@ -734,7 +770,8 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
                         </Button>
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>

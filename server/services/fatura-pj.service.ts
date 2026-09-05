@@ -36,13 +36,59 @@ export async function listarCartoes(empresaId: number): Promise<any[]> {
   return r as any[];
 }
 
+/** "CC Nubank" / "Nubank" / "nubank pj" → mesma chave (evita cartão duplicado). */
+export function chaveNomeCartao(s: string): string {
+  return String(s || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .replace(/^cc\s+/, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/**
+ * Cadastra OU atualiza cartão pelo nome na empresa.
+ * O agente WhatsApp às vezes chama cadastrar_cartao_empresa 2× no mesmo fluxo —
+ * sem upsert isso gerava dois "CC Nubank" no seletor.
+ */
 export async function criarCartao(empresaId: number, b: any): Promise<any> {
+  const nome = String(b.nome || "").trim();
+  if (!nome) throw new Error("Nome do cartão é obrigatório");
+
+  const chave = chaveNomeCartao(nome);
+  const lista = await listarCartoes(empresaId);
+  const existente = lista.find((c) => chaveNomeCartao(c.nome) === chave);
+
+  if (existente) {
+    await db.execute(sql`
+      UPDATE empresas_cartoes SET
+        bandeira = COALESCE(${b.bandeira ?? null}, bandeira),
+        limite = COALESCE(${b.limite != null ? Number(b.limite).toFixed(2) : null}, limite),
+        dia_fechamento = COALESCE(${b.dia_fechamento != null ? Number(b.dia_fechamento) : null}, dia_fechamento),
+        dia_vencimento = COALESCE(${b.dia_vencimento != null ? Number(b.dia_vencimento) : null}, dia_vencimento),
+        ativo = true
+      WHERE id = ${existente.id}
+    `);
+    const r = await db.execute(sql`SELECT * FROM empresas_cartoes WHERE id = ${existente.id} LIMIT 1`);
+    return { ...(r as any[])[0], atualizado: true };
+  }
+
   const r = await db.execute(sql`
     INSERT INTO empresas_cartoes (empresa_id, nome, bandeira, limite, dia_fechamento, dia_vencimento, ativo)
-    VALUES (${empresaId}, ${b.nome}, ${b.bandeira ?? null}, ${b.limite ?? null}, ${b.dia_fechamento}, ${b.dia_vencimento}, true)
+    VALUES (
+      ${empresaId},
+      ${nome},
+      ${b.bandeira ?? null},
+      ${b.limite != null ? Number(b.limite).toFixed(2) : null},
+      ${Number(b.dia_fechamento)},
+      ${Number(b.dia_vencimento)},
+      true
+    )
     RETURNING *
   `);
-  return (r as any[])[0];
+  return { ...(r as any[])[0], atualizado: false };
 }
 
 export async function excluirCartao(cartaoId: number): Promise<void> {
@@ -195,6 +241,52 @@ export async function conciliarFatura(fatura: any, movimentos: Array<{ data: str
 
 export async function fecharFatura(faturaId: number): Promise<any> {
   const r = await db.execute(sql`UPDATE empresas_faturas SET status = 'fechada' WHERE id = ${faturaId} AND status <> 'paga' RETURNING *`);
+  return (r as any[])[0];
+}
+
+/**
+ * Reabre fatura:
+ * - fechada → aberta (só muda status)
+ * - paga → estorna a saída de caixa do pagamento e volta a aberta
+ */
+export async function reabrirFatura(fatura: any): Promise<any> {
+  if (fatura.status === "aberta") {
+    return fatura;
+  }
+
+  if (fatura.status === "fechada") {
+    const r = await db.execute(sql`
+      UPDATE empresas_faturas SET status = 'aberta'
+      WHERE id = ${fatura.id} AND status = 'fechada'
+      RETURNING *
+    `);
+    return (r as any[])[0] || fatura;
+  }
+
+  if (fatura.status !== "paga") {
+    throw new Error(`Não é possível reabrir fatura com status "${fatura.status}".`);
+  }
+
+  if (fatura.transacao_pagamento_id) {
+    await db.execute(sql`
+      DELETE FROM empresas_transacoes WHERE id = ${fatura.transacao_pagamento_id}
+    `);
+  }
+
+  // Compras voltam a “em aberto” no limite do cartão (sem data_pagamento).
+  await db.execute(sql`
+    UPDATE empresas_transacoes
+    SET data_pagamento = NULL
+    WHERE fatura_id = ${fatura.id}
+      AND COALESCE(movimenta_caixa, false) = false
+  `);
+
+  const r = await db.execute(sql`
+    UPDATE empresas_faturas
+    SET status = 'aberta', transacao_pagamento_id = NULL, data_pagamento = NULL
+    WHERE id = ${fatura.id}
+    RETURNING *
+  `);
   return (r as any[])[0];
 }
 

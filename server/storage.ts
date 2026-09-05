@@ -1947,6 +1947,7 @@ export class DbStorage implements IStorage {
       WHERE t.empresa_id = ${empresaId}
         AND t.data_transacao >= ${de}
         AND t.data_transacao <= ${ate}
+        AND t.status = 'Efetivada'
         AND NOT (COALESCE(t.reembolso_pessoal, false) = true AND t.status = 'Pendente')
         AND ${NAO_E_PAGAMENTO_FATURA}
       GROUP BY t.tipo, c.classificacao
@@ -2027,6 +2028,7 @@ export class DbStorage implements IStorage {
         AND t.tipo = 'Despesa'
         AND t.data_transacao >= ${de}
         AND t.data_transacao <= ${ate}
+        AND t.status = 'Efetivada'
         AND NOT (COALESCE(t.reembolso_pessoal, false) = true AND t.status = 'Pendente')
         AND ${NAO_E_PAGAMENTO_FATURA}
       GROUP BY c.classificacao
@@ -2045,6 +2047,7 @@ export class DbStorage implements IStorage {
         AND tipo = 'Receita'
         AND data_transacao >= ${de}
         AND data_transacao <= ${ate}
+        AND status = 'Efetivada'
         AND NOT (COALESCE(reembolso_pessoal, false) = true AND status = 'Pendente')
     `);
     receita = parseFloat((recRows as any[])[0]?.total) || 0;

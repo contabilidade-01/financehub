@@ -183,3 +183,36 @@ export async function baixarTransacaoEmpresa(
 
   return { ok: true, transacao: updated, anterior: transacao };
 }
+
+/**
+ * Reabre lançamento PJ: Efetivada → Pendente (some do realizado dos relatórios).
+ * Cartão: mantém competência/fatura; limpa data_pagamento.
+ * Conta/caixa: desliga movimenta_caixa até nova baixa.
+ */
+export async function reabrirTransacaoEmpresa(
+  empresaId: number,
+  transacaoId: number,
+  userId: number,
+): Promise<ResultadoAtualizacao> {
+  const empresa = await storage.getEmpresaById(empresaId);
+  if (!empresa) return { ok: false, status: 404, error: "Empresa não encontrada." };
+  if (empresa.usuario_id !== userId) return { ok: false, status: 403, error: "Acesso negado." };
+
+  const transacao = await storage.getEmpresaTransacaoById(transacaoId);
+  if (!transacao) return { ok: false, status: 404, error: "Transação não encontrada." };
+  if (transacao.empresa_id !== empresaId) {
+    return { ok: false, status: 403, error: "Transação não pertence a esta empresa." };
+  }
+  if (transacao.status !== "Efetivada") {
+    return { ok: false, status: 400, error: "Só é possível reabrir lançamento efetivado." };
+  }
+
+  const patch: any = {
+    status: "Pendente",
+    data_pagamento: null,
+    movimenta_caixa: false,
+  };
+
+  const updated = await storage.updateEmpresaTransacao(transacaoId, patch);
+  return { ok: true, transacao: updated, anterior: transacao };
+}

@@ -48,11 +48,14 @@ export type ResolverMeioPjOk = {
 
 export type ResolverMeioPjFail = {
   ok: false;
-  precisa: "conta" | "cartao" | "meio" | "cadastrar_conta";
+  precisa: "conta" | "cartao" | "meio" | "cadastrar_conta" | "cadastrar_cartao";
   mensagem: string;
   sugestoes: string[];
   contas?: string[];
   cartoes?: string[];
+  nome_sugerido?: string;
+  faltando?: string[];
+  instrucao_agente?: string;
 };
 
 const NOME_CAIXINHA = "Caixinha";
@@ -318,15 +321,24 @@ export async function resolverMeioPorNomePj(
     return { ok: true, conta_bancaria_id: conta.id, rotulo: conta.nome || conta.banco };
   }
 
-  if (/cartao|credito|nubank|inter|c6|itau|bradesco|santander|visa|master|elo|magalu/.test(alvo)) {
+  if (/cartao|credito|nubank|inter|c6|itau|bradesco|santander|visa|master|elo|magalu|hipercard|amex/.test(alvo)) {
     return {
       ok: false,
-      precisa: "cartao",
-      mensagem: `Não achei o cartão "${raw}". Qual o nome exato, ou cadastre com cadastrar_cartao_empresa (fechamento e vencimento)?`,
+      precisa: "cadastrar_cartao",
+      mensagem:
+        `Não achei o cartão "${raw}" nesta empresa.` +
+        (nomesCartoes.length
+          ? ` Você tem: ${nomesCartoes.join(", ")}. Ou cadastre o novo.`
+          : " Ainda não há cartão cadastrado.") +
+        ` Para cadastrar *${raw}*, diga o dia de fechamento e o dia de vencimento numa resposta só (ex.: "fecha dia 10, vence dia 17").`,
       sugestoes: nomesCartoes,
       contas: nomesBancarias,
       cartoes: nomesCartoes,
-    };
+      nome_sugerido: raw,
+      faltando: ["dia_fechamento", "dia_vencimento"],
+      instrucao_agente:
+        "Peça fechamento e vencimento numa pergunta só. Ao receber, chame cadastrar_cartao_empresa e EM SEGUIDA o lançamento (lancar_empresa ou parcelar_compra_empresa). Se o usuário já confirmou a compra (sim/isso/pode), NÃO peça confirmação de novo — execute.",
+    } as ResolverMeioPjFail;
   }
 
   return {

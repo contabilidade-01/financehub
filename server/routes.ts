@@ -1423,6 +1423,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/empresas/:id/transacoes/:transacaoId", combinedAuth, empresaTransacaoCtrl.getEmpresaTransacao);
   app.put("/api/empresas/:id/transacoes/:transacaoId", combinedAuth, empresaTransacaoCtrl.updateEmpresaTransacao);
   app.put("/api/empresas/:id/transacoes/:transacaoId/pagar", combinedAuth, empresaTransacaoCtrl.pagarEmpresaTransacao);
+  app.put("/api/empresas/:id/transacoes/:transacaoId/reabrir", combinedAuth, empresaTransacaoCtrl.reabrirEmpresaTransacao);
   app.delete("/api/empresas/:id/transacoes/:transacaoId", combinedAuth, empresaTransacaoCtrl.deleteEmpresaTransacao);
 
   // Formas de pagamento PJ (legado — POST bloqueado; meio = conta/Caixinha/cartão)
@@ -1451,6 +1452,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/empresas/:id/cartoes/:cartaoId/saldo", combinedAuth, empresaFaturaCtrl.saldoCartao);
   app.get("/api/empresas/:id/faturas/:faturaId", combinedAuth, empresaFaturaCtrl.detalheFatura);
   app.post("/api/empresas/:id/faturas/:faturaId/fechar", combinedAuth, empresaFaturaCtrl.fecharFatura);
+  app.post("/api/empresas/:id/faturas/:faturaId/reabrir", combinedAuth, empresaFaturaCtrl.reabrirFatura);
   app.post("/api/empresas/:id/faturas/:faturaId/pagar", combinedAuth, empresaFaturaCtrl.pagarFatura);
   app.post("/api/empresas/:id/faturas/:faturaId/conciliar", combinedAuth, uploadFatura.single("arquivo"), empresaFaturaCtrl.conciliarFatura);
 

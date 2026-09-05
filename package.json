@@ -29,6 +29,7 @@
     "test:isolamento-contas": "tsx scripts/testar-isolamento-contas.ts",
     "test:mover": "tsx scripts/testar-mover-meio.ts",
     "test:meio": "tsx scripts/testar-parse-meio.ts",
+    "test:chave-cartao": "tsx scripts/testar-chave-cartao.ts",
     "test:segregacao-pj": "tsx scripts/testar-segregacao-pj.ts",
     "test:extrato-saldo": "tsx scripts/testar-extrato-saldo.ts",
     "test:segregacao-regras": "tsx scripts/testar-segregacao-pj-regras.ts",

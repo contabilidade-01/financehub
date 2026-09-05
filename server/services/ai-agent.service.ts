@@ -800,7 +800,7 @@ function buildTools(ctx?: ToolContext) {
       type: "function" as const,
       function: {
         name: "lancar_empresa",
-        description: "Lança uma receita ou despesa NA EMPRESA (PJ) à vista. Se a compra for PARCELADA no cartão, use 'parcelar_compra_empresa'. forma_pagamento = conta bancária, Caixinha (dinheiro) OU cartão. Se a mensagem já disser dinheiro/espécie/caixa, a tool usa a Caixinha sozinha. PIX/boleto/débito/TED sozinhos pedem a conta (ou cadastro se não houver). Sem meio na frase nem no arg, devolve precisa_meio.",
+        description: "Lança receita/despesa NA EMPRESA (PJ) à vista — inclusive compra no CARTÃO em 1x (entra na fatura vigente). Só use parcelar_compra_empresa se o usuário DISSE que é parcelado (3x, em 5 vezes…). forma_pagamento = conta, Caixinha/dinheiro ou cartão. Dinheiro na frase → Caixinha. PIX/boleto pedem conta.",
         parameters: {
           type: "object",
           properties: {
@@ -831,7 +831,7 @@ function buildTools(ctx?: ToolContext) {
       type: "function" as const,
       function: {
         name: "parcelar_compra_empresa",
-        description: "Compra PARCELADA no CARTÃO da empresa (PJ). Use quando a mensagem tiver 'parcelada', 'Nx', 'em Nx', 'em N vezes'. Exemplos: '3x100 no Itaú', 'compra parcelada de 300 em 3x', '5x de 35 no Magalu'. Cria N lançamentos — a 1ª na fatura VIGENTE e as demais nos meses seguintes. OBRIGATÓRIO cartão (ou deixe vazio se só houver 1 cadastrado). Informe valor_parcela OU valor_total. Se faltar cartão/valor/qtd, NÃO invente — a tool devolve precisa_* para você perguntar.",
+        description: "Compra PARCELADA (2+ vezes) no CARTÃO da empresa. NÃO use se o usuário só disse 'no cartão'/'no Nubank' sem falar em parcelas — nesse caso use lancar_empresa (à vista 1x na fatura). Use quando houver '3x', 'em 5 vezes', 'parcelada em Nx'. Cria N lançamentos; 1ª na fatura vigente. Informe valor_parcela OU valor_total.",
         parameters: {
           type: "object",
           properties: {
@@ -1029,7 +1029,7 @@ function buildTools(ctx?: ToolContext) {
       type: "function" as const,
       function: {
         name: "cadastrar_cartao_empresa",
-        description: "Cadastra um cartão de crédito DA EMPRESA. Precisa do dia de fechamento e do dia de vencimento — pergunte os dois de uma vez se o usuário não disser. NUNCA invente esses dias.",
+        description: "Cadastra OU atualiza um cartão de crédito DA EMPRESA (upsert pelo nome: 'Nubank' = 'CC Nubank'). Se já existir, só atualiza dias/limite — NÃO cria duplicata. Precisa do dia de fechamento e do dia de vencimento — pergunte os dois de uma vez se o usuário não disser. NUNCA invente esses dias. Chame no máximo UMA vez por cartão no fluxo.",
         parameters: {
           type: "object",
           properties: {
@@ -2128,21 +2128,35 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           parseParcelamentoDoTexto,
         } = await import("./parse-parcelamento");
         const msgUser = ctx.userMessage || "";
-        const pareceParcelado =
-          parcelasN > 1 || textoSugereParcelamento(msgUser) || textoSugereParcelamento(String(args.descricao || ""));
-        // "compra parcelada…" mesmo se o modelo esqueceu de passar parcelas.
-        if (pareceParcelado) {
-          const doTexto = parseParcelamentoDoTexto(`${msgUser} ${args.descricao || ""}`);
+        // Só a mensagem do usuário conta — ignore descrição inventada "Compra parcelada".
+        const doTextoParc = parseParcelamentoDoTexto(msgUser);
+        const qtdParcelas =
+          parcelasN > 1 ? parcelasN : (Number(doTextoParc.parcelas) >= 2 ? Number(doTextoParc.parcelas) : 0);
+        const userFalouParcelado = textoSugereParcelamento(msgUser);
+
+        // Cartão sem falar em parcelas = à vista (1x) via lancar_empresa.
+        // Parcelar só com 2+ parcelas explícitas (3x, em 5 vezes…).
+        if (qtdParcelas >= 2) {
           return executeTool("parcelar_compra_empresa", {
             ...args,
             tipo: "Despesa",
-            valor_parcela: args.valor_parcela ?? doTexto.valorParcela ?? undefined,
-            valor_total: args.valor_total ?? (doTexto.modo === "total" ? doTexto.valorTotal : undefined),
-            parcelas: parcelasN > 1 ? parcelasN : (doTexto.parcelas || undefined),
-            forma_pagamento: args.forma_pagamento || doTexto.cartaoHint || meioTexto || undefined,
+            valor_parcela: args.valor_parcela ?? doTextoParc.valorParcela ?? undefined,
+            valor_total: args.valor_total ?? (doTextoParc.modo === "total" ? doTextoParc.valorTotal : undefined),
+            parcelas: qtdParcelas,
+            forma_pagamento: args.forma_pagamento || doTextoParc.cartaoHint || meioTexto || undefined,
             data_inicio: args.data_transacao || args.data_inicio,
             descricao: args.descricao || "Compra parcelada",
           }, ctx);
+        }
+        if (userFalouParcelado && qtdParcelas < 2) {
+          return JSON.stringify({
+            error: "Faltou a quantidade de parcelas.",
+            precisa_valor: true,
+            precisa: "parcelas",
+            mensagem:
+              "Você falou em parcelado — em quantas vezes? (ex.: 3x, 5x de 35). Se foi à vista no cartão, diga \"à vista\" ou \"1x\".",
+            exemplos: ["3x de 100 no Nubank", "à vista no Nubank"],
+          });
         }
 
         if (!(Number(args.valor) > 0)) {
@@ -2166,6 +2180,9 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
             contas: resolvido.contas,
             cartoes: resolvido.cartoes,
             mensagem: resolvido.mensagem,
+            nome_sugerido: (resolvido as any).nome_sugerido,
+            faltando: (resolvido as any).faltando,
+            instrucao_agente: (resolvido as any).instrucao_agente,
           });
         }
 
@@ -2327,16 +2344,18 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
 
         const resolvido = await resolverMeioPorNomePj(empresa.id, ctx.userId, cartaoTexto);
         if (!resolvido.ok) {
-          // Nome novo: orientar cadastrar ou escolher da lista — só cartões.
           return JSON.stringify({
             error: resolvido.mensagem,
             precisa_meio: true,
-            precisa: "cartao",
+            precisa: resolvido.precisa === "cadastrar_cartao" ? "cadastrar_cartao" : "cartao",
             sugestoes: cartoes.map((c: any) => c.nome),
             cartoes: cartoes.map((c: any) => c.nome),
-            mensagem: cartoes.length
-              ? `Parcelado exige cartão. Qual destes? ${cartoes.map((c: any) => c.nome).join(", ")} — ou diga o nome e os dias de fechamento/vencimento para cadastrar.`
-              : "Compra parcelada precisa de cartão. Qual o nome? Posso cadastrar se você passar fechamento e vencimento.",
+            mensagem: resolvido.mensagem,
+            nome_sugerido: (resolvido as any).nome_sugerido || cartaoTexto,
+            faltando: (resolvido as any).faltando || ["dia_fechamento", "dia_vencimento"],
+            instrucao_agente:
+              (resolvido as any).instrucao_agente ||
+              "Peça fechamento e vencimento numa pergunta só; cadastrar_cartao_empresa e em seguida parcelar. Se já confirmou (sim/isso), execute sem pedir de novo.",
           });
         }
         // Preferir cartão de mesmo nome se o texto casou só com conta.
@@ -2352,22 +2371,31 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
             return JSON.stringify({
               error: "Parcelamento exige cartão de crédito (não conta bancária).",
               precisa_meio: true,
-              precisa: "cartao",
+              precisa: "cadastrar_cartao",
               sugestoes: cartoes.map((c: any) => c.nome),
               cartoes: cartoes.map((c: any) => c.nome),
+              nome_sugerido: cartaoTexto,
+              faltando: ["dia_fechamento", "dia_vencimento"],
               mensagem: cartoes.length
                 ? `"${cartaoTexto}" é conta bancária. Parcelado é no cartão — qual cartão? ${cartoes.map((c: any) => c.nome).join(", ")}.`
-                : `"${cartaoTexto}" é conta. Cadastre um cartão (fechamento e vencimento) para parcelar.`,
+                : `"${cartaoTexto}" parece cartão novo. Diga fechamento e vencimento para cadastrar e parcelar.`,
             });
           }
         }
         if (!cartaoId) {
           return JSON.stringify({
-            error: "Parcelamento exige cartão de crédito (não conta bancária).",
+            error: "Parcelamento exige cartão de crédito.",
             precisa_meio: true,
-            precisa: "cartao",
+            precisa: "cadastrar_cartao",
             sugestoes: cartoes.map((c: any) => c.nome),
             cartoes: cartoes.map((c: any) => c.nome),
+            nome_sugerido: cartaoTexto,
+            faltando: ["dia_fechamento", "dia_vencimento"],
+            mensagem: cartoes.length
+              ? `Não achei o cartão "${cartaoTexto}". Qual destes? ${cartoes.map((c: any) => c.nome).join(", ")} — ou diga fechamento e vencimento para cadastrar.`
+              : `Não há cartão "${cartaoTexto}". Diga o dia de fechamento e o dia de vencimento numa resposta só para eu cadastrar e registrar a compra.`,
+            instrucao_agente:
+              "Peça fechamento+vencimento numa pergunta só. cadastrar_cartao_empresa e em seguida parcelar_compra_empresa. Se o usuário já confirmou (sim/isso), não peça confirmação de novo.",
           });
         }
 
@@ -2721,14 +2749,17 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           dia_fechamento: args.dia_fechamento,
           dia_vencimento: args.dia_vencimento,
         });
+        const verbo = cartao.atualizado ? "atualizado" : "cadastrado";
         return JSON.stringify({
           success: true,
           cartao: cartao.nome,
           id: cartao.id,
+          atualizado: !!cartao.atualizado,
           dia_fechamento: cartao.dia_fechamento,
           dia_vencimento: cartao.dia_vencimento,
           limite: cartao.limite,
-          dica: "O cartão já aparece em Faturas PJ no app.",
+          mensagem: `Cartão *${cartao.nome}* ${verbo}. Já pode lançar a compra nele.`,
+          dica: "Se o cartão já existia (mesmo nome), só atualizou — não cria duplicata. Em seguida chame lancar_empresa ou parcelar_compra_empresa.",
         });
       }
 
@@ -3002,10 +3033,14 @@ export async function runAgent(
   5. Se a tool devolver precisa_meio / aviso_meio, use mensagem/sugestões/contas/cartoes.
 - **NÃO CHUTE a conta.** Só preencha 'conta' quando o usuário NOMEAR a conta ("lança no aluguel", "isso é folha") ou quando a descrição disser exatamente o que é ("compra de mercadoria", "paguei o DAS"). Nos demais casos, OMITA 'conta': o sistema classifica lendo a descrição e o plano inteiro da empresa, e acerta mais do que um palpite.
 
-### Compra PARCELADA (cartão) — OBRIGATÓRIO seguir
-Dispare 'parcelar_compra_empresa' (NUNCA 'parcelar_compra' do PF, NUNCA várias 'lancar_empresa') quando a mensagem tiver qualquer sinal de parcelamento:
-- palavras: parcelada, parcelado, parcelamento, dividido em
-- padrões: "3x100", "3x de 100", "5x de 35", "em 3x", "em 3 vezes", "300 em 3x", "valor de 300 em 3x"
+### Cartão de crédito — à vista é o padrão
+- Disse "no cartão" / "no Nubank" / "no crédito" **sem** falar em parcelas (3x, em 5 vezes, parcelada em…) → é **à vista (1x)** na fatura. Use **só** 'lancar_empresa' com forma_pagamento = nome do cartão. NÃO pergunte quantas parcelas. NÃO use 'parcelar_compra_empresa'. NÃO invente a descrição "Compra parcelada".
+- Só dispare 'parcelar_compra_empresa' quando o usuário **disse** que é parcelado com quantidade (ou "parcelada" sem Nx — aí pergunte "em quantas vezes?").
+
+### Compra PARCELADA (cartão) — só quando o usuário parcelou
+Dispare 'parcelar_compra_empresa' (NUNCA 'parcelar_compra' do PF, NUNCA várias 'lancar_empresa') somente com sinal claro de parcelamento **na mensagem do usuário**:
+- padrões: "3x100", "3x de 100", "5x de 35", "em 3x", "em 3 vezes", "300 em 3x"
+- palavra "parcelada/parcelado" **com** quantidade, ou sozinha → pergunte quantas vezes (não grave 1x como parcelado)
 
 **Como montar os args (eficiência — não invente):**
 | Frase do usuário | parcelas | valor_parcela | valor_total |
@@ -3020,11 +3055,13 @@ Dispare 'parcelar_compra_empresa' (NUNCA 'parcelar_compra' do PF, NUNCA várias 
 **Cenários incompletos — PERGUNTE, não grave:**
 1. Sem cartão + vários cartões → pergunte "Em qual cartão?" (listar_cartoes_empresa / sugestões da tool).
 2. Sem cartão + **só 1** cartão → chame a tool sem forma_pagamento; o sistema usa esse cartão e avisa.
-3. Sem cartão + nenhum cadastrado → pergunte o nome; ofereça cadastrar (cadastrar_cartao_empresa).
-4. Só "compra parcelada de 300" sem Nx → pergunte "Em quantas vezes?".
-5. Só "em 3x no Itaú" sem valor → pergunte o valor (parcela ou total).
-6. "no crédito" / "no cartão" sem nome → trate como falta de cartão (passos 1–3).
-7. Tool devolve precisa_meio / precisa_valor → use a mensagem/sugestões; NÃO invente Magalu/Itaú/valores.
+3. Tool devolve precisa=cadastrar_cartao (cartão citado ainda não existe, ex. Nubank) → peça **fechamento e vencimento numa pergunta só**. Ao receber, chame 'cadastrar_cartao_empresa' e **EM SEGUIDA** 'lancar_empresa' ou 'parcelar_compra_empresa'. NÃO faça fila de perguntas (fechamento → parcelas → confirmar → confirmar de novo).
+4. Usuário respondeu sim/isso/pode depois que você ofereceu registrar → **chame a tool agora**; não peça "Confirmando?" de novo.
+5. Compra no cartão **sem** o usuário falar em parcelas → 'lancar_empresa' à vista (1x). Nunca pergunte "quantas parcelas?" nem use parcelar com 1x.
+6. Só "compra parcelada" / "parcelado" sem Nx → pergunte "Em quantas vezes?" (não invente 1x nem 3x).
+7. Só "em 3x no Itaú" sem valor → pergunte o valor (parcela ou total).
+8. "no crédito" / "no cartão" sem nome → trate como falta de cartão (passos 1–3).
+9. Tool devolve precisa_meio / precisa_valor → use a mensagem/sugestões/instrucao_agente; NÃO invente Magalu/Itaú/valores.
 
 **Depois de gravar:** confirme em 1 frase: N× de R$X no cartão Y, 1ª na fatura competência_primeira, total R$Z.
 
@@ -3052,7 +3089,8 @@ Este usuário NÃO tem carteira pessoal ativa. Toda consulta, edição e cadastr
 - Editar/corrigir um lançamento → 'buscar_transacao_empresa_por_filtro' → 'atualiza_transacao_empresa' (siga o fluxo da seção 5, sempre confirmando antes).
 - Criar conta no plano → 'criar_conta_empresa'. Para criar E mover lançamento que caiu em Outras → 'criar_conta_e_mover_empresa'. O CÓDIGO é gerado automaticamente: não peça nem invente.
 - Cartão de crédito da empresa → 'cadastrar_cartao_empresa' (peça dia de fechamento e dia de vencimento numa pergunta só; nunca invente esses dias), 'listar_cartoes_empresa', 'fatura_cartao_empresa', 'saldo_cartao_empresa' (limite/usado/disponível).
-- Compra parcelada no cartão → 'parcelar_compra_empresa' (NÃO use parcelar_compra do PF).
+- Compra no cartão à vista (sem o usuário dizer parcelado) → 'lancar_empresa' com o nome do cartão (1x na fatura).
+- Compra parcelada (2+ vezes) → 'parcelar_compra_empresa' (NÃO use parcelar_compra do PF).
 - Meio de pagamento = CONTA BANCÁRIA, Caixinha (dinheiro) ou CARTÃO. Dinheiro na frase → Caixinha sem perguntar. Pix/boleto → conta bancária (ou 'criar_conta_bancaria_empresa' se não houver). Cartão novo → 'cadastrar_cartao_empresa' (fechamento + vencimento; nunca invente).
 - Conta bancária nova (Itaú, Bradesco…) → 'criar_conta_bancaria_empresa' (confirme antes). NÃO confundir com 'criar_conta_empresa' (plano de contas).
 - Baixar / marcar como paga uma conta Pendente → 'pagar_transacao_empresa' (depois de confirmar o lançamento).

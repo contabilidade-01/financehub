@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, CreditCard, Lock, CheckCircle2, Trash2, ShoppingCart, FileUp } from "lucide-react";
+import { Plus, CreditCard, Lock, Unlock, CheckCircle2, Trash2, ShoppingCart, FileUp, RotateCcw } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import PeriodoSelector from "@/components/shared/PeriodoSelector";
 import { Periodo, rangeDoPeriodo, rotuloPeriodo } from "@/lib/period";
@@ -133,6 +133,11 @@ export default function PjFaturas({ empresaId }: { empresaId: number }) {
   const fecharF = useMutation({
     mutationFn: (id: number) => apiRequest(`${base}/faturas/${id}/fechar`, { method: "POST", data: {} }),
     onSuccess: () => { inval(); toast({ title: "Fatura fechada" }); },
+    onError: (e: any) => toast({ title: "Erro", description: e?.error || e?.message, variant: "destructive" }),
+  });
+  const reabrirF = useMutation({
+    mutationFn: (id: number) => apiRequest(`${base}/faturas/${id}/reabrir`, { method: "POST", data: {} }),
+    onSuccess: () => { inval(); toast({ title: "Fatura reaberta" }); },
     onError: (e: any) => toast({ title: "Erro", description: e?.error || e?.message, variant: "destructive" }),
   });
   const pagarF = useMutation({
@@ -418,8 +423,26 @@ export default function PjFaturas({ empresaId }: { empresaId: number }) {
               </div>
 
               <div className="flex justify-end gap-2">
-                {detalhe.fatura.status === "aberta" && <Button variant="outline" onClick={() => fecharF.mutate(detalhe.fatura.id)} disabled={fecharF.isPending}><Lock className="h-4 w-4 mr-1" /> Fechar</Button>}
-                {detalhe.fatura.status !== "paga" && <Button onClick={() => openPagar({ ...detalhe.fatura, total: detalhe.total })} disabled={detalhe.total <= 0}><CheckCircle2 className="h-4 w-4 mr-1" /> Pagar</Button>}
+                {detalhe.fatura.status === "aberta" && (
+                  <Button variant="outline" onClick={() => fecharF.mutate(detalhe.fatura.id)} disabled={fecharF.isPending}>
+                    <Lock className="h-4 w-4 mr-1" /> Fechar
+                  </Button>
+                )}
+                {detalhe.fatura.status === "fechada" && (
+                  <Button variant="outline" onClick={() => reabrirF.mutate(detalhe.fatura.id)} disabled={reabrirF.isPending}>
+                    <Unlock className="h-4 w-4 mr-1" /> Reabrir
+                  </Button>
+                )}
+                {detalhe.fatura.status === "paga" && (
+                  <Button variant="outline" onClick={() => reabrirF.mutate(detalhe.fatura.id)} disabled={reabrirF.isPending}>
+                    <RotateCcw className="h-4 w-4 mr-1" /> Reabrir
+                  </Button>
+                )}
+                {detalhe.fatura.status !== "paga" && (
+                  <Button onClick={() => openPagar({ ...detalhe.fatura, total: detalhe.total })} disabled={detalhe.total <= 0}>
+                    <CheckCircle2 className="h-4 w-4 mr-1" /> Pagar
+                  </Button>
+                )}
               </div>
             </div>
           )}

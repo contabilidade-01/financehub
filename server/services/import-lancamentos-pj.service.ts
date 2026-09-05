@@ -11,7 +11,7 @@ import * as XLSX from "xlsx";
 import { db } from "../db";
 import { sql } from "drizzle-orm";
 import { storage } from "../storage";
-import { criarCartao, listarCartoes } from "./fatura-pj.service";
+import { criarCartao, listarCartoes, chaveNomeCartao } from "./fatura-pj.service";
 
 const FORMAS_GENERICAS =
   /^(boleto|d[ée]bito|cart[aã]o([_\s-]?de)?[_\s-]?d[ée]bito|cart[aã]o([_\s-]?de)?[_\s-]?cr[ée]dito|cartao_credito|cartao_debito|cart[aã]o|pix|dinheiro|transfer[êe]ncia|ted|doc|esp[ée]cie|—|-)?$/i;
@@ -321,7 +321,8 @@ async function resolveConta(empresaId: number, nomeCategoria: string, tipo: "Des
 
 async function resolveCartao(empresaId: number, nome: string, diaVenc: number | null) {
   const lista = await listarCartoes(empresaId);
-  const hit = lista.find((c) => norm(c.nome) === norm(nome));
+  const chave = chaveNomeCartao(nome);
+  const hit = lista.find((c) => chaveNomeCartao(c.nome) === chave);
   if (hit) return hit;
   const venc = diaVenc && diaVenc >= 1 && diaVenc <= 31 ? diaVenc : 10;
   const fech = Math.max(1, venc - 7);
