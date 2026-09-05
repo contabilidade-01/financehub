@@ -277,6 +277,9 @@ export async function createTransaction(req: Request, res: Response) {
         contaBancariaId: isCartao ? null : (transactionData as any).conta_bancaria_id,
         usuarioId: userId,
         status: isCartao ? "Pendente" : (transactionData.status || "Efetivada"),
+        competenciaInicial: typeof req.body?.competencia_inicial === "string"
+          ? req.body.competencia_inicial
+          : null,
       });
       const first = await storage.getTransactionById(result.ids[0]);
       return res.status(201).json({ ...first, compra_grupo: result.compra_grupo, parcelas_criadas: result.ids.length });

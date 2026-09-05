@@ -3,6 +3,8 @@
  */
 import {
   competenciaDaCompra,
+  competenciaMaisMeses,
+  datasDaCompetencia,
   ehFormaCartaoCredito,
   valoresParcelas,
 } from "../server/services/fatura-core";
@@ -148,6 +150,42 @@ const fail = (nome: string, detalhe: string) => {
   const bissexto = competenciaDaCompra("2028-01-10", 1, 29);
   if (bissexto.dataVenc !== "2028-02-29") fail("29/02 em ano bissexto", bissexto.dataVenc);
   else ok("29 de fevereiro existe em ano bissexto");
+}
+
+// --- Parcelamento: cada parcela numa fatura diferente ---
+{
+  // Ancorar a competencia e o que o parcelamento faz hoje. Reaplicar a regra de
+  // fechamento sobre a data deslocada colocava duas parcelas na MESMA fatura
+  // sempre que a compra caia num dia que o mes seguinte nao tem.
+  const casos: Array<[string, number, number, number]> = [
+    ["2026-01-31", 30, 7, 3],   // fevereiro nao tem dia 31
+    ["2026-01-31", 28, 10, 4],
+    ["2026-03-31", 30, 15, 2],
+    ["2026-01-29", 28, 5, 13],  // atravessa fevereiro e a virada de ano
+  ];
+  let colisao = false;
+  for (const [dataCompra, fech, venc, n] of casos) {
+    const base = competenciaDaCompra(dataCompra, fech, venc).competencia;
+    const comps = Array.from({ length: n }, (_, i) => competenciaMaisMeses(base, i));
+    if (new Set(comps).size !== n) {
+      colisao = true;
+      fail(`parcelas repetem fatura (${dataCompra}, fecha ${fech})`, comps.join(", "));
+    }
+  }
+  if (!colisao) ok("cada parcela cai numa competencia distinta, inclusive em fim de mes");
+
+  // A competencia ancorada mantem as datas certas da fatura.
+  const d = datasDaCompetencia("2026-02", 30, 7);
+  if (d.dataFech !== "2026-02-28" || d.dataVenc !== "2026-03-07") {
+    fail("datasDaCompetencia fev/fechamento 30", `${d.dataFech} / ${d.dataVenc}`);
+  } else ok("fechamento 30 em fevereiro vira 28 e o vencimento vai para marco");
+
+  // Mesmo resultado da regra por data quando nao ha fim de mes envolvido.
+  const porData = competenciaDaCompra("2026-03-20", 10, 17);
+  const porComp = datasDaCompetencia(porData.competencia, 10, 17);
+  if (porComp.dataFech !== porData.dataFech || porComp.dataVenc !== porData.dataVenc) {
+    fail("datasDaCompetencia diverge de competenciaDaCompra", JSON.stringify([porData, porComp]));
+  } else ok("as duas rotas dao as mesmas datas de fechamento e vencimento");
 }
 
 console.log(falhas ? `\n${falhas} falha(s)` : "\nIsolamento + helpers: OK");

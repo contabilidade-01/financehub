@@ -3069,12 +3069,15 @@ export async function criarCompraParcelada(params: {
   contaBancariaId?: number | null;
   usuarioId?: number;
   status?: string;
+  /** Fatura da 1ª parcela (AAAA-MM). Vazio = a que o fechamento do cartão indicar. */
+  competenciaInicial?: string | null;
 }): Promise<{ compra_grupo: string; ids: number[]; parcelas: number; valor_parcela: number }> {
   const {
     walletId, categoriaId, descricao, parcelas, formaPagamentoId, dataInicio,
     contaBancariaId, usuarioId, status = "Efetivada",
   } = params;
-  const { valoresParcelas } = await import("./services/fatura-core");
+  const { valoresParcelas, competenciaDaCompra, competenciaMaisMeses } =
+    await import("./services/fatura-core");
   const total = params.valorTotal != null
     ? Number(params.valorTotal)
     : Number(params.valorParcela || 0) * parcelas;
@@ -3088,6 +3091,19 @@ export async function criarCompraParcelada(params: {
     const { cartaoPfDoUsuario } = await import("./services/fatura-pf.service");
     cartao = await cartaoPfDoUsuario(formaPagamentoId, usuarioId);
   }
+
+  // A fatura da 1ª parcela é decidida UMA vez; as seguintes andam de mês em mês.
+  // Antes cada parcela reaplicava a regra de fechamento sobre a data deslocada,
+  // e no fim de mês duas parcelas caíam na mesma fatura.
+  const competenciaBase = cartao
+    ? (params.competenciaInicial && /^\d{4}-\d{2}$/.test(params.competenciaInicial)
+        ? params.competenciaInicial
+        : competenciaDaCompra(
+            dataInicio,
+            Number(cartao.dia_fechamento) || 1,
+            Number(cartao.dia_vencimento) || 10,
+          ).competencia)
+    : null;
 
   for (let i = 0; i < parcelas; i++) {
     const mesTotal = (m - 1) + i;
@@ -3105,9 +3121,11 @@ export async function criarCompraParcelada(params: {
     let contaId = contaBancariaId ?? null;
     let statusParcela = status;
 
-    if (cartao && usuarioId) {
-      const { resolverFaturaPf } = await import("./services/fatura-pf.service");
-      const { fatura, competencia: comp } = await resolverFaturaPf(usuarioId, walletId, cartao, dataISO);
+    if (cartao && usuarioId && competenciaBase) {
+      const { resolverFaturaPfPorCompetencia } = await import("./services/fatura-pf.service");
+      const { fatura, competencia: comp } = await resolverFaturaPfPorCompetencia(
+        usuarioId, walletId, cartao, competenciaMaisMeses(competenciaBase, i),
+      );
       faturaId = fatura.id;
       competencia = comp;
       movimentaCaixa = false;
@@ -3144,12 +3162,15 @@ export async function criarCompraParceladaPj(params: {
   status?: string;
   origem?: string;
   dataVencimentoBase?: string | null;
+  /** Fatura da 1ª parcela (AAAA-MM). Vazio = a que o fechamento do cartão indicar. */
+  competenciaInicial?: string | null;
 }): Promise<{ compra_grupo: string; ids: number[]; parcelas: number; valor_parcela: number }> {
   const {
     empresaId, userId, categoriaId, descricao, parcelas, dataInicio,
     cartaoId, contaBancariaId, status = "Efetivada", origem = "manual",
   } = params;
-  const { valoresParcelas } = await import("./services/fatura-core");
+  const { valoresParcelas, competenciaDaCompra, competenciaMaisMeses } =
+    await import("./services/fatura-core");
   const valores = valoresParcelas(Number(params.valorTotal) || 0, parcelas);
   const grupo = randomUUID();
   const [y, m, d] = dataInicio.split("-").map(Number);
@@ -3163,6 +3184,17 @@ export async function criarCompraParceladaPj(params: {
       throw new Error("Cartão não encontrado nesta empresa.");
     }
   }
+
+  // Mesma âncora do PF: competência da 1ª parcela + i meses.
+  const competenciaBase = cartao
+    ? (params.competenciaInicial && /^\d{4}-\d{2}$/.test(params.competenciaInicial)
+        ? params.competenciaInicial
+        : competenciaDaCompra(
+            dataInicio,
+            Number(cartao.dia_fechamento) || 1,
+            Number(cartao.dia_vencimento) || 10,
+          ).competencia)
+    : null;
 
   for (let i = 0; i < parcelas; i++) {
     const mesTotal = (m - 1) + i;
@@ -3182,9 +3214,11 @@ export async function criarCompraParceladaPj(params: {
     let metodo: string | null = null;
     let statusParcela = status;
 
-    if (cartao) {
-      const { resolverFaturaDoCartao } = await import("./services/fatura-pj.service");
-      const r = await resolverFaturaDoCartao(empresaId, cartao, dataISO);
+    if (cartao && competenciaBase) {
+      const { resolverFaturaPorCompetencia } = await import("./services/fatura-pj.service");
+      const r = await resolverFaturaPorCompetencia(
+        empresaId, cartao, competenciaMaisMeses(competenciaBase, i),
+      );
       faturaId = r.fatura.id;
       competencia = r.competencia;
       metodo = r.metodo;

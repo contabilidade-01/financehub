@@ -10,7 +10,7 @@
  */
 import { db } from "../db";
 import { sql } from "drizzle-orm";
-import { competenciaDaCompra, num } from "./fatura-core";
+import { competenciaDaCompra, datasDaCompetencia, num } from "./fatura-core";
 
 export { competenciaDaCompra };
 
@@ -77,6 +77,21 @@ export async function resolverFaturaDoCartao(
   );
   const fatura = await getOrCreateFatura(empresaId, cartao.id, competencia, dataFech, dataVenc);
   return { fatura, competencia, metodo: cartao.nome };
+}
+
+/** Fatura de uma competência já decidida (parcela i = competência da 1ª + i meses). */
+export async function resolverFaturaPorCompetencia(
+  empresaId: number,
+  cartao: { id: number; dia_fechamento: number; dia_vencimento: number; nome: string },
+  competencia: string,
+): Promise<{ fatura: any; competencia: string; metodo: string }> {
+  const { competencia: comp, dataFech, dataVenc } = datasDaCompetencia(
+    competencia,
+    Number(cartao.dia_fechamento),
+    Number(cartao.dia_vencimento),
+  );
+  const fatura = await getOrCreateFatura(empresaId, cartao.id, comp, dataFech, dataVenc);
+  return { fatura, competencia: comp, metodo: cartao.nome };
 }
 
 // Registra uma compra no cartão (competência, não mexe no caixa).

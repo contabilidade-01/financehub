@@ -5,7 +5,7 @@
  */
 import { db } from "../db";
 import { sql } from "drizzle-orm";
-import { competenciaDaCompra, ehFormaCartaoCredito, num } from "./fatura-core";
+import { competenciaDaCompra, datasDaCompetencia, ehFormaCartaoCredito, num } from "./fatura-core";
 
 export { ehFormaCartaoCredito };
 
@@ -76,6 +76,22 @@ export async function resolverFaturaPf(
   );
   const fatura = await getOrCreateFaturaPf(usuarioId, carteiraId, cartao.id, competencia, dataFech, dataVenc);
   return { fatura, competencia };
+}
+
+/** Fatura de uma competência já decidida (parcela i = competência da 1ª + i meses). */
+export async function resolverFaturaPfPorCompetencia(
+  usuarioId: number,
+  carteiraId: number,
+  cartao: { id: number; dia_fechamento: number; dia_vencimento: number; nome: string },
+  competencia: string,
+): Promise<{ fatura: any; competencia: string }> {
+  const { competencia: comp, dataFech, dataVenc } = datasDaCompetencia(
+    competencia,
+    Number(cartao.dia_fechamento) || 1,
+    Number(cartao.dia_vencimento) || 10,
+  );
+  const fatura = await getOrCreateFaturaPf(usuarioId, carteiraId, cartao.id, comp, dataFech, dataVenc);
+  return { fatura, competencia: comp };
 }
 
 export async function getFaturaTotalPf(faturaId: number): Promise<number> {

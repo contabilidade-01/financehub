@@ -20,7 +20,21 @@ export function competenciaDaCompra(dataISO: string, diaFech: number, diaVenc: n
     mes += 1;
     if (mes > 11) { mes = 0; ano += 1; }
   }
-  const competencia = `${ano}-${pad2(mes + 1)}`;
+  return datasDaCompetencia(`${ano}-${pad2(mes + 1)}`, diaFech, diaVenc);
+}
+
+/**
+ * Fechamento e vencimento de uma competência já conhecida.
+ *
+ * Existe para o parcelamento: a fatura da parcela i é a da 1ª mais i meses,
+ * decidida por competência e não reaplicando a regra de fechamento sobre uma
+ * data deslocada. Deslocar a data quebra em fim de mês — compra dia 31 com
+ * fechamento dia 30 caía na competência seguinte, e a 2ª parcela, com a data
+ * grudada em 28 de fevereiro, voltava para a MESMA fatura da 1ª.
+ */
+export function datasDaCompetencia(competencia: string, diaFech: number, diaVenc: number) {
+  const [ano, mes1] = String(competencia).split("-").map(Number);
+  const mes = (mes1 || 1) - 1; // 0-11
   const dataFech = `${ano}-${pad2(mes + 1)}-${pad2(diaDoMes(ano, mes, diaFech))}`;
   let vMes = mes, vAno = ano;
   if (diaVenc < diaFech) {
@@ -28,7 +42,7 @@ export function competenciaDaCompra(dataISO: string, diaFech: number, diaVenc: n
     if (vMes > 11) { vMes = 0; vAno += 1; }
   }
   const dataVenc = `${vAno}-${pad2(vMes + 1)}-${pad2(diaDoMes(vAno, vMes, diaVenc))}`;
-  return { competencia, dataFech, dataVenc };
+  return { competencia: `${ano}-${pad2(mes + 1)}`, dataFech, dataVenc };
 }
 
 /**

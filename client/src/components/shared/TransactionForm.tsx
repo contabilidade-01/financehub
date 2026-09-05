@@ -53,6 +53,7 @@ const createTransactionFormSchema = (t: (key: string, fallback: string) => strin
   data_transacao: z.string().min(1, t('validation.date_required', 'Date is required')),
   reembolsavel: z.boolean().default(false),
   parcelas: z.coerce.number().int().min(1).default(1),
+  competencia_inicial: z.string().optional().default(""),
 });
 
 type TransactionFormValues = z.infer<ReturnType<typeof createTransactionFormSchema>>;
@@ -117,6 +118,7 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
       data_transacao: formatDate(new Date(), "yyyy-MM-dd"),
       reembolsavel: false,
       parcelas: 1,
+      competencia_inicial: "",
     },
   });
 
@@ -223,7 +225,7 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
         metodo_pagamento = pm?.nome || "PIX";
       }
 
-      const { pago_com, parcelas, ...rest } = data;
+      const { pago_com, parcelas, competencia_inicial, ...rest } = data;
       const transactionData: Record<string, unknown> = {
         ...rest,
         reembolsavel: data.tipo === TransactionType.EXPENSE && data.reembolsavel,
@@ -241,6 +243,10 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
       if (kind === "cartao") {
         transactionData.forma_pagamento_id = forma_pagamento_id;
         transactionData.conta_bancaria_id = null;
+        // Vazio = a fatura que o fechamento do cartao indicar.
+        if (!transaction && competencia_inicial) {
+          transactionData.competencia_inicial = competencia_inicial;
+        }
       } else if (kind === "conta") {
         transactionData.conta_bancaria_id = conta_bancaria_id;
         // Forma (PIX etc.) fica a cargo do backend se não enviada.
@@ -283,6 +289,7 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
         data_transacao: formatDate(new Date(), "yyyy-MM-dd"),
         reembolsavel: false,
         parcelas: 1,
+        competencia_inicial: "",
       });
     } catch (error: any) {
       console.error("Erro ao salvar transação:", error);
@@ -437,6 +444,30 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
               />
             )}
           </div>
+
+          {!transaction &&
+            form.watch("tipo") === TransactionType.EXPENSE &&
+            String(form.watch("pago_com") || "").startsWith("cartao:") && (
+              <FormField
+                control={form.control}
+                name="competencia_inicial"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      Fatura da 1a parcela <span className="text-muted-foreground">(opcional)</span>
+                    </FormLabel>
+                    <FormControl>
+                      <Input type="month" {...field} value={field.value ?? ""} />
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground">
+                      Em branco, o sistema usa o fechamento do cartao. As parcelas seguintes caem na
+                      fatura do mes seguinte, uma a uma.
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
           <FormField
             control={form.control}

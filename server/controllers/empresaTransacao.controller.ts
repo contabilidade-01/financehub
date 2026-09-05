@@ -130,6 +130,9 @@ export const createEmpresaTransacao = async (req: Request, res: Response) => {
           dataVencimentoBase: parsed.data.data_vencimento
             ? String(parsed.data.data_vencimento).slice(0, 10)
             : null,
+          competenciaInicial: typeof req.body?.competencia_inicial === "string"
+            ? req.body.competencia_inicial
+            : null,
         });
         const first = await storage.getEmpresaTransacaoById(result.ids[0]);
         return res.status(201).json({
