@@ -802,7 +802,7 @@ function buildTools(ctx?: ToolContext) {
       type: "function" as const,
       function: {
         name: "lancar_empresa",
-        description: "Lança uma receita ou despesa NA EMPRESA (PJ) à vista. Se a compra for PARCELADA no cartão (ex.: '5x de 35 no Magalu'), use 'parcelar_compra_empresa' em vez desta. OBRIGATÓRIO forma_pagamento = conta bancária OU cartão. Pix/débito sozinho NÃO basta. Boleto NÃO é meio.",
+        description: "Lança uma receita ou despesa NA EMPRESA (PJ) à vista. Se a compra for PARCELADA no cartão (ex.: '5x de 35 no Magalu'), use 'parcelar_compra_empresa' em vez desta. forma_pagamento = conta bancária OU cartão (ex.: 'Itaú', 'Caixinha', 'Nubank'). Se omitir, o sistema usa a Caixinha. Pix/débito sozinho: informe a conta ou deixe vazio (Caixinha). Boleto NÃO é meio.",
         parameters: {
           type: "object",
           properties: {
@@ -814,7 +814,7 @@ function buildTools(ctx?: ToolContext) {
             data_transacao: { type: "string", description: "AAAA-MM-DD (default hoje)" },
             forma_pagamento: {
               type: "string",
-              description: "Conta bancária OU cartão (ex.: 'Itaú PJ', 'Caixa', 'Nubank'). Obrigatório. Pix/boleto/débito sozinhos não bastam — diga a conta.",
+              description: "Conta bancária, Caixinha ou cartão (ex.: 'Itaú PJ', 'Caixinha', 'Nubank'). Opcional — se omitir, usa Caixinha.",
             },
             parcelas: {
               type: "number",
@@ -825,7 +825,7 @@ function buildTools(ctx?: ToolContext) {
               description: "Valor de CADA parcela (ex.: 35). Use com parcelas quando o usuário disser '5x de 35'.",
             },
           },
-          required: ["empresa", "tipo", "forma_pagamento"],
+          required: ["empresa", "tipo"],
         },
       },
     },
@@ -2111,13 +2111,8 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         const empresa = await resolverEmpresa(ctx.userId, args.empresa);
         if ("erro" in empresa) return JSON.stringify(empresa);
 
+        // Sem forma → Caixinha (resolverMeioPorNomePj com string vazia).
         const meioTexto = String(args.forma_pagamento || "").trim();
-        if (!meioTexto) {
-          return JSON.stringify({
-            error: "Informe a conta bancária ou o cartão (forma_pagamento). Pix/boleto sozinho não basta.",
-            precisa_meio: true,
-          });
-        }
 
         const parcelasN = Math.min(60, Math.max(1, Number(args.parcelas) || 1));
         const {
@@ -2907,7 +2902,7 @@ export async function runAgent(
 - Este usuário é PJ (Empresa: ${emp.nome}). ${seg}
 - TODAS as transações financeiras (receitas e despesas) enviadas por ele DEVEM ser lançadas na empresa utilizando a ferramenta 'lancar_empresa' (informando empresa: "${emp.nome}"). NUNCA use 'insere_transacao' (pessoal) para este usuário, a menos que ele especifique explicitamente que é uma transação pessoal.
 - Fale em frases curtas e simples.
-- **Meio de pagamento (OBRIGATÓRIO):** 'forma_pagamento' = nome da CONTA BANCÁRIA ou do CARTÃO (ex.: "Itaú", "Caixa", "Nubank PJ"). Pix/débito/TED/dinheiro sozinho NÃO basta — pergunte "de qual conta?". Boleto NÃO é meio: pergunte a conta de onde sai. Cartão de crédito = nome do cartão. Se o usuário não disse, NÃO chame 'lancar_empresa' — pergunte primeiro. Se a tool devolver precisa_meio, use as sugestões e pergunte de novo.
+- **Meio de pagamento:** 'forma_pagamento' = nome da CONTA BANCÁRIA, Caixinha ou CARTÃO (ex.: "Itaú", "Caixinha", "Nubank PJ"). Se o usuário NÃO disser a forma, OMITA forma_pagamento — o sistema usa a Caixinha. Pix/débito/TED sozinhos: se souber a conta, informe; senão omita (Caixinha). Boleto NÃO é meio: pergunte a conta ou use Caixinha. Cartão de crédito = nome do cartão. Se a tool devolver precisa_meio, use as sugestões e pergunte de novo.
 - **NÃO CHUTE a conta.** Só preencha 'conta' quando o usuário NOMEAR a conta ("lança no aluguel", "isso é folha") ou quando a descrição disser exatamente o que é ("compra de mercadoria", "paguei o DAS"). Nos demais casos, OMITA 'conta': o sistema classifica lendo a descrição e o plano inteiro da empresa, e acerta mais do que um palpite.
 
 ### Compra PARCELADA (cartão) — OBRIGATÓRIO seguir

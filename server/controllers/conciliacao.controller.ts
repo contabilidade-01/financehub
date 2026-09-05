@@ -45,6 +45,8 @@ export class ConciliacaoController {
     const emp = await empresaDoUsuario(req, res); if (!emp) return;
     const de = (req.query.de as string) || undefined;
     const ate = (req.query.ate as string) || undefined;
+    const { garantirCaixinhaPj } = await import("../services/meio-pagamento-pj");
+    await garantirCaixinhaPj(emp.id, (req as any).user?.id);
     const { listarContasComSaldoPj } = await import("../services/conta-bancaria.service");
     res.json(await listarContasComSaldoPj(emp.id, de, ate));
   }
@@ -70,8 +72,15 @@ export class ConciliacaoController {
   static async criarConta(req: Request, res: Response) {
     const emp = await empresaDoUsuario(req, res); if (!emp) return;
     const b = req.body || {};
-    if (!b.banco) return res.status(400).json({ error: "banco é obrigatório" });
-    const conta = await createContaBancaria({ ...b, empresa_id: emp.id, usuario_id: (req as any).user.id });
+    if (!b.banco && !b.nome) return res.status(400).json({ error: "banco ou nome é obrigatório" });
+    const nome = String(b.nome || b.banco).trim();
+    const conta = await createContaBancaria({
+      ...b,
+      banco: b.banco || nome,
+      nome,
+      empresa_id: emp.id,
+      usuario_id: (req as any).user.id,
+    });
     res.status(201).json(conta);
   }
   static async atualizarConta(req: Request, res: Response) {

@@ -2,10 +2,15 @@
  * Meio de pagamento PJ — visão de extrato.
  * Conta bancária → mexe no caixa.
  * Cartão de crédito → fatura / competência (não mexe no caixa).
+ * Sem meio informado → Caixinha (conta tipo caixa).
  * Boleto NÃO é meio: o pagamento sai de uma conta.
  */
 import { cartaoDoUsuario, resolverFaturaDoCartao } from "./fatura-pj.service";
-import { getContasBancariasByEmpresa } from "../storage";
+import {
+  createContaBancaria,
+  getContasBancariasByEmpresa,
+  updateContaBancaria,
+} from "../storage";
 
 export type MeioPagamentoPjInput = {
   userId: number;
@@ -14,7 +19,7 @@ export type MeioPagamentoPjInput = {
   dataISO: string;
   cartao_id?: number | null;
   conta_bancaria_id?: number | null;
-  /** Se true, exige conta ou cartão (create). Se false, permite herdar. */
+  /** Se true, garante Caixinha quando não houver meio. */
   exigirMeio?: boolean;
   statusAtual?: string | null;
 };
@@ -31,10 +36,51 @@ export type MeioPagamentoPjResult = {
   isCartao: boolean;
 };
 
+const NOME_CAIXINHA = "Caixinha";
+
+function ehCaixinha(c: any): boolean {
+  const n = String(c?.nome || "").trim().toLowerCase();
+  const b = String(c?.banco || "").trim().toLowerCase();
+  return n === "caixinha" || b === "caixinha" || (c?.tipo === "caixa" && (n === "caixa" || b === "caixa"));
+}
+
+/** Garante a conta Caixinha da empresa (idempotente). */
+export async function garantirCaixinhaPj(
+  empresaId: number,
+  usuarioId?: number | null,
+): Promise<any> {
+  const contas = await getContasBancariasByEmpresa(empresaId);
+  const existente = (contas as any[]).find(ehCaixinha);
+  if (existente) {
+    if (String(existente.nome || "") !== NOME_CAIXINHA || existente.tipo !== "caixa") {
+      try {
+        await updateContaBancaria(existente.id, {
+          banco: existente.banco || NOME_CAIXINHA,
+          nome: NOME_CAIXINHA,
+          tipo: "caixa",
+        } as any);
+      } catch {
+        // coluna nome pode falhar em update legado — segue com o id
+      }
+    }
+    return { ...existente, nome: NOME_CAIXINHA, tipo: "caixa" };
+  }
+  return createContaBancaria({
+    empresa_id: empresaId,
+    usuario_id: usuarioId ?? null,
+    banco: NOME_CAIXINHA,
+    nome: NOME_CAIXINHA,
+    tipo: "caixa",
+    saldo_inicial: 0,
+  });
+}
+
+/** Preferência: Caixinha → corrente → caixa → primeira ativa. */
 export async function contaPadraoPj(empresaId: number): Promise<number | null> {
   const contas = await getContasBancariasByEmpresa(empresaId);
   const ativas = (contas as any[]).filter((c) => c.ativo !== false);
   const prefer =
+    ativas.find(ehCaixinha) ||
     ativas.find((c) => c.tipo === "corrente") ||
     ativas.find((c) => c.tipo === "caixa") ||
     ativas[0];
@@ -43,7 +89,7 @@ export async function contaPadraoPj(empresaId: number): Promise<number | null> {
 
 /**
  * Cartão → fatura + sem caixa.
- * Conta → caixa + conta (explícita ou padrão se houver só uma / exigirMeio).
+ * Conta → caixa + conta (explícita, padrão ou Caixinha).
  */
 export async function aplicarMeioPagamentoPj(
   input: MeioPagamentoPjInput,
@@ -76,7 +122,6 @@ export async function aplicarMeioPagamentoPj(
     };
   }
 
-  // Extrato / caixa: precisa de conta bancária.
   let contaId: number | null = null;
   if (contaBody) {
     const minhas = await getContasBancariasByEmpresa(input.empresaId);
@@ -85,18 +130,20 @@ export async function aplicarMeioPagamentoPj(
     }
     contaId = contaBody;
   } else {
+    // Sem meio → Caixinha (cria se ainda não existir).
+    await garantirCaixinhaPj(input.empresaId, input.userId);
     contaId = await contaPadraoPj(input.empresaId);
   }
 
   if (input.exigirMeio && !contaId) {
     throw new Error(
-      "Informe a conta bancária (Pix/débito/TED/dinheiro) ou o cartão de crédito. Cadastre uma conta em Contas Bancárias se ainda não tiver.",
+      "Não foi possível usar a Caixinha. Cadastre uma conta em Contas Bancárias.",
     );
   }
 
   const contas = await getContasBancariasByEmpresa(input.empresaId);
   const conta = (contas as any[]).find((c) => c.id === contaId);
-  const metodo = conta ? (conta.nome || conta.banco || "Conta") : null;
+  const metodo = conta ? (conta.nome || conta.banco || NOME_CAIXINHA) : NOME_CAIXINHA;
 
   return {
     cartao_id: null,
@@ -121,17 +168,19 @@ export async function resolverMeioPorNomePj(
 > {
   const raw = (texto || "").trim();
   if (!raw) {
-    return {
-      ok: false,
-      precisa: "meio",
-      mensagem: "Informe a conta bancária ou o cartão.",
-      sugestoes: [],
-    };
+    const caixa = await garantirCaixinhaPj(empresaId, userId);
+    return { ok: true, conta_bancaria_id: caixa.id, rotulo: NOME_CAIXINHA };
   }
 
   const norm = (s: string) =>
     s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
   const alvo = norm(raw);
+
+  // Caixinha / caixa / dinheiro em espécie → conta Caixinha.
+  if (/^(caixinha|caixa|dinheiro|especie|em\s*especie)$/.test(alvo)) {
+    const caixa = await garantirCaixinhaPj(empresaId, userId);
+    return { ok: true, conta_bancaria_id: caixa.id, rotulo: NOME_CAIXINHA };
+  }
 
   // Boleto sozinho não é meio.
   if (/^(boleto|bol)$/.test(alvo)) {
@@ -144,18 +193,22 @@ export async function resolverMeioPorNomePj(
       ok: false,
       precisa: "conta",
       mensagem:
-        "Boleto não é meio de pagamento — o dinheiro sai de uma conta. De qual conta bancária foi/será pago?",
+        "Boleto não é meio de pagamento — o dinheiro sai de uma conta. De qual conta bancária foi/será pago? (Caixinha, se for em espécie)",
       sugestoes: nomes,
     };
   }
 
-  // Pix/débito/TED/dinheiro sozinhos → precisa nome da conta.
-  if (/^(pix|debito|transferencia|ted|doc|dinheiro|especie)$/.test(alvo)) {
+  // Pix/débito/TED sozinhos → precisa nome da conta (ou Caixinha se só houver ela).
+  if (/^(pix|debito|transferencia|ted|doc)$/.test(alvo)) {
     const contas = await getContasBancariasByEmpresa(empresaId);
     const ativas = (contas as any[]).filter((c) => c.ativo !== false);
     if (ativas.length === 1) {
       const c = ativas[0];
       return { ok: true, conta_bancaria_id: c.id, rotulo: c.nome || c.banco };
+    }
+    const caixa = ativas.find(ehCaixinha);
+    if (caixa && ativas.length <= 2) {
+      return { ok: true, conta_bancaria_id: caixa.id, rotulo: NOME_CAIXINHA };
     }
     return {
       ok: false,
@@ -188,7 +241,6 @@ export async function resolverMeioPorNomePj(
     return { ok: true, conta_bancaria_id: conta.id, rotulo: conta.nome || conta.banco };
   }
 
-  // Parece cartão (crédito / nome de bandeira) sem cadastro.
   if (/cartao|credito|nubank|inter|c6|itau|bradesco|santander|visa|master|elo|magalu/.test(alvo)) {
     return {
       ok: false,
@@ -206,7 +258,7 @@ export async function resolverMeioPorNomePj(
   return {
     ok: false,
     precisa: "meio",
-    mensagem: `Não entendi "${raw}". Informe a conta bancária ou o cartão.`,
+    mensagem: `Não entendi "${raw}". Informe a conta bancária, a Caixinha ou o cartão.`,
     sugestoes: [...nomesContas, ...nomesCartoes.map((n) => `CC ${n}`)],
   };
 }

@@ -14,14 +14,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PlusCircle, Trash2, Edit2 } from "lucide-react";
+import { PlusCircle, Trash2, Edit2, Plus } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import PeriodoSelector from "@/components/shared/PeriodoSelector";
 import { Periodo, rangeDoPeriodo, rotuloPeriodo } from "@/lib/period";
 
 interface ContaBancaria {
   id: number;
   banco: string;
+  nome?: string | null;
   agencia: string | null;
   numero: string | null;
   tipo: "corrente" | "poupanca" | "caixa";
@@ -35,6 +37,8 @@ interface ContaBancaria {
   ativo: boolean;
   criado_em: string;
 }
+
+type ContaPlano = { id: number; codigo: string; nome: string; tipo: string };
 
 type Lancamento = {
   id: number;
@@ -57,8 +61,21 @@ const dataBR = (s: string) => {
   return `${d}/${m}/${y}`;
 };
 
+const hoje = () => new Date().toISOString().slice(0, 10);
+
+function rotuloConta(c: ContaBancaria) {
+  return c.nome || c.banco || "Conta";
+}
+
+function rotuloTipo(tipo: string) {
+  if (tipo === "caixa") return "Caixinha";
+  if (tipo === "poupanca") return "Poupança";
+  return "Corrente";
+}
+
 export default function ContasBancarias({ empresaId }: { empresaId: number }) {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [periodo, setPeriodo] = useState<Periodo>("current_month");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
@@ -83,6 +100,14 @@ export default function ContasBancarias({ empresaId }: { empresaId: number }) {
     saldo_inicial: 0,
   });
   const [detalhe, setDetalhe] = useState<{ id: number; nome: string } | null>(null);
+  const [lancando, setLancando] = useState(false);
+  const [lancForm, setLancForm] = useState({
+    tipo: "Despesa",
+    categoria_id: "",
+    descricao: "",
+    valor: "",
+    data_transacao: hoje(),
+  });
 
   const base = `/api/empresas/${empresaId}/contas-bancarias`;
 
@@ -90,6 +115,12 @@ export default function ContasBancarias({ empresaId }: { empresaId: number }) {
     queryKey: [`${base}${qs}`],
     queryFn: () => apiRequest(`${base}${qs}`),
     enabled: periodoPronto,
+  });
+
+  const { data: plano = [] } = useQuery<ContaPlano[]>({
+    queryKey: [`/api/empresas/${empresaId}/contas`],
+    queryFn: () => apiRequest(`/api/empresas/${empresaId}/contas`),
+    enabled: !!empresaId,
   });
 
   const detalheUrl = detalhe ? `${base}/${detalhe.id}/lancamentos${qs}` : null;
@@ -107,6 +138,9 @@ export default function ContasBancarias({ empresaId }: { empresaId: number }) {
   const invalidate = () => {
     queryClient.invalidateQueries({
       predicate: (q) => String(q.queryKey[0] || "").startsWith(base),
+    });
+    queryClient.invalidateQueries({
+      predicate: (q) => String(q.queryKey[0] || "").includes(`/empresas/${empresaId}/transacoes`),
     });
   };
 
@@ -134,6 +168,25 @@ export default function ContasBancarias({ empresaId }: { empresaId: number }) {
     onSuccess: () => invalidate(),
   });
 
+  const criarLancamento = useMutation({
+    mutationFn: (data: any) =>
+      apiRequest(`/api/empresas/${empresaId}/transacoes`, { method: "POST", data }),
+    onSuccess: () => {
+      invalidate();
+      setLancando(false);
+      setLancForm({
+        tipo: "Despesa",
+        categoria_id: "",
+        descricao: "",
+        valor: "",
+        data_transacao: hoje(),
+      });
+      toast({ title: "Lançamento criado — aparece também em Transações." });
+    },
+    onError: (err: any) =>
+      toast({ title: "Erro", description: err?.message || "Falha ao criar", variant: "destructive" }),
+  });
+
   const handleOpenEdit = (conta: ContaBancaria) => {
     setEditingId(conta.id);
     setFormData({
@@ -155,11 +208,38 @@ export default function ContasBancarias({ empresaId }: { empresaId: number }) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.banco.trim()) return;
-    const payload = { ...formData, saldo_inicial: Number(formData.saldo_inicial) };
+    const payload = {
+      ...formData,
+      nome: formData.banco.trim(),
+      saldo_inicial: Number(formData.saldo_inicial),
+    };
     if (editingId) await updateMutation.mutateAsync({ id: editingId, data: payload });
     else await createMutation.mutateAsync(payload);
     handleClose();
   };
+
+  const submitLancamento = () => {
+    if (!detalhe) return;
+    if (!lancForm.categoria_id) {
+      toast({ title: "Escolha a classificação", variant: "destructive" });
+      return;
+    }
+    if (!lancForm.descricao.trim() || !lancForm.valor) {
+      toast({ title: "Preencha descrição e valor", variant: "destructive" });
+      return;
+    }
+    criarLancamento.mutate({
+      categoria_id: Number(lancForm.categoria_id),
+      descricao: lancForm.descricao.trim(),
+      valor: Number(String(lancForm.valor).replace(",", ".")),
+      tipo: lancForm.tipo,
+      data_transacao: lancForm.data_transacao,
+      status: "Efetivada",
+      conta_bancaria_id: detalhe.id,
+    });
+  };
+
+  const planoDoTipo = plano.filter((c) => c.tipo === lancForm.tipo);
 
   return (
     <div className="space-y-4">
@@ -167,7 +247,7 @@ export default function ContasBancarias({ empresaId }: { empresaId: number }) {
         <div>
           <h2 className="text-2xl font-bold">Contas Bancárias</h2>
           <p className="text-sm text-muted-foreground">
-            Extrato por período · toque no saldo para ver os lançamentos
+            Extrato por período · Caixinha e bancos · toque no saldo para ver os lançamentos
           </p>
         </div>
         <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); else setOpen(true); }}>
@@ -183,12 +263,12 @@ export default function ContasBancarias({ empresaId }: { empresaId: number }) {
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <Label htmlFor="banco">Banco *</Label>
+                <Label htmlFor="banco">Nome *</Label>
                 <Input
                   id="banco"
                   value={formData.banco}
                   onChange={(e) => setFormData({ ...formData, banco: e.target.value })}
-                  placeholder="ex: Banco do Brasil"
+                  placeholder="ex: Banco do Brasil, Caixinha"
                   required
                 />
               </div>
@@ -219,7 +299,7 @@ export default function ContasBancarias({ empresaId }: { empresaId: number }) {
                   <SelectContent>
                     <SelectItem value="corrente">Corrente</SelectItem>
                     <SelectItem value="poupanca">Poupança</SelectItem>
-                    <SelectItem value="caixa">Caixa</SelectItem>
+                    <SelectItem value="caixa">Caixinha</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -269,26 +349,27 @@ export default function ContasBancarias({ empresaId }: { empresaId: number }) {
       ) : contas.length === 0 ? (
         <Card className="p-8 text-center">
           <p className="text-muted-foreground">Nenhuma conta bancária cadastrada.</p>
-          <p className="text-sm text-muted-foreground mt-1">Crie uma para começar a importar extratos.</p>
+          <p className="text-sm text-muted-foreground mt-1">A Caixinha é criada automaticamente ao abrir esta tela.</p>
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {contas.map((conta) => {
             const saldoPeriodo = Number(conta.saldo ?? conta.movimento ?? 0);
+            const titulo = rotuloConta(conta);
             return (
               <Card key={conta.id} className="p-4">
                 <div className="space-y-2 mb-4">
-                  <h3 className="font-bold text-lg">{conta.banco}</h3>
+                  <h3 className="font-bold text-lg">{titulo}</h3>
                   <p className="text-sm text-muted-foreground">
                     {conta.agencia && conta.numero ? `${conta.agencia} / ${conta.numero}` : "–"}
                   </p>
                   <p className="text-sm">
-                    Tipo: <span className="font-medium capitalize">{conta.tipo}</span>
+                    Tipo: <span className="font-medium">{rotuloTipo(conta.tipo)}</span>
                   </p>
                   <button
                     type="button"
                     className="w-full text-left pt-2 border-t rounded-lg hover:bg-muted/40 -mx-1 px-1 py-1 transition-colors"
-                    onClick={() => setDetalhe({ id: conta.id, nome: conta.banco })}
+                    onClick={() => setDetalhe({ id: conta.id, nome: titulo })}
                   >
                     <p className="text-xs text-muted-foreground">Saldo do período</p>
                     <p
@@ -337,7 +418,7 @@ export default function ContasBancarias({ empresaId }: { empresaId: number }) {
         </div>
       )}
 
-      <Dialog open={!!detalhe} onOpenChange={(o) => { if (!o) setDetalhe(null); }}>
+      <Dialog open={!!detalhe} onOpenChange={(o) => { if (!o) { setDetalhe(null); setLancando(false); } }}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle>Conta · {detalhe?.nome}</DialogTitle>
@@ -402,9 +483,89 @@ export default function ContasBancarias({ empresaId }: { empresaId: number }) {
               </div>
             </>
           )}
-          <DialogFooter>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button
+              variant="default"
+              className="gap-1"
+              onClick={() => setLancando(true)}
+            >
+              <Plus className="h-4 w-4" />
+              Novo lançamento
+            </Button>
             <Button variant="outline" onClick={() => setDetalhe(null)}>
               Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={lancando} onOpenChange={setLancando}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Novo lançamento · {detalhe?.nome}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Tipo</Label>
+              <Select
+                value={lancForm.tipo}
+                onValueChange={(v) => setLancForm({ ...lancForm, tipo: v, categoria_id: "" })}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Despesa">Despesa</SelectItem>
+                  <SelectItem value="Receita">Receita</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Descrição *</Label>
+              <Input
+                value={lancForm.descricao}
+                onChange={(e) => setLancForm({ ...lancForm, descricao: e.target.value })}
+                placeholder="Ex.: Material de escritório"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Valor *</Label>
+                <Input
+                  value={lancForm.valor}
+                  onChange={(e) => setLancForm({ ...lancForm, valor: e.target.value })}
+                  inputMode="decimal"
+                  placeholder="0,00"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Data</Label>
+                <Input
+                  type="date"
+                  value={lancForm.data_transacao}
+                  onChange={(e) => setLancForm({ ...lancForm, data_transacao: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Classificação *</Label>
+              <Select
+                value={lancForm.categoria_id}
+                onValueChange={(v) => setLancForm({ ...lancForm, categoria_id: v })}
+              >
+                <SelectTrigger><SelectValue placeholder="Conta do plano" /></SelectTrigger>
+                <SelectContent>
+                  {planoDoTipo.map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>
+                      {c.codigo} — {c.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLancando(false)}>Cancelar</Button>
+            <Button onClick={submitLancamento} disabled={criarLancamento.isPending}>
+              Salvar
             </Button>
           </DialogFooter>
         </DialogContent>

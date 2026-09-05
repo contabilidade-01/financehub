@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,28 @@ import { useToast } from "@/hooks/use-toast";
 import type { EmpresaTransacaoWithDetails, EmpresaConta } from "@shared/schema";
 
 type ContaBancariaPj = { id: number; banco: string; nome?: string | null; tipo?: string; ativo?: boolean };
+
+function rotuloContaBanc(b: ContaBancariaPj) {
+  return b.nome || b.banco || "Conta";
+}
+
+/** Rótulo da coluna Forma — cartão com CC uma vez só; sem meio = Caixinha. */
+function rotuloFormaPj(
+  t: EmpresaTransacaoWithDetails,
+  bancos: ContaBancariaPj[],
+  cartoes: { id: number; nome: string }[],
+): string {
+  if ((t as any).cartao_id) {
+    const c = cartoes.find((x) => x.id === (t as any).cartao_id);
+    const nome = (c?.nome || t.metodo_pagamento || "Cartão").trim();
+    return /^cc\s/i.test(nome) ? nome : `CC ${nome}`;
+  }
+  if ((t as any).conta_bancaria_id) {
+    const b = bancos.find((x) => x.id === (t as any).conta_bancaria_id);
+    return b ? rotuloContaBanc(b) : (t.metodo_pagamento || "Caixinha");
+  }
+  return t.metodo_pagamento || "Caixinha";
+}
 
 type Periodo = "todos" | "mes_atual" | "mes_passado" | "ano" | "personalizado";
 
@@ -76,7 +98,7 @@ function TransacaoForm({
   const contasDoTipo = contas.filter((c) => c.tipo === tipo);
   const bancosAtivos = bancos.filter((b) => b.ativo !== false);
   const cartoesAtivos = cartoes.filter((c) => c.ativo !== false);
-  const rotuloBanco = (b: ContaBancariaPj) => b.nome || b.banco;
+  const rotuloBanco = rotuloContaBanc;
   const isCartaoSel = pagamento.startsWith("cartao:");
   const podeParcelar = tipo === "Despesa" && isCartaoSel && !inicial;
   const nParc = Math.max(1, Number(parcelas) || 1);
@@ -89,6 +111,16 @@ function TransacaoForm({
     nParc > 1 && valorModo === "parcela" && valorNum > 0
       ? Math.round(valorNum * nParc * 100) / 100
       : valorNum;
+
+  // Sem meio escolhido: pré-seleciona Caixinha (ou primeira conta).
+  useEffect(() => {
+    if (inicial || pagamento) return;
+    const caixa =
+      bancosAtivos.find((b) => /^caixinha$/i.test(rotuloContaBanc(b))) ||
+      bancosAtivos.find((b) => b.tipo === "caixa");
+    if (caixa) setPagamento(`conta:${caixa.id}`);
+    else if (bancosAtivos[0]) setPagamento(`conta:${bancosAtivos[0].id}`);
+  }, [bancosAtivos, inicial, pagamento]);
 
   const trocarTipo = (novo: string) => {
     setTipo(novo);
@@ -384,18 +416,21 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
     onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
   });
 
-  // Contas + cartões usados nos lançamentos (filtro).
+  // Contas + cartões usados nos lançamentos (filtro) — mesmo rótulo da coluna Forma.
   const formasPagamento = useMemo(() => {
     const set = new Map<string, string>();
     for (const t of transacoes) {
-      const nome = (t as any).metodo_pagamento_nome || t.metodo_pagamento;
-      if (nome) set.set(String(nome), String(nome));
+      const nome = rotuloFormaPj(t, bancos, cartoes);
+      if (nome) set.set(nome, nome);
     }
     for (const b of bancos) {
-      const n = b.nome || b.banco;
+      const n = rotuloContaBanc(b);
       if (n) set.set(n, n);
     }
-    for (const c of cartoes) set.set(c.nome, c.nome);
+    for (const c of cartoes) {
+      const n = /^cc\s/i.test(c.nome) ? c.nome : `CC ${c.nome}`;
+      set.set(n, n);
+    }
     return [...set.values()].sort((a, b) => a.localeCompare(b, "pt-BR"));
   }, [transacoes, bancos, cartoes]);
 
@@ -408,15 +443,12 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
       if (fTipo !== "todos" && t.tipo !== fTipo) return false;
       if (fConta !== "todas" && String(t.categoria_id) !== fConta) return false;
       if (fStatus !== "todos" && t.status !== fStatus) return false;
-      if (fForma !== "todas") {
-        const nome = (t as any).metodo_pagamento_nome || t.metodo_pagamento || "";
-        if (nome !== fForma) return false;
-      }
+      if (fForma !== "todas" && rotuloFormaPj(t, bancos, cartoes) !== fForma) return false;
       if (de && t.data_transacao < de) return false;
       if (ate && t.data_transacao > ate) return false;
       return true;
     });
-  }, [transacoes, busca, fTipo, fConta, fStatus, fForma, fPeriodo, fDe, fAte]);
+  }, [transacoes, busca, fTipo, fConta, fStatus, fForma, fPeriodo, fDe, fAte, bancos, cartoes]);
 
   // Subtotais do que está na tela — é o que dá utilidade ao filtro.
   const totais = useMemo(() => {
@@ -570,6 +602,7 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
                 <tr>
                   <th className="text-left p-3">Data</th>
                   <th className="text-left p-3">Descrição</th>
+                  <th className="text-left p-3">Forma</th>
                   <th className="text-left p-3">Classificação</th>
                   <th className="text-right p-3">Valor</th>
                   <th className="text-center p-3">Tipo</th>
@@ -578,10 +611,10 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
               </thead>
               <tbody>
                 {isLoading ? (
-                  <tr><td colSpan={6} className="text-center p-4">Carregando...</td></tr>
+                  <tr><td colSpan={7} className="text-center p-4">Carregando...</td></tr>
                 ) : filtradas.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="text-center p-4 text-muted-foreground">
+                    <td colSpan={7} className="text-center p-4 text-muted-foreground">
                       {transacoes.length === 0 ? "Nenhuma transação ainda." : "Nenhum lançamento com esses filtros."}
                     </td>
                   </tr>
@@ -597,19 +630,14 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
                         {t.status === "Pendente" && (
                           <Badge variant="outline" className="ml-2 text-[10px]">Pendente</Badge>
                         )}
-                        {(t as any).cartao_id && (
-                          <Badge variant="outline" className="ml-2 text-[10px]">
-                            Cartão · {t.metodo_pagamento || "crédito"}
-                          </Badge>
-                        )}
                         {(t as any).parcela_num && (t as any).parcela_total && (t as any).parcela_total > 1 && (
                           <Badge variant="secondary" className="ml-2 text-[10px]">
                             {(t as any).parcela_num}/{(t as any).parcela_total}
                           </Badge>
                         )}
-                        {!(t as any).cartao_id && t.metodo_pagamento && (
-                          <Badge variant="outline" className="ml-2 text-[10px]">{t.metodo_pagamento}</Badge>
-                        )}
+                      </td>
+                      <td className="p-3 text-xs whitespace-nowrap">
+                        {rotuloFormaPj(t, bancos, cartoes)}
                       </td>
                       <td className="p-3 text-xs">
                         {trocandoConta === t.id ? (

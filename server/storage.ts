@@ -3757,9 +3757,11 @@ export async function listarConsentimentosLgpd(opts: { limit?: number; offset?: 
 // Conciliação bancária — Contas bancárias
 // ============================================
 export async function createContaBancaria(data: any): Promise<any> {
+  const banco = String(data.banco || data.nome || "").trim();
+  const nome = String(data.nome || data.banco || "").trim() || banco;
   const r = await db.execute(sql`
-    INSERT INTO contas_bancarias (empresa_id, usuario_id, banco, agencia, numero, tipo, saldo_inicial, ativo)
-    VALUES (${data.empresa_id}, ${data.usuario_id ?? null}, ${data.banco}, ${data.agencia ?? null},
+    INSERT INTO contas_bancarias (empresa_id, usuario_id, banco, nome, agencia, numero, tipo, saldo_inicial, ativo)
+    VALUES (${data.empresa_id}, ${data.usuario_id ?? null}, ${banco}, ${nome}, ${data.agencia ?? null},
             ${data.numero ?? null}, ${data.tipo ?? 'corrente'}, ${Number(data.saldo_inicial ?? 0).toFixed(2)}, true)
     RETURNING *
   `);
@@ -3775,6 +3777,7 @@ export async function updateContaBancaria(id: number, data: any): Promise<any> {
   const r = await db.execute(sql`
     UPDATE contas_bancarias SET
       banco = COALESCE(${data.banco ?? null}, banco),
+      nome = COALESCE(${data.nome ?? null}, nome),
       agencia = COALESCE(${data.agencia ?? null}, agencia),
       numero = COALESCE(${data.numero ?? null}, numero),
       tipo = COALESCE(${data.tipo ?? null}, tipo),

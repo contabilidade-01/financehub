@@ -820,6 +820,52 @@ const STEPS: Step[] = [
       await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_usuarios_exclusao ON usuarios(exclusao_efetiva_em)`);
     },
   },
+  {
+    name: "PJ: garantir Caixinha + backfill txs sem meio",
+    run: async () => {
+      // Contas sem nome herdam o banco.
+      await db.execute(sql`UPDATE contas_bancarias SET nome = banco WHERE empresa_id IS NOT NULL AND (nome IS NULL OR nome = '')`);
+
+      const empresas = await db.execute(sql`SELECT id, usuario_id FROM empresas WHERE COALESCE(ativo, true) = true`);
+      for (const emp of empresas as any[]) {
+        const existentes = await db.execute(sql`
+          SELECT id FROM contas_bancarias
+          WHERE empresa_id = ${emp.id}
+            AND (
+              lower(coalesce(nome, '')) = 'caixinha'
+              OR lower(coalesce(banco, '')) = 'caixinha'
+              OR (tipo = 'caixa' AND lower(coalesce(nome, banco, '')) IN ('caixa', 'caixinha'))
+            )
+          LIMIT 1
+        `);
+        let caixaId = (existentes as any[])[0]?.id as number | undefined;
+        if (!caixaId) {
+          const criada = await db.execute(sql`
+            INSERT INTO contas_bancarias (empresa_id, usuario_id, banco, nome, tipo, saldo_inicial, ativo)
+            VALUES (${emp.id}, ${emp.usuario_id ?? null}, 'Caixinha', 'Caixinha', 'caixa', 0, true)
+            RETURNING id
+          `);
+          caixaId = (criada as any[])[0]?.id;
+        } else {
+          await db.execute(sql`
+            UPDATE contas_bancarias SET nome = 'Caixinha', tipo = 'caixa'
+            WHERE id = ${caixaId}
+          `);
+        }
+        if (!caixaId) continue;
+        await db.execute(sql`
+          UPDATE empresas_transacoes
+          SET conta_bancaria_id = ${caixaId},
+              metodo_pagamento = COALESCE(NULLIF(metodo_pagamento, ''), 'Caixinha'),
+              movimenta_caixa = COALESCE(movimenta_caixa, true)
+          WHERE empresa_id = ${emp.id}
+            AND conta_bancaria_id IS NULL
+            AND cartao_id IS NULL
+            AND fatura_id IS NULL
+        `);
+      }
+    },
+  },
 ];
 
 export async function runAutoMigrations(): Promise<void> {
