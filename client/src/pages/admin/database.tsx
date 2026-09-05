@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Database, Download, RefreshCw, FileText, RotateCcw } from "lucide-react";
+import { Database, Download, RefreshCw, FileText, RotateCcw, HardDriveDownload, Save, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
@@ -21,8 +21,33 @@ interface DatabaseInfo {
   total: number;
 }
 
+interface Backup {
+  id: number;
+  criado_em: string;
+  tipo: string;
+  slot: string | null;
+  tamanho_bytes: number;
+  linhas: number;
+  tabelas: number;
+  erro: string | null;
+}
+
+interface BackupsResposta {
+  backups: Backup[];
+  politica: { horarios: number[]; fuso: string; maximo: number; slot_atual: string };
+}
+
+function tamanhoLegivel(bytes: number): string {
+  if (!bytes) return "-";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
 export default function DatabasePage() {
   const [isDownloading, setIsDownloading] = useState(false);
+  const [gerandoBackup, setGerandoBackup] = useState(false);
+  const [baixandoBackup, setBaixandoBackup] = useState<number | null>(null);
   const [resetLoading, setResetLoading] = useState(false);
   const [resetSuccess, setResetSuccess] = useState<string | null>(null);
   const [resetError, setResetError] = useState<string | null>(null);
@@ -114,6 +139,60 @@ export default function DatabasePage() {
     setResetLoading(false);
   };
 
+  // ---- Backups do banco ----
+  const { data: backupsInfo, refetch: refetchBackups } = useQuery<BackupsResposta>({
+    queryKey: ["/api/admin/backups"],
+    refetchInterval: false,
+  });
+
+  const handleGerarBackup = async () => {
+    try {
+      setGerandoBackup(true);
+      const res: any = await apiRequest("/api/admin/backups", { method: "POST" });
+      if (res?.success === false) throw new Error(res?.message || "Falha ao gerar backup");
+      toast({
+        title: "Backup gerado",
+        description: `${(res?.linhas ?? 0).toLocaleString("pt-BR")} linhas - ${tamanhoLegivel(res?.tamanho_bytes ?? 0)}`,
+      });
+      refetchBackups();
+    } catch (err: any) {
+      toast({
+        title: "Erro ao gerar backup",
+        description: err?.message || "Nao foi possivel gerar o backup agora.",
+        variant: "destructive",
+      });
+    } finally {
+      setGerandoBackup(false);
+    }
+  };
+
+  const handleBaixarBackup = async (b: Backup) => {
+    try {
+      setBaixandoBackup(b.id);
+      const response = await fetch(`/api/admin/backups/${b.id}/download`, {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Erro ao baixar backup");
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `financehub-backup-${b.criado_em.slice(0, 16).replace(/[:T]/g, "-")}.sql.gz`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err: any) {
+      toast({
+        title: "Erro ao baixar backup",
+        description: err?.message || "Nao foi possivel baixar o arquivo.",
+        variant: "destructive",
+      });
+    } finally {
+      setBaixandoBackup(null);
+    }
+  };
+
   return (
     <div className="container mx-auto py-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -165,6 +244,96 @@ export default function DatabasePage() {
       {resetError && <div className="mt-2 text-red-700">{resetError}</div>}
 
       <div className="grid gap-6">
+        {/* Backups do banco */}
+        <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
+          <CardHeader>
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div>
+                <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} flex items-center gap-2`}>
+                  <HardDriveDownload className="h-5 w-5" />
+                  Backups do banco
+                </CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {backupsInfo?.politica
+                    ? `Automatico as ${backupsInfo.politica.horarios.map((h) => `${h}h`).join(", ")} (Brasilia) - guarda as ${backupsInfo.politica.maximo} copias mais recentes`
+                    : "Automatico 3x por dia - guarda as 20 copias mais recentes"}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Contem a estrutura e os dados (lancamentos dos usuarios). Para restaurar:{" "}
+                  <code className="text-xs">gunzip -c arquivo.sql.gz | psql $DATABASE_URL</code>
+                </p>
+              </div>
+              <Button onClick={handleGerarBackup} disabled={gerandoBackup}>
+                <Save className={`h-4 w-4 mr-2 ${gerandoBackup ? 'animate-spin' : ''}`} />
+                {gerandoBackup ? "Gerando..." : "Gerar backup agora"}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {!backupsInfo?.backups?.length ? (
+              <div className="text-center py-8 text-muted-foreground">
+                Nenhum backup ainda. O primeiro roda no proximo horario, ou clique em "Gerar backup agora".
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Data</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead className="text-right">Linhas</TableHead>
+                    <TableHead className="text-right">Tabelas</TableHead>
+                    <TableHead className="text-right">Tamanho</TableHead>
+                    <TableHead className="text-right">Arquivo</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {backupsInfo.backups.map((b) => (
+                    <TableRow key={b.id}>
+                      <TableCell className="font-medium">
+                        {new Date(b.criado_em).toLocaleString("pt-BR")}
+                      </TableCell>
+                      <TableCell>
+                        {b.erro ? (
+                          <Badge variant="destructive" className="gap-1">
+                            <AlertTriangle className="h-3 w-3" />
+                            falhou
+                          </Badge>
+                        ) : (
+                          <Badge variant={b.tipo === "manual" ? "default" : "secondary"}>
+                            {b.tipo}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {b.erro ? "-" : b.linhas.toLocaleString("pt-BR")}
+                      </TableCell>
+                      <TableCell className="text-right">{b.erro ? "-" : b.tabelas}</TableCell>
+                      <TableCell className="text-right">{tamanhoLegivel(b.tamanho_bytes)}</TableCell>
+                      <TableCell className="text-right">
+                        {b.erro ? (
+                          <span className="text-xs text-muted-foreground" title={b.erro}>
+                            {b.erro.slice(0, 40)}
+                          </span>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleBaixarBackup(b)}
+                            disabled={baixandoBackup === b.id}
+                          >
+                            <Download className={`h-4 w-4 mr-2 ${baixandoBackup === b.id ? 'animate-spin' : ''}`} />
+                            Baixar
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Estatísticas */}
         <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
           <CardHeader>

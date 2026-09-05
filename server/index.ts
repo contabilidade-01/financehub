@@ -193,6 +193,12 @@ app.use((req, res, next) => {
     // LGPD: expurga quem pediu exclusão e já venceu a carência. Roda no boot e
     // 1x por dia — sem isso, o pedido do titular ficaria esperando alguém rodar
     // na mão. Não bloqueia o boot.
+    // Backup do banco: 3x por dia (03h, 11h e 19h de Brasilia), 20 copias.
+    // Confere o slot corrente a cada 10 min, entao um deploy no meio do dia
+    // nao faz o horario ser pulado.
+    import('./services/backup.service').then(({ iniciarAgendadorBackups }) => {
+      iniciarAgendadorBackups();
+    }).catch(() => {});
     import('./services/lgpd-dados.service').then(({ expurgarExclusoesVencidas }) => {
       expurgarExclusoesVencidas().catch(() => {});
       setInterval(() => { expurgarExclusoesVencidas().catch(() => {}); }, 24 * 60 * 60 * 1000);
