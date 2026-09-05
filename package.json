@@ -27,7 +27,8 @@
     "test:classificacao": "tsx scripts/testar-classificacao-pj.ts",
     "test:planos": "tsx scripts/testar-planos-por-tipo.ts",
     "test:isolamento-contas": "tsx scripts/testar-isolamento-contas.ts",
-    "test:mover": "tsx scripts/testar-mover-meio.ts"
+    "test:mover": "tsx scripts/testar-mover-meio.ts",
+    "test:backup": "tsx scripts/testar-backup.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

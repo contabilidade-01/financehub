@@ -82,6 +82,7 @@ import * as paymentSettingsController from "./controllers/payment-settings.contr
 import { AnalyticsController } from "./controllers/analytics.controller";
 import { SubscriptionController } from "./controllers/subscription.controller";
 import * as databaseController from "./controllers/database.controller";
+import * as backupController from "./controllers/backup.controller";
 import * as setupController from "./controllers/setup.controller";
 import * as welcomeMessagesController from "./controllers/welcome-messages.controller";
 import * as wahaConfigController from "./controllers/waha-config.controller";
@@ -692,6 +693,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     checkImpersonation,
     requireSuperAdmin,
     databaseController.generateDatabaseDDL,
+  );
+
+  // Backups do banco (super admin) — 3x/dia automatico + download manual
+  app.get(
+    "/api/admin/backups",
+    combinedAuth,
+    checkImpersonation,
+    requireSuperAdmin,
+    backupController.listar,
+  );
+
+  app.post(
+    "/api/admin/backups",
+    combinedAuth,
+    checkImpersonation,
+    requireSuperAdmin,
+    backupController.gerarAgora,
+  );
+
+  app.get(
+    "/api/admin/backups/:id/download",
+    combinedAuth,
+    checkImpersonation,
+    requireSuperAdmin,
+    backupController.baixar,
   );
 
   // Setup routes (public access when SETUP=true)
