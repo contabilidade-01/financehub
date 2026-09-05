@@ -3024,6 +3024,28 @@ export async function runAgent(
   if (ctx.tipoPessoa === "juridica" && (ctx as any).empresaAtiva) {
     const emp = (ctx as any).empresaAtiva as { id: number; nome: string; segmento?: string | null };
     let planoLinhas = "";
+    // Contas e cartões entram no contexto igual ao plano de contas. Sem isso o
+    // modelo precisa chamar uma tool só para saber os nomes — e quando não
+    // chama, responde "Aqui estão as contas: [Lista de contas bancárias]".
+    let meiosBloco = "";
+    try {
+      const { getContasBancariasByEmpresa } = await import("../storage");
+      const { listarCartoes } = await import("./fatura-pj.service");
+      const bancarias = ((await getContasBancariasByEmpresa(emp.id)) as any[])
+        .filter((c) => c.ativo !== false);
+      const cartoesEmp = await listarCartoes(emp.id);
+      const ehCaixa = (c: any) =>
+        c.tipo === "caixa" || /^caixinha$/i.test(String(c.nome || c.banco || ""));
+      const nomesBanco = bancarias.filter((c) => !ehCaixa(c)).map((c) => c.nome || c.banco);
+      const temCaixinha = bancarias.some(ehCaixa);
+      meiosBloco =
+        `- Contas bancárias: ${nomesBanco.length ? nomesBanco.join(", ") : "NENHUMA cadastrada"}\n` +
+        `- Dinheiro/espécie: ${temCaixinha ? "Caixinha" : "Caixinha (será criada no primeiro uso)"}\n` +
+        `- Cartões de crédito: ${cartoesEmp.length ? cartoesEmp.map((c: any) => c.nome).join(", ") : "nenhum cadastrado"}` +
+        (nomesBanco.length
+          ? ""
+          : `\n- Como não há conta bancária, Pix/débito/TED/boleto não têm de onde sair: ofereça cadastrar com 'criar_conta_bancaria_empresa'.`);
+    } catch { /* segue sem a lista de meios */ }
     try {
       const contasPj = await storage.getEmpresasContasByEmpresaId(emp.id);
       planoLinhas = contasPj.map((c: any) => `- ${c.codigo} — ${c.nome} (${c.tipo})`).join("\n");
@@ -3041,7 +3063,8 @@ export async function runAgent(
 - **Meio de pagamento (decida na tool; perguntar é exceção):**
   1. Disse dinheiro / espécie / caixinha / "via caixa" / "em dinheiro" → é **Caixinha**. Chame 'lancar_empresa' (pode omitir forma_pagamento — a tool lê a frase). Avise "Lancei na Caixinha". NÃO pergunte conta.
   2. Disse Pix / débito / TED / boleto → pergunte **qual conta bancária** (liste as contas). Se a tool devolver precisa=cadastrar_conta (não há conta bancária, só Caixinha ou nenhuma), ofereça cadastrar com 'criar_conta_bancaria_empresa' (confirme banco/nome antes). **Não** grave Pix na Caixinha.
-  3. Não disse nada → pergunte as **três** opções: conta bancária, Caixinha (dinheiro) ou cartão. Use listar_cartoes_empresa (campos cartoes + contas).
+  3. Não disse nada → pergunte as **três** opções: conta bancária, Caixinha (dinheiro) ou cartão.
+  6. **Ao perguntar, escreva os nomes reais** da seção "Meios de pagamento desta empresa" abaixo. Eles já estão aqui: não chame tool só para listar e NUNCA escreva marcador do tipo "[Lista de contas bancárias]".
   4. Se a mesma pergunta já foi feita e a resposta veio parecida (ex.: "em dinheiro" de novo), **não repita** — use o que ele disse e chame a tool.
   5. Se a tool devolver precisa_meio / aviso_meio, use mensagem/sugestões/contas/cartoes.
 - **NÃO CHUTE a conta.** Só preencha 'conta' quando o usuário NOMEAR a conta ("lança no aluguel", "isso é folha") ou quando a descrição disser exatamente o que é ("compra de mercadoria", "paguei o DAS"). Nos demais casos, OMITA 'conta': o sistema classifica lendo a descrição e o plano inteiro da empresa, e acerta mais do que um palpite.
@@ -3109,6 +3132,9 @@ Este usuário NÃO tem carteira pessoal ativa. Toda consulta, edição e cadastr
 - Conta bancária nova (Itaú, Bradesco…) → 'criar_conta_bancaria_empresa' (confirme antes). NÃO confundir com 'criar_conta_empresa' (plano de contas).
 - Baixar / marcar como paga uma conta Pendente → 'pagar_transacao_empresa' (depois de confirmar o lançamento).
 - NÃO ofereça gráfico nem lembrete no modo empresa (ainda não existem no PJ). Responda com os números e, se couber, indique a tela de Relatórios PJ no app.
+
+### Meios de pagamento desta empresa (nomes reais — cite estes, nunca invente nem escreva "[lista]")
+${meiosBloco || "(não foi possível listar os meios — use listar_cartoes_empresa antes de perguntar)"}
 
 ### Plano de contas desta empresa
 ${planoLinhas || "(não foi possível listar as contas)"}
