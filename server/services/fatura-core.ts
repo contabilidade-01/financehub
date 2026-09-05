@@ -14,19 +14,33 @@ export function competenciaDaCompra(dataISO: string, diaFech: number, diaVenc: n
   const d = new Date(String(dataISO).slice(0, 10) + "T00:00:00");
   let ano = d.getFullYear();
   let mes = d.getMonth(); // 0-11
+  // Compra NO dia do fechamento ainda entra nesta fatura; a partir do dia
+  // seguinte vai para a próxima.
   if (d.getDate() > diaFech) {
     mes += 1;
     if (mes > 11) { mes = 0; ano += 1; }
   }
   const competencia = `${ano}-${pad2(mes + 1)}`;
-  const dataFech = `${ano}-${pad2(mes + 1)}-${pad2(Math.min(diaFech, 28))}`;
+  const dataFech = `${ano}-${pad2(mes + 1)}-${pad2(diaDoMes(ano, mes, diaFech))}`;
   let vMes = mes, vAno = ano;
   if (diaVenc < diaFech) {
     vMes += 1;
     if (vMes > 11) { vMes = 0; vAno += 1; }
   }
-  const dataVenc = `${vAno}-${pad2(vMes + 1)}-${pad2(Math.min(diaVenc, 28))}`;
+  const dataVenc = `${vAno}-${pad2(vMes + 1)}-${pad2(diaDoMes(vAno, vMes, diaVenc))}`;
   return { competencia, dataFech, dataVenc };
+}
+
+/**
+ * O dia N daquele mês, limitado ao último dia real (30/02 → 28 ou 29).
+ *
+ * Antes isso era `Math.min(dia, 28)`, o que mentia a data: cartão que vence
+ * dia 29 aparecia vencendo dia 28, e cartão que fecha dia 30 mostrava
+ * fechamento no dia 28 — antes de compras do dia 29 que estavam na fatura.
+ */
+function diaDoMes(ano: number, mes0: number, dia: number): number {
+  const ultimo = new Date(Date.UTC(ano, mes0 + 1, 0)).getUTCDate();
+  return Math.min(Math.max(1, Math.floor(dia) || 1), ultimo);
 }
 
 /** Avança N meses a partir de uma competência YYYY-MM. */

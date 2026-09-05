@@ -124,6 +124,30 @@ const fail = (nome: string, detalhe: string) => {
   // dia 20 > fechamento 10 → competência do mês seguinte
   if (r.competencia !== "2026-04") fail("competência após fechamento", r.competencia);
   else ok("competenciaDaCompra após fechamento");
+
+  // Compra NO dia do fechamento ainda entra na fatura corrente.
+  const noDia = competenciaDaCompra("2026-03-10", 10, 17);
+  if (noDia.competencia !== "2026-03") fail("compra no dia do fechamento", noDia.competencia);
+  else ok("compra no dia do fechamento fica na fatura corrente");
+
+  // Dia 29/30/31 não pode virar 28 — o vencimento real é o que a pessoa paga.
+  const venc29 = competenciaDaCompra("2026-03-10", 1, 29);
+  if (venc29.dataVenc !== "2026-04-29") fail("vencimento dia 29", venc29.dataVenc);
+  else ok("vencimento dia 29 não é truncado para 28");
+
+  const fecha30 = competenciaDaCompra("2026-01-29", 30, 7);
+  if (fecha30.competencia !== "2026-01" || fecha30.dataFech !== "2026-01-30") {
+    fail("fechamento dia 30", `${fecha30.competencia} / ${fecha30.dataFech}`);
+  } else ok("fechamento dia 30 não fica anterior à compra do dia 29");
+
+  // Dia inexistente cai no último dia real do mês.
+  const fev = competenciaDaCompra("2026-02-10", 1, 31);
+  if (fev.dataVenc !== "2026-03-31") fail("dia 31 no mês seguinte", fev.dataVenc);
+  else ok("dia inexistente cai no último dia do mês");
+
+  const bissexto = competenciaDaCompra("2028-01-10", 1, 29);
+  if (bissexto.dataVenc !== "2028-02-29") fail("29/02 em ano bissexto", bissexto.dataVenc);
+  else ok("29 de fevereiro existe em ano bissexto");
 }
 
 console.log(falhas ? `\n${falhas} falha(s)` : "\nIsolamento + helpers: OK");
