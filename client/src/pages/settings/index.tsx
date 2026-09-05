@@ -33,6 +33,7 @@ import { cn } from "@/lib/utils";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { UnsavedChangesModal } from "@/components/ui/UnsavedChangesModal";
 import { useLocalization, useTranslation } from "@/contexts/LocalizationContext";
+import { MeusDados } from "@/components/settings/MeusDados";
 
 const createProfileSchema = (t: (key: string, fallback: string) => string) =>
   z.object({
@@ -387,6 +388,7 @@ export default function SettingsPage() {
           <TabsTrigger value="seguranca">{t('settings.security', 'Segurança')}</TabsTrigger>
           <TabsTrigger value="api">{t('settings.api', 'API')}</TabsTrigger>
           <TabsTrigger value="assinatura">{t('settings.subscription', 'Assinatura')}</TabsTrigger>
+          <TabsTrigger value="privacidade">{t('settings.privacy', 'Meus dados')}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="perfil">
@@ -625,6 +627,10 @@ export default function SettingsPage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="privacidade">
+          <MeusDados />
         </TabsContent>
       </Tabs>
 
