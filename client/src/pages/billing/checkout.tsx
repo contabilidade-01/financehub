@@ -133,6 +133,15 @@ export default function CheckoutPage({
     setPersonalInfo({ ...personalInfo, [field]: formattedValue });
   };
 
+  // Com um plano por tipo, a lista vem com um item só: seleciona sozinho para o
+  // cliente não precisar "escolher" o que não tem alternativa.
+  const planoUnico = (plans?.length ?? 0) === 1;
+  useEffect(() => {
+    if (planoUnico && selectedPlanId === null && plans?.[0]) {
+      setSelectedPlanId(plans[0].id);
+    }
+  }, [planoUnico, plans, selectedPlanId]);
+
   const canGoToStep2 = selectedPlanId !== null;
   const canGoToStep3 = personalInfo.name && personalInfo.email && validateCPF(personalInfo.cpfCnpj) && personalInfo.phone && personalInfo.postalCode && personalInfo.addressNumber;
   // CARTÃO NO SITE: canSubmit era isCardValid. Sem cartão no site, basta ter chegado no passo 3.
@@ -296,11 +305,15 @@ export default function CheckoutPage({
         </div>
       </div>
 
-      {/* Step 1: Select Plan */}
+      {/* Step 1: plano do tipo do cliente (PF ou PJ) */}
       {step === 1 && (
         <div>
-          <h2 className="text-2xl font-semibold mb-6">Escolha seu plano</h2>
-          <div className="grid md:grid-cols-3 gap-6 mb-6">
+          {/* Um preço por tipo: o servidor já devolve só o plano de quem está
+              assinando, então não há o que escolher — é confirmar e seguir. */}
+          <h2 className="text-2xl font-semibold mb-6">
+            {planoUnico ? "Seu plano" : "Escolha seu plano"}
+          </h2>
+          <div className={`grid gap-6 mb-6 ${planoUnico ? "max-w-md" : "md:grid-cols-3"}`}>
             {plans?.map((plan) => (
               <PlanCard
                 key={plan.id}

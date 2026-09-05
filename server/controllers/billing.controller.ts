@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { storage } from "../storage";
+import { storage, filtrarPlanosPorTipo } from "../storage";
 import { getSubscriptionService } from "../services/subscription.service";
 import { z } from "zod";
 import { db } from "../db";
@@ -214,6 +214,20 @@ export async function checkout(req: Request, res: Response) {
       });
     }
 
+    // Quem manda no preço é o TIPO do usuário (createHostedCheckout resolve).
+    // Se o cliente enviou um planId, ele tem que ser do tipo dele — senão veria
+    // um valor na tela e seria cobrado outro. Recusa em vez de cobrar calado.
+    if (validatedData.planId) {
+      const usuario = await storage.getUserById(userId);
+      const ativos = (await storage.getActiveSubscriptionPlans()).filter((p: any) => p.active !== false);
+      const permitidos = filtrarPlanosPorTipo(ativos, (usuario as any)?.tipo_pessoa);
+      if (permitidos.length && !permitidos.some((p) => p.id === validatedData.planId)) {
+        return res.status(400).json({
+          error: "Plano indisponível para o seu tipo de cadastro (Pessoa Física / Jurídica).",
+        });
+      }
+    }
+
     const hosted = await getSubscriptionService(storage).createHostedCheckout(
       userId,
       ((ciclo as any) || 'mensal'),
@@ -379,7 +393,13 @@ export async function validateExternalCheckoutToken(req: Request, res: Response)
       console.error('[Checkout Validate] Falha ao buscar planos:', planErr?.message);
       return res.status(500).json({ error: "Erro ao validar token" });
     }
-    const activePlans = plans.filter(p => p.active);
+    // Só o plano do TIPO deste usuário: PF nunca vê o preço de PJ e vice-versa.
+    // O token já identifica quem é, e a cobrança sai por este mesmo critério
+    // (createHostedCheckout) — o preço mostrado tem que ser o preço cobrado.
+    const activePlans = filtrarPlanosPorTipo(
+      plans.filter((p) => p.active),
+      (user as any).tipo_pessoa,
+    );
 
     // Retornar dados do usuário (sem informações sensíveis) e planos
     res.json({
@@ -802,11 +822,18 @@ export async function getBillingMetrics(req: Request, res: Response) {
     // Clientes ativados MANUALMENTE pelo admin (só gravam data_expiracao_assinatura
     // na tabela usuarios, sem linha em user_subscriptions) — não entravam no MRR/ativos.
     // Incluí-los para o painel refletir o negócio real (ex.: clientes-chave que pagam
-    // a mensalidade junto com honorários). Preço assumido = mensal do plano base.
+    // a mensalidade junto com honorários).
     const agoraMs = Date.now();
     const idsComAssinaturaAtiva = new Set(activeSubscriptions.map((s) => s.usuarioId));
-    const precoBase = plans.find((p) => (p as any).active) || plans[0];
-    const precoMensalBase = precoBase ? parseFloat(precoBase.priceMonthly.toString()) : 0;
+    const ativos = plans.filter((p) => (p as any).active);
+    // Cada cliente entra pelo preço do SEU tipo: contar todo mundo pelo plano
+    // mais barato subestimava o MRR assim que PF e PJ passaram a ter preços
+    // diferentes (a lista vem ordenada por preço).
+    const precoMensalDoTipo = (tipoPessoa?: string | null): number => {
+      const doTipo = filtrarPlanosPorTipo(ativos, tipoPessoa);
+      const escolhido = doTipo[0] || ativos[0];
+      return escolhido ? parseFloat(escolhido.priceMonthly.toString()) : 0;
+    };
     const allUsers = await storage.getAllUsers();
     const manuaisAtivos = allUsers.filter((u: any) =>
       (u.tipo_usuario === 'normal' || u.tipo_usuario === 'usuario') &&
@@ -814,7 +841,10 @@ export async function getBillingMetrics(req: Request, res: Response) {
       new Date(u.data_expiracao_assinatura).getTime() > agoraMs &&
       !idsComAssinaturaAtiva.has(u.id)
     );
-    const mrrManual = manuaisAtivos.length * precoMensalBase;
+    const mrrManual = manuaisAtivos.reduce(
+      (sum: number, u: any) => sum + precoMensalDoTipo(u.tipo_pessoa),
+      0,
+    );
     const mrr = mrrAsaas + mrrManual;
 
     // Calcular taxa de churn (últimos 30 dias)

@@ -6,9 +6,10 @@ import { filtrarPlanosPorTipo } from "../server/storage";
 type Plano = { planCode: string; priceMonthly: string; tipoPessoa?: string | null };
 
 // Ordenados por preço, como vêm do banco (orderBy priceMonthly).
+// Os valores são os reais do negócio: PF 39,90 e PJ 79,90.
 const GENERICO: Plano = { planCode: "basico", priceMonthly: "49.00", tipoPessoa: null };
-const PF: Plano = { planCode: "pf", priceMonthly: "49.00", tipoPessoa: "fisica" };
-const PJ: Plano = { planCode: "pj", priceMonthly: "99.00", tipoPessoa: "juridica" };
+const PF: Plano = { planCode: "pf", priceMonthly: "39.90", tipoPessoa: "fisica" };
+const PJ: Plano = { planCode: "pj", priceMonthly: "79.90", tipoPessoa: "juridica" };
 
 type Caso = {
   nome: string;
@@ -59,5 +60,26 @@ for (const c of CASOS) {
     "|", JSON.stringify(obtido),
   );
 }
-console.log(`\n${CASOS.length - falhas}/${CASOS.length} passaram`);
+// --- Preço que cada tipo vê e paga (regra de negócio: PF 39,90 / PJ 79,90) ---
+// Cobre o caminho inteiro: é a mesma função que alimenta a lista do checkout,
+// o checkout externo por link e a escolha do plano da cobrança no Asaas.
+const PRECOS: { nome: string; tipo: string; esperado: string }[] = [
+  { nome: "PF assina/renova → 39,90", tipo: "fisica", esperado: "39.90" },
+  { nome: "PJ assina/renova → 79,90", tipo: "juridica", esperado: "79.90" },
+];
+for (const p of PRECOS) {
+  const doTipo = filtrarPlanosPorTipo([PF, PJ], p.tipo);
+  const preco = doTipo[0]?.priceMonthly;
+  const soUm = doTipo.length === 1; // sem escolha: um plano por tipo
+  const ok = preco === p.esperado && soUm;
+  if (!ok) falhas++;
+  console.log(
+    `${ok ? "ok  " : "FALHA"} ${p.nome}`.padEnd(58),
+    "|", p.esperado.padEnd(15),
+    "|", `${preco} (${doTipo.length} plano)`,
+  );
+}
+
+const total = CASOS.length + PRECOS.length;
+console.log(`\n${total - falhas}/${total} passaram`);
 process.exit(falhas === 0 ? 0 : 1);
