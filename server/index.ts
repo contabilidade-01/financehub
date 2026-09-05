@@ -190,6 +190,13 @@ app.use((req, res, next) => {
     console.log('✅ Aplicação inicializada com sucesso!');
     // Cérebro coletivo: agrega a memória global (PF) sem bloquear o boot.
     import('./storage').then(({ agregarMemoriaGlobalPF }) => agregarMemoriaGlobalPF().catch(() => {}));
+    // LGPD: expurga quem pediu exclusão e já venceu a carência. Roda no boot e
+    // 1x por dia — sem isso, o pedido do titular ficaria esperando alguém rodar
+    // na mão. Não bloqueia o boot.
+    import('./services/lgpd-dados.service').then(({ expurgarExclusoesVencidas }) => {
+      expurgarExclusoesVencidas().catch(() => {});
+      setInterval(() => { expurgarExclusoesVencidas().catch(() => {}); }, 24 * 60 * 60 * 1000);
+    });
   } catch (error) {
     console.error('❌ Falha na inicialização do banco:', error);
     console.log('⚠️ Continuando sem inicialização automática...');

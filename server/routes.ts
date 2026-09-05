@@ -776,6 +776,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ ok: true, versao: LGPD_VERSAO_ATUAL });
     } catch (e: any) { res.status(500).json({ error: e?.message }); }
   });
+  // LGPD — portabilidade: o titular baixa numa planilha tudo que é dele.
+  app.get("/api/lgpd/exportar", combinedAuth, async (req: any, res) => {
+    try {
+      const { exportarDadosUsuario } = await import("./services/lgpd-dados.service");
+      const { buffer, nome } = await exportarDadosUsuario(req.user.id);
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="${nome}"`);
+      res.send(buffer);
+    } catch (e: any) {
+      console.error("[LGPD] exportar:", e?.message);
+      res.status(500).json({ error: "Não foi possível gerar a exportação." });
+    }
+  });
+
+  // LGPD — eliminação: pedido, situação e desistência. Nada é apagado na hora;
+  // o expurgo só acontece depois da carência (job diário no boot).
+  app.get("/api/lgpd/exclusao", combinedAuth, async (req: any, res) => {
+    try {
+      const { statusExclusao } = await import("./services/lgpd-dados.service");
+      res.json(await statusExclusao(req.user.id));
+    } catch (e: any) { res.status(500).json({ error: e?.message }); }
+  });
+  app.post("/api/lgpd/exclusao", combinedAuth, async (req: any, res) => {
+    try {
+      const { solicitarExclusao, DIAS_CARENCIA_EXCLUSAO } = await import("./services/lgpd-dados.service");
+      // Confirmação explícita por palavra: depois da carência não tem volta.
+      if (String(req.body?.confirmacao || "").trim().toUpperCase() !== "EXCLUIR") {
+        return res.status(400).json({ error: "Para confirmar, envie a palavra EXCLUIR." });
+      }
+      const status = await solicitarExclusao(req.user.id, req.body?.motivo);
+      res.json({ ...status, carencia_dias: DIAS_CARENCIA_EXCLUSAO });
+    } catch (e: any) { res.status(500).json({ error: e?.message }); }
+  });
+  app.delete("/api/lgpd/exclusao", combinedAuth, async (req: any, res) => {
+    try {
+      const { cancelarExclusao } = await import("./services/lgpd-dados.service");
+      res.json(await cancelarExclusao(req.user.id));
+    } catch (e: any) { res.status(500).json({ error: e?.message }); }
+  });
+
   app.get("/api/admin/lgpd/consentimentos", combinedAuth, requireSuperAdmin, async (req, res) => {
     try {
       const limit = req.query.limit ? Number(req.query.limit) : 200;

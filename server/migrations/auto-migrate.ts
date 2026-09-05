@@ -799,6 +799,18 @@ const STEPS: Step[] = [
       }
     },
   },
+  {
+    // LGPD: pedido de exclusão com carência + marca de anonimização.
+    // anonimizado_em é o que impede reprocessar quem já foi expurgado.
+    name: "usuarios: exclusao de conta (LGPD)",
+    run: async () => {
+      await db.execute(sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS exclusao_solicitada_em TIMESTAMPTZ`);
+      await db.execute(sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS exclusao_efetiva_em TIMESTAMPTZ`);
+      await db.execute(sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS exclusao_motivo TEXT`);
+      await db.execute(sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS anonimizado_em TIMESTAMPTZ`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_usuarios_exclusao ON usuarios(exclusao_efetiva_em)`);
+    },
+  },
 ];
 
 export async function runAutoMigrations(): Promise<void> {
