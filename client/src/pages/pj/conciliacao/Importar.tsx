@@ -23,7 +23,13 @@ interface ImportResult {
   saldo_final_informado: number | null;
 }
 
-export default function Importar({ empresaId }: { empresaId: number }) {
+export default function Importar({
+  empresaId,
+  onIrParaBancada,
+}: {
+  empresaId: number;
+  onIrParaBancada?: () => void;
+}) {
   const [selectedContaId, setSelectedContaId] = useState<string>("");
   const [file, setFile] = useState<File | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
@@ -206,7 +212,10 @@ export default function Importar({ empresaId }: { empresaId: number }) {
             >
               Importar Outro
             </Button>
-            <Button className="flex-1" onClick={() => window.location.hash = "#/p/conciliacao/bancada"}>
+            <Button
+              className="flex-1"
+              onClick={() => (onIrParaBancada ? onIrParaBancada() : undefined)}
+            >
               Ir para Bancada
             </Button>
           </div>

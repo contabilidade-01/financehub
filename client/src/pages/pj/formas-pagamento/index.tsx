@@ -23,7 +23,7 @@ export default function PjFormasPagamento({ empresaId }: { empresaId: number }) 
           </ul>
           <div className="flex flex-wrap gap-2 pt-2">
             <Button asChild variant="default" size="sm">
-              <Link href="/p/conciliacao">
+              <Link href="/p/contas-bancarias">
                 <Wallet className="h-4 w-4 mr-1" /> Contas e Caixinha
               </Link>
             </Button>

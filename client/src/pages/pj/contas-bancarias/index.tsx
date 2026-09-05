@@ -222,12 +222,12 @@ export default function ContasBancarias({ empresaId }: { empresaId: number }) {
   const planoDoTipo = plano.filter((c) => c.tipo === lancForm.tipo);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-4 md:p-6 max-w-6xl mx-auto">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="text-2xl font-bold">Contas Bancárias</h2>
+          <h1 className="text-2xl font-bold">Contas bancárias</h1>
           <p className="text-sm text-muted-foreground">
-            Extrato por período · Caixinha e bancos · toque no saldo para ver os lançamentos
+            Saldo e extrato de cada conta e da Caixinha
           </p>
         </div>
         <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); else setOpen(true); }}>

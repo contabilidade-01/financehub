@@ -13,7 +13,8 @@ try {
       const [key, ...valueParts] = trimmedLine.split('=');
       if (key && valueParts.length > 0) {
         const value = valueParts.join('=');
-        process.env[key] = value;
+        // Não sobrescreve se já veio do ambiente (ex.: smoke com Postgres Docker).
+        if (process.env[key] === undefined) process.env[key] = value;
       }
     }
   }
