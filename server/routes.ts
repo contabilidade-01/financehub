@@ -1409,6 +1409,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/empresas/:id/dashboard/resumo", combinedAuth, empresaTransacaoCtrl.getEmpresaResumo);
   app.get("/api/empresas/:id/relatorios/dre", combinedAuth, empresaTransacaoCtrl.getEmpresaDRE);
   app.get("/api/empresas/:id/relatorios/fluxo-caixa", combinedAuth, empresaTransacaoCtrl.getEmpresaFluxoCaixa);
+  app.get("/api/empresas/:id/vencimentos", combinedAuth, empresaTransacaoCtrl.listarVencimentosPj);
   // Fluxo projetado PJ — matriz plano de contas da empresa × meses
   app.get("/api/empresas/:id/relatorios/fluxo-projetado", combinedAuth, fluxoProjetadoCtrl.getFluxoProjetadoEmpresa);
   // Fatura de cartão PJ (competência × caixa)
@@ -1416,6 +1417,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const uploadFatura = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
   app.get("/api/empresas/:id/cartoes", combinedAuth, empresaFaturaCtrl.listarCartoes);
   app.get("/api/empresas/:id/cartoes-com-saldo", combinedAuth, empresaFaturaCtrl.listarCartoesComSaldo);
+  app.get("/api/empresas/:id/cartoes/:cartaoId/lancamentos", combinedAuth, empresaFaturaCtrl.lancamentosCartao);
   app.post("/api/empresas/:id/cartoes", combinedAuth, empresaFaturaCtrl.criarCartao);
   app.delete("/api/empresas/:id/cartoes/:cartaoId", combinedAuth, empresaFaturaCtrl.excluirCartao);
   app.post("/api/empresas/:id/cartoes/:cartaoId/compras", combinedAuth, empresaFaturaCtrl.registrarCompra);
@@ -1445,6 +1447,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const { ConciliacaoController } = await import("./controllers/conciliacao.controller");
   const uploadMemoria = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
   app.get("/api/empresas/:id/contas-bancarias", combinedAuth, ConciliacaoController.listarContas);
+  app.get("/api/empresas/:id/contas-bancarias/:contaId/lancamentos", combinedAuth, ConciliacaoController.lancamentosConta);
   app.post("/api/empresas/:id/contas-bancarias", combinedAuth, ConciliacaoController.criarConta);
   app.put("/api/empresas/:id/contas-bancarias/:contaId", combinedAuth, ConciliacaoController.atualizarConta);
   app.delete("/api/empresas/:id/contas-bancarias/:contaId", combinedAuth, ConciliacaoController.removerConta);

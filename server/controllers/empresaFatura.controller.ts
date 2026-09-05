@@ -84,7 +84,30 @@ export async function saldoCartao(req: Request, res: Response) {
 // GET /api/empresas/:id/cartoes-com-saldo
 export async function listarCartoesComSaldo(req: Request, res: Response) {
   const empresaId = await guardEmpresa(req, res); if (!empresaId) return;
-  return res.json(await fatura.listarCartoesComSaldo(empresaId));
+  const de = (req.query.de as string) || undefined;
+  const ate = (req.query.ate as string) || undefined;
+  return res.json(await fatura.listarCartoesComSaldo(empresaId, de, ate));
+}
+
+// GET /api/empresas/:id/cartoes/:cartaoId/lancamentos
+export async function lancamentosCartao(req: Request, res: Response) {
+  const empresaId = await guardEmpresa(req, res); if (!empresaId) return;
+  const cartao = await fatura.cartaoDoUsuario(Number(req.params.cartaoId), req.user!.id);
+  if (!cartao || cartao.empresa_id !== empresaId) {
+    return res.status(404).json({ error: "Cartão não encontrado" });
+  }
+  const de = (req.query.de as string) || undefined;
+  const ate = (req.query.ate as string) || undefined;
+  const lista = await fatura.listarLancamentosCartaoPj(empresaId, cartao.id, de, ate);
+  const mov = await fatura.movimentoCartaoPeriodoPj(cartao.id, de, ate);
+  return res.json({
+    cartao_id: cartao.id,
+    cartao_nome: cartao.nome,
+    periodo: { de: de || null, ate: ate || null },
+    saldo: mov.usado,
+    usado: mov.usado,
+    lancamentos: lista,
+  });
 }
 
 // GET /api/empresas/:id/faturas/:faturaId

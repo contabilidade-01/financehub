@@ -800,13 +800,19 @@ export const empresasTransacoes = pgTable("empresas_transacoes", {
   cartao_id: integer("cartao_id"),
   fatura_id: integer("fatura_id"),
   competencia: varchar("competencia", { length: 7 }),
+  // Conta bancária (extrato). Cartão e conta são mutuamente exclusivos no meio.
+  conta_bancaria_id: integer("conta_bancaria_id"),
+  // Parcelamento (mesma compra)
+  compra_grupo: varchar("compra_grupo", { length: 40 }),
+  parcela_num: integer("parcela_num"),
+  parcela_total: integer("parcela_total"),
   // Empresa deve à pessoa (grupo "Reembolsos a Pagar — Pessoal").
   reembolso_pessoal: boolean("reembolso_pessoal").notNull().default(false),
   data_vencimento: date("data_vencimento"),
   // Quando a conta Pendente foi baixada (marcada como paga).
   data_pagamento: date("data_pagamento"),
   itens_agrupados: integer("itens_agrupados"),
-  // Forma de pagamento da EMPRESA (PIX/boleto/débito…). Isolada do PF.
+  // Legado: formas PIX/débito… O meio atual é conta_bancaria_id | cartao_id.
   empresa_forma_pagamento_id: integer("empresa_forma_pagamento_id"),
 });
 
@@ -880,8 +886,12 @@ export const insertEmpresaTransacaoSchema = z.object({
   origem: z.string().optional().default('manual'),
   movimenta_caixa: z.boolean().optional(),
   cartao_id: flexibleNumberSchema.optional().nullable(),
+  conta_bancaria_id: flexibleNumberSchema.optional().nullable(),
   fatura_id: flexibleNumberSchema.optional().nullable(),
   competencia: z.string().optional().nullable(),
+  compra_grupo: z.string().optional().nullable(),
+  parcela_num: z.number().int().optional().nullable(),
+  parcela_total: z.number().int().optional().nullable(),
   reembolso_pessoal: z.boolean().optional().default(false),
   data_vencimento: z.string().transform(normalizeDateFormat).optional().nullable(),
   data_pagamento: z.string().transform(normalizeDateFormat).optional().nullable(),
@@ -904,13 +914,18 @@ export const updateEmpresaTransacaoSchema = z.object({
   data_pagamento: z.string().optional().nullable(),
   movimenta_caixa: z.boolean().optional(),
   cartao_id: flexibleNumberSchema.optional().nullable(),
+  conta_bancaria_id: flexibleNumberSchema.optional().nullable(),
   fatura_id: flexibleNumberSchema.optional().nullable(),
   competencia: z.string().optional().nullable(),
+  compra_grupo: z.string().optional().nullable(),
+  parcela_num: z.number().int().optional().nullable(),
+  parcela_total: z.number().int().optional().nullable(),
 });
 
 export const insertEmpresaFormaPagamentoSchema = z.object({
   empresa_id: z.number().int().optional(),
   nome: z.string().min(1, { message: 'Nome é obrigatório' }),
+  // boleto mantido no enum só por legado; UI/padrões não oferecem mais.
   tipo: z.enum(['pix', 'boleto', 'debito', 'transferencia', 'dinheiro', 'outro']).optional().default('outro'),
   ativo: z.boolean().optional().default(true),
 });

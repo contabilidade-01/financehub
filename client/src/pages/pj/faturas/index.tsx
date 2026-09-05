@@ -11,23 +11,51 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { useToast } from "@/hooks/use-toast";
 import { Plus, CreditCard, Lock, CheckCircle2, Trash2, ShoppingCart, FileUp } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import PeriodoSelector from "@/components/shared/PeriodoSelector";
+import { Periodo, rangeDoPeriodo, rotuloPeriodo } from "@/lib/period";
 import type { EmpresaConta } from "@shared/schema";
 
 type Cartao = {
   id: number; nome: string; bandeira: string | null;
   dia_fechamento: number; dia_vencimento: number;
   limite?: number; usado?: number; disponivel?: number; percentual?: number;
+  qtd_lancamentos?: number;
 };
 type Fatura = { id: number; competencia: string; data_fechamento: string; data_vencimento: string; status: string; total: number };
+type Lancamento = {
+  id: number; descricao: string; valor: number | string; tipo: string;
+  data_transacao: string; categoria?: string | null; categoria_codigo?: string | null;
+};
+const OPCOES: Periodo[] = ["current_month", "last_month", "next_month", "custom"];
 const money = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
 const fmt = (d: any) => { if (!d) return "—"; try { return new Date(String(d).slice(0, 10) + "T00:00:00").toLocaleDateString("pt-BR"); } catch { return String(d); } };
+const dataBR = (s: string) => {
+  const [y, m, d] = String(s).slice(0, 10).split("-");
+  if (!y || !m || !d) return s;
+  return `${d}/${m}/${y}`;
+};
 const hoje = () => new Date().toISOString().slice(0, 10);
 const stBadge = (s: string) => s === "paga" ? { t: "Paga", c: "bg-emerald-500/15 text-emerald-600" } : s === "fechada" ? { t: "Fechada", c: "bg-amber-500/15 text-amber-600" } : { t: "Aberta", c: "bg-blue-500/15 text-blue-600" };
 
 export default function PjFaturas({ empresaId }: { empresaId: number }) {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const [periodo, setPeriodo] = useState<Periodo>("current_month");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  const range = rangeDoPeriodo(periodo, customFrom, customTo);
+  const periodoPronto = periodo !== "custom" || Boolean(range.de && range.ate);
+  const periodoLabel = rotuloPeriodo(periodo, range.de, range.ate);
+  const qs = useMemo(() => {
+    const p = new URLSearchParams();
+    if (range.de) p.set("de", range.de);
+    if (range.ate) p.set("ate", range.ate);
+    const s = p.toString();
+    return s ? `?${s}` : "";
+  }, [range.de, range.ate]);
+
   const [cartaoSel, setCartaoSel] = useState<number | null>(null);
+  const [detalheCartao, setDetalheCartao] = useState<{ id: number; nome: string } | null>(null);
   const [novoCartao, setNovoCartao] = useState(false);
   const [cForm, setCForm] = useState({ nome: "", bandeira: "", limite: "", dia_fechamento: "", dia_vencimento: "" });
   const [comprando, setComprando] = useState(false);
@@ -41,9 +69,9 @@ export default function PjFaturas({ empresaId }: { empresaId: number }) {
 
   const base = `/api/empresas/${empresaId}`;
   const { data: cartoes = [], isLoading } = useQuery<Cartao[]>({
-    queryKey: [`${base}/cartoes-com-saldo`],
-    queryFn: () => apiRequest(`${base}/cartoes-com-saldo`),
-    enabled: !!empresaId,
+    queryKey: [`${base}/cartoes-com-saldo${qs}`],
+    queryFn: () => apiRequest(`${base}/cartoes-com-saldo${qs}`),
+    enabled: !!empresaId && periodoPronto,
   });
   const { data: contas = [] } = useQuery<EmpresaConta[]>({ queryKey: [`${base}/contas`], queryFn: () => apiRequest(`${base}/contas`), enabled: !!empresaId });
   const { data: bancos = [] } = useQuery<any[]>({ queryKey: [`${base}/contas-bancarias`], queryFn: () => apiRequest(`${base}/contas-bancarias`), enabled: !!empresaId });
@@ -56,6 +84,15 @@ export default function PjFaturas({ empresaId }: { empresaId: number }) {
     queryKey: [`${base}/faturas`, faturaAberta], queryFn: () => apiRequest(`${base}/faturas/${faturaAberta}`), enabled: faturaAberta != null,
   });
 
+  const detalheUrl = detalheCartao ? `${base}/cartoes/${detalheCartao.id}/lancamentos${qs}` : null;
+  const { data: detalhePeriodo, isLoading: loadingDetalhePeriodo } = useQuery<{
+    saldo?: number; usado?: number; lancamentos: Lancamento[];
+  }>({
+    queryKey: [detalheUrl || "/api/noop"],
+    queryFn: () => apiRequest(detalheUrl!),
+    enabled: !!detalheUrl && periodoPronto,
+  });
+
   const leaves = useMemo(() => {
     const parents = new Set(contas.map((c) => (c as any).parent_id).filter(Boolean) as number[]);
     return contas.filter((c) => !parents.has(c.id)).sort((a, b) => a.codigo.localeCompare(b.codigo));
@@ -63,19 +100,28 @@ export default function PjFaturas({ empresaId }: { empresaId: number }) {
 
   const inval = () => {
     qc.invalidateQueries({ queryKey: [`${base}/cartoes`, cartaoAtivo, "faturas"] });
-    qc.invalidateQueries({ queryKey: [`${base}/cartoes-com-saldo`] });
+    qc.invalidateQueries({ predicate: (q) => String(q.queryKey[0] || "").startsWith(`${base}/cartoes-com-saldo`) });
     qc.invalidateQueries({ queryKey: [`${base}/relatorios/fluxo-caixa`] });
     if (faturaAberta) qc.invalidateQueries({ queryKey: [`${base}/faturas`, faturaAberta] });
+    if (detalheUrl) qc.invalidateQueries({ queryKey: [detalheUrl] });
   };
 
   const createCartao = useMutation({
     mutationFn: (d: any) => apiRequest(`${base}/cartoes`, { method: "POST", data: d }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: [`${base}/cartoes`] }); qc.invalidateQueries({ queryKey: [`${base}/cartoes-com-saldo`] }); setNovoCartao(false); setCForm({ nome: "", bandeira: "", limite: "", dia_fechamento: "", dia_vencimento: "" }); toast({ title: "Cartão criado" }); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [`${base}/cartoes`] });
+      qc.invalidateQueries({ predicate: (q) => String(q.queryKey[0] || "").startsWith(`${base}/cartoes-com-saldo`) });
+      setNovoCartao(false); setCForm({ nome: "", bandeira: "", limite: "", dia_fechamento: "", dia_vencimento: "" }); toast({ title: "Cartão criado" });
+    },
     onError: (e: any) => toast({ title: "Erro", description: e?.error || e?.message, variant: "destructive" }),
   });
   const delCartao = useMutation({
     mutationFn: (id: number) => apiRequest(`${base}/cartoes/${id}`, { method: "DELETE" }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: [`${base}/cartoes`] }); qc.invalidateQueries({ queryKey: [`${base}/cartoes-com-saldo`] }); setCartaoSel(null); toast({ title: "Cartão excluído" }); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [`${base}/cartoes`] });
+      qc.invalidateQueries({ predicate: (q) => String(q.queryKey[0] || "").startsWith(`${base}/cartoes-com-saldo`) });
+      setCartaoSel(null); toast({ title: "Cartão excluído" });
+    },
   });
   const addCompra = useMutation({
     mutationFn: (d: any) => apiRequest(`${base}/cartoes/${cartaoAtivo}/compras`, { method: "POST", data: d }),
@@ -135,30 +181,59 @@ export default function PjFaturas({ empresaId }: { empresaId: number }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2"><CreditCard className="h-6 w-6" /> Faturas de Cartão</h1>
-          <p className="text-sm text-muted-foreground">Compras entram como competência; só o pagamento da fatura move o caixa.</p>
+          <p className="text-sm text-muted-foreground">Gasto do período · toque no cartão para ver compras. Faturas e pagamento continuam abaixo.</p>
         </div>
         <Button onClick={() => setNovoCartao(true)}><Plus className="h-4 w-4 mr-2" /> Novo cartão</Button>
       </div>
 
-      {isLoading ? <Skeleton className="h-28 w-full" /> : cartoes.length === 0 ? (
+      <div className="space-y-2">
+        <PeriodoSelector
+          periodo={periodo}
+          onPeriodoChange={setPeriodo}
+          customFrom={customFrom}
+          customTo={customTo}
+          onCustomFromChange={setCustomFrom}
+          onCustomToChange={setCustomTo}
+          opcoes={OPCOES}
+        />
+        <p className="text-sm text-muted-foreground capitalize">{periodoLabel}</p>
+      </div>
+
+      {!periodoPronto || isLoading ? <Skeleton className="h-28 w-full" /> : cartoes.length === 0 ? (
         <Card><CardContent className="py-10 text-center text-muted-foreground">Nenhum cartão PJ. Crie o primeiro.</CardContent></Card>
       ) : (
         <>
           <div className="flex flex-wrap gap-2 items-center">
             {cartoes.map((c) => (
-              <button key={c.id} onClick={() => setCartaoSel(c.id)} className={`px-4 py-2 rounded-lg border text-sm text-left min-w-[180px] ${c.id === cartaoAtivo ? "border-primary bg-primary/5" : "border-border"}`}>
-                <div className="font-medium flex items-center gap-2"><CreditCard className="h-4 w-4" /> {c.nome}</div>
-                <div className="text-xs text-muted-foreground">Fecha dia {c.dia_fechamento} · vence dia {c.dia_vencimento}</div>
-                {c.limite != null && Number(c.limite) > 0 ? (
-                  <div className="mt-1 text-xs space-y-0.5">
-                    <div>Limite: {money(Number(c.limite))}</div>
-                    <div className="text-rose-500">Usado: {money(Number(c.usado || 0))} ({Number(c.percentual || 0).toFixed(0)}%)</div>
-                    <div className="text-emerald-600 font-medium">Disponível: {money(Number(c.disponivel || 0))}</div>
-                  </div>
-                ) : (
-                  <div className="mt-1 text-xs text-muted-foreground">Sem limite cadastrado</div>
-                )}
-              </button>
+              <div
+                key={c.id}
+                className={`px-4 py-2 rounded-lg border text-sm text-left min-w-[200px] ${c.id === cartaoAtivo ? "border-primary bg-primary/5" : "border-border"}`}
+              >
+                <button type="button" className="w-full text-left" onClick={() => setCartaoSel(c.id)}>
+                  <div className="font-medium flex items-center gap-2"><CreditCard className="h-4 w-4" /> {c.nome}</div>
+                  <div className="text-xs text-muted-foreground">Fecha dia {c.dia_fechamento} · vence dia {c.dia_vencimento}</div>
+                </button>
+                <button
+                  type="button"
+                  className="w-full text-left mt-1 rounded hover:bg-muted/50 -mx-1 px-1 py-0.5 transition-colors"
+                  onClick={() => setDetalheCartao({ id: c.id, nome: c.nome })}
+                >
+                  {c.limite != null && Number(c.limite) > 0 ? (
+                    <div className="text-xs space-y-0.5">
+                      <div className="text-muted-foreground">Gasto do período</div>
+                      <div className="text-rose-500 font-medium">Usado: {money(Number(c.usado || 0))} ({Number(c.percentual || 0).toFixed(0)}%)</div>
+                      <div className="text-emerald-600">Disponível: {money(Number(c.disponivel || 0))}</div>
+                      <div className="text-muted-foreground">{c.qtd_lancamentos ?? 0} compra(s) · ver detalhes</div>
+                    </div>
+                  ) : (
+                    <div className="text-xs space-y-0.5">
+                      <div className="text-muted-foreground">Gasto do período</div>
+                      <div className="font-medium">{money(Number(c.usado || 0))}</div>
+                      <div className="text-muted-foreground">{c.qtd_lancamentos ?? 0} compra(s) · ver detalhes</div>
+                    </div>
+                  )}
+                </button>
+              </div>
             ))}
             {cartaoAtivo && <Button size="sm" variant="outline" onClick={() => setComprando(true)}><ShoppingCart className="h-4 w-4 mr-1" /> Registrar compra</Button>}
           </div>
@@ -181,6 +256,54 @@ export default function PjFaturas({ empresaId }: { empresaId: number }) {
           {faturasData?.cartao && <Button variant="ghost" size="sm" className="text-destructive" onClick={() => delCartao.mutate(faturasData.cartao.id)}><Trash2 className="h-4 w-4 mr-1" /> Excluir cartão {faturasData.cartao.nome}</Button>}
         </>
       )}
+
+      {/* Lançamentos do período do cartão */}
+      <Dialog open={!!detalheCartao} onOpenChange={(o) => { if (!o) setDetalheCartao(null); }}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Cartão · {detalheCartao?.nome}</DialogTitle>
+            <p className="text-sm text-muted-foreground capitalize">{periodoLabel}</p>
+          </DialogHeader>
+          {loadingDetalhePeriodo ? (
+            <div className="space-y-2 py-4">
+              <Skeleton className="h-8 w-40" />
+              <Skeleton className="h-16 w-full" />
+            </div>
+          ) : (
+            <>
+              <div className="rounded-lg border border-border/60 px-3 py-2 mb-2">
+                <p className="text-xs text-muted-foreground">Gasto do período</p>
+                <p className="text-xl font-semibold text-rose-500">
+                  {money(Number(detalhePeriodo?.saldo ?? detalhePeriodo?.usado ?? 0))}
+                </p>
+              </div>
+              <div className="overflow-y-auto flex-1 min-h-0 space-y-2 pr-1">
+                {(detalhePeriodo?.lancamentos || []).length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">Nenhuma compra neste período.</p>
+                ) : (
+                  (detalhePeriodo?.lancamentos || []).map((l) => (
+                    <div key={l.id} className="flex items-start justify-between gap-3 rounded-lg border border-border/60 px-3 py-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{l.descricao}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {dataBR(l.data_transacao)}
+                          {l.categoria ? ` · ${l.categoria_codigo ? `${l.categoria_codigo} — ` : ""}${l.categoria}` : ""}
+                        </p>
+                      </div>
+                      <span className="text-sm font-semibold shrink-0 text-red-500">
+                        −{money(Math.abs(Number(l.valor) || 0))}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDetalheCartao(null)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Novo cartão */}
       <Dialog open={novoCartao} onOpenChange={setNovoCartao}>

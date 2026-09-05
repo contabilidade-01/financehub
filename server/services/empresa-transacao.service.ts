@@ -1,5 +1,6 @@
 import { storage } from "../storage";
 import { updateEmpresaTransacaoSchema } from "../../shared/schema";
+import { aplicarMeioPagamentoPj } from "./meio-pagamento-pj";
 
 /**
  * Regras de atualização de transação PJ, num lugar só.
@@ -28,7 +29,6 @@ export async function atualizarTransacaoEmpresa(
     return { ok: false, status: 403, error: "Transação não pertence a esta empresa." };
   }
 
-  // Aceita cartao_id no body mesmo fora do zod parcial estrito (vem do form).
   const bruto = (dados || {}) as any;
   const parsed = updateEmpresaTransacaoSchema.safeParse(dados);
   if (!parsed.success) {
@@ -52,65 +52,73 @@ export async function atualizarTransacaoEmpresa(
   }
 
   const patch: any = { ...parsed.data };
+  const dataISO = String(parsed.data.data_transacao ?? transacao.data_transacao).slice(0, 10);
 
-  // Cartão no payload: "cartao_id" explícito (número) ou null para tirar do cartão.
   const mudouCartao = Object.prototype.hasOwnProperty.call(bruto, "cartao_id");
-  const cartaoIdNovo = mudouCartao
-    ? (bruto.cartao_id == null || bruto.cartao_id === "" ? null : Number(bruto.cartao_id))
-    : undefined;
+  const mudouContaBanc = Object.prototype.hasOwnProperty.call(bruto, "conta_bancaria_id");
 
-  if (cartaoIdNovo) {
-    if (tipoFinal !== "Despesa") {
-      return { ok: false, status: 400, error: "Cartão de crédito só pode ser usado em Despesa." };
+  if (mudouCartao || mudouContaBanc) {
+    const cartaoId = mudouCartao
+      ? (bruto.cartao_id == null || bruto.cartao_id === "" ? null : Number(bruto.cartao_id))
+      : ((transacao as any).cartao_id ?? null);
+    // Se trocou para cartão, zera conta; se trocou para conta, zera cartão.
+    let contaBancId = mudouContaBanc
+      ? (bruto.conta_bancaria_id == null || bruto.conta_bancaria_id === "" ? null : Number(bruto.conta_bancaria_id))
+      : ((transacao as any).conta_bancaria_id ?? null);
+    let cartaoFinal = cartaoId;
+    if (mudouCartao && cartaoId) contaBancId = null;
+    if (mudouContaBanc && !mudouCartao) cartaoFinal = null;
+    if (mudouContaBanc && contaBancId && !cartaoId) cartaoFinal = null;
+    if (mudouCartao && cartaoId == null && !mudouContaBanc) {
+      // Saiu do cartão sem informar conta → usa padrão / exige.
+      contaBancId = (transacao as any).conta_bancaria_id ?? null;
     }
-    const { cartaoDoUsuario, resolverFaturaDoCartao } = await import("./fatura-pj.service");
-    const cartao = await cartaoDoUsuario(cartaoIdNovo, userId);
-    if (!cartao || cartao.empresa_id !== empresaId) {
-      return { ok: false, status: 400, error: "Cartão não encontrado nesta empresa." };
+
+    try {
+      const meio = await aplicarMeioPagamentoPj({
+        userId,
+        empresaId,
+        tipo: tipoFinal,
+        dataISO,
+        cartao_id: cartaoFinal,
+        conta_bancaria_id: contaBancId,
+        exigirMeio: true,
+        statusAtual: (parsed.data.status as string) ?? transacao.status,
+      });
+      patch.cartao_id = meio.cartao_id;
+      patch.conta_bancaria_id = meio.conta_bancaria_id;
+      patch.fatura_id = meio.fatura_id;
+      patch.competencia = meio.competencia;
+      patch.movimenta_caixa = meio.movimenta_caixa;
+      patch.empresa_forma_pagamento_id = meio.empresa_forma_pagamento_id;
+      patch.metodo_pagamento = meio.metodo_pagamento;
+    } catch (meioErr: any) {
+      return { ok: false, status: 400, error: meioErr?.message || "Meio de pagamento inválido." };
     }
-    const dataISO = String(parsed.data.data_transacao ?? transacao.data_transacao).slice(0, 10);
-    const { fatura, competencia, metodo } = await resolverFaturaDoCartao(empresaId, cartao, dataISO);
-    patch.cartao_id = cartao.id;
-    patch.fatura_id = fatura.id;
-    patch.competencia = competencia;
-    patch.movimenta_caixa = false;
-    patch.empresa_forma_pagamento_id = null;
-    patch.metodo_pagamento = metodo;
-  } else if (cartaoIdNovo === null) {
-    // Saiu do cartão → volta a ser lançamento de caixa / forma normal.
-    patch.cartao_id = null;
-    patch.fatura_id = null;
-    patch.competencia = null;
-    if (patch.movimenta_caixa === undefined) patch.movimenta_caixa = true;
   } else if ((transacao as any).cartao_id) {
     // Continua no mesmo cartão: se mudou a data, reatribui a fatura da competência.
     const dataNova = parsed.data.data_transacao
       ? String(parsed.data.data_transacao).slice(0, 10)
       : null;
     if (dataNova && dataNova !== String(transacao.data_transacao).slice(0, 10)) {
-      const { cartaoDoUsuario, resolverFaturaDoCartao } = await import("./fatura-pj.service");
-      const cartao = await cartaoDoUsuario(Number((transacao as any).cartao_id), userId);
-      if (cartao && cartao.empresa_id === empresaId) {
-        const { fatura, competencia, metodo } = await resolverFaturaDoCartao(empresaId, cartao, dataNova);
-        patch.fatura_id = fatura.id;
-        patch.competencia = competencia;
-        patch.metodo_pagamento = metodo;
+      try {
+        const meio = await aplicarMeioPagamentoPj({
+          userId,
+          empresaId,
+          tipo: tipoFinal,
+          dataISO: dataNova,
+          cartao_id: Number((transacao as any).cartao_id),
+          exigirMeio: true,
+        });
+        patch.fatura_id = meio.fatura_id;
+        patch.competencia = meio.competencia;
+        patch.metodo_pagamento = meio.metodo_pagamento;
         patch.movimenta_caixa = false;
+        patch.conta_bancaria_id = null;
+      } catch (meioErr: any) {
+        return { ok: false, status: 400, error: meioErr?.message || "Meio de pagamento inválido." };
       }
     }
-  }
-
-  if (parsed.data.empresa_forma_pagamento_id != null && !cartaoIdNovo) {
-    const { getFormaById } = await import("./empresa-forma.service");
-    const forma = await getFormaById(empresaId, Number(parsed.data.empresa_forma_pagamento_id));
-    if (!forma) return { ok: false, status: 400, error: "Forma de pagamento não encontrada." };
-    patch.metodo_pagamento = forma.nome;
-    patch.cartao_id = null;
-    patch.fatura_id = null;
-    patch.competencia = null;
-    if (patch.movimenta_caixa === undefined) patch.movimenta_caixa = true;
-  } else if (parsed.data.empresa_forma_pagamento_id === null && cartaoIdNovo === undefined) {
-    patch.metodo_pagamento = parsed.data.metodo_pagamento ?? null;
   }
 
   const updated = await storage.updateEmpresaTransacao(transacaoId, patch);
@@ -149,8 +157,6 @@ export async function baixarTransacaoEmpresa(
 
   const cartaoId = (transacao as any).cartao_id as number | null;
   if (cartaoId) {
-    // Compra de cartão: baixa individual NÃO libera limite — isso só acontece
-    // ao pagar a fatura. Garante fatura + competência e marca data_pagamento.
     const { cartaoDoUsuario, resolverFaturaDoCartao } = await import("./fatura-pj.service");
     const cartao = await cartaoDoUsuario(cartaoId, userId);
     const patch: any = {

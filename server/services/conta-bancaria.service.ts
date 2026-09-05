@@ -253,6 +253,65 @@ export async function excluirContaPf(userId: number, contaId: number): Promise<{
   return { ok: (r as any[]).length > 0 };
 }
 
+export async function listarLancamentosContaPj(
+  empresaId: number,
+  contaId: number,
+  de?: string,
+  ate?: string,
+): Promise<any[]> {
+  const conta = await db.execute(sql`
+    SELECT id FROM contas_bancarias
+    WHERE id = ${contaId} AND empresa_id = ${empresaId}
+    LIMIT 1
+  `);
+  if (!(conta as any[])[0]) return [];
+
+  const filtroDe = de ? sql`AND t.data_transacao >= ${de}` : sql``;
+  const filtroAte = ate ? sql`AND t.data_transacao <= ${ate}` : sql``;
+
+  const rows = await db.execute(sql`
+    SELECT t.id, t.descricao, t.valor, t.tipo, t.data_transacao, t.status,
+           t.movimenta_caixa, c.nome AS categoria, c.codigo AS categoria_codigo
+    FROM empresas_transacoes t
+    LEFT JOIN empresas_contas c ON c.id = t.categoria_id
+    WHERE t.conta_bancaria_id = ${contaId}
+      AND t.empresa_id = ${empresaId}
+      AND COALESCE(t.movimenta_caixa, true) = true
+      AND t.status = 'Efetivada'
+      ${filtroDe}
+      ${filtroAte}
+    ORDER BY t.data_transacao DESC, t.id DESC
+  `);
+  return rows as any[];
+}
+
+/** Lista contas PJ com saldo acumulado + movimento do período (se de/ate). */
+export async function listarContasComSaldoPj(
+  empresaId: number,
+  de?: string,
+  ate?: string,
+): Promise<any[]> {
+  const { getContasBancariasByEmpresa, getSaldoSistemaConta } = await import("../storage");
+  const contas = await getContasBancariasByEmpresa(empresaId);
+  const comPeriodo = Boolean(de || ate);
+  return Promise.all(
+    (contas as any[]).map(async (c) => {
+      const saldoSistema = await getSaldoSistemaConta(c.id);
+      const mov = await movimentoContaPeriodo(c.id, de, ate);
+      return {
+        ...c,
+        saldo_sistema: saldoSistema,
+        saldo: comPeriodo ? mov.movimento : saldoSistema,
+        movimento: mov.movimento,
+        entradas: mov.entradas,
+        saidas: mov.saidas,
+        qtd_lancamentos: mov.qtd,
+        periodo: { de: de || null, ate: ate || null },
+      };
+    }),
+  );
+}
+
 /** Soma dos saldos das contas ativas do usuário (= novo "saldo geral" PF). */
 export async function saldoGeralPf(userId: number): Promise<number> {
   const contas = await listarContasComSaldoPf(userId);

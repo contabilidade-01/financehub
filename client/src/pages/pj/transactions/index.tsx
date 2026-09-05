@@ -8,7 +8,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Badge } from "@/components/ui/badge";
 import { Plus, Trash2, Edit2, Search, X, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import type { EmpresaTransacaoWithDetails, EmpresaConta, EmpresaFormaPagamento } from "@shared/schema";
+import type { EmpresaTransacaoWithDetails, EmpresaConta } from "@shared/schema";
+
+type ContaBancariaPj = { id: number; banco: string; nome?: string | null; tipo?: string; ativo?: boolean };
 
 type Periodo = "todos" | "mes_atual" | "mes_passado" | "ano" | "personalizado";
 
@@ -41,7 +43,7 @@ const fmt = (n: number | string) =>
  */
 function TransacaoForm({
   contas,
-  formas,
+  bancos,
   cartoes,
   inicial,
   salvando,
@@ -49,7 +51,7 @@ function TransacaoForm({
   onCancel,
 }: {
   contas: EmpresaConta[];
-  formas: EmpresaFormaPagamento[];
+  bancos: ContaBancariaPj[];
   cartoes: { id: number; nome: string; ativo?: boolean }[];
   inicial?: EmpresaTransacaoWithDetails | null;
   salvando: boolean;
@@ -58,60 +60,111 @@ function TransacaoForm({
 }) {
   const pagamentoInicial = () => {
     if (inicial?.cartao_id) return `cartao:${inicial.cartao_id}`;
-    if (inicial?.empresa_forma_pagamento_id) return `forma:${inicial.empresa_forma_pagamento_id}`;
-    return "nenhuma";
+    if ((inicial as any)?.conta_bancaria_id) return `conta:${(inicial as any).conta_bancaria_id}`;
+    return "";
   };
 
   const [tipo, setTipo] = useState<string>(inicial?.tipo ?? "Despesa");
   const [categoriaId, setCategoriaId] = useState<string>(inicial ? String(inicial.categoria_id) : "");
   const [status, setStatus] = useState<string>(inicial?.status ?? "Efetivada");
   const [pagamento, setPagamento] = useState<string>(pagamentoInicial());
+  const [parcelas, setParcelas] = useState<number>(1);
+  /** No crédito: informar o total da compra ou o valor de cada parcela. */
+  const [valorModo, setValorModo] = useState<"total" | "parcela">("parcela");
+  const [valorDigitado, setValorDigitado] = useState<string>(inicial ? String(inicial.valor) : "");
 
   const contasDoTipo = contas.filter((c) => c.tipo === tipo);
-  const formasAtivas = formas.filter((f) => f.ativo);
+  const bancosAtivos = bancos.filter((b) => b.ativo !== false);
   const cartoesAtivos = cartoes.filter((c) => c.ativo !== false);
+  const rotuloBanco = (b: ContaBancariaPj) => b.nome || b.banco;
+  const isCartaoSel = pagamento.startsWith("cartao:");
+  const podeParcelar = tipo === "Despesa" && isCartaoSel && !inicial;
+  const nParc = Math.max(1, Number(parcelas) || 1);
+  const valorNum = Number(valorDigitado) || 0;
+  const valorParcelaPreview =
+    nParc > 1 && valorModo === "total" && valorNum > 0
+      ? Math.round((valorNum / nParc) * 100) / 100
+      : valorNum;
+  const valorTotalPreview =
+    nParc > 1 && valorModo === "parcela" && valorNum > 0
+      ? Math.round(valorNum * nParc * 100) / 100
+      : valorNum;
 
   const trocarTipo = (novo: string) => {
     setTipo(novo);
     const atual = contas.find((c) => String(c.id) === categoriaId);
     if (atual && atual.tipo !== novo) setCategoriaId("");
-    // Cartão só faz sentido em Despesa.
-    if (novo !== "Despesa" && pagamento.startsWith("cartao:")) setPagamento("nenhuma");
+    if (novo !== "Despesa" && pagamento.startsWith("cartao:")) {
+      setPagamento("");
+      setParcelas(1);
+    }
+  };
+
+  const trocarPagamento = (v: string) => {
+    setPagamento(v);
+    if (!v.startsWith("cartao:")) setParcelas(1);
   };
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!pagamento || !valorNum) return;
     const fd = new FormData(e.currentTarget);
     const isCartao = pagamento.startsWith("cartao:");
-    const isForma = pagamento.startsWith("forma:");
+    const isConta = pagamento.startsWith("conta:");
     const cartao = isCartao ? cartoes.find((c) => String(c.id) === pagamento.slice(7)) : null;
-    const forma = isForma ? formas.find((f) => String(f.id) === pagamento.slice(6)) : null;
+    const banco = isConta ? bancos.find((b) => String(b.id) === pagamento.slice(6)) : null;
+
+    const parcelar = podeParcelar && nParc > 1;
+    const valorTotal = parcelar
+      ? (valorModo === "parcela" ? valorTotalPreview : valorNum)
+      : valorNum;
+    const valorParcela = parcelar
+      ? (valorModo === "parcela" ? valorNum : valorParcelaPreview)
+      : undefined;
 
     onSubmit({
       descricao: fd.get("descricao"),
-      valor: Number(fd.get("valor")),
+      valor: valorTotal,
       tipo,
       categoria_id: Number(categoriaId),
       data_transacao: fd.get("data_transacao"),
       status: isCartao ? "Efetivada" : status,
       data_vencimento: (fd.get("data_vencimento") as string) || null,
       cartao_id: cartao ? cartao.id : null,
-      empresa_forma_pagamento_id: forma ? forma.id : null,
-      metodo_pagamento: cartao?.nome ?? forma?.nome ?? null,
+      conta_bancaria_id: banco ? banco.id : null,
+      empresa_forma_pagamento_id: null,
+      metodo_pagamento: cartao?.nome ?? (banco ? rotuloBanco(banco) : null),
+      parcelas: parcelar ? nParc : 1,
+      valor_modo: parcelar ? valorModo : undefined,
+      valor_parcela: parcelar ? valorParcela : undefined,
     });
   };
 
   return (
     <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-3">
       <Input name="descricao" placeholder="Descrição" required defaultValue={inicial?.descricao ?? ""} />
-      <Input
-        name="valor"
-        type="number"
-        step="0.01"
-        placeholder="Valor"
-        required
-        defaultValue={inicial ? String(inicial.valor) : ""}
-      />
+      <div className="space-y-1">
+        <Input
+          type="number"
+          step="0.01"
+          min="0.01"
+          placeholder={
+            podeParcelar && nParc > 1
+              ? (valorModo === "parcela" ? "Valor da parcela" : "Valor total")
+              : "Valor"
+          }
+          required
+          value={valorDigitado}
+          onChange={(e) => setValorDigitado(e.target.value)}
+        />
+        {podeParcelar && nParc > 1 && valorNum > 0 && (
+          <p className="text-[11px] text-muted-foreground">
+            {valorModo === "parcela"
+              ? `${nParc}× de ${fmt(valorNum)} = ${fmt(valorTotalPreview)}`
+              : `${fmt(valorNum)} em ${nParc}× de ~${fmt(valorParcelaPreview)}`}
+          </p>
+        )}
+      </div>
       <Input
         name="data_transacao"
         type="date"
@@ -138,26 +191,21 @@ function TransacaoForm({
         </SelectContent>
       </Select>
 
-      <Select value={pagamento} onValueChange={setPagamento}>
-        <SelectTrigger><SelectValue placeholder="Pago com" /></SelectTrigger>
+      <Select value={pagamento || undefined} onValueChange={trocarPagamento}>
+        <SelectTrigger><SelectValue placeholder="Conta ou cartão" /></SelectTrigger>
         <SelectContent>
-          <SelectItem value="nenhuma">Sem forma</SelectItem>
-          {formasAtivas.map((f) => (
-            <SelectItem key={`f-${f.id}`} value={`forma:${f.id}`}>{f.nome}</SelectItem>
+          {bancosAtivos.map((b) => (
+            <SelectItem key={`b-${b.id}`} value={`conta:${b.id}`}>{rotuloBanco(b)}</SelectItem>
           ))}
-          {tipo === "Despesa" && cartoesAtivos.length > 0 && (
-            <>
-              {cartoesAtivos.map((c) => (
-                <SelectItem key={`c-${c.id}`} value={`cartao:${c.id}`}>
-                  CC {c.nome}
-                </SelectItem>
-              ))}
-            </>
-          )}
+          {tipo === "Despesa" && cartoesAtivos.map((c) => (
+            <SelectItem key={`c-${c.id}`} value={`cartao:${c.id}`}>
+              CC {c.nome}
+            </SelectItem>
+          ))}
         </SelectContent>
       </Select>
 
-      {!pagamento.startsWith("cartao:") && (
+      {!isCartaoSel && (
         <Select value={status} onValueChange={setStatus}>
           <SelectTrigger><SelectValue /></SelectTrigger>
           <SelectContent>
@@ -167,10 +215,42 @@ function TransacaoForm({
         </Select>
       )}
 
-      {pagamento.startsWith("cartao:") && (
+      {isCartaoSel && (
         <p className="text-xs text-muted-foreground md:col-span-1 self-center">
-          Compra no cartão: entra na fatura da competência e compõe o saldo até a fatura ser paga.
+          Compra no cartão: entra na fatura de cada competência (mês a mês se parcelar).
         </p>
+      )}
+      {pagamento.startsWith("conta:") && (
+        <p className="text-xs text-muted-foreground md:col-span-1 self-center">
+          Extrato: Pix, débito, TED e dinheiro saem desta conta. Boleto também — escolha a conta de onde sai.
+        </p>
+      )}
+
+      {podeParcelar && (
+        <>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Parcelas no cartão</label>
+            <Input
+              type="number"
+              min={1}
+              max={60}
+              value={parcelas}
+              onChange={(e) => setParcelas(Math.max(1, Math.min(60, Number(e.target.value) || 1)))}
+              placeholder="Qtd. (ex.: 5)"
+            />
+          </div>
+          {nParc > 1 && (
+            <Select value={valorModo} onValueChange={(v) => setValorModo(v as "total" | "parcela")}>
+              <SelectTrigger>
+                <SelectValue placeholder="Informar…" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="parcela">Valor de cada parcela</SelectItem>
+                <SelectItem value="total">Valor total da compra</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+        </>
       )}
 
       <Input
@@ -181,7 +261,7 @@ function TransacaoForm({
       />
 
       <div className="flex gap-2 md:col-span-2">
-        <Button type="submit" disabled={salvando || !categoriaId}>
+        <Button type="submit" disabled={salvando || !categoriaId || !pagamento || !valorNum}>
           {inicial ? "Salvar alterações" : "Salvar"}
         </Button>
         {onCancel && (
@@ -219,8 +299,8 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
     enabled: !!empresaId,
   });
 
-  const { data: formas = [] } = useQuery<EmpresaFormaPagamento[]>({
-    queryKey: [`/api/empresas/${empresaId}/formas-pagamento`],
+  const { data: bancos = [] } = useQuery<ContaBancariaPj[]>({
+    queryKey: [`/api/empresas/${empresaId}/contas-bancarias`],
     enabled: !!empresaId,
   });
 
@@ -235,6 +315,7 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
     qc.invalidateQueries({ queryKey: [`/api/empresas/${empresaId}/dashboard/resumo`] });
     qc.invalidateQueries({ queryKey: [`/api/empresas/${empresaId}/cartoes-com-saldo`] });
     qc.invalidateQueries({ queryKey: [`/api/empresas/${empresaId}/cartoes`] });
+    qc.invalidateQueries({ queryKey: [`/api/empresas/${empresaId}/contas-bancarias`] });
   };
 
   const createMut = useMutation({
@@ -303,16 +384,20 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
     onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
   });
 
-  // Formas + nomes de cartão usados nos lançamentos (filtro).
+  // Contas + cartões usados nos lançamentos (filtro).
   const formasPagamento = useMemo(() => {
     const set = new Map<string, string>();
     for (const t of transacoes) {
       const nome = (t as any).metodo_pagamento_nome || t.metodo_pagamento;
       if (nome) set.set(String(nome), String(nome));
     }
+    for (const b of bancos) {
+      const n = b.nome || b.banco;
+      if (n) set.set(n, n);
+    }
     for (const c of cartoes) set.set(c.nome, c.nome);
     return [...set.values()].sort((a, b) => a.localeCompare(b, "pt-BR"));
-  }, [transacoes, cartoes]);
+  }, [transacoes, bancos, cartoes]);
 
   const filtradas = useMemo(() => {
     const { de, ate } = janelaDoPeriodo(fPeriodo, fDe, fAte);
@@ -373,7 +458,7 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
           <CardContent className="pt-4">
             <TransacaoForm
               contas={contas}
-              formas={formas}
+              bancos={bancos}
               cartoes={cartoes}
               salvando={createMut.isPending}
               onSubmit={(dados) => createMut.mutate(dados)}
@@ -517,6 +602,11 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
                             Cartão · {t.metodo_pagamento || "crédito"}
                           </Badge>
                         )}
+                        {(t as any).parcela_num && (t as any).parcela_total && (t as any).parcela_total > 1 && (
+                          <Badge variant="secondary" className="ml-2 text-[10px]">
+                            {(t as any).parcela_num}/{(t as any).parcela_total}
+                          </Badge>
+                        )}
                         {!(t as any).cartao_id && t.metodo_pagamento && (
                           <Badge variant="outline" className="ml-2 text-[10px]">{t.metodo_pagamento}</Badge>
                         )}
@@ -603,7 +693,7 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
           {editando && (
             <TransacaoForm
               contas={contas}
-              formas={formas}
+              bancos={bancos}
               cartoes={cartoes}
               inicial={editando}
               salvando={updateMut.isPending}

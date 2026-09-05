@@ -1,8 +1,9 @@
 import { Request, Response } from "express";
 import { storage } from "../storage";
-import { softDeleteEmpresaTransacao, restaurarUltimaExcluidaPJ, listarLixeiraPJ } from "../storage";
+import { softDeleteEmpresaTransacao } from "../storage";
 import { insertEmpresaTransacaoSchema } from "../../shared/schema";
 import { atualizarTransacaoEmpresa, baixarTransacaoEmpresa } from "../services/empresa-transacao.service";
+import { aplicarMeioPagamentoPj } from "../services/meio-pagamento-pj";
 import * as formas from "../services/empresa-forma.service";
 
 /**
@@ -59,53 +60,102 @@ export const createEmpresaTransacao = async (req: Request, res: Response) => {
       });
     }
 
-    // Cartão de crédito: mesma regra do "Registrar compra" em Faturas —
-    // competência, fatura da competência, não mexe no caixa, compõe o saldo.
-    const cartaoIdBody = req.body?.cartao_id != null ? Number(req.body.cartao_id) : (parsed.data.cartao_id != null ? Number(parsed.data.cartao_id) : null);
-    if (cartaoIdBody) {
-      if (tipoNorm !== "Despesa") {
-        return res.status(400).json({ error: "Cartão de crédito só pode ser usado em Despesa." });
-      }
-      const { cartaoDoUsuario, resolverFaturaDoCartao } = await import("../services/fatura-pj.service");
-      const cartao = await cartaoDoUsuario(cartaoIdBody, userId);
-      if (!cartao || cartao.empresa_id !== empresaId) {
-        return res.status(400).json({ error: "Cartão não encontrado nesta empresa." });
-      }
-      const dataISO = String(parsed.data.data_transacao).slice(0, 10);
-      const { fatura, competencia, metodo } = await resolverFaturaDoCartao(empresaId, cartao, dataISO);
-      const transacao = await storage.createEmpresaTransacao({
-        ...parsed.data,
-        empresa_id: empresaId,
-        tipo: "Despesa",
-        cartao_id: cartao.id,
-        fatura_id: fatura.id,
-        competencia,
-        movimenta_caixa: false,
-        empresa_forma_pagamento_id: null,
-        metodo_pagamento: metodo,
-        origem: (req.body.origem as string) ?? "manual",
-      } as any);
-      return res.status(201).json(transacao);
+    const dataISO = String(parsed.data.data_transacao).slice(0, 10);
+    const cartaoIdBody =
+      req.body?.cartao_id != null
+        ? Number(req.body.cartao_id)
+        : (parsed.data.cartao_id != null ? Number(parsed.data.cartao_id) : null);
+    const contaBancariaBody =
+      req.body?.conta_bancaria_id != null
+        ? Number(req.body.conta_bancaria_id)
+        : (parsed.data.conta_bancaria_id != null ? Number(parsed.data.conta_bancaria_id) : null);
+
+    let meio;
+    try {
+      meio = await aplicarMeioPagamentoPj({
+        userId,
+        empresaId,
+        tipo: tipoNorm,
+        dataISO,
+        cartao_id: cartaoIdBody,
+        conta_bancaria_id: contaBancariaBody,
+        exigirMeio: true,
+        statusAtual: parsed.data.status,
+      });
+    } catch (meioErr: any) {
+      return res.status(400).json({ error: meioErr?.message || "Meio de pagamento inválido." });
     }
 
-    // Forma PJ (PIX/boleto/débito…): resolve nome para metodo_pagamento.
-    let metodoPagamento = parsed.data.metodo_pagamento ?? null;
-    let empresaFormaId = parsed.data.empresa_forma_pagamento_id ?? null;
-    if (empresaFormaId) {
-      const forma = await formas.getFormaById(empresaId, Number(empresaFormaId));
-      if (!forma) return res.status(400).json({ error: "Forma de pagamento não encontrada." });
-      metodoPagamento = forma.nome;
+    const parcelasN = Math.min(60, Math.max(1, Number(req.body?.parcelas) || 1));
+    if (parcelasN > 1 && tipoNorm === "Despesa") {
+      const { criarCompraParceladaPj } = await import("../storage");
+      // Aceita valor total OU valor da parcela (ex.: 5x de 35 → valor_parcela=35).
+      const valorInformado = Number(parsed.data.valor) || 0;
+      const valorParcelaBody =
+        req.body?.valor_parcela != null && req.body.valor_parcela !== ""
+          ? Number(req.body.valor_parcela)
+          : null;
+      const modo = String(req.body?.valor_modo || "").toLowerCase();
+      let valorTotal = valorInformado;
+      if (
+        (modo === "parcela" || (valorParcelaBody != null && Number.isFinite(valorParcelaBody) && valorParcelaBody > 0))
+      ) {
+        const vp =
+          valorParcelaBody != null && valorParcelaBody > 0 ? valorParcelaBody : valorInformado;
+        valorTotal = Math.round(vp * parcelasN * 100) / 100;
+      } else if (req.body?.valor_total != null && Number(req.body.valor_total) > 0) {
+        valorTotal = Number(req.body.valor_total);
+      }
+      if (!(valorTotal > 0)) {
+        return res.status(400).json({ error: "Informe o valor total ou o valor da parcela." });
+      }
+      if (!meio.cartao_id) {
+        return res.status(400).json({
+          error: "Parcelamento em várias competências é para cartão de crédito. Escolha o cartão.",
+        });
+      }
+      try {
+        const result = await criarCompraParceladaPj({
+          empresaId,
+          userId,
+          categoriaId: parsed.data.categoria_id as number,
+          descricao: parsed.data.descricao,
+          valorTotal,
+          parcelas: parcelasN,
+          dataInicio: dataISO,
+          cartaoId: meio.cartao_id,
+          contaBancariaId: null,
+          status: "Efetivada",
+          origem: (req.body.origem as string) ?? "manual",
+          dataVencimentoBase: parsed.data.data_vencimento
+            ? String(parsed.data.data_vencimento).slice(0, 10)
+            : null,
+        });
+        const first = await storage.getEmpresaTransacaoById(result.ids[0]);
+        return res.status(201).json({
+          ...first,
+          compra_grupo: result.compra_grupo,
+          parcelas_criadas: result.ids.length,
+          valor_parcela: result.valor_parcela,
+          valor_total: valorTotal,
+        });
+      } catch (parcErr: any) {
+        return res.status(400).json({ error: parcErr?.message || "Erro ao parcelar." });
+      }
     }
 
     const transacao = await storage.createEmpresaTransacao({
       ...parsed.data,
       empresa_id: empresaId,
-      cartao_id: null,
-      fatura_id: null,
-      competencia: null,
-      empresa_forma_pagamento_id: empresaFormaId,
-      metodo_pagamento: metodoPagamento,
-      origem: (req.body.origem as string) ?? 'manual'
+      tipo: tipoNorm,
+      cartao_id: meio.cartao_id,
+      conta_bancaria_id: meio.conta_bancaria_id,
+      fatura_id: meio.fatura_id,
+      competencia: meio.competencia,
+      movimenta_caixa: meio.movimenta_caixa,
+      empresa_forma_pagamento_id: meio.empresa_forma_pagamento_id,
+      metodo_pagamento: meio.metodo_pagamento ?? parsed.data.metodo_pagamento ?? null,
+      origem: (req.body.origem as string) ?? "manual",
     } as any);
 
     return res.status(201).json(transacao);
@@ -213,7 +263,6 @@ export const deleteEmpresaTransacao = async (req: Request, res: Response) => {
 };
 
 // PUT /api/empresas/:id/transacoes/:transacaoId/pagar
-// Baixa conta a pagar: Pendente → Efetivada + data_pagamento + movimenta_caixa.
 export const pagarEmpresaTransacao = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
@@ -261,6 +310,11 @@ export const createEmpresaForma = async (req: Request, res: Response) => {
     if (isNaN(empresaId)) return res.status(400).json({ error: "ID inválido." });
     const empresa = await resolveEmpresa(empresaId, userId, res);
     if (!empresa) return;
+    if (String(req.body?.tipo || "").toLowerCase() === "boleto") {
+      return res.status(400).json({
+        error: "Boleto não é meio de pagamento — informe a conta bancária de onde sai o pagamento.",
+      });
+    }
     const criada = await formas.criarForma(empresaId, req.body || {});
     return res.status(201).json(criada);
   } catch (err: any) {
@@ -277,12 +331,12 @@ export const updateEmpresaForma = async (req: Request, res: Response) => {
     if (isNaN(empresaId) || isNaN(formaId)) return res.status(400).json({ error: "ID inválido." });
     const empresa = await resolveEmpresa(empresaId, userId, res);
     if (!empresa) return;
-    const upd = await formas.atualizarForma(empresaId, formaId, req.body || {});
-    if (!upd) return res.status(404).json({ error: "Forma não encontrada." });
-    return res.json(upd);
+    const atualizada = await formas.atualizarForma(empresaId, formaId, req.body || {});
+    if (!atualizada) return res.status(404).json({ error: "Forma não encontrada." });
+    return res.json(atualizada);
   } catch (err: any) {
     console.error("updateEmpresaForma:", err);
-    return res.status(500).json({ error: err?.message || "Erro interno." });
+    return res.status(err?.status || 500).json({ error: err?.message || "Erro interno." });
   }
 };
 
@@ -304,7 +358,6 @@ export const deleteEmpresaForma = async (req: Request, res: Response) => {
 };
 
 // GET /api/empresas/:id/dashboard/resumo?de=YYYY-MM-DD&ate=YYYY-MM-DD
-// Retorna entradas, saídas fixas/variáveis/outras, margem de contribuição, lucro/prejuízo
 export const getEmpresaResumo = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
@@ -328,7 +381,6 @@ export const getEmpresaResumo = async (req: Request, res: Response) => {
 };
 
 // GET /api/empresas/:id/relatorios/dre?de=YYYY-MM-DD&ate=YYYY-MM-DD
-// DRE simplificada: Receita Bruta − Despesas Variáveis = Margem Contribuição − Fixas − Outras = Lucro/Prejuízo
 export const getEmpresaDRE = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
@@ -352,7 +404,6 @@ export const getEmpresaDRE = async (req: Request, res: Response) => {
 };
 
 // GET /api/empresas/:id/relatorios/fluxo-caixa?ano=YYYY
-// Fluxo de Caixa Gerencial mensal (visão avançada/CFO): contas × meses.
 export const getEmpresaFluxoCaixa = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
@@ -367,6 +418,68 @@ export const getEmpresaFluxoCaixa = async (req: Request, res: Response) => {
     return res.json(data);
   } catch (err) {
     console.error("getEmpresaFluxoCaixa:", err);
+    return res.status(500).json({ error: "Erro interno." });
+  }
+};
+
+// GET /api/empresas/:id/vencimentos?status=aberta|paga&de=&ate=
+// Faturas de cartão + despesas Pendentes (boleto/PIX/TED) do período.
+export const listarVencimentosPj = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const empresaId = parseInt(req.params.id);
+    if (isNaN(empresaId)) return res.status(400).json({ error: "ID inválido." });
+    const empresa = await resolveEmpresa(empresaId, userId, res);
+    if (!empresa) return;
+
+    const { db } = await import("../db");
+    const { sql } = await import("drizzle-orm");
+    const de = (req.query.de as string) || undefined;
+    const ate = (req.query.ate as string) || undefined;
+    const status = (req.query.status as string) || "aberta";
+
+    let statusFilter = sql`f.status IN ('aberta', 'fechada')`;
+    if (status === "paga") statusFilter = sql`f.status = 'paga'`;
+    else if (status === "todas") statusFilter = sql`true`;
+
+    const faturas = await db.execute(sql`
+      SELECT f.*, c.nome AS cartao_nome, c.bandeira AS cartao_cor,
+             COALESCE((
+               SELECT SUM(t.valor::numeric) FROM empresas_transacoes t
+               WHERE t.fatura_id = f.id AND COALESCE(t.movimenta_caixa, false) = false
+             ), 0) AS total
+      FROM empresas_faturas f
+      JOIN empresas_cartoes c ON c.id = f.cartao_id
+      WHERE f.empresa_id = ${empresaId}
+        AND ${statusFilter}
+        ${de ? sql`AND f.data_vencimento >= ${de}` : sql``}
+        ${ate ? sql`AND f.data_vencimento <= ${ate}` : sql``}
+      ORDER BY f.data_vencimento ASC
+    `);
+
+    const st = status === "paga" ? "Efetivada" : "Pendente";
+    const boletos = await db.execute(sql`
+      SELECT t.id, t.descricao, t.valor, t.data_vencimento, t.data_transacao, t.status, t.tipo,
+             t.fatura_id, t.movimenta_caixa, t.metodo_pagamento AS forma_pagamento,
+             t.parcela_num, t.parcela_total, t.conta_bancaria_id,
+             ec.nome AS categoria, ec.codigo AS categoria_codigo
+      FROM empresas_transacoes t
+      LEFT JOIN empresas_contas ec ON ec.id = t.categoria_id
+      WHERE t.empresa_id = ${empresaId}
+        AND t.status = ${st}
+        AND t.tipo = 'Despesa'
+        AND COALESCE(t.reembolso_pessoal, false) = false
+        AND t.fatura_id IS NULL
+        AND COALESCE(t.movimenta_caixa, true) = true
+        AND (t.data_vencimento IS NOT NULL OR t.data_transacao IS NOT NULL)
+        ${de ? sql`AND COALESCE(t.data_vencimento, t.data_transacao) >= ${de}` : sql``}
+        ${ate ? sql`AND COALESCE(t.data_vencimento, t.data_transacao) <= ${ate}` : sql``}
+      ORDER BY COALESCE(t.data_vencimento, t.data_transacao) ASC
+    `);
+
+    return res.json({ faturas, boletos });
+  } catch (err) {
+    console.error("listarVencimentosPj:", err);
     return res.status(500).json({ error: "Erro interno." });
   }
 };

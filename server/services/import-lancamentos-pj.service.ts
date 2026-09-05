@@ -365,6 +365,54 @@ export async function commitImportPj(empresaId: number, parsed: ParseResultPj): 
       if ((await storage.getEmpresasContasByEmpresaId(empresaId)).length > antes) categoriasCriadas++;
     }
     const cartaoId = l.formaEhCartao ? cartaoByNorm.get(norm(l.forma)) : undefined;
+    let meioPatch: any = {
+      movimenta_caixa: true,
+      cartao_id: null,
+      fatura_id: null,
+      competencia: null,
+      conta_bancaria_id: null,
+      metodo_pagamento: l.forma || null,
+    };
+    if (cartaoId) {
+      try {
+        // Resolve fatura pelo cartão da empresa (competência do vencimento).
+        const cartoes = await listarCartoes(empresaId);
+        const cartao = cartoes.find((c) => c.id === cartaoId);
+        if (cartao) {
+          const { resolverFaturaDoCartao } = await import("./fatura-pj.service");
+          const { fatura, competencia, metodo } = await resolverFaturaDoCartao(
+            empresaId,
+            cartao,
+            l.vencimento,
+          );
+          meioPatch = {
+            movimenta_caixa: false,
+            cartao_id: cartao.id,
+            fatura_id: fatura.id,
+            competencia,
+            conta_bancaria_id: null,
+            metodo_pagamento: metodo || l.forma || cartao.nome,
+          };
+        }
+      } catch {
+        meioPatch = {
+          movimenta_caixa: false,
+          cartao_id: cartaoId,
+          fatura_id: null,
+          competencia: null,
+          conta_bancaria_id: null,
+          metodo_pagamento: l.forma || null,
+        };
+      }
+    } else {
+      // Conta a pagar: entra em Vencimentos (movimenta_caixa + Pendente).
+      try {
+        const { contaPadraoPj } = await import("./meio-pagamento-pj");
+        const contaId = await contaPadraoPj(empresaId);
+        if (contaId) meioPatch.conta_bancaria_id = contaId;
+      } catch { /* segue sem conta */ }
+    }
+
     await storage.createEmpresaTransacao({
       empresa_id: empresaId,
       categoria_id: contaCache.get(catKey)!,
@@ -377,9 +425,7 @@ export async function commitImportPj(empresaId: number, parsed: ParseResultPj): 
       origem: "importacao",
       reembolso_pessoal: l.reembolsoPessoal,
       itens_agrupados: l.itensAgrupados,
-      movimenta_caixa: false,
-      cartao_id: cartaoId ?? null,
-      metodo_pagamento: l.forma || null,
+      ...meioPatch,
     } as any);
     existentes.add(k);
     if (l.reembolsoPessoal) reembolsosCriados++;

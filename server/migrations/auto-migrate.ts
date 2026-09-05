@@ -800,6 +800,15 @@ const STEPS: Step[] = [
     },
   },
   {
+    name: "empresas_transacoes: compra_grupo + parcelas",
+    run: async () => {
+      await db.execute(sql`ALTER TABLE empresas_transacoes ADD COLUMN IF NOT EXISTS compra_grupo VARCHAR(40)`);
+      await db.execute(sql`ALTER TABLE empresas_transacoes ADD COLUMN IF NOT EXISTS parcela_num INTEGER`);
+      await db.execute(sql`ALTER TABLE empresas_transacoes ADD COLUMN IF NOT EXISTS parcela_total INTEGER`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_emp_tx_compra_grupo ON empresas_transacoes(compra_grupo)`);
+    },
+  },
+  {
     // LGPD: pedido de exclusão com carência + marca de anonimização.
     // anonimizado_em é o que impede reprocessar quem já foi expurgado.
     name: "usuarios: exclusao de conta (LGPD)",

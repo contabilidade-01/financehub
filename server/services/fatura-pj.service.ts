@@ -261,14 +261,106 @@ export async function getSaldoCartaoEmpresa(cartaoId: number): Promise<{
   };
 }
 
-export async function listarCartoesComSaldo(empresaId: number): Promise<any[]> {
+/** Gastos do cartão PJ no intervalo civil [de, ate]. */
+export async function movimentoCartaoPeriodoPj(
+  cartaoId: number,
+  de?: string,
+  ate?: string,
+): Promise<{ usado: number; qtd: number }> {
+  const filtroDe = de ? sql`AND t.data_transacao >= ${de}` : sql``;
+  const filtroAte = ate ? sql`AND t.data_transacao <= ${ate}` : sql``;
+  const rows = await db.execute(sql`
+    SELECT
+      COALESCE(SUM(ABS(t.valor::numeric)), 0) AS total,
+      COUNT(*)::int AS qtd
+    FROM empresas_transacoes t
+    WHERE t.cartao_id = ${cartaoId}
+      AND t.tipo = 'Despesa'
+      AND COALESCE(t.movimenta_caixa, false) = false
+      AND NOT EXISTS (
+        SELECT 1 FROM empresas_faturas fp WHERE fp.transacao_pagamento_id = t.id
+      )
+      ${filtroDe}
+      ${filtroAte}
+  `);
+  return {
+    usado: Math.round(num((rows as any[])[0]?.total) * 100) / 100,
+    qtd: Number((rows as any[])[0]?.qtd || 0),
+  };
+}
+
+export async function listarLancamentosCartaoPj(
+  empresaId: number,
+  cartaoId: number,
+  de?: string,
+  ate?: string,
+): Promise<any[]> {
+  const cartao = await db.execute(sql`
+    SELECT id FROM empresas_cartoes
+    WHERE id = ${cartaoId} AND empresa_id = ${empresaId}
+    LIMIT 1
+  `);
+  if (!(cartao as any[])[0]) return [];
+
+  const filtroDe = de ? sql`AND t.data_transacao >= ${de}` : sql``;
+  const filtroAte = ate ? sql`AND t.data_transacao <= ${ate}` : sql``;
+
+  const rows = await db.execute(sql`
+    SELECT t.id, t.descricao, t.valor, t.tipo, t.data_transacao, t.status,
+           t.competencia, t.fatura_id,
+           c.nome AS categoria, c.codigo AS categoria_codigo
+    FROM empresas_transacoes t
+    LEFT JOIN empresas_contas c ON c.id = t.categoria_id
+    WHERE t.cartao_id = ${cartaoId}
+      AND t.empresa_id = ${empresaId}
+      AND t.tipo = 'Despesa'
+      AND COALESCE(t.movimenta_caixa, false) = false
+      AND NOT EXISTS (
+        SELECT 1 FROM empresas_faturas fp WHERE fp.transacao_pagamento_id = t.id
+      )
+      ${filtroDe}
+      ${filtroAte}
+    ORDER BY t.data_transacao DESC, t.id DESC
+  `);
+  return rows as any[];
+}
+
+export async function listarCartoesComSaldo(
+  empresaId: number,
+  de?: string,
+  ate?: string,
+): Promise<any[]> {
   const cartoes = await listarCartoes(empresaId);
+  const comPeriodo = Boolean(de || ate);
   return Promise.all(cartoes.map(async (c) => {
     try {
       const saldo = await getSaldoCartaoEmpresa(c.id);
-      return { ...c, ...saldo };
+      if (comPeriodo) {
+        const mov = await movimentoCartaoPeriodoPj(c.id, de, ate);
+        const limite = saldo.limite;
+        const disponivel = limite > 0 ? Math.max(0, limite - mov.usado) : 0;
+        const percentual = limite > 0 ? (mov.usado / limite) * 100 : 0;
+        return {
+          ...c,
+          ...saldo,
+          usado: mov.usado,
+          disponivel: Math.round(disponivel * 100) / 100,
+          percentual: Math.round(percentual * 10) / 10,
+          qtd_lancamentos: mov.qtd,
+          periodo: { de: de || null, ate: ate || null },
+        };
+      }
+      return { ...c, ...saldo, periodo: { de: null, ate: null } };
     } catch {
-      return { ...c, limite: num(c.limite), usado: 0, disponivel: num(c.limite), percentual: 0 };
+      return {
+        ...c,
+        limite: num(c.limite),
+        usado: 0,
+        disponivel: num(c.limite),
+        percentual: 0,
+        qtd_lancamentos: 0,
+        periodo: { de: de || null, ate: ate || null },
+      };
     }
   }));
 }

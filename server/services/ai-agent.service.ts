@@ -170,6 +170,7 @@ interface ToolContext {
 const TOOLS_PJ = new Set([
   "listar_empresas",
   "lancar_empresa",
+  "parcelar_compra_empresa",
   "listar_todas_transacoes_empresa",
   "resumo_empresa",
   "dre_empresa",
@@ -201,6 +202,7 @@ const TOOLS_PJ = new Set([
 // na versão pessoal (defesa extra, além da lista acima).
 const EQUIVALENTE_PJ: Record<string, string> = {
   insere_transacao: "lancar_empresa",
+  parcelar_compra: "parcelar_compra_empresa",
   atualiza_transacao: "atualiza_transacao_empresa",
   busca_transacao: "busca_transacao_empresa",
   buscar_transacao_por_filtro: "buscar_transacao_empresa_por_filtro",
@@ -755,7 +757,7 @@ function buildTools(ctx?: ToolContext) {
       type: "function" as const,
       function: {
         name: "lancar_empresa",
-        description: "Lança uma receita ou despesa NA EMPRESA (PJ), separada das finanças pessoais. Use quando o usuário deixar claro que é da empresa/negócio. Precisa saber de qual empresa e em qual conta do plano de contas.",
+        description: "Lança uma receita ou despesa NA EMPRESA (PJ) à vista. Se a compra for PARCELADA no cartão (ex.: '5x de 35 no Magalu'), use 'parcelar_compra_empresa' em vez desta. OBRIGATÓRIO forma_pagamento = conta bancária OU cartão. Pix/débito sozinho NÃO basta. Boleto NÃO é meio.",
         parameters: {
           type: "object",
           properties: {
@@ -765,8 +767,41 @@ function buildTools(ctx?: ToolContext) {
             valor: { type: "number" },
             tipo: { type: "string", enum: ["Receita", "Despesa"] },
             data_transacao: { type: "string", description: "AAAA-MM-DD (default hoje)" },
+            forma_pagamento: {
+              type: "string",
+              description: "Conta bancária OU cartão (ex.: 'Itaú PJ', 'Caixa', 'Nubank'). Obrigatório. Pix/boleto/débito sozinhos não bastam — diga a conta.",
+            },
+            parcelas: {
+              type: "number",
+              description: "Se > 1, a tool redireciona para parcelamento no cartão (mesma lógica de parcelar_compra_empresa).",
+            },
+            valor_parcela: {
+              type: "number",
+              description: "Valor de CADA parcela (ex.: 35). Use com parcelas quando o usuário disser '5x de 35'.",
+            },
           },
-          required: ["empresa", "valor", "tipo"],
+          required: ["empresa", "tipo", "forma_pagamento"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "parcelar_compra_empresa",
+        description: "Compra PARCELADA no CARTÃO da empresa (PJ). Use quando a mensagem tiver 'parcelada', 'Nx', 'em Nx', 'em N vezes'. Exemplos: '3x100 no Itaú', 'compra parcelada de 300 em 3x', '5x de 35 no Magalu'. Cria N lançamentos — a 1ª na fatura VIGENTE e as demais nos meses seguintes. OBRIGATÓRIO cartão (ou deixe vazio se só houver 1 cadastrado). Informe valor_parcela OU valor_total. Se faltar cartão/valor/qtd, NÃO invente — a tool devolve precisa_* para você perguntar.",
+        parameters: {
+          type: "object",
+          properties: {
+            empresa: { type: "string", description: "Nome (ou parte) da empresa." },
+            descricao: { type: "string", description: "O que foi comprado (se o usuário não disse, use 'Compra parcelada')" },
+            valor_total: { type: "number", description: "Total da compra. Use quando disser '300 em 3x' / 'valor de 300 parcelado'." },
+            valor_parcela: { type: "number", description: "Valor de CADA parcela. Use quando disser '3x100' / '3x de 100' / '5x de 35'." },
+            parcelas: { type: "number", description: "Número de parcelas (ex.: 3). Se omitir, o sistema tenta ler da frase do usuário." },
+            forma_pagamento: { type: "string", description: "Nome do cartão (ex.: 'Itaú', 'Magalu'). Se omitir e houver só 1 cartão, o sistema usa esse. Se houver vários, a tool pede para escolher." },
+            conta: { type: "string", description: "Conta do plano (opcional)" },
+            data_inicio: { type: "string", description: "AAAA-MM-DD da 1ª parcela. Omita para usar HOJE → fatura vigente." },
+          },
+          required: ["empresa"],
         },
       },
     },
@@ -1989,6 +2024,52 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         const empresa = await resolverEmpresa(ctx.userId, args.empresa);
         if ("erro" in empresa) return JSON.stringify(empresa);
 
+        const meioTexto = String(args.forma_pagamento || "").trim();
+        if (!meioTexto) {
+          return JSON.stringify({
+            error: "Informe a conta bancária ou o cartão (forma_pagamento). Pix/boleto sozinho não basta.",
+            precisa_meio: true,
+          });
+        }
+
+        const parcelasN = Math.min(60, Math.max(1, Number(args.parcelas) || 1));
+        const {
+          textoSugereParcelamento,
+          parseParcelamentoDoTexto,
+        } = await import("./parse-parcelamento");
+        const msgUser = ctx.userMessage || "";
+        const pareceParcelado =
+          parcelasN > 1 || textoSugereParcelamento(msgUser) || textoSugereParcelamento(String(args.descricao || ""));
+        // "compra parcelada…" mesmo se o modelo esqueceu de passar parcelas.
+        if (pareceParcelado) {
+          const doTexto = parseParcelamentoDoTexto(`${msgUser} ${args.descricao || ""}`);
+          return executeTool("parcelar_compra_empresa", {
+            ...args,
+            tipo: "Despesa",
+            valor_parcela: args.valor_parcela ?? doTexto.valorParcela ?? undefined,
+            valor_total: args.valor_total ?? (doTexto.modo === "total" ? doTexto.valorTotal : undefined),
+            parcelas: parcelasN > 1 ? parcelasN : (doTexto.parcelas || undefined),
+            forma_pagamento: args.forma_pagamento || doTexto.cartaoHint || undefined,
+            data_inicio: args.data_transacao || args.data_inicio,
+            descricao: args.descricao || "Compra parcelada",
+          }, ctx);
+        }
+
+        if (!(Number(args.valor) > 0)) {
+          return JSON.stringify({ error: "Informe o valor do lançamento." });
+        }
+
+        const { resolverMeioPorNomePj, aplicarMeioPagamentoPj } = await import("./meio-pagamento-pj");
+        const resolvido = await resolverMeioPorNomePj(empresa.id, ctx.userId, meioTexto);
+        if (!resolvido.ok) {
+          return JSON.stringify({
+            error: resolvido.mensagem,
+            precisa_meio: true,
+            precisa: resolvido.precisa,
+            sugestoes: resolvido.sugestoes,
+          });
+        }
+
         const contas = await storage.getEmpresasContasByEmpresaId(empresa.id);
         const tipo = args.tipo === "Receita" ? "Receita" : "Despesa";
         const { conta, usouOutras, motivo, ignorouInformada } = resolverContaPj({
@@ -1999,8 +2080,6 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           segmento: ctx.empresaAtiva?.segmento || (empresa as any).segmento,
         });
         if (ignorouInformada) {
-          // Rastro para auditar classificação: o modelo sugeriu uma conta que a
-          // descrição do usuário não sustentava.
           console.log(`[Classificação PJ] palpite '${args.conta}' descartado (motivo=${motivo}) para "${args.descricao}" → ${conta?.codigo}`);
         }
         if (!conta) {
@@ -2008,15 +2087,39 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         }
 
         const today = new Date().toISOString().slice(0, 10);
+        const dataISO = (args.data_transacao || today).slice(0, 10);
+        let meio;
+        try {
+          meio = await aplicarMeioPagamentoPj({
+            userId: ctx.userId,
+            empresaId: empresa.id,
+            tipo,
+            dataISO,
+            cartao_id: resolvido.cartao_id ?? null,
+            conta_bancaria_id: resolvido.conta_bancaria_id ?? null,
+            exigirMeio: true,
+            statusAtual: "Efetivada",
+          });
+        } catch (meioErr: any) {
+          return JSON.stringify({ error: meioErr?.message || "Meio de pagamento inválido.", precisa_meio: true });
+        }
+
         const criada = await storage.createEmpresaTransacao({
           empresa_id: empresa.id,
           categoria_id: conta.id,
           descricao: args.descricao || "Lançamento",
-          valor: args.valor || 0,
+          valor: Number(args.valor) || 0,
           tipo,
-          data_transacao: args.data_transacao || today,
+          data_transacao: dataISO,
           status: "Efetivada",
           origem: "whatsapp",
+          cartao_id: meio.cartao_id,
+          conta_bancaria_id: meio.conta_bancaria_id,
+          fatura_id: meio.fatura_id,
+          competencia: meio.competencia,
+          movimenta_caixa: meio.movimenta_caixa,
+          empresa_forma_pagamento_id: null,
+          metodo_pagamento: meio.metodo_pagamento || resolvido.rotulo,
         } as any);
         const orcamento = tipo === "Despesa"
           ? await getStatusOrcamentoContaPJ(empresa.id, conta.id)
@@ -2050,12 +2153,158 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         }
         return JSON.stringify({
           success: true, id: criada.id, empresa: empresaNome,
-          conta: `${conta.codigo} — ${conta.nome}`, valor: args.valor, tipo, data: args.data_transacao || today,
+          conta: `${conta.codigo} — ${conta.nome}`, valor: args.valor, tipo, data: dataISO,
+          pago_com: resolvido.rotulo,
+          meio: meio.isCartao ? "cartao" : "conta_bancaria",
           usou_outras: usouOutras,
           pendente_criar_conta,
           dica: usouOutras
             ? `Lancei em Outras. OFEREÇA criar a conta *${pendente_criar_conta.nome_sugerido}* e mover o lançamento. Quando o usuário confirmar (sim/pode/ok/claro/fechou/cria...), chame 'criar_conta_e_mover_empresa' com id_transacao=${criada.id} e nome=${pendente_criar_conta.nome_sugerido} — NÃO peça confirmação de novo. Se recusar (não/deixa/cancela), não crie.`
             : "Se a conta não for essa, dá para mudar depois em Transações PJ no app.",
+          orcamento,
+        });
+      }
+
+      case "parcelar_compra_empresa": {
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        if ("erro" in empresa) return JSON.stringify(empresa);
+
+        const { listarCartoes, cartaoDoUsuario, competenciaDaCompra } = await import("./fatura-pj.service");
+        const {
+          resolverValoresParcelamento,
+          parseParcelamentoDoTexto,
+        } = await import("./parse-parcelamento");
+        const { resolverMeioPorNomePj } = await import("./meio-pagamento-pj");
+
+        const msg = `${ctx.userMessage || ""} ${args.descricao || ""}`;
+        const doTexto = parseParcelamentoDoTexto(msg);
+        const valores = resolverValoresParcelamento({ args, userMessage: msg });
+        if (valores.incompleto) {
+          return JSON.stringify({
+            error: valores.incompleto,
+            precisa_valor: true,
+            mensagem: valores.incompleto,
+            exemplos: ["3x de 100 no Itaú", "compra parcelada de 300 em 3x no Magalu"],
+          });
+        }
+
+        const cartoes = await listarCartoes(empresa.id);
+        let cartaoTexto = String(args.forma_pagamento || doTexto.cartaoHint || "").trim();
+        let cartaoAuto = false;
+
+        if (!cartaoTexto) {
+          if (cartoes.length === 1) {
+            cartaoTexto = cartoes[0].nome;
+            cartaoAuto = true;
+          } else if (cartoes.length === 0) {
+            return JSON.stringify({
+              precisa_meio: true,
+              precisa: "cartao",
+              error: "Nenhum cartão cadastrado na empresa.",
+              mensagem:
+                "Compra parcelada precisa de cartão. Qual o nome do cartão? (ex.: Itaú, Magalu). Posso cadastrar se ainda não existir.",
+              sugestoes: [],
+            });
+          } else {
+            return JSON.stringify({
+              precisa_meio: true,
+              precisa: "cartao",
+              error: "Informe o cartão da compra parcelada.",
+              sugestoes: cartoes.map((c: any) => c.nome),
+              mensagem: `Em qual cartão foi a parcelada? Você tem: ${cartoes.map((c: any) => c.nome).join(", ")}.`,
+            });
+          }
+        }
+
+        const resolvido = await resolverMeioPorNomePj(empresa.id, ctx.userId, cartaoTexto);
+        if (!resolvido.ok) {
+          // Nome novo: orientar cadastrar ou escolher da lista.
+          return JSON.stringify({
+            error: resolvido.mensagem,
+            precisa_meio: true,
+            precisa: resolvido.precisa === "meio" ? "cartao" : resolvido.precisa,
+            sugestoes: resolvido.sugestoes.length ? resolvido.sugestoes : cartoes.map((c: any) => c.nome),
+            mensagem: cartoes.length
+              ? `Não achei o cartão "${cartaoTexto}". Qual destes? ${cartoes.map((c: any) => c.nome).join(", ")} — ou diga o nome para cadastrar.`
+              : resolvido.mensagem,
+          });
+        }
+        if (!resolvido.cartao_id) {
+          return JSON.stringify({
+            error: "Parcelamento exige cartão de crédito (não conta bancária).",
+            precisa_meio: true,
+            precisa: "cartao",
+            sugestoes: cartoes.map((c: any) => c.nome),
+          });
+        }
+
+        const contas = await storage.getEmpresasContasByEmpresaId(empresa.id);
+        const { conta, usouOutras } = resolverContaPj({
+          contas,
+          tipo: "Despesa",
+          contaInformada: args.conta,
+          descricao: `${args.descricao || ""} ${ctx.userMessage || ""}`,
+          segmento: ctx.empresaAtiva?.segmento || (empresa as any).segmento,
+        });
+        if (!conta) {
+          return JSON.stringify({ error: "A empresa não tem conta de Despesa no plano. Cadastre no app." });
+        }
+
+        // 1ª parcela: HOJE → fatura vigente (respeita dia de fechamento do cartão).
+        const today = new Date().toISOString().slice(0, 10);
+        const dataInicio = /^\d{4}-\d{2}-\d{2}/.test(args.data_inicio || "")
+          ? String(args.data_inicio).slice(0, 10)
+          : today;
+
+        const cartao = await cartaoDoUsuario(resolvido.cartao_id, ctx.userId);
+        let competencia1a: string | null = null;
+        if (cartao) {
+          competencia1a = competenciaDaCompra(
+            dataInicio,
+            Number(cartao.dia_fechamento),
+            Number(cartao.dia_vencimento),
+          ).competencia;
+        }
+
+        const { criarCompraParceladaPj } = await import("../storage");
+        let r;
+        try {
+          r = await criarCompraParceladaPj({
+            empresaId: empresa.id,
+            userId: ctx.userId,
+            categoriaId: conta.id,
+            descricao: args.descricao || "Compra parcelada",
+            valorTotal: valores.valorTotal,
+            parcelas: valores.parcelas,
+            dataInicio,
+            cartaoId: resolvido.cartao_id,
+            origem: "whatsapp",
+          });
+        } catch (e: any) {
+          return JSON.stringify({ error: e?.message || "Erro ao parcelar no cartão." });
+        }
+
+        const orcamento = await getStatusOrcamentoContaPJ(empresa.id, conta.id);
+        const empresaNome = empresa.nome_fantasia || empresa.razao_social;
+        return JSON.stringify({
+          success: true,
+          empresa: empresaNome,
+          compra_grupo: r.compra_grupo,
+          parcelas: r.parcelas,
+          valor_parcela: r.valor_parcela,
+          total: Math.round(valores.valorTotal * 100) / 100,
+          cartao: resolvido.rotulo,
+          cartao_escolhido_automaticamente: cartaoAuto,
+          conta: `${conta.codigo} — ${conta.nome}`,
+          competencia_primeira: competencia1a,
+          ids: r.ids,
+          usou_outras: usouOutras,
+          dica:
+            `Lancei ${r.parcelas}× de R$ ${Number(r.valor_parcela).toFixed(2)}` +
+            ` (total R$ ${valores.valorTotal.toFixed(2)}) no cartão *${resolvido.rotulo}*` +
+            (competencia1a ? `. 1ª parcela na fatura *${competencia1a}* (vigente)` : "") +
+            `; demais nos meses seguintes.` +
+            (cartaoAuto ? ` (usei o único cartão cadastrado: ${resolvido.rotulo})` : ""),
           orcamento,
         });
       }
@@ -2552,9 +2801,39 @@ export async function runAgent(
 - Este usuário é PJ (Empresa: ${emp.nome}). ${seg}
 - TODAS as transações financeiras (receitas e despesas) enviadas por ele DEVEM ser lançadas na empresa utilizando a ferramenta 'lancar_empresa' (informando empresa: "${emp.nome}"). NUNCA use 'insere_transacao' (pessoal) para este usuário, a menos que ele especifique explicitamente que é uma transação pessoal.
 - Fale em frases curtas e simples.
+- **Meio de pagamento (OBRIGATÓRIO):** 'forma_pagamento' = nome da CONTA BANCÁRIA ou do CARTÃO (ex.: "Itaú", "Caixa", "Nubank PJ"). Pix/débito/TED/dinheiro sozinho NÃO basta — pergunte "de qual conta?". Boleto NÃO é meio: pergunte a conta de onde sai. Cartão de crédito = nome do cartão. Se o usuário não disse, NÃO chame 'lancar_empresa' — pergunte primeiro. Se a tool devolver precisa_meio, use as sugestões e pergunte de novo.
 - **NÃO CHUTE a conta.** Só preencha 'conta' quando o usuário NOMEAR a conta ("lança no aluguel", "isso é folha") ou quando a descrição disser exatamente o que é ("compra de mercadoria", "paguei o DAS"). Nos demais casos, OMITA 'conta': o sistema classifica lendo a descrição e o plano inteiro da empresa, e acerta mais do que um palpite.
+
+### Compra PARCELADA (cartão) — OBRIGATÓRIO seguir
+Dispare 'parcelar_compra_empresa' (NUNCA 'parcelar_compra' do PF, NUNCA várias 'lancar_empresa') quando a mensagem tiver qualquer sinal de parcelamento:
+- palavras: parcelada, parcelado, parcelamento, dividido em
+- padrões: "3x100", "3x de 100", "5x de 35", "em 3x", "em 3 vezes", "300 em 3x", "valor de 300 em 3x"
+
+**Como montar os args (eficiência — não invente):**
+| Frase do usuário | parcelas | valor_parcela | valor_total |
+|---|---|---|---|
+| "3x100 no Itaú" / "3x de 100" | 3 | 100 | (omitir) |
+| "compra parcelada de 300 em 3x" | 3 | (omitir) | 300 |
+| "5x de 35 no Magalu" | 5 | 35 | (omitir) |
+| "parcelada em 10x de 50" | 10 | 50 | (omitir) |
+
+**1ª parcela = fatura vigente:** omita data_inicio (o sistema usa HOJE → competência atual do cartão). As demais parcelas vão para os meses seguintes automaticamente.
+
+**Cenários incompletos — PERGUNTE, não grave:**
+1. Sem cartão + vários cartões → pergunte "Em qual cartão?" (listar_cartoes_empresa / sugestões da tool).
+2. Sem cartão + **só 1** cartão → chame a tool sem forma_pagamento; o sistema usa esse cartão e avisa.
+3. Sem cartão + nenhum cadastrado → pergunte o nome; ofereça cadastrar (cadastrar_cartao_empresa).
+4. Só "compra parcelada de 300" sem Nx → pergunte "Em quantas vezes?".
+5. Só "em 3x no Itaú" sem valor → pergunte o valor (parcela ou total).
+6. "no crédito" / "no cartão" sem nome → trate como falta de cartão (passos 1–3).
+7. Tool devolve precisa_meio / precisa_valor → use a mensagem/sugestões; NÃO invente Magalu/Itaú/valores.
+
+**Depois de gravar:** confirme em 1 frase: N× de R$X no cartão Y, 1ª na fatura competência_primeira, total R$Z.
+
+Exemplo completo: "compra parcelada de 3x100 no cartão Itaú" →
+parcelar_compra_empresa(empresa: "${emp.nome}", forma_pagamento: "Itaú", parcelas: 3, valor_parcela: 100, descricao: "Compra parcelada").
 - Cuidado com armadilhas comuns: gasto com veículo (abastecimento, oficina, pneu, pedágio, cartório, despachante) NÃO é compra de mercadoria/CMV e NÃO é imposto. Imposto é só imposto mesmo (DAS, IPVA, licenciamento, taxa).
-- Se não tiver certeza, mesmo assim LANCE. O sistema escolhe a melhor conta; se não achar, usa Outras Receitas ou Outras Despesas. Diga a conta usada. Se cair em Outras (campo usou_outras / pendente_criar_conta), avise e OFEREÇA criar a conta sugerida e mover o lançamento.
+- Se não tiver certeza, mesmo assim LANCE (exceto parcelamento incompleto — aí pergunte). O sistema escolhe a melhor conta; se não achar, usa Outras. Diga a conta usada. Se cair em Outras (campo usou_outras / pendente_criar_conta), avise e OFEREÇA criar a conta sugerida e mover o lançamento.
 
 ### Oferta criar conta (após cair em Outras) — OBRIGATÓRIO
 Quando 'lancar_empresa' devolver pendente_criar_conta:
@@ -2575,7 +2854,8 @@ Este usuário NÃO tem carteira pessoal ativa. Toda consulta, edição e cadastr
 - Editar/corrigir um lançamento → 'buscar_transacao_empresa_por_filtro' → 'atualiza_transacao_empresa' (siga o fluxo da seção 5, sempre confirmando antes).
 - Criar conta no plano → 'criar_conta_empresa'. Para criar E mover lançamento que caiu em Outras → 'criar_conta_e_mover_empresa'. O CÓDIGO é gerado automaticamente: não peça nem invente.
 - Cartão de crédito da empresa → 'cadastrar_cartao_empresa' (peça dia de fechamento e dia de vencimento numa pergunta só; nunca invente esses dias), 'listar_cartoes_empresa', 'fatura_cartao_empresa', 'saldo_cartao_empresa' (limite/usado/disponível).
-- Formas de pagamento (PIX, boleto, débito) → 'listar_formas_empresa', 'cadastrar_forma_empresa'. Cartão NÃO é forma — é 'cadastrar_cartao_empresa'.
+- Compra parcelada no cartão → 'parcelar_compra_empresa' (NÃO use parcelar_compra do PF).
+- Formas de pagamento legadas (PIX, débito) → 'listar_formas_empresa', 'cadastrar_forma_empresa'. Em lançamentos o meio é CONTA BANCÁRIA ou CARTÃO — Boleto não é forma. Cartão → 'cadastrar_cartao_empresa'.
 - Baixar / marcar como paga uma conta Pendente → 'pagar_transacao_empresa' (depois de confirmar o lançamento).
 - NÃO ofereça gráfico nem lembrete no modo empresa (ainda não existem no PJ). Responda com os números e, se couber, indique a tela de Relatórios PJ no app.
 
