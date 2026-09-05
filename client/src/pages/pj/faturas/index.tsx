@@ -20,6 +20,8 @@ type Cartao = {
   dia_fechamento: number; dia_vencimento: number;
   limite?: number; usado?: number; disponivel?: number; percentual?: number;
   qtd_lancamentos?: number;
+  gasto_periodo?: number | null;
+  fatura_corrente?: { id: number; competencia: string; total: number; status: string } | null;
 };
 type Fatura = { id: number; competencia: string; data_fechamento: string; data_vencimento: string; status: string; total: number };
 type Lancamento = {
@@ -181,7 +183,7 @@ export default function PjFaturas({ empresaId }: { empresaId: number }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2"><CreditCard className="h-6 w-6" /> Faturas de Cartão</h1>
-          <p className="text-sm text-muted-foreground">Gasto do período · toque no cartão para ver compras. Faturas e pagamento continuam abaixo.</p>
+          <p className="text-sm text-muted-foreground">Total da fatura corrente · toque no valor para abrir as compras. Faturas por competência abaixo.</p>
         </div>
         <Button onClick={() => setNovoCartao(true)}><Plus className="h-4 w-4 mr-2" /> Novo cartão</Button>
       </div>
@@ -216,22 +218,29 @@ export default function PjFaturas({ empresaId }: { empresaId: number }) {
                 <button
                   type="button"
                   className="w-full text-left mt-1 rounded hover:bg-muted/50 -mx-1 px-1 py-0.5 transition-colors"
-                  onClick={() => setDetalheCartao({ id: c.id, nome: c.nome })}
+                  onClick={() => {
+                    setCartaoSel(c.id);
+                    if (c.fatura_corrente?.id) setFaturaAberta(c.fatura_corrente.id);
+                    else setDetalheCartao({ id: c.id, nome: c.nome });
+                  }}
                 >
-                  {c.limite != null && Number(c.limite) > 0 ? (
-                    <div className="text-xs space-y-0.5">
-                      <div className="text-muted-foreground">Gasto do período</div>
-                      <div className="text-rose-500 font-medium">Usado: {money(Number(c.usado || 0))} ({Number(c.percentual || 0).toFixed(0)}%)</div>
-                      <div className="text-emerald-600">Disponível: {money(Number(c.disponivel || 0))}</div>
-                      <div className="text-muted-foreground">{c.qtd_lancamentos ?? 0} compra(s) · ver detalhes</div>
+                  <div className="text-xs space-y-0.5">
+                    <div className="text-muted-foreground">
+                      Fatura {c.fatura_corrente?.competencia || "corrente"}
                     </div>
-                  ) : (
-                    <div className="text-xs space-y-0.5">
-                      <div className="text-muted-foreground">Gasto do período</div>
-                      <div className="font-medium">{money(Number(c.usado || 0))}</div>
-                      <div className="text-muted-foreground">{c.qtd_lancamentos ?? 0} compra(s) · ver detalhes</div>
+                    <div className="text-rose-500 font-medium text-base">
+                      {money(Number(c.fatura_corrente?.total ?? 0))}
                     </div>
-                  )}
+                    {c.limite != null && Number(c.limite) > 0 && (
+                      <>
+                        <div className="text-muted-foreground">
+                          Limite usado: {money(Number(c.usado || 0))} ({Number(c.percentual || 0).toFixed(0)}%)
+                        </div>
+                        <div className="text-emerald-600">Disponível: {money(Number(c.disponivel || 0))}</div>
+                      </>
+                    )}
+                    <div className="text-muted-foreground">toque para ver compras da fatura</div>
+                  </div>
                 </button>
               </div>
             ))}
@@ -357,7 +366,17 @@ export default function PjFaturas({ empresaId }: { empresaId: number }) {
                 {detalhe.compras.length === 0 ? <div className="p-4 text-center text-sm text-muted-foreground">Sem compras.</div> :
                   detalhe.compras.map((c) => (
                     <div key={c.id} className="flex items-center justify-between px-3 py-2 text-sm">
-                      <div className="min-w-0"><div className="truncate">{c.descricao}</div><div className="text-xs text-muted-foreground">{fmt(c.data_transacao)} · {c.categoria_codigo} {c.categoria_nome}</div></div>
+                      <div className="min-w-0">
+                        <div className="truncate">
+                          {c.descricao}
+                          {c.parcela_num && c.parcela_total && Number(c.parcela_total) > 1 && (
+                            <Badge variant="secondary" className="ml-2 text-[10px]">
+                              {c.parcela_num}/{c.parcela_total}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground">{fmt(c.data_transacao)} · {c.categoria_codigo} {c.categoria_nome}</div>
+                      </div>
                       <div className="font-medium shrink-0">{money(Number(c.valor))}</div>
                     </div>
                   ))}

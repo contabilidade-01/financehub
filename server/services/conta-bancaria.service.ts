@@ -260,18 +260,20 @@ export async function listarLancamentosContaPj(
   ate?: string,
 ): Promise<any[]> {
   const conta = await db.execute(sql`
-    SELECT id FROM contas_bancarias
+    SELECT id, nome, banco FROM contas_bancarias
     WHERE id = ${contaId} AND empresa_id = ${empresaId}
     LIMIT 1
   `);
   if (!(conta as any[])[0]) return [];
+  const rotuloConta = (conta as any[])[0].nome || (conta as any[])[0].banco || "Conta";
 
   const filtroDe = de ? sql`AND t.data_transacao >= ${de}` : sql``;
   const filtroAte = ate ? sql`AND t.data_transacao <= ${ate}` : sql``;
 
   const rows = await db.execute(sql`
     SELECT t.id, t.descricao, t.valor, t.tipo, t.data_transacao, t.status,
-           t.movimenta_caixa, c.nome AS categoria, c.codigo AS categoria_codigo
+           t.movimenta_caixa, t.metodo_pagamento, t.parcela_num, t.parcela_total,
+           c.nome AS categoria, c.codigo AS categoria_codigo
     FROM empresas_transacoes t
     LEFT JOIN empresas_contas c ON c.id = t.categoria_id
     WHERE t.conta_bancaria_id = ${contaId}
@@ -280,9 +282,69 @@ export async function listarLancamentosContaPj(
       AND t.status = 'Efetivada'
       ${filtroDe}
       ${filtroAte}
-    ORDER BY t.data_transacao DESC, t.id DESC
+    ORDER BY t.data_transacao ASC, t.id ASC
   `);
-  return rows as any[];
+  return (rows as any[]).map((r) => ({
+    ...r,
+    forma: r.metodo_pagamento || rotuloConta,
+  }));
+}
+
+/** Extrato PJ com saldo anterior, saldo por linha e saldo final. */
+export async function montarExtratoContaPj(
+  empresaId: number,
+  contaId: number,
+  de?: string,
+  ate?: string,
+): Promise<{
+  saldo_inicial: number;
+  saldo_final: number;
+  saldo: number;
+  entradas: number;
+  saidas: number;
+  lancamentos: any[];
+}> {
+  const contaRows = await db.execute(sql`
+    SELECT id, saldo_inicial FROM contas_bancarias
+    WHERE id = ${contaId} AND empresa_id = ${empresaId} LIMIT 1
+  `);
+  const conta = (contaRows as any[])[0];
+  if (!conta) {
+    return { saldo_inicial: 0, saldo_final: 0, saldo: 0, entradas: 0, saidas: 0, lancamentos: [] };
+  }
+
+  let saldoAnterior: number;
+  if (de) {
+    const d = new Date(`${de}T12:00:00`);
+    d.setDate(d.getDate() - 1);
+    const vespera = d.toISOString().slice(0, 10);
+    saldoAnterior = await saldoConta(contaId, vespera);
+  } else {
+    saldoAnterior = num(conta.saldo_inicial);
+  }
+
+  const lista = await listarLancamentosContaPj(empresaId, contaId, de, ate);
+  let saldo = saldoAnterior;
+  let entradas = 0;
+  let saidas = 0;
+  const lancamentos = lista.map((l) => {
+    const valor = Math.abs(num(l.valor));
+    const receita = l.tipo === "Receita";
+    if (receita) entradas += valor;
+    else saidas += valor;
+    saldo = Math.round((saldo + (receita ? valor : -valor)) * 100) / 100;
+    return { ...l, saldo };
+  });
+
+  const mov = await movimentoContaPeriodo(contaId, de, ate);
+  return {
+    saldo_inicial: Math.round(saldoAnterior * 100) / 100,
+    saldo_final: Math.round(saldo * 100) / 100,
+    saldo: mov.movimento,
+    entradas: Math.round(entradas * 100) / 100,
+    saidas: Math.round(saidas * 100) / 100,
+    lancamentos,
+  };
 }
 
 /** Lista contas PJ com saldo acumulado + movimento do período (se de/ate). */
@@ -291,15 +353,16 @@ export async function listarContasComSaldoPj(
   de?: string,
   ate?: string,
 ): Promise<any[]> {
-  const { getContasBancariasByEmpresa, getSaldoSistemaConta } = await import("../storage");
+  const { getContasBancariasByEmpresa } = await import("../storage");
   const contas = await getContasBancariasByEmpresa(empresaId);
   const comPeriodo = Boolean(de || ate);
   return Promise.all(
     (contas as any[]).map(async (c) => {
-      const saldoSistema = await getSaldoSistemaConta(c.id);
+      const saldoSistema = await saldoConta(c.id);
       const mov = await movimentoContaPeriodo(c.id, de, ate);
       return {
         ...c,
+        nome: c.nome || c.banco,
         saldo_sistema: saldoSistema,
         saldo: comPeriodo ? mov.movimento : saldoSistema,
         movimento: mov.movimento,

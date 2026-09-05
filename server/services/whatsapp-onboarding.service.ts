@@ -159,6 +159,8 @@ export class WhatsAppOnboardingService {
 
           // Seed do plano de contas PJ automaticamente
           await storage.seedEmpresasContas(empresa.id);
+          const { garantirCaixinhaPj } = await import("./meio-pagamento-pj");
+          await garantirCaixinhaPj(empresa.id, userId);
 
           // Limpa o estado de onboarding
           await storage.deleteWhatsAppOnboardingState(remoteJid);

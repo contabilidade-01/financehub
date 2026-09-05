@@ -132,7 +132,6 @@ function Sidebar() {
       { icon: <Wallet className="mr-3 h-4 w-4" />, text: 'Contas bancárias', path: "/p/conciliacao" },
       { icon: <CreditCard className="mr-3 h-4 w-4" />, text: 'Cartões e Faturas', path: "/p/faturas" },
       { icon: <TrendingUp className="mr-3 h-4 w-4" />, text: 'Vencimentos', path: "/p/vencimentos" },
-      { icon: <CreditCard className="mr-3 h-4 w-4" />, text: 'Formas de Pagamento', path: "/p/formas-pagamento" },
       { icon: <FileUp className="mr-3 h-4 w-4" />, text: 'Conciliação', path: "/p/conciliacao" },
       { icon: <FileUp className="mr-3 h-4 w-4" />, text: 'Importar Lançamentos', path: "/p/importar" },
       { icon: <HandCoins className="mr-3 h-4 w-4" />, text: 'Reembolsos a Pagar', path: "/p/reembolsos" },

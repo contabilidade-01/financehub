@@ -345,6 +345,8 @@ export async function resetPassword(req: Request, res: Response) {
               ativo: true,
             } as any);
             await storage.seedEmpresasContas(empresa.id);
+            const { garantirCaixinhaPj } = await import("../services/meio-pagamento-pj");
+            await garantirCaixinhaPj(empresa.id, user.id);
             empresaNome = empresa.razao_social;
           } else {
             empresaNome = jaTem[0].razao_social;

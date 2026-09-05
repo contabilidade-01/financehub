@@ -866,6 +866,82 @@ const STEPS: Step[] = [
       }
     },
   },
+  {
+    name: "PJ: desativar formas soltas (PIX/boleto/etc) + limpar vínculo",
+    run: async () => {
+      // Soft-desativa todas as formas da tabela legada (não apaga — evita CASCADE).
+      const desativadas = await db.execute(sql`
+        UPDATE empresas_formas_pagamento
+        SET ativo = false
+        WHERE ativo = true
+        RETURNING id, empresa_id, nome
+      `);
+      const n = (desativadas as any[]).length;
+      if (n) {
+        console.log(`[AutoMigrate] PJ formas soltas desativadas: ${n}`);
+        for (const f of (desativadas as any[]).slice(0, 30)) {
+          console.log(`  - empresa ${f.empresa_id}: ${f.nome}`);
+        }
+        if (n > 30) console.log(`  … e mais ${n - 30}`);
+      }
+
+      // Txs que só tinham forma solta (sem conta/cartão) → Caixinha.
+      const empresas = await db.execute(sql`SELECT id, usuario_id FROM empresas WHERE COALESCE(ativo, true) = true`);
+      let remapeadas = 0;
+      for (const emp of empresas as any[]) {
+        const caixa = await db.execute(sql`
+          SELECT id FROM contas_bancarias
+          WHERE empresa_id = ${emp.id}
+            AND (
+              lower(coalesce(nome, '')) = 'caixinha'
+              OR lower(coalesce(banco, '')) = 'caixinha'
+              OR tipo = 'caixa'
+            )
+          LIMIT 1
+        `);
+        let caixaId = (caixa as any[])[0]?.id as number | undefined;
+        if (!caixaId) {
+          const criada = await db.execute(sql`
+            INSERT INTO contas_bancarias (empresa_id, usuario_id, banco, nome, tipo, saldo_inicial, ativo)
+            VALUES (${emp.id}, ${emp.usuario_id ?? null}, 'Caixinha', 'Caixinha', 'caixa', 0, true)
+            RETURNING id
+          `);
+          caixaId = (criada as any[])[0]?.id;
+        }
+        if (!caixaId) continue;
+
+        const upd = await db.execute(sql`
+          UPDATE empresas_transacoes
+          SET conta_bancaria_id = COALESCE(conta_bancaria_id, ${caixaId}),
+              empresa_forma_pagamento_id = NULL,
+              metodo_pagamento = CASE
+                WHEN cartao_id IS NOT NULL THEN metodo_pagamento
+                WHEN conta_bancaria_id IS NOT NULL THEN metodo_pagamento
+                ELSE COALESCE(NULLIF(metodo_pagamento, ''), 'Caixinha')
+              END,
+              movimenta_caixa = CASE
+                WHEN cartao_id IS NOT NULL OR fatura_id IS NOT NULL THEN false
+                ELSE COALESCE(movimenta_caixa, true)
+              END
+          WHERE empresa_id = ${emp.id}
+            AND empresa_forma_pagamento_id IS NOT NULL
+            AND cartao_id IS NULL
+            AND fatura_id IS NULL
+          RETURNING id
+        `);
+        remapeadas += (upd as any[]).length;
+
+        // Limpa o vínculo também nas que já têm conta/cartão.
+        await db.execute(sql`
+          UPDATE empresas_transacoes
+          SET empresa_forma_pagamento_id = NULL
+          WHERE empresa_id = ${emp.id}
+            AND empresa_forma_pagamento_id IS NOT NULL
+        `);
+      }
+      console.log(`[AutoMigrate] PJ txs remapeadas de forma solta → conta/Caixinha: ${remapeadas}`);
+    },
+  },
 ];
 
 export async function runAutoMigrations(): Promise<void> {

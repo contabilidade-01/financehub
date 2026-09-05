@@ -1425,7 +1425,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/empresas/:id/transacoes/:transacaoId/pagar", combinedAuth, empresaTransacaoCtrl.pagarEmpresaTransacao);
   app.delete("/api/empresas/:id/transacoes/:transacaoId", combinedAuth, empresaTransacaoCtrl.deleteEmpresaTransacao);
 
-  // Formas de pagamento PJ (PIX, boleto, débito…) — isoladas do PF
+  // Formas de pagamento PJ (legado — POST bloqueado; meio = conta/Caixinha/cartão)
   app.get("/api/empresas/:id/formas-pagamento", combinedAuth, empresaTransacaoCtrl.listEmpresaFormas);
   app.post("/api/empresas/:id/formas-pagamento", combinedAuth, empresaTransacaoCtrl.createEmpresaForma);
   app.put("/api/empresas/:id/formas-pagamento/:formaId", combinedAuth, empresaTransacaoCtrl.updateEmpresaForma);

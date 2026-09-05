@@ -7,7 +7,6 @@ import { withRetry } from "../utils/ai-errors";
 import { resolverContaPj } from "./classificar-conta-pj";
 import { atualizarTransacaoEmpresa, baixarTransacaoEmpresa } from "./empresa-transacao.service";
 import { listarCartoes as listarCartoesPj, criarCartao as criarCartaoPj, listarFaturas as listarFaturasPj, getSaldoCartaoEmpresa } from "./fatura-pj.service";
-import { garantirFormasPadrao, criarForma as criarFormaPj } from "./empresa-forma.service";
 import { sugerirNomeConta } from "./confirmacao-usuario";
 import {
   registrarOfertaCriarConta,
@@ -188,8 +187,6 @@ const TOOLS_PJ = new Set([
   "listar_cartoes_empresa",
   "fatura_cartao_empresa",
   "saldo_cartao_empresa",
-  "listar_formas_empresa",
-  "cadastrar_forma_empresa",
   "simular_meta_financeira",
   "criar_meta",
   "deletar_meta",
@@ -802,7 +799,7 @@ function buildTools(ctx?: ToolContext) {
       type: "function" as const,
       function: {
         name: "lancar_empresa",
-        description: "Lança uma receita ou despesa NA EMPRESA (PJ) à vista. Se a compra for PARCELADA no cartão (ex.: '5x de 35 no Magalu'), use 'parcelar_compra_empresa' em vez desta. forma_pagamento = conta bancária OU cartão (ex.: 'Itaú', 'Caixinha', 'Nubank'). Se omitir, o sistema usa a Caixinha. Pix/débito sozinho: informe a conta ou deixe vazio (Caixinha). Boleto NÃO é meio.",
+        description: "Lança uma receita ou despesa NA EMPRESA (PJ) à vista. Se a compra for PARCELADA no cartão, use 'parcelar_compra_empresa'. forma_pagamento = conta bancária, Caixinha (dinheiro) OU cartão. PIX/boleto/débito/TED sozinhos NÃO bastam — informe a conta. Sem forma, a tool devolve precisa_meio para você perguntar (NÃO assuma Caixinha).",
         parameters: {
           type: "object",
           properties: {
@@ -814,7 +811,7 @@ function buildTools(ctx?: ToolContext) {
             data_transacao: { type: "string", description: "AAAA-MM-DD (default hoje)" },
             forma_pagamento: {
               type: "string",
-              description: "Conta bancária, Caixinha ou cartão (ex.: 'Itaú PJ', 'Caixinha', 'Nubank'). Opcional — se omitir, usa Caixinha.",
+              description: "Conta bancária, Caixinha ou cartão (ex.: 'Itaú PJ', 'Caixinha', 'Nubank'). Obrigatório salvo se a tool já devolveu precisa_meio e o usuário respondeu.",
             },
             parcelas: {
               type: "number",
@@ -825,7 +822,7 @@ function buildTools(ctx?: ToolContext) {
               description: "Valor de CADA parcela (ex.: 35). Use com parcelas quando o usuário disser '5x de 35'.",
             },
           },
-          required: ["empresa", "tipo"],
+          required: ["empresa", "tipo", "forma_pagamento"],
         },
       },
     },
@@ -1085,34 +1082,6 @@ function buildTools(ctx?: ToolContext) {
             cartao: { type: "string", description: "Nome (ou parte) do cartão." },
           },
           required: ["empresa", "cartao"],
-        },
-      },
-    },
-    {
-      type: "function" as const,
-      function: {
-        name: "listar_formas_empresa",
-        description: "Lista as formas de pagamento da empresa (PIX, boleto, débito…). Cartões são listados com listar_cartoes_empresa.",
-        parameters: {
-          type: "object",
-          properties: { empresa: { type: "string" } },
-          required: ["empresa"],
-        },
-      },
-    },
-    {
-      type: "function" as const,
-      function: {
-        name: "cadastrar_forma_empresa",
-        description: "Cadastra uma forma de pagamento da empresa (PIX, boleto, débito, transferência, dinheiro). NÃO use para cartão de crédito — use cadastrar_cartao_empresa.",
-        parameters: {
-          type: "object",
-          properties: {
-            empresa: { type: "string" },
-            nome: { type: "string", description: "Ex.: 'PIX Conta PJ', 'Boleto'." },
-            tipo: { type: "string", enum: ["pix", "boleto", "debito", "transferencia", "dinheiro", "outro"] },
-          },
-          required: ["empresa", "nome"],
         },
       },
     },
@@ -2111,8 +2080,23 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         const empresa = await resolverEmpresa(ctx.userId, args.empresa);
         if ("erro" in empresa) return JSON.stringify(empresa);
 
-        // Sem forma → Caixinha (resolverMeioPorNomePj com string vazia).
         const meioTexto = String(args.forma_pagamento || "").trim();
+        const { resolverMeioPorNomePj, aplicarMeioPagamentoPj } = await import("./meio-pagamento-pj");
+        // Sem forma → pergunta (não assume Caixinha).
+        if (!meioTexto) {
+          const resolvidoVazio = await resolverMeioPorNomePj(empresa.id, ctx.userId, "");
+          if (!resolvidoVazio.ok) {
+            return JSON.stringify({
+              error: resolvidoVazio.mensagem,
+              precisa_meio: true,
+              precisa: resolvidoVazio.precisa,
+              sugestoes: resolvidoVazio.sugestoes,
+              contas: resolvidoVazio.contas,
+              cartoes: resolvidoVazio.cartoes,
+              mensagem: resolvidoVazio.mensagem,
+            });
+          }
+        }
 
         const parcelasN = Math.min(60, Math.max(1, Number(args.parcelas) || 1));
         const {
@@ -2141,7 +2125,6 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           return JSON.stringify({ error: "Informe o valor do lançamento." });
         }
 
-        const { resolverMeioPorNomePj, aplicarMeioPagamentoPj } = await import("./meio-pagamento-pj");
         const resolvido = await resolverMeioPorNomePj(empresa.id, ctx.userId, meioTexto);
         if (!resolvido.ok) {
           return JSON.stringify({
@@ -2149,6 +2132,9 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
             precisa_meio: true,
             precisa: resolvido.precisa,
             sugestoes: resolvido.sugestoes,
+            contas: resolvido.contas,
+            cartoes: resolvido.cartoes,
+            mensagem: resolvido.mensagem,
           });
         }
 
@@ -2300,23 +2286,47 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
 
         const resolvido = await resolverMeioPorNomePj(empresa.id, ctx.userId, cartaoTexto);
         if (!resolvido.ok) {
-          // Nome novo: orientar cadastrar ou escolher da lista.
+          // Nome novo: orientar cadastrar ou escolher da lista — só cartões.
           return JSON.stringify({
             error: resolvido.mensagem,
             precisa_meio: true,
-            precisa: resolvido.precisa === "meio" ? "cartao" : resolvido.precisa,
-            sugestoes: resolvido.sugestoes.length ? resolvido.sugestoes : cartoes.map((c: any) => c.nome),
+            precisa: "cartao",
+            sugestoes: cartoes.map((c: any) => c.nome),
+            cartoes: cartoes.map((c: any) => c.nome),
             mensagem: cartoes.length
-              ? `Não achei o cartão "${cartaoTexto}". Qual destes? ${cartoes.map((c: any) => c.nome).join(", ")} — ou diga o nome para cadastrar.`
-              : resolvido.mensagem,
+              ? `Parcelado exige cartão. Qual destes? ${cartoes.map((c: any) => c.nome).join(", ")} — ou diga o nome e os dias de fechamento/vencimento para cadastrar.`
+              : "Compra parcelada precisa de cartão. Qual o nome? Posso cadastrar se você passar fechamento e vencimento.",
           });
         }
-        if (!resolvido.cartao_id) {
+        // Preferir cartão de mesmo nome se o texto casou só com conta.
+        let cartaoId = resolvido.cartao_id ?? null;
+        if (!cartaoId && resolvido.conta_bancaria_id) {
+          const n = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+          const alvo = n(resolvido.rotulo || cartaoTexto);
+          const mesmoNome = cartoes.find((c: any) => n(c.nome) === alvo || n(c.nome).includes(alvo) || alvo.includes(n(c.nome)));
+          if (mesmoNome) {
+            cartaoId = mesmoNome.id;
+            cartaoAuto = true;
+          } else {
+            return JSON.stringify({
+              error: "Parcelamento exige cartão de crédito (não conta bancária).",
+              precisa_meio: true,
+              precisa: "cartao",
+              sugestoes: cartoes.map((c: any) => c.nome),
+              cartoes: cartoes.map((c: any) => c.nome),
+              mensagem: cartoes.length
+                ? `"${cartaoTexto}" é conta bancária. Parcelado é no cartão — qual cartão? ${cartoes.map((c: any) => c.nome).join(", ")}.`
+                : `"${cartaoTexto}" é conta. Cadastre um cartão (fechamento e vencimento) para parcelar.`,
+            });
+          }
+        }
+        if (!cartaoId) {
           return JSON.stringify({
             error: "Parcelamento exige cartão de crédito (não conta bancária).",
             precisa_meio: true,
             precisa: "cartao",
             sugestoes: cartoes.map((c: any) => c.nome),
+            cartoes: cartoes.map((c: any) => c.nome),
           });
         }
 
@@ -2338,7 +2348,8 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           ? String(args.data_inicio).slice(0, 10)
           : today;
 
-        const cartao = await cartaoDoUsuario(resolvido.cartao_id, ctx.userId);
+        const cartao = await cartaoDoUsuario(cartaoId, ctx.userId);
+        const cartaoRotulo = cartao?.nome || resolvido.rotulo || cartaoTexto;
         let competencia1a: string | null = null;
         if (cartao) {
           competencia1a = competenciaDaCompra(
@@ -2359,7 +2370,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
             valorTotal: valores.valorTotal,
             parcelas: valores.parcelas,
             dataInicio,
-            cartaoId: resolvido.cartao_id,
+            cartaoId,
             origem: "whatsapp",
           });
         } catch (e: any) {
@@ -2375,7 +2386,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           parcelas: r.parcelas,
           valor_parcela: r.valor_parcela,
           total: Math.round(valores.valorTotal * 100) / 100,
-          cartao: resolvido.rotulo,
+          cartao: cartaoRotulo,
           cartao_escolhido_automaticamente: cartaoAuto,
           conta: `${conta.codigo} — ${conta.nome}`,
           competencia_primeira: competencia1a,
@@ -2383,10 +2394,10 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           usou_outras: usouOutras,
           dica:
             `Lancei ${r.parcelas}× de R$ ${Number(r.valor_parcela).toFixed(2)}` +
-            ` (total R$ ${valores.valorTotal.toFixed(2)}) no cartão *${resolvido.rotulo}*` +
+            ` (total R$ ${valores.valorTotal.toFixed(2)}) no cartão *${cartaoRotulo}*` +
             (competencia1a ? `. 1ª parcela na fatura *${competencia1a}* (vigente)` : "") +
             `; demais nos meses seguintes.` +
-            (cartaoAuto ? ` (usei o único cartão cadastrado: ${resolvido.rotulo})` : ""),
+            (cartaoAuto ? ` (usei o cartão ${cartaoRotulo})` : ""),
           orcamento,
         });
       }
@@ -2684,14 +2695,20 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         const empresa = await resolverEmpresa(ctx.userId, args.empresa);
         if ("erro" in empresa) return JSON.stringify(empresa);
         const cartoes = await listarCartoesPj(empresa.id);
-        if (cartoes.length === 0) {
-          return JSON.stringify({ cartoes: [], mensagem: "A empresa ainda não tem cartão cadastrado." });
-        }
+        const { getContasBancariasByEmpresa } = await import("../storage");
+        const contasRaw = await getContasBancariasByEmpresa(empresa.id);
+        const contas = (contasRaw as any[])
+          .filter((c) => c.ativo !== false)
+          .map((c) => ({ id: c.id, nome: c.nome || c.banco, tipo: c.tipo }));
         return JSON.stringify({
           cartoes: cartoes.map((c) => ({
             id: c.id, nome: c.nome, limite: c.limite,
             dia_fechamento: c.dia_fechamento, dia_vencimento: c.dia_vencimento, ativo: c.ativo,
           })),
+          contas,
+          mensagem: cartoes.length === 0
+            ? "A empresa ainda não tem cartão cadastrado. Contas bancárias estão em 'contas'."
+            : undefined,
         });
       }
 
@@ -2728,23 +2745,21 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       }
 
       case "listar_formas_empresa": {
-        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
-        if ("erro" in empresa) return JSON.stringify(empresa);
-        const formas = await garantirFormasPadrao(empresa.id);
-        return JSON.stringify({
-          formas: formas.filter((f) => f.ativo).map((f) => ({ id: f.id, nome: f.nome, tipo: f.tipo })),
-        });
+        // Legado: redireciona para cartões + contas (meio real).
+        return executeTool("listar_cartoes_empresa", args, ctx);
       }
 
       case "cadastrar_forma_empresa": {
         const empresa = await resolverEmpresa(ctx.userId, args.empresa);
         if ("erro" in empresa) return JSON.stringify(empresa);
-        try {
-          const forma = await criarFormaPj(empresa.id, { nome: args.nome, tipo: args.tipo });
-          return JSON.stringify({ success: true, forma: forma.nome, tipo: forma.tipo, id: forma.id });
-        } catch (e: any) {
-          return JSON.stringify({ success: false, error: e?.message || "Erro ao cadastrar forma" });
-        }
+        return JSON.stringify({
+          success: false,
+          obsoleto: true,
+          error:
+            "Forma solta (PIX/boleto/débito) não é mais meio. Cadastre conta bancária no app, use Caixinha para dinheiro, ou cadastrar_cartao_empresa com fechamento e vencimento.",
+          precisa_meio: true,
+          precisa: "meio",
+        });
       }
 
       default:
@@ -2902,7 +2917,7 @@ export async function runAgent(
 - Este usuário é PJ (Empresa: ${emp.nome}). ${seg}
 - TODAS as transações financeiras (receitas e despesas) enviadas por ele DEVEM ser lançadas na empresa utilizando a ferramenta 'lancar_empresa' (informando empresa: "${emp.nome}"). NUNCA use 'insere_transacao' (pessoal) para este usuário, a menos que ele especifique explicitamente que é uma transação pessoal.
 - Fale em frases curtas e simples.
-- **Meio de pagamento:** 'forma_pagamento' = nome da CONTA BANCÁRIA, Caixinha ou CARTÃO (ex.: "Itaú", "Caixinha", "Nubank PJ"). Se o usuário NÃO disser a forma, OMITA forma_pagamento — o sistema usa a Caixinha. Pix/débito/TED sozinhos: se souber a conta, informe; senão omita (Caixinha). Boleto NÃO é meio: pergunte a conta ou use Caixinha. Cartão de crédito = nome do cartão. Se a tool devolver precisa_meio, use as sugestões e pergunte de novo.
+- **Meio de pagamento:** 'forma_pagamento' = CONTA BANCÁRIA, Caixinha (só dinheiro em espécie) ou CARTÃO. PIX/débito/TED/boleto sozinhos NÃO bastam — pergunte "de qual conta?". **Exceção:** se houver só **1** conta ativa, a tool pode usá-la e avisar. Caixinha só quando o usuário disser dinheiro/espécie/caixa. Sem meio identificado → PERGUNTE (use listar_cartoes_empresa: campos cartoes + contas). NUNCA assuma Caixinha em silêncio. Se a tool devolver precisa_meio, use contas/cartoes/sugestões.
 - **NÃO CHUTE a conta.** Só preencha 'conta' quando o usuário NOMEAR a conta ("lança no aluguel", "isso é folha") ou quando a descrição disser exatamente o que é ("compra de mercadoria", "paguei o DAS"). Nos demais casos, OMITA 'conta': o sistema classifica lendo a descrição e o plano inteiro da empresa, e acerta mais do que um palpite.
 
 ### Compra PARCELADA (cartão) — OBRIGATÓRIO seguir
@@ -2956,7 +2971,7 @@ Este usuário NÃO tem carteira pessoal ativa. Toda consulta, edição e cadastr
 - Criar conta no plano → 'criar_conta_empresa'. Para criar E mover lançamento que caiu em Outras → 'criar_conta_e_mover_empresa'. O CÓDIGO é gerado automaticamente: não peça nem invente.
 - Cartão de crédito da empresa → 'cadastrar_cartao_empresa' (peça dia de fechamento e dia de vencimento numa pergunta só; nunca invente esses dias), 'listar_cartoes_empresa', 'fatura_cartao_empresa', 'saldo_cartao_empresa' (limite/usado/disponível).
 - Compra parcelada no cartão → 'parcelar_compra_empresa' (NÃO use parcelar_compra do PF).
-- Formas de pagamento legadas (PIX, débito) → 'listar_formas_empresa', 'cadastrar_forma_empresa'. Em lançamentos o meio é CONTA BANCÁRIA ou CARTÃO — Boleto não é forma. Cartão → 'cadastrar_cartao_empresa'.
+- Meio de pagamento = CONTA BANCÁRIA, Caixinha (dinheiro) ou CARTÃO. Use 'listar_cartoes_empresa' (campos cartoes + contas). PIX/boleto/débito não são meio. Cartão novo → 'cadastrar_cartao_empresa' (fechamento + vencimento obrigatórios; nunca invente nem cadastre sozinho).
 - Baixar / marcar como paga uma conta Pendente → 'pagar_transacao_empresa' (depois de confirmar o lançamento).
 - NÃO ofereça gráfico nem lembrete no modo empresa (ainda não existem no PJ). Responda com os números e, se couber, indique a tela de Relatórios PJ no app.
 

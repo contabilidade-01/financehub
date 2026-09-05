@@ -135,10 +135,13 @@ export async function detalheFatura(faturaId: number): Promise<any> {
   const fatura = await getFaturaById(faturaId);
   if (!fatura) return null;
   const compras = await db.execute(sql`
-    SELECT t.id, t.descricao, t.valor, t.data_transacao, t.categoria_id, c.nome AS categoria_nome, c.codigo AS categoria_codigo
+    SELECT t.id, t.descricao, t.valor, t.data_transacao, t.categoria_id,
+           t.parcela_num, t.parcela_total,
+           c.nome AS categoria_nome, c.codigo AS categoria_codigo
     FROM empresas_transacoes t
     LEFT JOIN empresas_contas c ON c.id = t.categoria_id
     WHERE t.fatura_id = ${faturaId}
+      AND COALESCE(t.movimenta_caixa, true) = false
     ORDER BY t.data_transacao
   `);
   return { fatura, compras: compras as any[], total: await getFaturaTotal(faturaId) };
@@ -346,26 +349,46 @@ export async function listarCartoesComSaldo(
   ate?: string,
 ): Promise<any[]> {
   const cartoes = await listarCartoes(empresaId);
-  const comPeriodo = Boolean(de || ate);
+  const hoje = new Date().toISOString().slice(0, 10);
   return Promise.all(cartoes.map(async (c) => {
     try {
       const saldo = await getSaldoCartaoEmpresa(c.id);
-      if (comPeriodo) {
-        const mov = await movimentoCartaoPeriodoPj(c.id, de, ate);
-        const limite = saldo.limite;
-        const disponivel = limite > 0 ? Math.max(0, limite - mov.usado) : 0;
-        const percentual = limite > 0 ? (mov.usado / limite) * 100 : 0;
-        return {
-          ...c,
-          ...saldo,
-          usado: mov.usado,
-          disponivel: Math.round(disponivel * 100) / 100,
-          percentual: Math.round(percentual * 10) / 10,
-          qtd_lancamentos: mov.qtd,
-          periodo: { de: de || null, ate: ate || null },
-        };
-      }
-      return { ...c, ...saldo, periodo: { de: null, ate: null } };
+      // Fatura corrente (competência de hoje) — número principal do card.
+      let fatura_corrente: { id: number; competencia: string; total: number; status: string } | null = null;
+      try {
+        const { competencia } = competenciaDaCompra(
+          hoje,
+          Number(c.dia_fechamento),
+          Number(c.dia_vencimento),
+        );
+        const fatRows = await db.execute(sql`
+          SELECT * FROM empresas_faturas
+          WHERE cartao_id = ${c.id} AND competencia = ${competencia}
+          LIMIT 1
+        `);
+        const f = (fatRows as any[])[0];
+        if (f) {
+          fatura_corrente = {
+            id: f.id,
+            competencia: f.competencia,
+            total: await getFaturaTotal(f.id),
+            status: f.status,
+          };
+        } else {
+          fatura_corrente = { id: 0, competencia, total: 0, status: "aberta" };
+        }
+      } catch { /* sem fatura corrente */ }
+
+      const mov = de || ate ? await movimentoCartaoPeriodoPj(c.id, de, ate) : null;
+      return {
+        ...c,
+        ...saldo,
+        fatura_corrente,
+        // Mantém gasto do período civil como extra; o card usa fatura_corrente.
+        gasto_periodo: mov?.usado ?? null,
+        qtd_lancamentos: mov?.qtd ?? undefined,
+        periodo: { de: de || null, ate: ate || null },
+      };
     } catch {
       return {
         ...c,
@@ -373,6 +396,7 @@ export async function listarCartoesComSaldo(
         usado: 0,
         disponivel: num(c.limite),
         percentual: 0,
+        fatura_corrente: null,
         qtd_lancamentos: 0,
         periodo: { de: de || null, ate: ate || null },
       };

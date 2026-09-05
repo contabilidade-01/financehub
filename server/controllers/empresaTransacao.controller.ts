@@ -298,8 +298,8 @@ export const listEmpresaFormas = async (req: Request, res: Response) => {
     if (isNaN(empresaId)) return res.status(400).json({ error: "ID inválido." });
     const empresa = await resolveEmpresa(empresaId, userId, res);
     if (!empresa) return;
-    const lista = await formas.garantirFormasPadrao(empresaId);
-    return res.json(lista);
+    const lista = await formas.listarFormas(empresaId);
+    return res.json(lista.filter((f: any) => f.ativo !== false));
   } catch (err) {
     console.error("listEmpresaFormas:", err);
     return res.status(500).json({ error: "Erro interno." });
@@ -313,13 +313,10 @@ export const createEmpresaForma = async (req: Request, res: Response) => {
     if (isNaN(empresaId)) return res.status(400).json({ error: "ID inválido." });
     const empresa = await resolveEmpresa(empresaId, userId, res);
     if (!empresa) return;
-    if (String(req.body?.tipo || "").toLowerCase() === "boleto") {
-      return res.status(400).json({
-        error: "Boleto não é meio de pagamento — informe a conta bancária de onde sai o pagamento.",
-      });
-    }
-    const criada = await formas.criarForma(empresaId, req.body || {});
-    return res.status(201).json(criada);
+    return res.status(400).json({
+      error:
+        "Forma solta não é mais meio de pagamento. Cadastre Conta bancária, use a Caixinha ou um Cartão em Cartões e Faturas.",
+    });
   } catch (err: any) {
     console.error("createEmpresaForma:", err);
     return res.status(err?.status || 500).json({ error: err?.message || "Erro interno." });

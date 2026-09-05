@@ -14,10 +14,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PlusCircle, Trash2, Edit2, Plus } from "lucide-react";
+import { PlusCircle, Trash2, Edit2 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import PeriodoSelector from "@/components/shared/PeriodoSelector";
+import ExtratoConta, { type ExtratoContaData } from "@/components/shared/ExtratoConta";
 import { Periodo, rangeDoPeriodo, rotuloPeriodo } from "@/lib/period";
 
 interface ContaBancaria {
@@ -40,26 +41,10 @@ interface ContaBancaria {
 
 type ContaPlano = { id: number; codigo: string; nome: string; tipo: string };
 
-type Lancamento = {
-  id: number;
-  descricao: string;
-  valor: number | string;
-  tipo: string;
-  data_transacao: string;
-  categoria?: string | null;
-  categoria_codigo?: string | null;
-};
-
 const OPCOES: Periodo[] = ["current_month", "last_month", "next_month", "custom"];
 
 const money = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
-
-const dataBR = (s: string) => {
-  const [y, m, d] = String(s).slice(0, 10).split("-");
-  if (!y || !m || !d) return s;
-  return `${d}/${m}/${y}`;
-};
 
 const hoje = () => new Date().toISOString().slice(0, 10);
 
@@ -124,12 +109,7 @@ export default function ContasBancarias({ empresaId }: { empresaId: number }) {
   });
 
   const detalheUrl = detalhe ? `${base}/${detalhe.id}/lancamentos${qs}` : null;
-  const { data: detalheData, isLoading: loadingDetalhe } = useQuery<{
-    saldo?: number;
-    entradas?: number;
-    saidas?: number;
-    lancamentos: Lancamento[];
-  }>({
+  const { data: detalheData, isLoading: loadingDetalhe } = useQuery<ExtratoContaData & { nome?: string }>({
     queryKey: [detalheUrl || "/api/noop"],
     queryFn: () => apiRequest(detalheUrl!),
     enabled: !!detalheUrl && periodoPronto,
@@ -349,7 +329,7 @@ export default function ContasBancarias({ empresaId }: { empresaId: number }) {
       ) : contas.length === 0 ? (
         <Card className="p-8 text-center">
           <p className="text-muted-foreground">Nenhuma conta bancária cadastrada.</p>
-          <p className="text-sm text-muted-foreground mt-1">A Caixinha é criada automaticamente ao abrir esta tela.</p>
+          <p className="text-sm text-muted-foreground mt-1">A Caixinha é criada na abertura da empresa.</p>
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -381,7 +361,7 @@ export default function ContasBancarias({ empresaId }: { empresaId: number }) {
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
                       {conta.qtd_lancamentos ?? 0} lançamento
-                      {(conta.qtd_lancamentos ?? 0) === 1 ? "" : "s"} · ver detalhes
+                      {(conta.qtd_lancamentos ?? 0) === 1 ? "" : "s"} · ver extrato
                     </p>
                   </button>
                   {conta.saldo_sistema != null && (
@@ -419,83 +399,18 @@ export default function ContasBancarias({ empresaId }: { empresaId: number }) {
       )}
 
       <Dialog open={!!detalhe} onOpenChange={(o) => { if (!o) { setDetalhe(null); setLancando(false); } }}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-hidden flex flex-col">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader>
-            <DialogTitle>Conta · {detalhe?.nome}</DialogTitle>
-            <p className="text-sm text-muted-foreground capitalize">{periodoLabel}</p>
+            <DialogTitle>Extrato · {detalhe?.nome}</DialogTitle>
           </DialogHeader>
-          {loadingDetalhe ? (
-            <div className="space-y-2 py-4">
-              <Skeleton className="h-8 w-40" />
-              <Skeleton className="h-16 w-full" />
-            </div>
-          ) : (
-            <>
-              <div className="rounded-lg border border-border/60 px-3 py-2 mb-2">
-                <p className="text-xs text-muted-foreground">Saldo do período</p>
-                <p
-                  className={`text-xl font-semibold ${
-                    Number(detalheData?.saldo ?? 0) < 0 ? "text-red-500" : ""
-                  }`}
-                >
-                  {money(Number(detalheData?.saldo ?? 0))}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Entradas {money(Number(detalheData?.entradas) || 0)} · Saídas{" "}
-                  {money(Number(detalheData?.saidas) || 0)}
-                </p>
-              </div>
-              <div className="overflow-y-auto flex-1 min-h-0 space-y-2 pr-1">
-                {(detalheData?.lancamentos || []).length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-8">
-                    Nenhum lançamento neste período.
-                  </p>
-                ) : (
-                  (detalheData?.lancamentos || []).map((l) => {
-                    const valor = Number(l.valor) || 0;
-                    const receita = l.tipo === "Receita";
-                    return (
-                      <div
-                        key={l.id}
-                        className="flex items-start justify-between gap-3 rounded-lg border border-border/60 px-3 py-2"
-                      >
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium truncate">{l.descricao}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {dataBR(l.data_transacao)}
-                            {l.categoria
-                              ? ` · ${l.categoria_codigo ? `${l.categoria_codigo} — ` : ""}${l.categoria}`
-                              : ""}
-                          </p>
-                        </div>
-                        <span
-                          className={`text-sm font-semibold shrink-0 ${
-                            receita ? "text-emerald-600" : "text-red-500"
-                          }`}
-                        >
-                          {receita ? "+" : "−"}
-                          {money(Math.abs(valor))}
-                        </span>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </>
-          )}
-          <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button
-              variant="default"
-              className="gap-1"
-              onClick={() => setLancando(true)}
-            >
-              <Plus className="h-4 w-4" />
-              Novo lançamento
-            </Button>
-            <Button variant="outline" onClick={() => setDetalhe(null)}>
-              Fechar
-            </Button>
-          </DialogFooter>
+          <ExtratoConta
+            titulo={detalhe?.nome || "Conta"}
+            periodoLabel={periodoLabel}
+            loading={loadingDetalhe}
+            data={detalheData}
+            onNovoLancamento={() => setLancando(true)}
+            onFechar={() => setDetalhe(null)}
+          />
         </DialogContent>
       </Dialog>
 

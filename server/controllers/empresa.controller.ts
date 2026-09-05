@@ -27,6 +27,8 @@ export const createEmpresa = async (req: Request, res: Response) => {
 
     // Seed automático do plano de contas Yampa-like
     const contas = await storage.seedEmpresasContas(empresa.id);
+    const { garantirCaixinhaPj } = await import("../services/meio-pagamento-pj");
+    await garantirCaixinhaPj(empresa.id, userId);
 
     return res.status(201).json({ empresa, contas_criadas: contas.length });
   } catch (err: any) {

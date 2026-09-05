@@ -157,9 +157,9 @@ export default function ImportarLancamentosPj({ empresaId }: { empresaId: number
             )}
             {preview.formasNovas.length > 0 && (
               <div>
-                <p className="text-sm font-medium mb-1 flex items-center gap-1"><CreditCard className="h-4 w-4" /> Formas/cartões</p>
+                <p className="text-sm font-medium mb-1 flex items-center gap-1"><CreditCard className="h-4 w-4" /> Cartões novos a cadastrar</p>
                 {preview.formasNovas.map((f) => (
-                  <Badge key={f.nome} variant="secondary" className="mr-1 mb-1">{f.cartao ? "💳 " : ""}{f.nome}</Badge>
+                  <Badge key={f.nome} variant="secondary" className="mr-1 mb-1">💳 {f.nome}</Badge>
                 ))}
               </div>
             )}

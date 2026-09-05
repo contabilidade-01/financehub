@@ -258,9 +258,8 @@ export async function montarPreviewPj(empresaId: number, parsed: ParseResultPj):
     }
     if (l.forma && l.formaEhCartao && !cartaoNorm.has(norm(l.forma))) {
       formasNovas.set(norm(l.forma), { nome: l.forma, cartao: true, diaVencimento: l.formaDiaVencimento });
-    } else if (l.forma && !l.formaEhCartao) {
-      formasNovas.set(norm(l.forma), { nome: l.forma, cartao: false, diaVencimento: null });
     }
+    // Forma não-cartão (PIX/boleto/nome de banco) NÃO vira cadastro — no commit vai para conta/Caixinha.
     if (existentes.has(chave(l.vencimento, l.descricao, l.valor))) duplicadas++;
     else if (l.reembolsoPessoal) { reembolsosPessoais++; totalReembolsos += l.valor; }
     else contasAPagar++;
