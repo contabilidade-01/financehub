@@ -180,6 +180,7 @@ const TOOLS_PJ = new Set([
   "buscar_transacao_empresa_por_filtro",
   "busca_transacao_empresa",
   "atualiza_transacao_empresa",
+  "mover_lancamentos_empresa",
   "pagar_transacao_empresa",
   "criar_conta_empresa",
   "criar_conta_e_mover_empresa",
@@ -724,6 +725,10 @@ function buildTools(ctx?: ToolContext) {
             forma_pagamento: { type: "string", description: "Cartão/forma (ex.: 'Nubank', 'Magazine Luiza'). Obrigatório." },
             categoria: { type: "string" },
             data_inicio: { type: "string", description: "AAAA-MM-DD (default hoje)" },
+            confirmar_sem_cartao: {
+              type: "boolean",
+              description: "So true depois que o usuario confirmar que o parcelamento NAO e num cartao de credito (carne, boleto parcelado).",
+            },
           },
           required: ["descricao", "parcelas", "forma_pagamento"],
         },
@@ -741,6 +746,46 @@ function buildTools(ctx?: ToolContext) {
             categoria: { type: "string", description: "Nova categoria" },
             descricao: { type: "string", description: "Nova descrição (mantém o (i/N) das parcelas)" },
           },
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "mover_lancamentos",
+        description:
+          "Move lancamentos JA REGISTRADOS (pelos codigos) para outra conta bancaria ou cartao de credito. Use para 'coloque esses lancamentos no CC Nubank PF', 'essa compra foi no cartao X e nao no Y', 'joga tudo isso para a conta Itau'. Ajusta fatura, competencia e caixa junto. Confirme os codigos com o usuario antes de chamar.",
+        parameters: {
+          type: "object",
+          properties: {
+            ids: {
+              type: "array",
+              items: { type: "number" },
+              description: "Codigos dos lancamentos (todos os da compra, se for parcelada).",
+            },
+            destino: {
+              type: "string",
+              description: "Nome do cartao ou da conta de destino (ex.: 'CC Nubank PF', 'Itau').",
+            },
+          },
+          required: ["ids", "destino"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "mover_lancamentos_empresa",
+        description:
+          "Move lancamentos JA REGISTRADOS DA EMPRESA (pelos codigos) para outra conta bancaria ou cartao de credito da empresa. Ajusta fatura, competencia e caixa junto. Confirme os codigos com o usuario antes de chamar.",
+        parameters: {
+          type: "object",
+          properties: {
+            empresa: { type: "string", description: "Nome (ou parte) da empresa." },
+            ids: { type: "array", items: { type: "number" }, description: "Codigos dos lancamentos." },
+            destino: { type: "string", description: "Nome do cartao ou da conta bancaria de destino." },
+          },
+          required: ["empresa", "ids", "destino"],
         },
       },
     },
@@ -1856,15 +1901,42 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       case "listar_cartoes": {
         const doUsuario = await storage.getPaymentMethodsByUserId(ctx.userId);
         const globais = await storage.getGlobalPaymentMethods();
-        const todos = [...doUsuario, ...globais]
-          .filter((p: any) => p.ativo !== false)
-          .map((p: any) => p.nome);
-        // remove duplicados preservando ordem
-        const nomes = Array.from(new Set(todos));
+        const ativos = [...doUsuario, ...globais].filter((p: any) => p.ativo !== false);
+        // Cartão de crédito é o que tem dias de fechamento e vencimento. Boleto,
+        // Pix e "Nubank" solto são FORMAS — oferecê-los como cartão fazia a
+        // compra parcelada cair fora da fatura, no caixa.
+        const ehCartao = (p: any) => p.dia_fechamento != null && p.dia_vencimento != null;
+        const nomes = Array.from(new Set(ativos.filter(ehCartao).map((p: any) => p.nome)));
+        const outras = Array.from(new Set(ativos.filter((p: any) => !ehCartao(p)).map((p: any) => p.nome)));
         if (nomes.length === 0) {
-          return JSON.stringify({ cartoes: [], mensagem: "Nenhum cartão/forma cadastrado ainda. Peça o nome do cartão para cadastrar." });
+          return JSON.stringify({
+            cartoes: [],
+            outras_formas: outras,
+            mensagem: "Nenhum CARTÃO DE CRÉDITO cadastrado (com dia de fechamento e vencimento). Os nomes em outras_formas NÃO são cartão — não ofereça como cartão. Peça o nome do cartão para cadastrar.",
+          });
         }
-        return JSON.stringify({ cartoes: nomes });
+        return JSON.stringify({
+          cartoes: nomes,
+          outras_formas: outras,
+          aviso: "Só o que está em 'cartoes' é cartão de crédito. Nunca ofereça 'outras_formas' como cartão.",
+        });
+      }
+
+      case "mover_lancamentos": {
+        const { moverLancamentosPf } = await import("./mover-meio.service");
+        const r = await moverLancamentosPf(ctx.userId, ctx.walletId, args.ids, String(args.destino || ""));
+        if (!r.ok) return JSON.stringify({ success: false, ...r });
+        return JSON.stringify({
+          success: true,
+          movidos: r.afetados,
+          destino: r.destino,
+          tipo_destino: r.tipo_destino,
+          faturas: r.faturas,
+          ids: r.ids,
+          mensagem: r.tipo_destino === "cartao"
+            ? `Movi ${r.afetados} lançamento(s) para o cartão ${r.destino}. Eles saíram do caixa e entraram nas faturas ${r.faturas.join(", ")}.`
+            : `Movi ${r.afetados} lançamento(s) para a conta ${r.destino}.`,
+        });
       }
 
       case "parcelar_compra": {
@@ -1915,6 +1987,21 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           const { cartaoPfDoUsuario } = await import("./fatura-pf.service");
           const cartao = await cartaoPfDoUsuario(formaId, ctx.userId);
           if (!cartao) {
+            // A forma existe mas NÃO é cartão de crédito. Antes isso virava N
+            // saídas de caixa em silêncio — o usuário dizia "Nubank" pensando no
+            // "CC Nubank PF" e a compra não entrava em fatura nenhuma.
+            if (!args.confirmar_sem_cartao) {
+              const reais = await getCartoesComSaldo(ctx.userId, ctx.walletId).catch(() => []);
+              const nomesReais = (reais as any[]).map((c) => c.cartao_nome || c.nome).filter(Boolean);
+              return JSON.stringify({
+                precisa_confirmar: true,
+                error: `"${formaNome}" está cadastrado como forma de pagamento, não como cartão de crédito.`,
+                cartoes_de_credito: nomesReais,
+                mensagem: nomesReais.length
+                  ? `Pergunte ao usuário: o parcelamento foi em algum destes cartões (${nomesReais.join(", ")})? Se ele confirmar que é carnê/boleto parcelado em "${formaNome}" mesmo, chame de novo com confirmar_sem_cartao=true.`
+                  : `Pergunte se é carnê/boleto parcelado. Se for cartão, ele precisa cadastrar o cartão com dia de fechamento e vencimento.`,
+              });
+            }
             const { contaPadraoPf } = await import("./conta-bancaria.service");
             contaBancariaId = await contaPadraoPf(ctx.userId);
           }
@@ -2475,6 +2562,25 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           alterado: dados,
           antes: { descricao: r.anterior.descricao, valor: r.anterior.valor, data: r.anterior.data_transacao, tipo: r.anterior.tipo },
           transacao: r.transacao,
+        });
+      }
+
+      case "mover_lancamentos_empresa": {
+        const empresaMv = await resolverEmpresa(ctx.userId, args.empresa);
+        if ("erro" in empresaMv) return JSON.stringify(empresaMv);
+        const { moverLancamentosPj } = await import("./mover-meio.service");
+        const r = await moverLancamentosPj(empresaMv.id, ctx.userId, args.ids, String(args.destino || ""));
+        if (!r.ok) return JSON.stringify({ success: false, ...r });
+        return JSON.stringify({
+          success: true,
+          movidos: r.afetados,
+          destino: r.destino,
+          tipo_destino: r.tipo_destino,
+          faturas: r.faturas,
+          ids: r.ids,
+          mensagem: r.tipo_destino === "cartao"
+            ? `Movi ${r.afetados} lançamento(s) para o cartão ${r.destino} (faturas ${r.faturas.join(", ")}).`
+            : `Movi ${r.afetados} lançamento(s) para a conta ${r.destino}.`,
         });
       }
 

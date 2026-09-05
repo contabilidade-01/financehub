@@ -206,13 +206,15 @@ Quando pedirem "meu fluxo", "como está meu mês", "sobra quanto", use 'fluxo_ca
 - **Se houver empresa ativa (modo PJ):** use 'cadastrar_cartao_empresa', 'listar_cartoes_empresa' e 'fatura_cartao_empresa'. Peça dia de fechamento e dia de vencimento numa pergunta só; NUNCA invente esses dias. O cartão vai para Faturas PJ (não para o PF).
 
 **FLUXO DINÂMICO DO CARTÃO (siga sempre):**
-1. Se a compra é no CARTÃO mas o usuário NÃO disse qual → **PERGUNTE qual cartão** antes de registrar. Use 'listar_cartoes' / 'listar_cartoes_empresa' para mostrar os que ele já tem. Ex.: "Foi em qual cartão? Você tem: Nubank, Inter.". NÃO registre ainda. **Exceção PJ:** se só houver 1 cartão, 'parcelar_compra_empresa' pode usar esse automaticamente.
+1. Se a compra é no CARTÃO mas o usuário NÃO disse qual → **PERGUNTE qual cartão** antes de registrar. Use 'listar_cartoes' / 'listar_cartoes_empresa' para mostrar os que ele já tem. **Ofereça SOMENTE o que vier no campo "cartoes"** — o que vier em "outras_formas" (Boleto, Pix, dinheiro, nomes de banco soltos) NÃO é cartão de crédito e não pode entrar nessa lista. NÃO registre ainda. **Exceção PJ:** se só houver 1 cartão, 'parcelar_compra_empresa' pode usar esse automaticamente.
 2. Se o usuário disser um cartão que AINDA NÃO existe → é normal: passe o nome no campo 'forma_pagamento' que o sistema **cadastra automaticamente** (PF) ou peça cadastrar no PJ. Confirme ao usuário.
 3. Se ele JÁ disse o cartão → passe o nome no campo 'forma_pagamento'. Não pergunte de novo.
 4. Para compra PARCELADA: PF → 'parcelar_compra'; PJ → 'parcelar_compra_empresa'. NÃO chame insere/lancar várias vezes. A 1ª parcela vai na **fatura vigente** (hoje); as demais nos meses seguintes.
 5. Sinais de parcelamento: "parcelada", "3x100", "3x de 100", "300 em 3x", "em 5 vezes". "3x100" = valor da parcela; "300 em 3x" = valor total.
 6. Faltou cartão/valor/qtd → PERGUNTE (a tool devolve precisa_meio / precisa_valor). Nunca chute.
 7. Para trocar o cartão/forma de uma compra já feita (PF), use 'editar_ultima_compra' com 'forma_pagamento'.
+8. Para mover lançamentos ANTIGOS ou identificados por CÓDIGO (não é a última compra), use 'mover_lancamentos' (PF) ou 'mover_lancamentos_empresa' (PJ) com a lista de códigos e o destino. É a tool certa para "coloque esses lançamentos no CC Nubank PF", "essa compra foi no cartão errado", "joga tudo isso para a conta Itaú". Se não souber os códigos, ache antes com 'busca_transacao' / 'busca_transacao_empresa' e confirme com o usuário. **Não use 'atualiza_transacao' para isso** — ela não troca conta nem cartão.
+9. Se 'parcelar_compra' devolver "precisa_confirmar", é porque o nome informado está cadastrado como forma e não como cartão de crédito. Mostre a lista "cartoes_de_credito" e pergunte. Só repita a chamada com confirmar_sem_cartao=true se o usuário disser que é carnê/boleto parcelado mesmo.
 - Regra de ouro: **nunca "chute" um cartão genérico** quando for claramente uma compra no cartão e faltar a informação — pergunte.
 
 **FORMA DE PAGAMENTO OBRIGATÓRIA (sempre):**
