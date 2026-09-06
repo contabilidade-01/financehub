@@ -1,30 +1,30 @@
 ---
-description: EasyPanel só implanta a branch financehub. Sempre merge + push nela para o código ir ao ar.
+description: EasyPanel — produção é a branch producao; financehub é integração.
 alwaysApply: true
 ---
 
-# Deploy EasyPanel — sempre na `financehub`
+# Deploy EasyPanel — produção = `producao`
 
-O EasyPanel deste projeto **só implanta a branch `financehub`**. Push em `cursor/*` (ou qualquer outra) **não** publica.
+O EasyPanel de **produção** deve implantar a branch **`producao`**.  
+A branch **`financehub`** é a de **integração** (CI + merge consciente → `producao`).
 
-## Sempre fazer
+## Fluxo
 
-Quando a correção/feature precisa ir para produção:
+1. Desenvolver e dar push em `financehub` (CI roda).
+2. Com CI verde, merge `financehub` → `producao`.
+3. `git push origin producao`.
+4. Confirmar no EasyPanel que o deploy mostra o **hash** de `producao` (`GET /api/health` → `commit_short`).
 
-1. Garantir que o commit está na branch `financehub` (merge da branch de trabalho nela).
-2. Dar **push em `origin/financehub`**.
-3. Confirmar no EasyPanel que o deploy mostra **esse** commit — não um commit antigo.
+## Cutover (uma vez)
+
+Se o painel ainda aponta para `financehub`, alterar o branch de deploy para **`producao`** no EasyPanel. Até lá, push só em `financehub` continua publicando — não misture os dois modos.
+
+## Homologação
+
+Segundo app no EasyPanel apontando para **`financehub`**, com `DATABASE_URL` **próprio**, `ASAAS_ENVIRONMENT=sandbox`, `UAZAPI_TOKEN` vazio, `SIMULADOR_WHATSAPP=true`.
 
 ## Não fazer
 
-- Não dizer que “já está no ar” só porque a branch `cursor/...` foi enviada.
-- Não deixar o usuário clicar Implantar esperando código que ainda não está na `financehub`.
-- Não misturar com a branch `main`, a menos que o usuário peça explicitamente.
-
-## Conferência rápida
-
-```
-git log origin/financehub -1 --oneline
-```
-
-O hash/mensagem tem que ser o da correção. Se o EasyPanel listar outro commit (ex.: `feat(pj): inclui MEI...`), a correção **não** subiu.
+- Não dizer que “já está no ar” só porque `financehub` ou `cursor/*` foi enviada, se o EasyPanel já estiver em `producao`.
+- Não usar `main` como destino, a menos que o usuário peça.
+- Rollback de imagem **não desfaz** migração de banco (só aditiva).

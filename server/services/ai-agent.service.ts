@@ -160,6 +160,8 @@ interface ToolContext {
   // Texto da mensagem atual do usuário. Usado por depositar_meta/sacar_meta para
   // casar a meta pelo contexto quando o usuário não dá id/título exato.
   userMessage?: string;
+  /** Preenchido pelo simulador de WhatsApp (homologação). */
+  toolTrace?: { name: string; args: Record<string, unknown>; resultPreview: string }[];
 }
 
 // Ferramentas que o login PJ (empresa ativa) enxerga. Tudo que ficou de fora
@@ -2363,8 +2365,15 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         const resolvido = await resolverMeioPorNomePj(
           empresa.id,
           ctx.userId,
-          // Parcelar SEMPRE é cartão: força pista (evita "Itaú"/"Banco Inter" caírem em conta).
-          /cartao|credito|\bcc\b/i.test(cartaoTexto) ? cartaoTexto : `cartão ${cartaoTexto}`,
+          // Com flag avançada: força pista cartão. Sem flag: usa o texto cru.
+          await (async () => {
+            try {
+              const { flagAtiva, FLAG_AGENTE_MEIO_PAGAMENTO } = await import("./feature-flags.service");
+              const on = await flagAtiva(FLAG_AGENTE_MEIO_PAGAMENTO, ctx.userId);
+              if (!on) return cartaoTexto;
+            } catch { /* segue avançado */ }
+            return /cartao|credito|\bcc\b/i.test(cartaoTexto) ? cartaoTexto : `cartão ${cartaoTexto}`;
+          })(),
         );
         if (!resolvido.ok) {
           return JSON.stringify({
@@ -3360,6 +3369,13 @@ ${ctx.categories.map(c => `- ${c.nome} (${c.tipo})`).join("\n")}`;
       ultimaToolExecutada = fnName;
       ultimoResultadoTool = result;
       registrarEscrita(fnName, result);
+      if (ctx.toolTrace) {
+        ctx.toolTrace.push({
+          name: fnName,
+          args: fnArgs && typeof fnArgs === "object" ? fnArgs : {},
+          resultPreview: String(result || "").slice(0, 800),
+        });
+      }
 
       messages.push({
         role: "tool",

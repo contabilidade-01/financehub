@@ -238,6 +238,17 @@ app.use((req, res, next) => {
   const port = isDevelopment ? 5001 : 5000;
 
   log(`🚀 Ambiente: ${isDevelopment ? 'DESENVOLVIMENTO' : 'PRODUÇÃO'}`);
+  try {
+    const { getAppVersion } = await import("./services/app-version");
+    const v = getAppVersion();
+    log(`📦 Versão: ${v.commit_short} · env=${v.env} · simulador=${v.simulador_whatsapp}`);
+  } catch { /* ignore */ }
+  try {
+    const { ensureFeatureFlagsBoot } = await import("./services/feature-flags.service");
+    await ensureFeatureFlagsBoot();
+  } catch (e: any) {
+    console.error("[boot] feature-flags:", e?.message || e);
+  }
   log(`🔌 Servidor rodando na porta ${port}`);
 
   server.listen(port);

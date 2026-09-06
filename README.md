@@ -85,6 +85,43 @@ Sistema SaaS completo de gestão financeira pessoal e empresarial.
 
 ---
 
+## Deploy, homologação e feature flags
+
+### Branches
+
+| Branch | Papel |
+|--------|--------|
+| `financehub` | Integração + app de **homologação** no EasyPanel |
+| `producao` | **Produção** no EasyPanel (merge só com CI verde) |
+
+Fluxo: desenvolver em `financehub` → CI (GitHub Actions) → merge em `producao` → push.  
+Conferir versão: `GET /api/health` → `commit_short`.
+
+### Homologação (segundo app EasyPanel)
+
+- Branch: `financehub`
+- `DATABASE_URL` **próprio** (nunca o de produção)
+- `ASAAS_ENVIRONMENT=sandbox`
+- `UAZAPI_TOKEN` vazio
+- `SIMULADOR_WHATSAPP=true`
+- Sessão/IA próprias
+
+Simulador: `/admin/simular-whatsapp` (super admin). Em produção sem a variável → 404.
+
+### Feature flags
+
+- Admin: `/admin/feature-flags`
+- Flag inexistente = desligada
+- Piloto `agente_meio_pagamento` (já liberada para todos — comportamento atual)
+- **Liberar para todos** / **Desligar todos** (freio; limpa lista individual)
+- Rollback de imagem **não desfaz** migração de banco — só schema aditivo
+
+### CI
+
+`.github/workflows/ci.yml` — `tsc` (baseline em `baseline-tsc.txt`, não pode subir), `npm run build`, baterias `test:*`.
+
+---
+
 ## Instalação
 
 ### 1. Instalar dependências

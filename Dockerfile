@@ -2,6 +2,10 @@
 # Usando Debian (slim) ao invés de Alpine para melhor compatibilidade com canvas
 FROM node:20-slim
 
+# Hash do commit (EasyPanel / CI: --build-arg GIT_COMMIT=$SOURCE_COMMIT)
+ARG GIT_COMMIT=unknown
+ENV APP_GIT_COMMIT=$GIT_COMMIT
+
 # Instalar dependências do sistema necessárias para canvas e chromium
 RUN apt-get update && apt-get install -y \
     build-essential \

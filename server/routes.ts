@@ -1500,6 +1500,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/empresas/:id/reembolsos-pessoais/:transacaoId/pagar", combinedAuth, ReembolsosPjController.pagar);
 
   // ==========================================
+  // Feature flags + simulador WhatsApp + health
+  // ==========================================
+  const featureFlagsCtrl = await import("./controllers/feature-flags.controller");
+  app.get("/api/flags", combinedAuth, featureFlagsCtrl.minhasFlags);
+  app.get("/api/admin/flags", combinedAuth, checkImpersonation, requireSuperAdmin, featureFlagsCtrl.listarFlags);
+  app.post("/api/admin/flags", combinedAuth, checkImpersonation, requireSuperAdmin, featureFlagsCtrl.criar);
+  app.post("/api/admin/flags/:chave/liberar-todos", combinedAuth, checkImpersonation, requireSuperAdmin, featureFlagsCtrl.liberarTodos);
+  app.post("/api/admin/flags/:chave/desligar-todos", combinedAuth, checkImpersonation, requireSuperAdmin, featureFlagsCtrl.desligarTodos);
+  app.post("/api/admin/flags/:chave/usuarios", combinedAuth, checkImpersonation, requireSuperAdmin, featureFlagsCtrl.ligarUser);
+  app.delete("/api/admin/flags/:chave/usuarios/:usuarioId", combinedAuth, checkImpersonation, requireSuperAdmin, featureFlagsCtrl.desligarUser);
+  app.get("/api/admin/flags/buscar-usuarios", combinedAuth, checkImpersonation, requireSuperAdmin, featureFlagsCtrl.buscarUsuarios);
+
+  const simularWaCtrl = await import("./controllers/simular-whatsapp.controller");
+  app.post("/api/admin/simular-whatsapp", combinedAuth, checkImpersonation, requireSuperAdmin, simularWaCtrl.simularWhatsapp);
+
+  {
+    const { getAppVersion } = await import("./services/app-version");
+    app.get("/api/health", (_req, res) => {
+      const v = getAppVersion();
+      res.json({
+        ok: true,
+        ...v,
+        time: new Date().toISOString(),
+      });
+    });
+  }
+
+  // ==========================================
   // WEBHOOK UAZAPI — Pipeline IA internalizado (substitui N8N)
   // Recebe mensagens do WhatsApp via UazAPI, processa com IA, insere transação, responde.
   // Sem auth Express — validado por token no body do UazAPI.

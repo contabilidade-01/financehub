@@ -1,28 +1,31 @@
 ---
 name: deploy-easypanel
 description: >-
-  Publica alterações do FinanceHub no EasyPanel. Sempre faz merge e push na
-  branch financehub (é a única que o EasyPanel implanta). Use quando o usuário
-  pedir deploy, implantar, publicar, push para produção, EasyPanel, ou quando
-  uma correção precisa ir ao ar.
+  Publica no EasyPanel. Produção = branch producao (merge a partir de financehub).
+  Homologação = app separado em financehub. Use quando pedir deploy, EasyPanel, publicar.
 ---
 
 # Deploy EasyPanel (FinanceHub)
 
-Branch de produção: **`financehub`**. O painel (Easy) implanta **somente** essa branch.
+| Ambiente | Branch | Observação |
+|----------|--------|------------|
+| Produção | `producao` | Só merge consciente com CI verde |
+| Integração / homologação | `financehub` | Push contínuo + app de homolog |
 
-## Sempre fazer
+## Produção
 
-1. Commit na branch de trabalho (se ainda não houver).
-2. `git checkout financehub` e `git pull origin financehub`.
-3. `git merge` da branch de trabalho (resolver conflitos se houver).
-4. `git push origin financehub`.
-5. Conferir no EasyPanel: o deploy tem que mostrar **esse** commit.
+1. Commit na `financehub` (ou branch de trabalho → merge nela).
+2. CI verde no GitHub Actions.
+3. `git checkout producao && git pull && git merge financehub && git push origin producao`.
+4. Conferir `GET /api/health` → `commit_short` = hash esperado.
 
-Push só em `cursor/*` **não** publica. Dizer que está no ar só depois do push em `financehub` e do deploy com o commit certo.
+## Homologação
 
-## Não fazer
+- App EasyPanel separado, branch `financehub`.
+- `DATABASE_URL` **nunca** a de produção.
+- `SIMULADOR_WHATSAPP=true`, Asaas sandbox, sem `UAZAPI_TOKEN`.
+- Feature flags: ligar só no usuário de teste em `/admin/feature-flags`.
 
-- Não pedir para o usuário clicar Implantar se o código ainda não está na `financehub`.
-- Não usar `main` como destino, a menos que o usuário peça.
-- Não commitar `.env` nem secrets.
+## Rollback
+
+Reimplantar imagem anterior no EasyPanel. **Não desfaz migração** — por isso schema só aditivo.

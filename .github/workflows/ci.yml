@@ -1,0 +1,57 @@
+# CI — portão antes de produção
+# Roda em push/PR nas branches de integração e produção.
+name: CI
+
+on:
+  push:
+    branches: [financehub, producao]
+  pull_request:
+    branches: [financehub, producao]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: Tipos, build e baterias
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Baseline TypeScript (não pode subir)
+        run: npx tsx scripts/check-tsc-baseline.ts
+
+      - name: Build
+        run: npm run build
+        env:
+          NODE_OPTIONS: --max_old_space_size=4096
+
+      - name: Baterias unitárias (sem banco)
+        run: |
+          npm run test:meio
+          npm run test:parcelamento
+          npm run test:recibo
+          npm run test:uma-empresa
+          npm run test:chave-cartao
+          npm run test:feature-flags
+
+      - name: Baterias com lógica pura / scripts
+        run: |
+          npm run test:mover
+          npm run test:classificacao
+          npm run test:planos
+          npm run test:isolamento-contas
+          npm run test:backup

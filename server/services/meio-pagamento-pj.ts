@@ -285,6 +285,7 @@ export async function aplicarMeioPagamentoPj(
 /**
  * Resolve texto do usuário/agente para cartão ou conta bancária.
  * Usa detectarMeio — "em dinheiro" / "via caixa" → Caixinha sem perguntar.
+ * Com flag agente_meio_pagamento desligada: só match exato (modo básico).
  */
 export async function resolverMeioPorNomePj(
   empresaId: number,
@@ -294,6 +295,14 @@ export async function resolverMeioPorNomePj(
   const raw = (texto || "").trim();
   const { ativas, bancarias, nomesContas, nomesBancarias, cartoes, nomesCartoes } =
     await listasMeios(empresaId);
+
+  let modoAvancado = true;
+  try {
+    const { flagAtiva, FLAG_AGENTE_MEIO_PAGAMENTO } = await import("./feature-flags.service");
+    modoAvancado = await flagAtiva(FLAG_AGENTE_MEIO_PAGAMENTO, userId);
+  } catch {
+    modoAvancado = true; // se flags falharem, mantém comportamento atual (já no ar)
+  }
 
   const det = detectarMeio(raw);
 
@@ -378,17 +387,19 @@ export async function resolverMeioPorNomePj(
           : undefined;
 
   const acharCartoes = () =>
-    cartoes.filter((c) => norm(c.nome) === alvo || casaNomeMeio(alvo, c.nome));
+    cartoes.filter((c) => {
+      if (norm(c.nome) === alvo) return true;
+      return modoAvancado ? casaNomeMeio(alvo, c.nome) : false;
+    });
 
   const acharContas = () =>
-    ativas.filter(
-      (c) =>
-        !ehCaixinha(c) &&
-        (norm(c.banco || "") === alvo ||
-          norm(c.nome || "") === alvo ||
-          casaNomeMeio(alvo, c.banco || "") ||
-          casaNomeMeio(alvo, c.nome || "")),
-    );
+    ativas.filter((c) => {
+      if (ehCaixinha(c)) return false;
+      if (norm(c.banco || "") === alvo || norm(c.nome || "") === alvo) return true;
+      return modoAvancado
+        ? casaNomeMeio(alvo, c.banco || "") || casaNomeMeio(alvo, c.nome || "")
+        : false;
+    });
 
   const acharCartao = () => acharCartoes()[0];
   const acharConta = () => acharContas()[0];
@@ -422,7 +433,10 @@ export async function resolverMeioPorNomePj(
   }
 
   // Sem pista: qualquer ambiguidade (marca em conta E cartão, ou vários no mesmo lado) → perguntar.
-  const classif = classificarMatchesMeioPorNome(termo, cartoes, ativas.filter((c) => !ehCaixinha(c)));
+  // Modo básico (flag off): classificar só com match exato (sem fuzzy Inter≈Banco Inter).
+  const classif = modoAvancado
+    ? classificarMatchesMeioPorNome(termo, cartoes, ativas.filter((c) => !ehCaixinha(c)))
+    : classificarMatchesMeioPorNomeBasico(termo, cartoes, ativas.filter((c) => !ehCaixinha(c)));
   if (classif.tipo === "cartao") {
     return { ok: true, cartao_id: classif.id, rotulo: classif.rotulo };
   }
@@ -494,6 +508,28 @@ export function classificarMatchesMeioPorNome(
       casaNomeMeio(alvo, c.nome || ""),
   );
 
+  return classificarHits(cartoesHit, contasHit);
+}
+
+/** Modo básico (flag off): só igualdade normalizada — sem fuzzy. */
+export function classificarMatchesMeioPorNomeBasico(
+  termo: string,
+  cartoes: { id: number; nome: string }[],
+  contas: { id: number; nome?: string | null; banco?: string | null }[],
+): ClassifMeioNome {
+  const alvo = norm(termo);
+  if (!alvo) return { tipo: "nenhum" };
+  const cartoesHit = (cartoes || []).filter((c) => norm(c.nome) === alvo);
+  const contasHit = (contas || []).filter(
+    (c) => norm(c.banco || "") === alvo || norm(c.nome || "") === alvo,
+  );
+  return classificarHits(cartoesHit, contasHit);
+}
+
+function classificarHits(
+  cartoesHit: { id: number; nome: string }[],
+  contasHit: { id: number; nome?: string | null; banco?: string | null }[],
+): ClassifMeioNome {
   if (cartoesHit.length >= 1 && contasHit.length >= 1) {
     return { tipo: "ambiguidade_conta_cartao", contas: contasHit, cartoes: cartoesHit };
   }
