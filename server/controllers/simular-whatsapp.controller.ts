@@ -23,7 +23,7 @@ export async function simularWhatsapp(req: Request, res: Response) {
     return res.status(400).json({ error: "Informe usuario_id e texto" });
   }
 
-  const user = await storage.getUser(usuarioId);
+  const user = await storage.getUserById(usuarioId);
   if (!user) return res.status(404).json({ error: "Usuário não encontrado" });
 
   const phoneRaw = String(user.telefone || "").replace(/\D/g, "");
@@ -87,7 +87,7 @@ export async function simularWhatsapp(req: Request, res: Response) {
     message: {
       chatid,
       messageType: "Conversation",
-      text,
+      text: texto,
       messageid: `sim-${Date.now()}`,
       messageTimestamp: Math.floor(Date.now() / 1000),
       fromMe: false,

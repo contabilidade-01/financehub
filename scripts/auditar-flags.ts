@@ -7,13 +7,14 @@
  */
 import { readFileSync, readdirSync, statSync } from "fs";
 import { join, resolve } from "path";
-import { fileURLToPath } from "url";
 import {
   FLAGS_NO_CODIGO,
   auditarDivergenciasFlags,
 } from "../server/services/feature-flags-logic";
 
-const root = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
+// Rodado sempre via npm a partir da raiz do repo; process.cwd() evita
+// import.meta, que o tsconfig (module: commonjs) do projeto nao aceita.
+const root = process.cwd();
 
 function walkTs(dir: string, out: string[] = []): string[] {
   let entries: string[];

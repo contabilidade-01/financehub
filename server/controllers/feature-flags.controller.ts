@@ -19,7 +19,7 @@ export async function listarFlags(req: Request, res: Response) {
     const mapa: Record<number, { id: number; nome: string | null; email: string | null }> = {};
     for (const id of allIds) {
       try {
-        const u = await storage.getUser(id);
+        const u = await storage.getUserById(id);
         if (u) mapa[id] = { id: u.id, nome: u.nome ?? null, email: u.email ?? null };
       } catch {
         mapa[id] = { id, nome: null, email: null };

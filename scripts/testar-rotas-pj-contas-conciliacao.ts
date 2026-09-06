@@ -5,7 +5,7 @@
 import fs from "fs";
 import path from "path";
 
-const root = path.resolve(import.meta.dirname, "..");
+const root = process.cwd();
 let falhas = 0;
 const ok = (n: string) => console.log("ok  ", n);
 const fail = (n: string, d: string) => {
