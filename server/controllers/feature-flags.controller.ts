@@ -7,6 +7,7 @@ import {
   desligarUsuario,
   flagsDoUsuario,
   invalidarCacheFlags,
+  aposentarFlag,
 } from "../services/feature-flags.service";
 import { storage } from "../storage";
 
@@ -128,5 +129,21 @@ export async function buscarUsuarios(req: Request, res: Response) {
     return res.json({ usuarios });
   } catch (e: any) {
     return res.status(500).json({ error: e?.message || "Erro na busca" });
+  }
+}
+
+/** Aposenta a linha no banco (só depois de limpar o if no código). */
+export async function aposentar(req: Request, res: Response) {
+  try {
+    const chave = String(req.params.chave || "");
+    await aposentarFlag(chave);
+    return res.json({
+      success: true,
+      chave,
+      mensagem:
+        "Linha removida. Se o if (flagAtiva) ainda existir no código, a flag passa a valer false para todos.",
+    });
+  } catch (e: any) {
+    return res.status(400).json({ error: e?.message || "Erro ao aposentar" });
   }
 }

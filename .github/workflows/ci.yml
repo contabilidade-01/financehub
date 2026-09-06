@@ -34,6 +34,9 @@ jobs:
       - name: Baseline TypeScript (não pode subir)
         run: npx tsx scripts/check-tsc-baseline.ts
 
+      - name: Flags sem literais
+        run: npm run flags:check-literals
+
       - name: Build
         run: npm run build
         env:
@@ -47,6 +50,8 @@ jobs:
           npm run test:uma-empresa
           npm run test:chave-cartao
           npm run test:feature-flags
+          npm run test:flags-ciclo
+          npm run flags:auditar
 
       - name: Baterias com lógica pura / scripts
         run: |

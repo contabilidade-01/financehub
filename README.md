@@ -112,8 +112,9 @@ Simulador: `/admin/simular-whatsapp` (super admin). Em produção sem a variáve
 
 - Admin: `/admin/feature-flags`
 - Flag inexistente = desligada
-- Piloto `agente_meio_pagamento` (já liberada para todos — comportamento atual)
-- **Liberar para todos** / **Desligar todos** (freio; limpa lista individual)
+- Ciclo (30 dias → limpar código → aposentar): ver [docs/feature-flags.md](docs/feature-flags.md)
+- `npm run flags:auditar` · `npm run flags:check-literals`
+- **Liberar para todos** / **Desligar todos** / **Aposentar** (só após limpar o `if` no código)
 - Rollback de imagem **não desfaz** migração de banco — só schema aditivo
 
 ### CI

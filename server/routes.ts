@@ -1510,6 +1510,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/admin/flags/:chave/desligar-todos", combinedAuth, checkImpersonation, requireSuperAdmin, featureFlagsCtrl.desligarTodos);
   app.post("/api/admin/flags/:chave/usuarios", combinedAuth, checkImpersonation, requireSuperAdmin, featureFlagsCtrl.ligarUser);
   app.delete("/api/admin/flags/:chave/usuarios/:usuarioId", combinedAuth, checkImpersonation, requireSuperAdmin, featureFlagsCtrl.desligarUser);
+  app.delete("/api/admin/flags/:chave", combinedAuth, checkImpersonation, requireSuperAdmin, featureFlagsCtrl.aposentar);
   app.get("/api/admin/flags/buscar-usuarios", combinedAuth, checkImpersonation, requireSuperAdmin, featureFlagsCtrl.buscarUsuarios);
 
   const simularWaCtrl = await import("./controllers/simular-whatsapp.controller");

@@ -2,7 +2,7 @@
  * Feature flags — avaliação pura (sem banco).
  * npm run test:feature-flags
  */
-import { avaliarFlag } from "../server/services/feature-flags.service";
+import { avaliarFlag } from "../server/services/feature-flags-logic";
 
 let falhas = 0;
 const ok = (n: string) => console.log("ok  ", n);

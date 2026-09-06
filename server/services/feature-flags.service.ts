@@ -3,16 +3,35 @@
  *
  * Padrão: desligado. Flag inexistente = false (código novo não vaza).
  * Tabelas criadas sob demanda (padrão backup.service), fora do auto-migrate.
+ *
+ * Ciclo: nascer off → teste → liberar todos → 30 dias → limpar código → aposentar linha.
  */
 import { db } from "../db";
 import { sql } from "drizzle-orm";
+import {
+  FLAG_AGENTE_MEIO_PAGAMENTO,
+  FLAGS_NO_CODIGO,
+  DIAS_PARA_APOSENTAR,
+  avaliarFlag,
+  calcularDiasLiberada,
+  prontaParaAposentar,
+  auditarDivergenciasFlags,
+} from "./feature-flags-logic";
 
-export const FLAG_AGENTE_MEIO_PAGAMENTO = "agente_meio_pagamento";
+export {
+  FLAG_AGENTE_MEIO_PAGAMENTO,
+  FLAGS_NO_CODIGO,
+  DIAS_PARA_APOSENTAR,
+  avaliarFlag,
+  calcularDiasLiberada,
+  prontaParaAposentar,
+  auditarDivergenciasFlags,
+};
 
-const CACHE_TTL_MS = 5_000; // curto: desligar deve valer na mensagem seguinte
+const CACHE_TTL_MS = 5_000;
 
 type CacheEntry = { value: boolean; exp: number };
-const cacheFlag = new Map<string, CacheEntry>(); // chave|userId → bool
+const cacheFlag = new Map<string, CacheEntry>();
 let tabelaPronta = false;
 
 async function garantirTabelas(): Promise<void> {
@@ -32,8 +51,11 @@ async function garantirTabelas(): Promise<void> {
       PRIMARY KEY (chave, usuario_id)
     )
   `);
-  // Piloto: regras de meio já estão no ar para todos — flag nasce liberada.
-  // Novas mudanças de risco devem nascer com ativo_todos=false.
+  await db.execute(sql`
+    ALTER TABLE feature_flags
+    ADD COLUMN IF NOT EXISTS liberado_todos_em TIMESTAMP
+  `);
+  // Piloto: regras de meio já no ar — nasce liberada.
   await db.execute(sql`
     INSERT INTO feature_flags (chave, descricao, ativo_todos)
     VALUES (
@@ -42,6 +64,12 @@ async function garantirTabelas(): Promise<void> {
       true
     )
     ON CONFLICT (chave) DO NOTHING
+  `);
+  // Flags já liberadas sem data: usa criado_em (não nasce "pronta" nem sem prazo).
+  await db.execute(sql`
+    UPDATE feature_flags
+    SET liberado_todos_em = criado_em
+    WHERE ativo_todos = true AND liberado_todos_em IS NULL
   `);
   tabelaPronta = true;
 }
@@ -58,21 +86,6 @@ export function invalidarCacheFlags(chave?: string): void {
   for (const k of cacheFlag.keys()) {
     if (k.startsWith(`${chave}|`)) cacheFlag.delete(k);
   }
-}
-
-/**
- * Avaliação pura (testável sem banco). Flag inexistente = false.
- */
-export function avaliarFlag(opts: {
-  existe: boolean;
-  ativoTodos: boolean;
-  usuariosComFlag: number[];
-  usuarioId: number | null;
-}): boolean {
-  if (!opts.existe) return false;
-  if (opts.ativoTodos) return true;
-  if (opts.usuarioId == null) return false;
-  return opts.usuariosComFlag.includes(opts.usuarioId);
 }
 
 /**
@@ -120,6 +133,9 @@ export type FlagAdminRow = {
   chave: string;
   descricao: string | null;
   ativo_todos: boolean;
+  liberado_todos_em: string | null;
+  dias_liberada: number | null;
+  pronta_aposentar: boolean;
   usuarios: number[];
   total_usuarios: number;
 };
@@ -127,7 +143,9 @@ export type FlagAdminRow = {
 export async function listarFlagsAdmin(): Promise<FlagAdminRow[]> {
   await garantirTabelas();
   const flags = await db.execute(sql`
-    SELECT chave, descricao, ativo_todos FROM feature_flags ORDER BY chave
+    SELECT chave, descricao, ativo_todos, liberado_todos_em, criado_em
+    FROM feature_flags
+    ORDER BY chave
   `);
   const rows = ((flags as any).rows || flags) as any[];
   const out: FlagAdminRow[] = [];
@@ -136,10 +154,16 @@ export async function listarFlagsAdmin(): Promise<FlagAdminRow[]> {
       SELECT usuario_id FROM feature_flags_usuarios WHERE chave = ${f.chave} ORDER BY usuario_id
     `);
     const ids = (((us as any).rows || us) as any[]).map((r) => Number(r.usuario_id));
+    const ativoTodos = f.ativo_todos === true || f.ativo_todos === "t" || f.ativo_todos === 1;
+    const liberado = f.liberado_todos_em ? String(f.liberado_todos_em) : null;
+    const dias = ativoTodos ? calcularDiasLiberada(liberado) : null;
     out.push({
       chave: f.chave,
       descricao: f.descricao ?? null,
-      ativo_todos: f.ativo_todos === true || f.ativo_todos === "t" || f.ativo_todos === 1,
+      ativo_todos: ativoTodos,
+      liberado_todos_em: liberado,
+      dias_liberada: dias,
+      pronta_aposentar: prontaParaAposentar(dias),
       usuarios: ids,
       total_usuarios: ids.length,
     });
@@ -156,8 +180,8 @@ export async function criarFlag(chave: string, descricao?: string): Promise<void
   if (!k) throw new Error("Chave inválida");
   await garantirTabelas();
   await db.execute(sql`
-    INSERT INTO feature_flags (chave, descricao, ativo_todos)
-    VALUES (${k}, ${descricao || null}, false)
+    INSERT INTO feature_flags (chave, descricao, ativo_todos, liberado_todos_em)
+    VALUES (${k}, ${descricao || null}, false, NULL)
     ON CONFLICT (chave) DO NOTHING
   `);
   invalidarCacheFlags(k);
@@ -165,16 +189,33 @@ export async function criarFlag(chave: string, descricao?: string): Promise<void
 
 export async function setAtivoTodos(chave: string, ativo: boolean): Promise<void> {
   await garantirTabelas();
-  const r = await db.execute(sql`
-    UPDATE feature_flags SET ativo_todos = ${ativo} WHERE chave = ${chave}
-  `);
-  const n = (r as any).rowCount ?? (r as any).count;
-  if (n === 0) throw new Error(`Flag '${chave}' não existe`);
-  // Freio de emergência: ao desligar "todos", limpa também a lista individual
-  // para ninguém ficar com o comportamento novo.
-  if (!ativo) {
+  if (ativo) {
+    const r = await db.execute(sql`
+      UPDATE feature_flags
+      SET ativo_todos = true, liberado_todos_em = NOW()
+      WHERE chave = ${chave}
+    `);
+    const n = (r as any).rowCount ?? (r as any).count;
+    if (n === 0) throw new Error(`Flag '${chave}' não existe`);
+  } else {
+    const r = await db.execute(sql`
+      UPDATE feature_flags
+      SET ativo_todos = false, liberado_todos_em = NULL
+      WHERE chave = ${chave}
+    `);
+    const n = (r as any).rowCount ?? (r as any).count;
+    if (n === 0) throw new Error(`Flag '${chave}' não existe`);
     await db.execute(sql`DELETE FROM feature_flags_usuarios WHERE chave = ${chave}`);
   }
+  invalidarCacheFlags(chave);
+}
+
+/** Remove a linha do banco. NÃO remove o if no código — faça isso antes. */
+export async function aposentarFlag(chave: string): Promise<void> {
+  await garantirTabelas();
+  const r = await db.execute(sql`DELETE FROM feature_flags WHERE chave = ${chave}`);
+  const n = (r as any).rowCount ?? (r as any).count;
+  if (n === 0) throw new Error(`Flag '${chave}' não existe`);
   invalidarCacheFlags(chave);
 }
 
@@ -200,7 +241,6 @@ export async function desligarUsuario(chave: string, usuarioId: number): Promise
   invalidarCacheFlags(chave);
 }
 
-/** Flags ativas para o usuário logado (UI). */
 export async function flagsDoUsuario(usuarioId: number): Promise<Record<string, boolean>> {
   await garantirTabelas();
   const flags = await listarFlagsAdmin();
@@ -211,7 +251,12 @@ export async function flagsDoUsuario(usuarioId: number): Promise<Record<string, 
   return out;
 }
 
-/** Garante tabelas no boot (homologação / produção). */
+export async function listarChavesNoBanco(): Promise<string[]> {
+  await garantirTabelas();
+  const r = await db.execute(sql`SELECT chave FROM feature_flags ORDER BY chave`);
+  return (((r as any).rows || r) as any[]).map((row) => String(row.chave));
+}
+
 export async function ensureFeatureFlagsBoot(): Promise<void> {
   try {
     await garantirTabelas();

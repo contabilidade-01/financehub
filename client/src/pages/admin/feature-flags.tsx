@@ -6,12 +6,26 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Flag, Users, Power, PowerOff, Plus } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Loader2, Flag, Users, Power, PowerOff, Plus, Trash2, AlertTriangle } from "lucide-react";
 
 type FlagRow = {
   chave: string;
   descricao: string | null;
   ativo_todos: boolean;
+  liberado_todos_em: string | null;
+  dias_liberada: number | null;
+  pronta_aposentar: boolean;
   usuarios: number[];
   total_usuarios: number;
   usuarios_detalhe: { id: number; nome: string | null; email: string | null }[];
@@ -35,6 +49,7 @@ export default function FeatureFlagsPage() {
   const [novaDesc, setNovaDesc] = useState("");
   const [busca, setBusca] = useState("");
   const [flagAlvo, setFlagAlvo] = useState<string | null>(null);
+  const [aposentarChave, setAposentarChave] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-flags"],
@@ -60,7 +75,11 @@ export default function FeatureFlagsPage() {
   const invalidate = () => qc.invalidateQueries({ queryKey: ["admin-flags"] });
 
   const criarMut = useMutation({
-    mutationFn: () => api("/api/admin/flags", { method: "POST", body: JSON.stringify({ chave: novaChave, descricao: novaDesc }) }),
+    mutationFn: () =>
+      api("/api/admin/flags", {
+        method: "POST",
+        body: JSON.stringify({ chave: novaChave, descricao: novaDesc }),
+      }),
     onSuccess: () => {
       toast({ title: "Flag criada (desligada por padrão)" });
       setNovaChave("");
@@ -71,7 +90,8 @@ export default function FeatureFlagsPage() {
   });
 
   const liberarMut = useMutation({
-    mutationFn: (chave: string) => api(`/api/admin/flags/${chave}/liberar-todos`, { method: "POST" }),
+    mutationFn: (chave: string) =>
+      api(`/api/admin/flags/${chave}/liberar-todos`, { method: "POST" }),
     onSuccess: () => {
       toast({ title: "Liberado para todos" });
       invalidate();
@@ -80,9 +100,12 @@ export default function FeatureFlagsPage() {
   });
 
   const desligarTodosMut = useMutation({
-    mutationFn: (chave: string) => api(`/api/admin/flags/${chave}/desligar-todos`, { method: "POST" }),
+    mutationFn: (chave: string) =>
+      api(`/api/admin/flags/${chave}/desligar-todos`, { method: "POST" }),
     onSuccess: () => {
-      toast({ title: "Desligado para todos (lista individual limpa — freio de emergência)" });
+      toast({
+        title: "Desligado para todos (lista individual limpa — freio de emergência)",
+      });
       invalidate();
     },
     onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
@@ -90,7 +113,10 @@ export default function FeatureFlagsPage() {
 
   const ligarUserMut = useMutation({
     mutationFn: ({ chave, usuario_id }: { chave: string; usuario_id: number }) =>
-      api(`/api/admin/flags/${chave}/usuarios`, { method: "POST", body: JSON.stringify({ usuario_id }) }),
+      api(`/api/admin/flags/${chave}/usuarios`, {
+        method: "POST",
+        body: JSON.stringify({ usuario_id }),
+      }),
     onSuccess: () => {
       toast({ title: "Usuário ligado na flag" });
       invalidate();
@@ -108,6 +134,16 @@ export default function FeatureFlagsPage() {
     onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
   });
 
+  const aposentarMut = useMutation({
+    mutationFn: (chave: string) => api(`/api/admin/flags/${chave}`, { method: "DELETE" }),
+    onSuccess: () => {
+      toast({ title: "Flag aposentada (linha removida do banco)" });
+      setAposentarChave(null);
+      invalidate();
+    },
+    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
+  });
+
   const flags = data || [];
 
   return (
@@ -117,8 +153,8 @@ export default function FeatureFlagsPage() {
           <Flag className="h-6 w-6" /> Feature flags
         </h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Comportamento novo nasce desligado. Ligue na conta de teste, valide, depois &quot;Liberar para todos&quot;.
-          Desligar não precisa de deploy.
+          Uma chave = uma funcionalidade (itere nela). Depois de liberar para todos, observe ~30 dias,
+          limpe o código e aposente a linha. Ver docs/feature-flags.md.
         </p>
         {health?.commit_short && (
           <p className="text-xs text-muted-foreground mt-2">
@@ -135,15 +171,26 @@ export default function FeatureFlagsPage() {
         <CardContent className="flex flex-col md:flex-row gap-3">
           <div className="flex-1 space-y-1">
             <Label>Chave</Label>
-            <Input placeholder="ex.: agente_recibo_v2" value={novaChave} onChange={(e) => setNovaChave(e.target.value)} />
+            <Input
+              placeholder="ex.: agente_recibo_v2"
+              value={novaChave}
+              onChange={(e) => setNovaChave(e.target.value)}
+            />
           </div>
           <div className="flex-[2] space-y-1">
             <Label>Descrição</Label>
             <Input value={novaDesc} onChange={(e) => setNovaDesc(e.target.value)} />
           </div>
           <div className="flex items-end">
-            <Button onClick={() => criarMut.mutate()} disabled={!novaChave.trim() || criarMut.isPending}>
-              {criarMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4 mr-1" />}
+            <Button
+              onClick={() => criarMut.mutate()}
+              disabled={!novaChave.trim() || criarMut.isPending}
+            >
+              {criarMut.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Plus className="h-4 w-4 mr-1" />
+              )}
               Criar
             </Button>
           </div>
@@ -158,19 +205,42 @@ export default function FeatureFlagsPage() {
         flags.map((f) => (
           <Card key={f.chave}>
             <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
-              <div>
+              <div className="space-y-2 min-w-0">
                 <CardTitle className="text-base font-mono">{f.chave}</CardTitle>
                 <CardDescription>{f.descricao || "—"}</CardDescription>
-                <div className="flex gap-2 mt-2">
+                <div className="flex flex-wrap gap-2">
                   {f.ativo_todos ? (
                     <Badge>Liberada para todos</Badge>
                   ) : (
                     <Badge variant="secondary">Só usuários na lista ({f.total_usuarios})</Badge>
                   )}
+                  {f.ativo_todos && f.dias_liberada != null && (
+                    <Badge variant="outline">
+                      Liberada para todos há {f.dias_liberada} dia
+                      {f.dias_liberada === 1 ? "" : "s"}
+                    </Badge>
+                  )}
+                  {f.pronta_aposentar && (
+                    <Badge variant="destructive">Pronta para aposentar</Badge>
+                  )}
                 </div>
+                {f.pronta_aposentar && (
+                  <Alert className="mt-2 border-amber-500/50 bg-amber-500/10">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>Pronta para aposentar</AlertTitle>
+                    <AlertDescription className="text-sm">
+                      Há 30+ dias liberada. Limpe o <code>if (flagAtiva)</code> e o caminho antigo no
+                      código, rode <code>npm run flags:auditar</code>, e só então use Aposentar.
+                    </AlertDescription>
+                  </Alert>
+                )}
               </div>
-              <div className="flex flex-wrap gap-2">
-                <Button size="sm" onClick={() => liberarMut.mutate(f.chave)} disabled={f.ativo_todos || liberarMut.isPending}>
+              <div className="flex flex-wrap gap-2 shrink-0">
+                <Button
+                  size="sm"
+                  onClick={() => liberarMut.mutate(f.chave)}
+                  disabled={f.ativo_todos || liberarMut.isPending}
+                >
                   <Power className="h-4 w-4 mr-1" /> Liberar para todos
                 </Button>
                 <Button
@@ -180,6 +250,14 @@ export default function FeatureFlagsPage() {
                   disabled={!f.ativo_todos || desligarTodosMut.isPending}
                 >
                   <PowerOff className="h-4 w-4 mr-1" /> Desligar todos
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => setAposentarChave(f.chave)}
+                  disabled={aposentarMut.isPending}
+                >
+                  <Trash2 className="h-4 w-4 mr-1" /> Aposentar
                 </Button>
               </div>
             </CardHeader>
@@ -191,14 +269,20 @@ export default function FeatureFlagsPage() {
                 {f.usuarios_detalhe?.length ? (
                   <ul className="text-sm space-y-1">
                     {f.usuarios_detalhe.map((u) => (
-                      <li key={u.id} className="flex items-center justify-between gap-2 border rounded px-2 py-1">
+                      <li
+                        key={u.id}
+                        className="flex items-center justify-between gap-2 border rounded px-2 py-1"
+                      >
                         <span>
-                          #{u.id} {u.nome || "—"} <span className="text-muted-foreground">{u.email}</span>
+                          #{u.id} {u.nome || "—"}{" "}
+                          <span className="text-muted-foreground">{u.email}</span>
                         </span>
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => desligarUserMut.mutate({ chave: f.chave, usuario_id: u.id })}
+                          onClick={() =>
+                            desligarUserMut.mutate({ chave: f.chave, usuario_id: u.id })
+                          }
                         >
                           Remover
                         </Button>
@@ -231,7 +315,9 @@ export default function FeatureFlagsPage() {
                         <Button
                           size="sm"
                           variant="secondary"
-                          onClick={() => ligarUserMut.mutate({ chave: f.chave, usuario_id: u.id })}
+                          onClick={() =>
+                            ligarUserMut.mutate({ chave: f.chave, usuario_id: u.id })
+                          }
                         >
                           Ligar
                         </Button>
@@ -244,6 +330,44 @@ export default function FeatureFlagsPage() {
           </Card>
         ))
       )}
+
+      <AlertDialog
+        open={!!aposentarChave}
+        onOpenChange={(open) => {
+          if (!open) setAposentarChave(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Aposentar {aposentarChave}?</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <span className="block">
+                Isto só apaga a <strong>linha no banco</strong>. Não remove o código.
+              </span>
+              <span className="block font-medium text-foreground">
+                Só aposente depois de o código ter sido limpo. Se o <code>if</code> ainda existir,
+                todos voltam ao comportamento antigo.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(e) => {
+                e.preventDefault();
+                if (aposentarChave) aposentarMut.mutate(aposentarChave);
+              }}
+            >
+              {aposentarMut.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "Aposentar linha"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
