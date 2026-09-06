@@ -2360,28 +2360,36 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           }
         }
 
-        const resolvido = await resolverMeioPorNomePj(empresa.id, ctx.userId, cartaoTexto);
+        const resolvido = await resolverMeioPorNomePj(
+          empresa.id,
+          ctx.userId,
+          // Parcelar SEMPRE é cartão: força pista (evita "Itaú"/"Banco Inter" caírem em conta).
+          /cartao|credito|\bcc\b/i.test(cartaoTexto) ? cartaoTexto : `cartão ${cartaoTexto}`,
+        );
         if (!resolvido.ok) {
           return JSON.stringify({
             error: resolvido.mensagem,
             precisa_meio: true,
             precisa: resolvido.precisa === "cadastrar_cartao" ? "cadastrar_cartao" : "cartao",
-            sugestoes: cartoes.map((c: any) => c.nome),
+            sugestoes: resolvido.sugestoes?.length ? resolvido.sugestoes : cartoes.map((c: any) => c.nome),
             cartoes: cartoes.map((c: any) => c.nome),
             mensagem: resolvido.mensagem,
             nome_sugerido: (resolvido as any).nome_sugerido || cartaoTexto,
-            faltando: (resolvido as any).faltando || ["dia_fechamento", "dia_vencimento"],
+            faltando: (resolvido as any).faltando,
             instrucao_agente:
               (resolvido as any).instrucao_agente ||
-              "Peça fechamento e vencimento numa pergunta só; cadastrar_cartao_empresa e em seguida parcelar. Se já confirmou (sim/isso), execute sem pedir de novo.",
+              "Se precisa=cartao e a lista já tem o nome, use esse cartão — NÃO peça fechamento. Só cadastrar_cartao_empresa se precisa=cadastrar_cartao de verdade.",
           });
         }
         // Preferir cartão de mesmo nome se o texto casou só com conta.
         let cartaoId = resolvido.cartao_id ?? null;
         if (!cartaoId && resolvido.conta_bancaria_id) {
-          const n = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-          const alvo = n(resolvido.rotulo || cartaoTexto);
-          const mesmoNome = cartoes.find((c: any) => n(c.nome) === alvo || n(c.nome).includes(alvo) || alvo.includes(n(c.nome)));
+          const { casaNomeMeio } = await import("./meio-pagamento-pj");
+          const mesmoNome = cartoes.find(
+            (c: any) =>
+              casaNomeMeio(resolvido.rotulo || cartaoTexto, c.nome) ||
+              casaNomeMeio(cartaoTexto, c.nome),
+          );
           if (mesmoNome) {
             cartaoId = mesmoNome.id;
             cartaoAuto = true;
@@ -2395,8 +2403,10 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
               nome_sugerido: cartaoTexto,
               faltando: ["dia_fechamento", "dia_vencimento"],
               mensagem: cartoes.length
-                ? `"${cartaoTexto}" é conta bancária. Parcelado é no cartão — qual cartão? ${cartoes.map((c: any) => c.nome).join(", ")}.`
-                : `"${cartaoTexto}" parece cartão novo. Diga fechamento e vencimento para cadastrar e parcelar.`,
+                ? `*${cartaoTexto}* é conta bancária. Para parcelar: use um cartão da lista (${cartoes.map((c: any) => c.nome).join(", ")}) OU diga fechamento e vencimento para cadastrar o *cartão* ${cartaoTexto}.`
+                : `*${cartaoTexto}* parece conta/banco. Parcelado precisa de cartão — diga fechamento e vencimento para cadastrar o cartão ${cartaoTexto}.`,
+              instrucao_agente:
+                "Não trate conta como cartão. Se o usuário escolher um cartão da lista, parcelar com esse nome. Se quiser o cartão da mesma marca da conta, peça fechamento+vencimento e cadastrar_cartao_empresa — só depois parcelar COM valor/parcelas do histórico (nunca valor_parcela 0).",
             });
           }
         }
@@ -2777,8 +2787,11 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           dia_fechamento: cartao.dia_fechamento,
           dia_vencimento: cartao.dia_vencimento,
           limite: cartao.limite,
-          mensagem: `Cartão *${cartao.nome}* ${verbo}. Já pode lançar a compra nele.`,
-          dica: "Se o cartão já existia (mesmo nome), só atualizou — não cria duplicata. Em seguida chame lancar_empresa ou parcelar_compra_empresa.",
+          mensagem: `Cartão *${cartao.nome}* ${verbo}.`,
+          dica:
+            "Cartão pronto. Em seguida: se a compra pendente tiver valor E parcelas no histórico da conversa, chame lancar_empresa ou parcelar_compra_empresa COM esses valores. " +
+            "Se faltar valor ou parcelas, PERGUNTE — NUNCA chame parcelar com valor_parcela 0 / sem valor. " +
+            "Cadastro de cartão sozinho NÃO registra a compra.",
         });
       }
 
@@ -3071,6 +3084,7 @@ export async function runAgent(
   6. **Ao perguntar, escreva os nomes reais** da seção "Meios de pagamento desta empresa" abaixo. Eles já estão aqui: não chame tool só para listar e NUNCA escreva marcador do tipo "[Lista de contas bancárias]".
   4. Se a mesma pergunta já foi feita e a resposta veio parecida (ex.: "em dinheiro" de novo), **não repita** — use o que ele disse e chame a tool.
   5. Se a tool devolver precisa_meio / aviso_meio, use mensagem/sugestões/contas/cartoes.
+     Se a mensagem disser que a marca existe como conta E cartão (ambiguidade), PERGUNTE conta ou cartão — nunca escolha sozinho.
 - **NÃO CHUTE a conta.** Só preencha 'conta' quando o usuário NOMEAR a conta ("lança no aluguel", "isso é folha") ou quando a descrição disser exatamente o que é ("compra de mercadoria", "paguei o DAS"). Nos demais casos, OMITA 'conta': o sistema classifica lendo a descrição e o plano inteiro da empresa, e acerta mais do que um palpite.
 
 ### Cartão de crédito — à vista é o padrão
@@ -3096,7 +3110,8 @@ Dispare 'parcelar_compra_empresa' (NUNCA 'parcelar_compra' do PF, NUNCA várias 
 **Cenários incompletos — PERGUNTE, não grave:**
 1. Sem cartão + vários cartões → pergunte "Em qual cartão?" (listar_cartoes_empresa / sugestões da tool).
 2. Sem cartão + **só 1** cartão → chame a tool sem forma_pagamento; o sistema usa esse cartão e avisa.
-3. Tool devolve precisa=cadastrar_cartao (cartão citado ainda não existe) → peça **fechamento e vencimento numa pergunta só**. Ao receber, chame 'cadastrar_cartao_empresa' e **EM SEGUIDA** 'lancar_empresa' ou 'parcelar_compra_empresa'. NÃO faça fila de perguntas.
+3. Tool devolve precisa=cadastrar_cartao (cartão citado ainda não existe) → peça **fechamento e vencimento numa pergunta só**. Ao receber, chame 'cadastrar_cartao_empresa'. **Só depois** chame 'lancar_empresa' ou 'parcelar_compra_empresa' se valor+parcelas estiverem claros no histórico — **NUNCA** parcelar com valor_parcela 0. Se faltar valor, pergunte. Se a tool devolver precisa=cartao com cartão já na lista (ex.: "Banco Inter"), USE esse nome — não peça cadastro de novo.
+3b. "Inter" / "cartão Inter" com cartão *Banco Inter* já cadastrado → use o existente. Nunca peça fechamento/vencimento de cartão que já aparece em cartoes/sugestões.
 4. Usuário respondeu sim/isso/pode depois que você ofereceu registrar → **chame a tool agora**; não peça "Confirmando?" de novo.
 5. Compra no cartão **sem** o usuário falar em parcelas → 'lancar_empresa' à vista (1x). Nunca pergunte "quantas parcelas?" nem use parcelar com 1x.
 6. Só "compra parcelada" / "parcelado" sem Nx → pergunte "Em quantas vezes?" (não invente 1x nem 3x).

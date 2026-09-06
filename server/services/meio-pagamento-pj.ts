@@ -132,19 +132,40 @@ async function listasMeios(empresaId: number) {
 /**
  * Casamento seguro de nome: todas as palavras do alvo precisam existir
  * no candidato (palavra inteira). Evita "via caixa" engolir "Caixa Econômica".
+ * Ignora fillers (banco/cartão/cc) para "Inter" ≈ "Banco Inter" ≈ "Cartão Inter".
  */
+const FILLER_MEIO = new Set(["banco", "cartao", "cc", "credito", "de", "do", "da", "conta"]);
+
+function palavrasMeioSignificativas(s: string): string[] {
+  return norm(s)
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w && !FILLER_MEIO.has(w));
+}
+
 export function casaNomeMeio(alvoRaw: string, candidatoRaw: string): boolean {
   const alvo = norm(alvoRaw);
   const cand = norm(candidatoRaw);
   if (!alvo || !cand) return false;
   if (alvo === cand) return true;
+
   const alvoWords = alvo.split(/[^a-z0-9]+/).filter(Boolean);
   const candWords = cand.split(/[^a-z0-9]+/).filter(Boolean);
   if (alvoWords.length === 0) return false;
   if (alvoWords.every((w) => candWords.includes(w))) return true;
+
+  // Núcleo sem "banco"/"cartão": Inter ↔ Banco Inter ↔ Cartão Inter.
+  const aCore = palavrasMeioSignificativas(alvo);
+  const cCore = palavrasMeioSignificativas(cand);
+  if (aCore.length > 0 && aCore.every((w) => cCore.includes(w))) return true;
+  if (cCore.length > 0 && cCore.every((w) => aCore.includes(w))) return true;
+
   // Um único termo longo: prefixo/contém (ex.: "santand" → Santander).
   if (alvoWords.length === 1 && alvo.length > 5) {
     return candWords.some((w) => w.startsWith(alvo) || alvo.startsWith(w) || w.includes(alvo));
+  }
+  // Marca curta (inter, c6, bb, pan): palavra inteira no candidato.
+  if (aCore.length === 1 && aCore[0].length >= 2 && aCore[0].length <= 5) {
+    return cCore.includes(aCore[0]) || candWords.includes(aCore[0]);
   }
   return false;
 }
@@ -356,33 +377,67 @@ export async function resolverMeioPorNomePj(
           ? "cartao"
           : undefined;
 
-  const acharCartao = () =>
-    cartoes.find((c) => norm(c.nome) === alvo) ||
-    cartoes.find((c) => casaNomeMeio(alvo, c.nome));
+  const acharCartoes = () =>
+    cartoes.filter((c) => norm(c.nome) === alvo || casaNomeMeio(alvo, c.nome));
 
-  const acharConta = () =>
-    ativas.find((c) => norm(c.banco || "") === alvo || norm(c.nome || "") === alvo) ||
-    ativas.find(
-      (c) => casaNomeMeio(alvo, c.banco || "") || casaNomeMeio(alvo, c.nome || ""),
+  const acharContas = () =>
+    ativas.filter(
+      (c) =>
+        !ehCaixinha(c) &&
+        (norm(c.banco || "") === alvo ||
+          norm(c.nome || "") === alvo ||
+          casaNomeMeio(alvo, c.banco || "") ||
+          casaNomeMeio(alvo, c.nome || "")),
     );
+
+  const acharCartao = () => acharCartoes()[0];
+  const acharConta = () => acharContas()[0];
 
   // Com pista, procura só no lado certo primeiro.
   if (pista === "cartao") {
-    const cartao = acharCartao();
-    if (cartao) return { ok: true, cartao_id: cartao.id, rotulo: cartao.nome };
-    return failCadastrarCartao(termo, nomesBancarias, nomesCartoes);
+    const hits = acharCartoes();
+    if (hits.length === 1) {
+      return { ok: true, cartao_id: hits[0].id, rotulo: hits[0].nome };
+    }
+    if (hits.length > 1) {
+      return failVariosCartoes(termo, hits, nomesBancarias, nomesCartoes);
+    }
+    // Conta homônima (ex.: tem conta Itaú, pediu cartão Itaú) → cadastrar CARTÃO, não devolver a conta.
+    const contaHomo = acharConta();
+    return failCadastrarCartao(termo, nomesBancarias, nomesCartoes, {
+      temContaHomonia: !!contaHomo,
+      rotuloConta: contaHomo ? String(contaHomo.nome || contaHomo.banco) : undefined,
+    });
   }
   if (pista === "conta") {
-    const conta = acharConta();
-    if (conta) return { ok: true, conta_bancaria_id: conta.id, rotulo: conta.nome || conta.banco };
+    const hits = acharContas();
+    if (hits.length === 1) {
+      const c = hits[0];
+      return { ok: true, conta_bancaria_id: c.id, rotulo: c.nome || c.banco };
+    }
+    if (hits.length > 1) {
+      return failVariasContas(termo, hits, nomesBancarias, nomesCartoes);
+    }
     return failCadastrarContaNome(termo, nomesBancarias, nomesCartoes);
   }
 
-  // Sem pista: tenta os dois; se nenhum, pergunta conta ou cartão.
-  const cartao = acharCartao();
-  if (cartao) return { ok: true, cartao_id: cartao.id, rotulo: cartao.nome };
-  const conta = acharConta();
-  if (conta) return { ok: true, conta_bancaria_id: conta.id, rotulo: conta.nome || conta.banco };
+  // Sem pista: qualquer ambiguidade (marca em conta E cartão, ou vários no mesmo lado) → perguntar.
+  const classif = classificarMatchesMeioPorNome(termo, cartoes, ativas.filter((c) => !ehCaixinha(c)));
+  if (classif.tipo === "cartao") {
+    return { ok: true, cartao_id: classif.id, rotulo: classif.rotulo };
+  }
+  if (classif.tipo === "conta") {
+    return { ok: true, conta_bancaria_id: classif.id, rotulo: classif.rotulo };
+  }
+  if (classif.tipo === "ambiguidade_conta_cartao") {
+    return failAmbiguoContaOuCartao(termo, classif.contas, classif.cartoes, nomesBancarias, nomesCartoes);
+  }
+  if (classif.tipo === "varios_cartoes") {
+    return failVariosCartoes(termo, classif.cartoes, nomesBancarias, nomesCartoes);
+  }
+  if (classif.tipo === "varias_contas") {
+    return failVariasContas(termo, classif.contas, nomesBancarias, nomesCartoes);
+  }
 
   return {
     ok: false,
@@ -401,26 +456,191 @@ export async function resolverMeioPorNomePj(
   } as ResolverMeioPjFail;
 }
 
+/**
+ * Classifica matches de um nome (sem pista conta/cartão).
+ * Exportado para testes — qualquer marca (Inter, Itaú, Nubank…).
+ */
+export type ClassifMeioNome =
+  | { tipo: "cartao"; id: number; rotulo: string }
+  | { tipo: "conta"; id: number; rotulo: string }
+  | {
+      tipo: "ambiguidade_conta_cartao";
+      contas: { id: number; nome?: string | null; banco?: string | null }[];
+      cartoes: { id: number; nome: string }[];
+    }
+  | { tipo: "varios_cartoes"; cartoes: { id: number; nome: string }[] }
+  | {
+      tipo: "varias_contas";
+      contas: { id: number; nome?: string | null; banco?: string | null }[];
+    }
+  | { tipo: "nenhum" };
+
+export function classificarMatchesMeioPorNome(
+  termo: string,
+  cartoes: { id: number; nome: string }[],
+  contas: { id: number; nome?: string | null; banco?: string | null }[],
+): ClassifMeioNome {
+  const alvo = norm(termo);
+  if (!alvo) return { tipo: "nenhum" };
+
+  const cartoesHit = (cartoes || []).filter(
+    (c) => norm(c.nome) === alvo || casaNomeMeio(alvo, c.nome),
+  );
+  const contasHit = (contas || []).filter(
+    (c) =>
+      norm(c.banco || "") === alvo ||
+      norm(c.nome || "") === alvo ||
+      casaNomeMeio(alvo, c.banco || "") ||
+      casaNomeMeio(alvo, c.nome || ""),
+  );
+
+  if (cartoesHit.length >= 1 && contasHit.length >= 1) {
+    return { tipo: "ambiguidade_conta_cartao", contas: contasHit, cartoes: cartoesHit };
+  }
+  if (cartoesHit.length > 1) {
+    return { tipo: "varios_cartoes", cartoes: cartoesHit };
+  }
+  if (contasHit.length > 1) {
+    return { tipo: "varias_contas", contas: contasHit };
+  }
+  if (cartoesHit.length === 1) {
+    return { tipo: "cartao", id: cartoesHit[0].id, rotulo: cartoesHit[0].nome };
+  }
+  if (contasHit.length === 1) {
+    const c = contasHit[0];
+    return { tipo: "conta", id: c.id, rotulo: String(c.nome || c.banco) };
+  }
+  return { tipo: "nenhum" };
+}
+
+function failAmbiguoContaOuCartao(
+  termo: string,
+  contasHit: { id: number; nome?: string | null; banco?: string | null }[],
+  cartoesHit: { id: number; nome: string }[],
+  nomesBancarias: string[],
+  nomesCartoes: string[],
+): ResolverMeioPjFail {
+  const rotulosConta = contasHit.map((c) => String(c.nome || c.banco)).filter(Boolean);
+  const rotulosCartao = cartoesHit.map((c) => c.nome);
+  return {
+    ok: false,
+    precisa: "meio",
+    mensagem:
+      `*${termo}* existe como conta e como cartão nesta empresa.` +
+      (rotulosConta.length ? ` Conta: ${rotulosConta.join(", ")}.` : "") +
+      (rotulosCartao.length ? ` Cartão: ${rotulosCartao.join(", ")}.` : "") +
+      ` É *conta bancária* ou *cartão de crédito*?`,
+    sugestoes: [...rotulosConta, ...rotulosCartao.map((n) => `CC ${n}`)],
+    contas: rotulosConta.length ? rotulosConta : nomesBancarias,
+    cartoes: rotulosCartao.length ? rotulosCartao : nomesCartoes,
+    nome_sugerido: termo,
+    instrucao_agente:
+      "Ambiguidade de marca (conta E cartão). Pergunte conta ou cartão — NÃO escolha sozinho. Na resposta, use forma_pagamento 'conta X' / 'banco X' ou 'cartão X' / 'CC X'.",
+  };
+}
+
+function failVariosCartoes(
+  termo: string,
+  hits: { id: number; nome: string }[],
+  nomesBancarias: string[],
+  nomesCartoes: string[],
+): ResolverMeioPjFail {
+  const nomes = hits.map((c) => c.nome);
+  return {
+    ok: false,
+    precisa: "cartao",
+    mensagem: `Achei mais de um cartão para *${termo}*: ${nomes.join(", ")}. Qual deles?`,
+    sugestoes: nomes,
+    contas: nomesBancarias,
+    cartoes: nomes,
+    nome_sugerido: termo,
+    instrucao_agente: "Peça qual cartão da lista pelo nome exato. NÃO invente.",
+  };
+}
+
+function failVariasContas(
+  termo: string,
+  hits: { id: number; nome?: string | null; banco?: string | null }[],
+  nomesBancarias: string[],
+  nomesCartoes: string[],
+): ResolverMeioPjFail {
+  const nomes = hits.map((c) => String(c.nome || c.banco)).filter(Boolean);
+  return {
+    ok: false,
+    precisa: "conta",
+    mensagem: `Achei mais de uma conta para *${termo}*: ${nomes.join(", ")}. Qual delas?`,
+    sugestoes: nomes,
+    contas: nomes,
+    cartoes: nomesCartoes,
+    nome_sugerido: termo,
+    instrucao_agente: "Peça qual conta da lista pelo nome exato. NÃO invente.",
+  };
+}
+
 function failCadastrarCartao(
   nome: string,
   nomesBancarias: string[],
   nomesCartoes: string[],
+  opts?: { temContaHomonia?: boolean; rotuloConta?: string },
 ): ResolverMeioPjFail {
+  // Se já existe cartão parecido na lista, NÃO peça cadastro — peça confirmação.
+  const parecidos = nomesCartoes.filter((n) => casaNomeMeio(nome, n) || casaNomeMeio(n, nome));
+  if (parecidos.length === 1) {
+    return {
+      ok: false,
+      precisa: "cartao",
+      mensagem: `Você já tem o cartão *${parecidos[0]}*. É esse? (Não cadastre de novo.)`,
+      sugestoes: parecidos,
+      contas: nomesBancarias,
+      cartoes: nomesCartoes,
+      nome_sugerido: parecidos[0],
+      instrucao_agente:
+        "O cartão JÁ EXISTE. Confirme o nome exato da lista e chame lancar/parcelar com forma_pagamento = esse nome. NÃO peça fechamento/vencimento nem cadastrar_cartao_empresa.",
+    };
+  }
+  if (parecidos.length > 1) {
+    return {
+      ok: false,
+      precisa: "cartao",
+      mensagem: `Encontrei cartões parecidos com *${nome}*: ${parecidos.join(", ")}. Qual deles?`,
+      sugestoes: parecidos,
+      contas: nomesBancarias,
+      cartoes: nomesCartoes,
+      instrucao_agente:
+        "Peça qual cartão da lista. NÃO cadastre outro com nome similar.",
+    };
+  }
+
+  let mensagem = `Não achei o cartão *${nome}*.`;
+  if (opts?.temContaHomonia) {
+    mensagem =
+      `*${opts.rotuloConta || nome}* está cadastrado como *conta bancária*, não como cartão.` +
+      ` Parcelamento / fatura exige cartão de crédito.`;
+  }
+  if (nomesCartoes.length) {
+    mensagem += ` Cartões que você já tem: ${nomesCartoes.join(", ")}.`;
+  } else {
+    mensagem += " Nenhum cartão cadastrado.";
+  }
+  if (nomesBancarias.length && !opts?.temContaHomonia) {
+    mensagem += ` Contas bancárias: ${nomesBancarias.join(", ")}.`;
+  }
+  mensagem +=
+    ` Para cadastrar o *cartão* *${nome}*, diga o dia de fechamento e o dia de vencimento numa resposta só.` +
+    (nomesCartoes.length ? " Ou escolha um cartão da lista." : "");
+
   return {
     ok: false,
     precisa: "cadastrar_cartao",
-    mensagem:
-      `Não achei o cartão *${nome}*.` +
-      (nomesCartoes.length ? ` Você tem: ${nomesCartoes.join(", ")}.` : " Nenhum cartão cadastrado.") +
-      (nomesBancarias.length ? ` Contas bancárias: ${nomesBancarias.join(", ")}.` : "") +
-      ` Para cadastrar *${nome}*, diga o dia de fechamento e o dia de vencimento numa resposta só.`,
+    mensagem,
     sugestoes: nomesCartoes,
     contas: nomesBancarias,
     cartoes: nomesCartoes,
     nome_sugerido: nome,
     faltando: ["dia_fechamento", "dia_vencimento"],
-    instrucao_agente:
-      "Peça fechamento e vencimento numa pergunta só. cadastrar_cartao_empresa e em seguida o lançamento.",
+    instrucao_agente: opts?.temContaHomonia
+      ? "Há conta com esse nome, mas falta o CARTÃO. Peça fechamento+vencimento para cadastrar_cartao_empresa (não criar_conta). Se o usuário escolher um cartão da lista, use esse."
+      : "Peça fechamento e vencimento numa pergunta só. cadastrar_cartao_empresa e em seguida o lançamento. Se a lista já tem cartão parecido, use o existente — não cadastre duplicata.",
   };
 }
 

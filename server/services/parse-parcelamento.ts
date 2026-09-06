@@ -8,6 +8,7 @@
  * - "compra parcelada de 300 em 3x" → total
  * - "parcelada no valor de 300 em 3x" → total
  * - "300 reais em 3 vezes" → total
+ * - "em duas vezes" / "duas parcelas" → qtd (extenso)
  * - "em 5x no Itaú" (só qtd; valor vem à parte)
  */
 
@@ -19,6 +20,25 @@ export type ParcelamentoParsed = {
   modo: "parcela" | "total" | null;
   cartaoHint: string | null;
 };
+
+/** Números por extenso comuns em parcelamento (2–12). */
+const EXTENSO_PARCELAS: Record<string, number> = {
+  dois: 2,
+  duas: 2,
+  tres: 3,
+  três: 3,
+  quatro: 4,
+  cinco: 5,
+  seis: 6,
+  sete: 7,
+  oito: 8,
+  nove: 9,
+  dez: 10,
+  onze: 11,
+  doze: 12,
+};
+
+const EXTENSO_ALT = Object.keys(EXTENSO_PARCELAS).join("|");
 
 function parseMoneyBR(raw: string): number | null {
   const t = String(raw || "")
@@ -37,6 +57,22 @@ function parseMoneyBR(raw: string): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+/** Aceita "3", "duas", "três" → número de parcelas (2–60). */
+export function numParcelasDeToken(raw: string): number | null {
+  const t = String(raw || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  if (!t) return null;
+  if (/^\d{1,2}$/.test(t)) {
+    const n = Number(t);
+    return n >= 2 && n <= 60 ? n : null;
+  }
+  const n = EXTENSO_PARCELAS[t] ?? EXTENSO_PARCELAS[String(raw || "").trim().toLowerCase()];
+  return n != null && n >= 2 && n <= 60 ? n : null;
+}
+
 const CARTAO_COM_PALAVRA =
   /(?:no\s+)?(?:cart[aã]o|cc)\s+(?:do\s+|da\s+|de\s+)?([A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9.\s]{0,30}?)(?=\s*$|[,.!?]|\s+em\s+\d|\s+\d+\s*[x×])/i;
 // Evitar \\b após acentos (JS trata "ú" como não-word → cortava "Itaú" em "Ita").
@@ -48,7 +84,11 @@ const CARTAO_NO_NOME =
  */
 export function textoSugereParcelamento(texto: string): boolean {
   const t = (texto || "").toLowerCase();
-  return /parcelad|parcelamento|\d+\s*[x×]\s*|em\s+\d+\s*[x×]|em\s+\d+\s*vezes|dividid[oa]\s+em/i.test(t);
+  const ext = `(?:${EXTENSO_ALT}|\\d+)`;
+  return new RegExp(
+    `parcelad|parcelamento|\\d+\\s*[x×]\\s*|em\\s+${ext}\\s*[x×]|em\\s+${ext}\\s*vezes|${ext}\\s+parcelas?|dividid[oa]\\s+em`,
+    "i",
+  ).test(t);
 }
 
 function extrairCartaoHint(raw: string): string | null {
@@ -99,18 +139,25 @@ export function parseParcelamentoDoTexto(texto: string): ParcelamentoParsed {
     }
   }
 
-  // "valor de 300 em 3x" / "parcelada de 300 em 3x" / "300 em 3x" / "300 em 3 vezes"
+  // "valor de 300 em 3x" / "parcelada de 300 em 3x" / "300 em 3x" / "300 em duas vezes"
+  const qtdCap = `(\\d{1,2}|${EXTENSO_ALT})`;
   const mTotal =
     raw.match(
-      /(?:valor\s+de|parcelad[oa]s?(?:\s+no\s+valor\s+de)?|compra\s+parcelada(?:\s+de)?|total\s+de)\s*(?:R\$\s*)?([\d.]+,\d{2}|\d+(?:[.,]\d{1,2})?)\s*(?:reais)?\s*(?:em|dividid[oa]\s+em)\s*(\d{1,2})\s*(?:[x×]|vezes)?/i,
+      new RegExp(
+        `(?:valor\\s+de|parcelad[oa]s?(?:\\s+no\\s+valor\\s+de)?|compra\\s+parcelada(?:\\s+de)?|total\\s+de)\\s*(?:R\\$\\s*)?([\\d.]+,\\d{2}|\\d+(?:[.,]\\d{1,2})?)\\s*(?:reais)?\\s*(?:em|dividid[oa]\\s+em)\\s*${qtdCap}\\s*(?:[x×]|vezes)?`,
+        "i",
+      ),
     ) ||
     raw.match(
-      /(?:R\$\s*)?([\d.]+,\d{2}|\d+(?:[.,]\d{1,2})?)\s*(?:reais)?\s+(?:em|dividid[oa]\s+em)\s+(\d{1,2})\s*(?:[x×]|vezes)/i,
+      new RegExp(
+        `(?:R\\$\\s*)?([\\d.]+,\\d{2}|\\d+(?:[.,]\\d{1,2})?)\\s*(?:reais)?\\s+(?:em|dividid[oa]\\s+em)\\s+${qtdCap}\\s*(?:[x×]|vezes)`,
+        "i",
+      ),
     );
   if (mTotal) {
     const v = parseMoneyBR(mTotal[1]);
-    const n = Number(mTotal[2]);
-    if (v && n >= 2 && n <= 60) {
+    const n = numParcelasDeToken(mTotal[2]);
+    if (v && n) {
       out.parcelas = n;
       out.valorTotal = v;
       out.modo = "total";
@@ -119,11 +166,18 @@ export function parseParcelamentoDoTexto(texto: string): ParcelamentoParsed {
     }
   }
 
-  // Só "em 5x" / "em 5 vezes" / "parcelada em 5x"
-  const mSoQtd = raw.match(/(?:em|parcelad[oa]s?\s+em|dividid[oa]\s+em)\s+(\d{1,2})\s*(?:[x×]|vezes)/i);
+  // Só "em 5x" / "em duas vezes" / "duas parcelas" / "parcelada em 5x"
+  const mSoQtd =
+    raw.match(
+      new RegExp(
+        `(?:em|parcelad[oa]s?\\s+em|dividid[oa]\\s+em)\\s+${qtdCap}\\s*(?:[x×]|vezes)`,
+        "i",
+      ),
+    ) ||
+    raw.match(new RegExp(`\\b${qtdCap}\\s+parcelas?\\b`, "i"));
   if (mSoQtd) {
-    const n = Number(mSoQtd[1]);
-    if (n >= 2 && n <= 60) out.parcelas = n;
+    const n = numParcelasDeToken(mSoQtd[1]);
+    if (n) out.parcelas = n;
   }
 
   return out;

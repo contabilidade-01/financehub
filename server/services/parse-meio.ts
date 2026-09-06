@@ -131,9 +131,10 @@ export function detectarMeio(texto: string): MeioDetectado {
     if (!temMarca(n)) return { tipo: "conta_generica" };
   }
 
-  // "banco Santander" / "no Banco X" → nome + pista conta (antes de tratar como cartão).
+  // "banco Santander" / "no Banco X" → conta — EXCETO se o texto já fala em cartão
+  // ("cartão Banco Inter" / "CC Banco Inter" NÃO pode virar conta).
   const mBanco = n.match(/\bbanco\s+([a-z0-9][a-z0-9.\s]{1,40}?)(?=\s*$|[,.!?]|em\s+\d|\d+\s*[x×]|reais|r\$)/);
-  if (mBanco) {
+  if (mBanco && !pistaCartaoNoTexto(n)) {
     const termo = mBanco[1].trim().replace(/\s+/g, " ");
     if (termo && !/^(do|da|de)$/.test(termo)) {
       return { tipo: "nome", termo, pista: "conta" };
@@ -141,12 +142,12 @@ export function detectarMeio(texto: string): MeioDetectado {
   }
   // "conta corrente Itaú" / "conta Santander"
   const mContaNome = n.match(/\bconta\s+(?:corrente\s+|poupanca\s+|bancaria\s+)?([a-z0-9][a-z0-9.\s]{1,30}?)(?=\s*$|[,.!?])/);
-  if (mContaNome && temMarca(n)) {
+  if (mContaNome && temMarca(n) && !pistaCartaoNoTexto(n)) {
     const marca = extrairMarca(n);
     if (marca) return { tipo: "nome", termo: marca, pista: "conta" };
   }
 
-  // "cartão Santander" / "CC Magalu" → nome + pista cartão.
+  // "cartão Santander" / "CC Magalu" / "cartão Banco Inter" → nome + pista cartão.
   if (pistaCartaoNoTexto(n) && temMarca(n)) {
     const marca = extrairMarca(n);
     if (marca) return { tipo: "nome", termo: marca, pista: "cartao" };

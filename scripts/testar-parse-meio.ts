@@ -3,7 +3,7 @@
  * npm run test:meio
  */
 import { detectarMeio, textoMeioDeDetect } from "../server/services/parse-meio";
-import { casaNomeMeio } from "../server/services/meio-pagamento-pj";
+import { casaNomeMeio, classificarMatchesMeioPorNome } from "../server/services/meio-pagamento-pj";
 
 let falhas = 0;
 const ok = (n: string) => console.log("ok  ", n);
@@ -61,6 +61,10 @@ expectTipo("débito", "conta_necessaria", "debito");
 expectPista("Compra de mercadoria R$ 31,30 no Banco Santander", "conta");
 expectPista("no Banco Santander", "conta");
 expectPista("Compra de 50 no cartão Santander", "cartao");
+expectPista("Cartão Inter", "cartao");
+expectPista("Cartão de crédito do Inter", "cartao");
+expectPista("cartão Banco Inter", "cartao"); // NÃO pode virar conta por causa de "banco"
+expectPista("Cartão de Crédito Banco Inter", "cartao");
 expectTipo("Conta bancária", "conta_generica");
 expectTipo("conta corrente", "conta_generica");
 
@@ -97,8 +101,65 @@ expectTipo("compra de 20 no Nubank", "nome", "nubank");
   else ok("via caixa não casa com Caixa Econômica");
   if (!casaNomeMeio("itau", "Itaú Corrente")) fail("itau vs Itaú Corrente", "não casou");
   else ok("itau casa com Itaú Corrente (palavra)");
+  if (!casaNomeMeio("inter", "Banco Inter")) fail("inter vs Banco Inter", "não casou");
+  else ok("inter casa com Banco Inter");
+  if (!casaNomeMeio("banco inter", "Inter")) fail("banco inter vs Inter", "não casou");
+  else ok("banco inter casa com Inter (núcleo)");
+  if (!casaNomeMeio("cartao inter", "Banco Inter")) fail("cartao inter vs Banco Inter", "não casou");
+  else ok("cartao inter casa com Banco Inter");
   if (!casaNomeMeio("caixa economica", "Caixa Econômica")) fail("nome completo Caixa", "não casou");
   else ok("Caixa Econômica casa pelo nome completo");
+}
+
+// Ambiguidade marca: conta E cartão → perguntar (qualquer banco)
+{
+  const inter = classificarMatchesMeioPorNome(
+    "Inter",
+    [{ id: 1, nome: "Banco Inter" }],
+    [{ id: 10, nome: "Conta Inter", banco: "Inter" }],
+  );
+  if (inter.tipo !== "ambiguidade_conta_cartao") {
+    fail("Inter conta+cartão", `esperado ambiguidade, obtido ${inter.tipo}`);
+  } else ok("Inter conta+cartão → ambiguidade");
+
+  const itau = classificarMatchesMeioPorNome(
+    "Itaú",
+    [{ id: 2, nome: "Itaú" }],
+    [{ id: 11, banco: "Itaú", nome: "Corrente Itaú" }],
+  );
+  if (itau.tipo !== "ambiguidade_conta_cartao") {
+    fail("Itaú conta+cartão", `esperado ambiguidade, obtido ${itau.tipo}`);
+  } else ok("Itaú conta+cartão → ambiguidade");
+
+  const soCartao = classificarMatchesMeioPorNome(
+    "Nubank",
+    [{ id: 3, nome: "Nubank" }],
+    [{ id: 12, nome: "Bradesco", banco: "Bradesco" }],
+  );
+  if (soCartao.tipo !== "cartao" || soCartao.id !== 3) {
+    fail("só Nubank cartão", JSON.stringify(soCartao));
+  } else ok("só cartão Nubank → cartão");
+
+  const soConta = classificarMatchesMeioPorNome(
+    "Santander",
+    [{ id: 4, nome: "Magalu" }],
+    [{ id: 13, nome: "Santander PJ", banco: "Santander" }],
+  );
+  if (soConta.tipo !== "conta" || soConta.id !== 13) {
+    fail("só Santander conta", JSON.stringify(soConta));
+  } else ok("só conta Santander → conta");
+
+  const variosCc = classificarMatchesMeioPorNome(
+    "Inter",
+    [
+      { id: 1, nome: "Banco Inter" },
+      { id: 2, nome: "Inter Black" },
+    ],
+    [],
+  );
+  if (variosCc.tipo !== "varios_cartoes" || variosCc.cartoes.length !== 2) {
+    fail("vários cartões Inter", JSON.stringify(variosCc));
+  } else ok("vários cartões mesma marca → perguntar qual");
 }
 
 if (falhas) {
