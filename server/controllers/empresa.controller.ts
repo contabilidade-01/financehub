@@ -17,20 +17,22 @@ export const createEmpresa = async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Dados inválidos", details: parsed.error.errors });
     }
 
-    // Regra: um login = uma empresa. Impede cadastro de uma 2ª empresa.
-    const existentes = await storage.getEmpresasByUsuarioId(userId);
-    if (existentes.length > 0) {
-      return res.status(409).json({ error: "Este usuário já possui uma empresa cadastrada. Cada login gerencia apenas uma empresa." });
+    // Regra: um login = uma empresa (também em storage.createEmpresa).
+    try {
+      const empresa = await storage.createEmpresa({ ...parsed.data, usuario_id: userId });
+
+      // Seed automático do plano de contas Yampa-like
+      const contas = await storage.seedEmpresasContas(empresa.id);
+      const { garantirCaixinhaPj } = await import("../services/meio-pagamento-pj");
+      await garantirCaixinhaPj(empresa.id, userId);
+
+      return res.status(201).json({ empresa, contas_criadas: contas.length });
+    } catch (errInner: any) {
+      if (errInner?.code === "EMPRESA_UNICA" || errInner?.status === 409) {
+        return res.status(409).json({ error: errInner.message || "Este usuário já possui uma empresa cadastrada." });
+      }
+      throw errInner;
     }
-
-    const empresa = await storage.createEmpresa({ ...parsed.data, usuario_id: userId });
-
-    // Seed automático do plano de contas Yampa-like
-    const contas = await storage.seedEmpresasContas(empresa.id);
-    const { garantirCaixinhaPj } = await import("../services/meio-pagamento-pj");
-    await garantirCaixinhaPj(empresa.id, userId);
-
-    return res.status(201).json({ empresa, contas_criadas: contas.length });
   } catch (err: any) {
     console.error("createEmpresa:", err);
     if (err.message?.includes("duplicate") || err.code === "23505") {

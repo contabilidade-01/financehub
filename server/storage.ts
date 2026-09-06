@@ -1634,8 +1634,9 @@ export class DbStorage implements IStorage {
     await db.update(whatsappOnboardingStates).set(updates).where(eq(whatsappOnboardingStates.remoteJid, remoteJid));
   }
 
-  async deleteWhatsAppOnboardingState(remoteJid: string): Promise<void> {
-    await db.delete(whatsappOnboardingStates).where(eq(whatsappOnboardingStates.remoteJid, remoteJid));
+  async deleteWhatsAppOnboardingState(remoteJid: string): Promise<boolean> {
+    const r = await db.delete(whatsappOnboardingStates).where(eq(whatsappOnboardingStates.remoteJid, remoteJid)).returning({ remoteJid: whatsappOnboardingStates.remoteJid });
+    return (r as any[]).length > 0;
   }
 
   // ============================================
@@ -1643,6 +1644,19 @@ export class DbStorage implements IStorage {
   // ============================================
 
   async createEmpresa(empresaData: InsertEmpresa): Promise<Empresa> {
+    const usuarioId = Number((empresaData as any).usuario_id);
+    if (!usuarioId || Number.isNaN(usuarioId)) {
+      throw new Error("usuario_id é obrigatório para criar empresa.");
+    }
+    const existentes = await this.getEmpresasByUsuarioId(usuarioId);
+    if (existentes.length > 0) {
+      const err: any = new Error(
+        "Este usuário já possui uma empresa cadastrada. Cada login gerencia apenas uma empresa.",
+      );
+      err.code = "EMPRESA_UNICA";
+      err.status = 409;
+      throw err;
+    }
     const result = await db.insert(empresas).values({
       ...empresaData,
       created_at: new Date()

@@ -148,6 +148,17 @@ export class WhatsAppOnboardingService {
 
         // FINALIZAÇÃO: Cria a empresa no banco de dados
         try {
+          // Um login = uma empresa — se já existe, encerra onboarding e segue.
+          const jaTem = await storage.getEmpresasByUsuarioId(userId);
+          if (jaTem.length > 0) {
+            await storage.deleteWhatsAppOnboardingState(remoteJid);
+            const nome = jaTem[0].nome_fantasia || jaTem[0].razao_social;
+            return {
+              handled: true,
+              response: `Você já tem a empresa *${nome}* cadastrada. Pode lançar normalmente! 👍`,
+            };
+          }
+
           const empresa = await storage.createEmpresa({
             usuario_id: userId,
             razao_social: data.razao_social || 'Empresa Sem Nome',
@@ -169,8 +180,15 @@ export class WhatsAppOnboardingService {
             handled: true,
             response: WhatsAppOnboardingService.STEPS.COMPLETED
           };
-        } catch (error) {
+        } catch (error: any) {
           console.error("[OnboardingService] Erro ao criar empresa:", error);
+          if (error?.code === "EMPRESA_UNICA" || error?.status === 409) {
+            await storage.deleteWhatsAppOnboardingState(remoteJid);
+            return {
+              handled: true,
+              response: "Você já possui uma empresa neste login. Pode usar o sistema normalmente! 👍",
+            };
+          }
           return {
             handled: true,
             response: "Houve um erro ao finalizar o cadastro da sua empresa. Por favor, tente novamente mais tarde ou contate o suporte. ⚠️"

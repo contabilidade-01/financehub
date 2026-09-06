@@ -617,7 +617,12 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
     // ============================================
     let agentResponse: string;
     try {
-      console.log(`[UazAPI Webhook] Chamando agente IA para user ${user.id}...`);
+      console.log(
+        `[UazAPI Webhook] Chamando agente IA para user ${user.id}` +
+          (empresaAtiva
+            ? ` · empresa ${empresaAtiva.id} (${empresaAtiva.nome})`
+            : " · sem empresa"),
+      );
       // F4.1 — histórico curto da conversa, para o agente ter contexto.
       const historico = await getConversaRecente(user.id, 6);
       agentResponse = await runAgent(resolvedText, agentContext, historico);

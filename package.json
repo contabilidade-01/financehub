@@ -30,6 +30,7 @@
     "test:mover": "tsx scripts/testar-mover-meio.ts",
     "test:meio": "tsx scripts/testar-parse-meio.ts",
     "test:recibo": "tsx scripts/testar-recibo-agente.ts",
+    "test:uma-empresa": "tsx scripts/testar-uma-empresa.ts",
     "test:chave-cartao": "tsx scripts/testar-chave-cartao.ts",
     "test:segregacao-pj": "tsx scripts/testar-segregacao-pj.ts",
     "test:extrato-saldo": "tsx scripts/testar-extrato-saldo.ts",

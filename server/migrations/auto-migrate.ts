@@ -115,6 +115,28 @@ const STEPS: Step[] = [
         )
       `);
       await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_empresas_transacoes_empresa ON empresas_transacoes(empresa_id)`);
+      // Um login = uma empresa. Só cria o índice se não houver duplicatas.
+      try {
+        const dups = await db.execute(sql`
+          SELECT usuario_id, COUNT(*)::int AS qtd
+          FROM empresas
+          GROUP BY usuario_id
+          HAVING COUNT(*) > 1
+        `);
+        const lista = dups as any[];
+        if (lista.length > 0) {
+          console.warn(
+            `[auto-migrate] idx_empresas_usuario_unico NÃO criado — duplicatas: ` +
+              lista.map((r) => `usuario_id=${r.usuario_id}(${r.qtd})`).join(", "),
+          );
+        } else {
+          await db.execute(sql`
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_empresas_usuario_unico ON empresas(usuario_id)
+          `);
+        }
+      } catch (e: any) {
+        console.warn("[auto-migrate] idx_empresas_usuario_unico:", e?.message || e);
+      }
     },
   },
   {

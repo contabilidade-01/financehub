@@ -12,7 +12,7 @@ import {
   getContasBancariasByEmpresa,
   updateContaBancaria,
 } from "../storage";
-import { detectarMeio, normMeio } from "./parse-meio";
+import { detectarMeio, normMeio, pistaContaNoTexto, pistaCartaoNoTexto } from "./parse-meio";
 
 export type MeioPagamentoPjInput = {
   userId: number;
@@ -290,6 +290,11 @@ export async function resolverMeioPorNomePj(
     return resolverContaNecessaria(det.termo, bancarias, nomesBancarias, nomesCartoes);
   }
 
+  // "conta bancária" / "no banco" (sem nome) — lista contas.
+  if (det.tipo === "conta_generica" || /^(conta|banco)$/.test(norm(raw))) {
+    return resolverContaNecessaria("conta", bancarias, nomesBancarias, nomesCartoes);
+  }
+
   // "cartão" / "cartão de crédito" sem nome — nunca inventar Nubank/etc.
   if (det.tipo === "cartao_generico" || /^(cartao|cartao\s+de\s+credito|credito)$/.test(norm(raw))) {
     if (cartoes.length === 1) {
@@ -311,7 +316,7 @@ export async function resolverMeioPorNomePj(
         cartoes: [],
         faltando: ["nome", "dia_fechamento", "dia_vencimento"],
         instrucao_agente:
-          "Pergunte o nome do cartão e fechamento+vencimento. NÃO invente nome (ex. Nubank). Ao receber, cadastrar_cartao_empresa e lancar.",
+          "Pergunte o nome do cartão e fechamento+vencimento. NÃO invente nome. Ao receber, cadastrar_cartao_empresa e lancar.",
       } as ResolverMeioPjFail;
     }
     return {
@@ -338,51 +343,107 @@ export async function resolverMeioPorNomePj(
     };
   }
 
-  // tipo === "nome"
-  const alvo = norm(det.termo || raw);
+  // tipo === "nome" — tenta casar; se não achar, usa pista do texto (nunca marca = cartão).
+  const termo = det.tipo === "nome" ? det.termo : raw;
+  const alvo = norm(termo);
+  const nn = norm(raw);
+  const pista: "conta" | "cartao" | undefined =
+    det.tipo === "nome" && det.pista
+      ? det.pista
+      : pistaContaNoTexto(nn)
+        ? "conta"
+        : pistaCartaoNoTexto(nn)
+          ? "cartao"
+          : undefined;
 
-  const cartao =
+  const acharCartao = () =>
     cartoes.find((c) => norm(c.nome) === alvo) ||
     cartoes.find((c) => casaNomeMeio(alvo, c.nome));
-  if (cartao) {
-    return { ok: true, cartao_id: cartao.id, rotulo: cartao.nome };
-  }
 
-  const conta =
+  const acharConta = () =>
     ativas.find((c) => norm(c.banco || "") === alvo || norm(c.nome || "") === alvo) ||
     ativas.find(
       (c) => casaNomeMeio(alvo, c.banco || "") || casaNomeMeio(alvo, c.nome || ""),
     );
-  if (conta) {
-    return { ok: true, conta_bancaria_id: conta.id, rotulo: conta.nome || conta.banco };
+
+  // Com pista, procura só no lado certo primeiro.
+  if (pista === "cartao") {
+    const cartao = acharCartao();
+    if (cartao) return { ok: true, cartao_id: cartao.id, rotulo: cartao.nome };
+    return failCadastrarCartao(termo, nomesBancarias, nomesCartoes);
+  }
+  if (pista === "conta") {
+    const conta = acharConta();
+    if (conta) return { ok: true, conta_bancaria_id: conta.id, rotulo: conta.nome || conta.banco };
+    return failCadastrarContaNome(termo, nomesBancarias, nomesCartoes);
   }
 
-  if (/cartao|credito|nubank|inter|c6|itau|bradesco|santander|visa|master|elo|magalu|hipercard|amex/.test(alvo)) {
-    return {
-      ok: false,
-      precisa: "cadastrar_cartao",
-      mensagem:
-        `Não achei o cartão "${raw}" nesta empresa.` +
-        (nomesCartoes.length
-          ? ` Você tem: ${nomesCartoes.join(", ")}. Ou cadastre o novo.`
-          : " Ainda não há cartão cadastrado.") +
-        ` Para cadastrar *${raw}*, diga o dia de fechamento e o dia de vencimento numa resposta só (ex.: "fecha dia 10, vence dia 17").`,
-      sugestoes: nomesCartoes,
-      contas: nomesBancarias,
-      cartoes: nomesCartoes,
-      nome_sugerido: raw,
-      faltando: ["dia_fechamento", "dia_vencimento"],
-      instrucao_agente:
-        "Peça fechamento e vencimento numa pergunta só. Ao receber, chame cadastrar_cartao_empresa e EM SEGUIDA o lançamento (lancar_empresa ou parcelar_compra_empresa). Se o usuário já confirmou a compra (sim/isso/pode), NÃO peça confirmação de novo — execute.",
-    } as ResolverMeioPjFail;
-  }
+  // Sem pista: tenta os dois; se nenhum, pergunta conta ou cartão.
+  const cartao = acharCartao();
+  if (cartao) return { ok: true, cartao_id: cartao.id, rotulo: cartao.nome };
+  const conta = acharConta();
+  if (conta) return { ok: true, conta_bancaria_id: conta.id, rotulo: conta.nome || conta.banco };
 
   return {
     ok: false,
     precisa: "meio",
-    mensagem: `Não entendi "${raw}". Informe a conta bancária, a Caixinha (dinheiro) ou o cartão.`,
-    sugestoes: [...nomesContas, ...nomesCartoes.map((n) => `CC ${n}`)],
-    contas: nomesContas,
+    mensagem:
+      `Não achei *${termo}* nesta empresa.` +
+      (nomesBancarias.length ? ` Contas: ${nomesBancarias.join(", ")}.` : " Nenhuma conta bancária.") +
+      (nomesCartoes.length ? ` Cartões: ${nomesCartoes.join(", ")}.` : " Nenhum cartão.") +
+      ` *${termo}* é conta bancária ou cartão de crédito?`,
+    sugestoes: [...nomesBancarias, ...nomesCartoes.map((n) => `CC ${n}`)],
+    contas: nomesBancarias,
     cartoes: nomesCartoes,
+    nome_sugerido: termo,
+    instrucao_agente:
+      "Pergunte se é conta ou cartão. Se conta → criar_conta_bancaria_empresa; se cartão → cadastrar_cartao_empresa (fechamento+vencimento). Mostre o que já existe.",
+  } as ResolverMeioPjFail;
+}
+
+function failCadastrarCartao(
+  nome: string,
+  nomesBancarias: string[],
+  nomesCartoes: string[],
+): ResolverMeioPjFail {
+  return {
+    ok: false,
+    precisa: "cadastrar_cartao",
+    mensagem:
+      `Não achei o cartão *${nome}*.` +
+      (nomesCartoes.length ? ` Você tem: ${nomesCartoes.join(", ")}.` : " Nenhum cartão cadastrado.") +
+      (nomesBancarias.length ? ` Contas bancárias: ${nomesBancarias.join(", ")}.` : "") +
+      ` Para cadastrar *${nome}*, diga o dia de fechamento e o dia de vencimento numa resposta só.`,
+    sugestoes: nomesCartoes,
+    contas: nomesBancarias,
+    cartoes: nomesCartoes,
+    nome_sugerido: nome,
+    faltando: ["dia_fechamento", "dia_vencimento"],
+    instrucao_agente:
+      "Peça fechamento e vencimento numa pergunta só. cadastrar_cartao_empresa e em seguida o lançamento.",
+  };
+}
+
+function failCadastrarContaNome(
+  nome: string,
+  nomesBancarias: string[],
+  nomesCartoes: string[],
+): ResolverMeioPjFail {
+  return {
+    ok: false,
+    precisa: "cadastrar_conta",
+    mensagem:
+      `Não achei *${nome}*.` +
+      (nomesBancarias.length
+        ? ` Suas contas: ${nomesBancarias.join(", ")}.`
+        : " Nenhuma conta bancária cadastrada.") +
+      (nomesCartoes.length ? ` Cartões: ${nomesCartoes.join(", ")}.` : "") +
+      ` Quer cadastrar *${nome}* como conta bancária? Use criar_conta_bancaria_empresa.`,
+    sugestoes: nomesBancarias,
+    contas: nomesBancarias,
+    cartoes: nomesCartoes,
+    nome_sugerido: nome,
+    instrucao_agente:
+      "Ofereça cadastrar a conta com criar_conta_bancaria_empresa (confirme banco/nome). NÃO peça fechamento/vencimento de cartão.",
   };
 }

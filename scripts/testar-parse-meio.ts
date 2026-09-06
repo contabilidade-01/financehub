@@ -22,15 +22,23 @@ function expectTipo(frase: string, tipo: string, extra?: string) {
     fail(`"${frase}" termo`, `esperado ${extra}, obtido ${d.termo}`);
     return;
   }
-  if (extra && d.tipo === "nome" && !String(d.termo).includes(extra) && d.termo !== extra) {
-    // nome pode ser normalizado sem acento
+  if (extra && d.tipo === "nome") {
     const t = d.termo.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    if (!t.includes(extra)) {
+    if (!t.includes(extra) && d.termo !== extra) {
       fail(`"${frase}" nome`, `esperado conter ${extra}, obtido ${d.termo}`);
       return;
     }
   }
   ok(`${tipo}: ${frase.slice(0, 48)}${frase.length > 48 ? "…" : ""}`);
+}
+
+function expectPista(frase: string, pista: "conta" | "cartao") {
+  const d = detectarMeio(frase);
+  if (d.tipo !== "nome" || d.pista !== pista) {
+    fail(`pista "${frase}"`, `esperado nome+${pista}, obtido ${JSON.stringify(d)}`);
+    return;
+  }
+  ok(`pista ${pista}: ${frase.slice(0, 40)}`);
 }
 
 // Conversas reais do print
@@ -39,13 +47,22 @@ expectTipo("Em dinheiro", "dinheiro");
 expectTipo("Pix", "conta_necessaria", "pix");
 expectTipo("Via caixa", "dinheiro");
 
-// Sinônimos
+// Sinônimos + Whisper
 expectTipo("dinheiro vivo", "dinheiro");
 expectTipo("em espécie", "dinheiro");
 expectTipo("no pix", "conta_necessaria", "pix");
+expectTipo("Pics", "conta_necessaria", "pix");
+expectTipo("pixs", "conta_necessaria", "pix");
 expectTipo("boleto", "conta_necessaria", "boleto");
 expectTipo("TED", "conta_necessaria", "ted");
 expectTipo("débito", "conta_necessaria", "debito");
+
+// Banco ≠ cartão
+expectPista("Compra de mercadoria R$ 31,30 no Banco Santander", "conta");
+expectPista("no Banco Santander", "conta");
+expectPista("Compra de 50 no cartão Santander", "cartao");
+expectTipo("Conta bancária", "conta_generica");
+expectTipo("conta corrente", "conta_generica");
 
 // Nome (banco / cartão)
 expectTipo("pelo Itaú", "nome", "itau");
@@ -53,11 +70,9 @@ expectTipo("Caixa Econômica", "nome", "caixa");
 expectTipo("cartão Caixa", "nome", "caixa");
 expectTipo("conta Caixa", "nome", "caixa");
 
-// Sem meio
+// Sem meio / cartão genérico
 expectTipo("Compra de mercadorias no valor de 142,41", "nenhum");
 expectTipo("", "nenhum");
-
-// Cartão genérico (sem inventar nome)
 expectTipo("Compra no cartão de crédito: vinte reais", "cartao_generico");
 expectTipo("no cartão", "cartao_generico");
 expectTipo("no crédito", "cartao_generico");
@@ -71,6 +86,9 @@ expectTipo("compra de 20 no Nubank", "nome", "nubank");
   const tc = textoMeioDeDetect(detectarMeio("no cartão de crédito"));
   if (tc !== "cartao") fail("textoMeioDeDetect cartao", tc);
   else ok("textoMeioDeDetect → cartao");
+  const tb = textoMeioDeDetect(detectarMeio("no Banco Santander"));
+  if (!/^banco\s+santander$/.test(tb)) fail("textoMeioDeDetect banco", tb);
+  else ok("textoMeioDeDetect → banco santander");
 }
 
 // Substring: "via caixa" NÃO engole "Caixa Econômica"

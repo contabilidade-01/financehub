@@ -80,12 +80,6 @@ export function extrairEscritaOk(tool: string, raw: string): EscritaRodada | nul
   if (!TOOLS_ESCRITA.has(tool)) return null;
   const parsed = parseSafe(raw);
   if (!parsed || parsed.error || parsed.precisa_meio || parsed.precisa) return null;
-  const temId =
-    parsed.id != null ||
-    (Array.isArray(parsed.ids) && parsed.ids.length > 0) ||
-    parsed.success === true;
-  if (!temId && !parsed.msg && !parsed.mensagem) return null;
-  // Falhas mascaradas: success sem id em lançamento
   if (
     (tool === "lancar_empresa" || tool === "insere_transacao") &&
     parsed.id == null
@@ -98,7 +92,26 @@ export function extrairEscritaOk(tool: string, raw: string): EscritaRodada | nul
   ) {
     return null;
   }
+  const temId =
+    parsed.id != null ||
+    (Array.isArray(parsed.ids) && parsed.ids.length > 0) ||
+    parsed.success === true;
+  if (!temId && !parsed.msg && !parsed.mensagem) return null;
   return { tool, raw, parsed };
+}
+
+function linhaOrcamento(o: any): string {
+  if (!o || typeof o !== "object") return "";
+  const pct = Number(o.percentual);
+  if (!Number.isFinite(pct)) return "";
+  const nome = o.categoria || "orçamento";
+  if (o.status === "estourado" || pct >= 100) {
+    return `\n⚠️ Orçamento *${nome}* estourado (${pct.toFixed(0)}% de R$ ${moneyBR(o.limite)}).`;
+  }
+  if (o.status === "atencao" || pct >= 80) {
+    return `\n⚠️ Orçamento *${nome}* em ${pct.toFixed(0)}% (R$ ${moneyBR(o.gasto)} / R$ ${moneyBR(o.limite)}).`;
+  }
+  return `\n📊 Orçamento *${nome}*: ${pct.toFixed(0)}% usado.`;
 }
 
 export function montarReciboDeEscrita(e: EscritaRodada): string {
@@ -118,9 +131,11 @@ export function montarReciboDeEscrita(e: EscritaRodada): string {
       `💰 R$ ${moneyBR(p.valor)}\n` +
       `🗓 ${dataBR(p.data || p.data_transacao)}\n` +
       `📊 ${cat}\n` +
-      `📍 Forma: ${forma}\n` +
-      `🔍 Código: #${p.id}`;
+      `📍 Forma: ${forma}`;
+    if (p.empresa) txt += `\n🏢 ${p.empresa}`;
+    txt += `\n🔍 Código: #${p.id}`;
     if (p.aviso_meio) txt += `\n_${p.aviso_meio}_`;
+    txt += linhaOrcamento(p.orcamento);
     if (p.pendente_criar_conta?.nome_sugerido) {
       txt += `\n\nClassifiquei em Outras. Quer criar a conta *${p.pendente_criar_conta.nome_sugerido}* e mover este lançamento?`;
     }
@@ -133,9 +148,11 @@ export function montarReciboDeEscrita(e: EscritaRodada): string {
       `🔴 Compra parcelada registrada!\n` +
       `*${p.descricao || "Compra parcelada"}*\n` +
       `💰 ${p.parcelas}× de R$ ${moneyBR(p.valor_parcela)} (total R$ ${moneyBR(p.total || p.valor_total)})\n` +
-      `📍 Cartão: ${p.cartao || p.forma_pagamento || "—"}\n` +
-      `🔍 Códigos: #${ids}`;
+      `📍 Cartão: ${p.cartao || p.forma_pagamento || "—"}`;
+    if (p.empresa) txt += `\n🏢 ${p.empresa}`;
+    txt += `\n🔍 Códigos: #${ids}`;
     if (p.dica) txt += `\n_${String(p.dica).slice(0, 280)}_`;
+    txt += linhaOrcamento(p.orcamento);
     return txt;
   }
 
@@ -166,6 +183,37 @@ export function montarReciboDeEscrita(e: EscritaRodada): string {
   return `✅ Operação concluída.`;
 }
 
+/** Mensagem de bloqueio: pede só o que parece faltar na mensagem do usuário. */
+export function mensagemTravaFalsoRecibo(userMessage?: string): string {
+  const n = String(userMessage || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  const temValor =
+    /\b(r\$\s*)?\d{1,7}([.,]\d{2})?\b/.test(n) || /\breais?\b/.test(n);
+  const temDesc =
+    /\b(compra|mercadoria|servico|pagamento|aluguel|gasolina|uber|lanche|salario)\b/.test(n) ||
+    (n.split(/\s+/).filter(Boolean).length >= 3 && temValor);
+  const temMeio =
+    /\b(pix|pics|dinheiro|cartao|credito|boleto|ted|debito|caixa|banco|conta|nubank|itau|santander)\b/.test(n);
+
+  const faltam: string[] = [];
+  if (!temValor) faltam.push("o valor");
+  if (!temDesc) faltam.push("a descrição");
+  if (!temMeio) faltam.push("como pagou (conta, Caixinha/dinheiro ou cartão)");
+
+  if (faltam.length === 0) {
+    return (
+      "Ainda não registrei nada neste turno. " +
+      "Confirme o meio de pagamento (conta bancária, Caixinha ou cartão) para eu lançar de verdade."
+    );
+  }
+  if (faltam.length === 1) {
+    return `Ainda não registrei nada. Me diga ${faltam[0]} para eu lançar.`;
+  }
+  return `Ainda não registrei nada. Me diga ${faltam.slice(0, -1).join(", ")} e ${faltam[faltam.length - 1]}.`;
+}
+
 /**
  * Decide a resposta final ao usuário.
  * - Houve escrita OK → recibo do servidor (não o texto livre do modelo).
@@ -174,9 +222,8 @@ export function montarReciboDeEscrita(e: EscritaRodada): string {
 export function finalizarRespostaAgente(opts: {
   content: string;
   escritas: EscritaRodada[];
+  userMessage?: string;
 }): string {
-  const ok = opts.escritas.filter((e) => extrairEscritaOk(e.tool, e.raw));
-  // Re-filter: escritas already extracted; use those with valid parse
   const validas = opts.escritas.filter((e) => {
     const p = e.parsed;
     if (!p) return false;
@@ -194,10 +241,7 @@ export function finalizarRespostaAgente(opts: {
 
   const content = String(opts.content || "").trim() || "Pronto!";
   if (afirmaEscrita(content)) {
-    return (
-      "Ainda não registrei nada neste turno. " +
-      "Me diga o valor, a descrição e como pagou (conta bancária, Caixinha/dinheiro ou cartão) para eu lançar de verdade."
-    );
+    return mensagemTravaFalsoRecibo(opts.userMessage);
   }
   return content;
 }

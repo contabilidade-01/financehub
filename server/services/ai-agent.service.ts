@@ -783,7 +783,7 @@ function buildTools(ctx?: ToolContext) {
             ids: { type: "array", items: { type: "number" }, description: "Codigos dos lancamentos." },
             destino: { type: "string", description: "Nome do cartao ou da conta bancaria de destino." },
           },
-          required: ["empresa", "ids", "destino"],
+          required: ["ids", "destino"],
         },
       },
     },
@@ -804,7 +804,7 @@ function buildTools(ctx?: ToolContext) {
         parameters: {
           type: "object",
           properties: {
-            empresa: { type: "string", description: "Nome (ou parte) da empresa. Se houver dúvida, use listar_empresas e pergunte." },
+            empresa: { type: "string", description: "Opcional — ignorado; a empresa ativa do login é usada automaticamente." },
             conta: { type: "string", description: "Código ou nome da conta do plano da empresa (ex.: '3.01', 'Receita de Vendas'). Se não souber, pode omitir — o sistema escolhe a melhor conta e, se não achar, usa Outras." },
             descricao: { type: "string" },
             valor: { type: "number" },
@@ -823,7 +823,7 @@ function buildTools(ctx?: ToolContext) {
               description: "Valor de CADA parcela (ex.: 35). Use com parcelas quando o usuário disser '5x de 35'.",
             },
           },
-          required: ["empresa", "tipo"],
+          required: ["tipo"],
         },
       },
     },
@@ -844,7 +844,7 @@ function buildTools(ctx?: ToolContext) {
             conta: { type: "string", description: "Conta do plano (opcional)" },
             data_inicio: { type: "string", description: "AAAA-MM-DD da 1ª parcela. Omita para usar HOJE → fatura vigente." },
           },
-          required: ["empresa"],
+          required: [],
         },
       },
     },
@@ -862,7 +862,7 @@ function buildTools(ctx?: ToolContext) {
             de: { type: "string", description: "AAAA-MM-DD (alternativa a mes/ano, para períodos livres)" },
             ate: { type: "string", description: "AAAA-MM-DD (alternativa a mes/ano)" },
           },
-          required: ["empresa"],
+          required: [],
         },
       },
     },
@@ -880,7 +880,7 @@ function buildTools(ctx?: ToolContext) {
             mes_b: { type: "number", description: "Mês do segundo período (1-12)." },
             ano_b: { type: "number", description: "Ano do segundo período." },
           },
-          required: ["empresa", "mes_a", "mes_b"],
+          required: ["mes_a", "mes_b"],
         },
       },
     },
@@ -899,7 +899,7 @@ function buildTools(ctx?: ToolContext) {
             ate: { type: "string", description: "AAAA-MM-DD (opcional)" },
             tipo: { type: "string", enum: ["Receita", "Despesa"], description: "Filtra só receitas ou só despesas (opcional)." },
           },
-          required: ["empresa"],
+          required: [],
         },
       },
     },
@@ -914,7 +914,7 @@ function buildTools(ctx?: ToolContext) {
             empresa: { type: "string", description: "Nome (ou parte) da empresa." },
             ano: { type: "number", description: "Ano com 4 dígitos (default: ano corrente)." },
           },
-          required: ["empresa"],
+          required: [],
         },
       },
     },
@@ -933,7 +933,7 @@ function buildTools(ctx?: ToolContext) {
             data_fim: { type: "string", description: "AAAA-MM-DD — fim da janela de datas." },
             tipo: { type: "string", enum: ["Receita", "Despesa"] },
           },
-          required: ["empresa"],
+          required: [],
         },
       },
     },
@@ -948,7 +948,7 @@ function buildTools(ctx?: ToolContext) {
             empresa: { type: "string", description: "Nome (ou parte) da empresa." },
             id_transacao: { type: "number", description: "Código/ID do lançamento." },
           },
-          required: ["empresa", "id_transacao"],
+          required: ["id_transacao"],
         },
       },
     },
@@ -968,7 +968,7 @@ function buildTools(ctx?: ToolContext) {
             data_transacao: { type: "string", description: "AAAA-MM-DD" },
             conta: { type: "string", description: "Código ou nome da conta do plano (ex.: '3.01', 'Folha de Pagamento')." },
           },
-          required: ["empresa", "id_transacao"],
+          required: ["id_transacao"],
         },
       },
     },
@@ -984,7 +984,7 @@ function buildTools(ctx?: ToolContext) {
             id_transacao: { type: "number", description: "Código/ID do lançamento pendente." },
             data_pagamento: { type: "string", description: "AAAA-MM-DD (opcional; default = hoje)." },
           },
-          required: ["empresa", "id_transacao"],
+          required: ["id_transacao"],
         },
       },
     },
@@ -1002,7 +1002,7 @@ function buildTools(ctx?: ToolContext) {
             classificacao: { type: "string", enum: ["FIXA", "VARIAVEL", "OUTRA"], description: "Despesa FIXA (todo mês, valor previsível) ou VARIAVEL (varia com a operação). Em dúvida, pergunte ao usuário." },
             grupo_gerencial: { type: "string", description: "Grupo do fluxo de caixa (opcional): receita, custo_variavel, despesa_fixa, investimento, nao_operacional, outras." },
           },
-          required: ["empresa", "nome", "tipo"],
+          required: ["nome", "tipo"],
         },
       },
     },
@@ -1021,7 +1021,7 @@ function buildTools(ctx?: ToolContext) {
             classificacao: { type: "string", enum: ["FIXA", "VARIAVEL", "OUTRA"], description: "Default VARIAVEL para despesa se omitir." },
             resposta_usuario: { type: "string", description: "Texto exato da confirmação do usuário (sim, pode, ok...). O sistema valida se é afirmação ou recusa." },
           },
-          required: ["empresa", "id_transacao", "nome", "tipo"],
+          required: ["id_transacao", "nome", "tipo"],
         },
       },
     },
@@ -1040,7 +1040,7 @@ function buildTools(ctx?: ToolContext) {
             limite: { type: "number", description: "Limite do cartão em R$ (opcional)." },
             bandeira: { type: "string", description: "Visa, Mastercard, Elo... (opcional)" },
           },
-          required: ["empresa", "nome", "dia_fechamento", "dia_vencimento"],
+          required: ["nome", "dia_fechamento", "dia_vencimento"],
         },
       },
     },
@@ -1058,7 +1058,7 @@ function buildTools(ctx?: ToolContext) {
             tipo: { type: "string", enum: ["corrente", "poupanca", "caixa"], description: "Default corrente." },
             saldo_inicial: { type: "number", description: "Saldo inicial em R$ (default 0)." },
           },
-          required: ["empresa", "nome"],
+          required: ["nome"],
         },
       },
     },
@@ -1070,7 +1070,7 @@ function buildTools(ctx?: ToolContext) {
         parameters: {
           type: "object",
           properties: { empresa: { type: "string", description: "Nome (ou parte) da empresa." } },
-          required: ["empresa"],
+          required: [],
         },
       },
     },
@@ -1085,7 +1085,7 @@ function buildTools(ctx?: ToolContext) {
             empresa: { type: "string", description: "Nome (ou parte) da empresa." },
             cartao: { type: "string", description: "Nome (ou parte) do cartão." },
           },
-          required: ["empresa", "cartao"],
+          required: ["cartao"],
         },
       },
     },
@@ -1100,7 +1100,7 @@ function buildTools(ctx?: ToolContext) {
             empresa: { type: "string", description: "Nome (ou parte) da empresa." },
             cartao: { type: "string", description: "Nome (ou parte) do cartão." },
           },
-          required: ["empresa", "cartao"],
+          required: ["cartao"],
         },
       },
     },
@@ -1116,7 +1116,7 @@ function buildTools(ctx?: ToolContext) {
             de: { type: "string", description: "AAAA-MM-DD (opcional)" },
             ate: { type: "string", description: "AAAA-MM-DD (opcional)" },
           },
-          required: ["empresa"],
+          required: [],
         },
       },
     },
@@ -2096,19 +2096,24 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       }
 
       case "lancar_empresa": {
-        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa, ctx);
         if ("erro" in empresa) return JSON.stringify(empresa);
 
         const { detectarMeio, textoMeioDeDetect } = await import("./parse-meio");
         const { resolverMeioPorNomePj, aplicarMeioPagamentoPj } = await import("./meio-pagamento-pj");
 
-        // Meio: frase do usuário manda — se disse "cartão" sem nome, ignore forma inventada (ex. Nubank).
+        // Meio: frase do usuário manda — pistas (banco/cartão) e cartão genérico.
         const detUser = detectarMeio(ctx.userMessage || "");
         let meioTexto = "";
         if (detUser.tipo === "cartao_generico") {
           meioTexto = "cartao";
+        } else if (detUser.tipo === "conta_generica") {
+          meioTexto = "conta";
         } else if (detUser.tipo === "dinheiro" || detUser.tipo === "conta_necessaria") {
           meioTexto = textoMeioDeDetect(detUser);
+        } else if (detUser.tipo === "nome") {
+          // Mantém pista ("banco santander" / "cartao X") — não deixa o modelo apagar.
+          meioTexto = textoMeioDeDetect(detUser) || String(args.forma_pagamento || "").trim();
         } else {
           meioTexto = String(args.forma_pagamento || "").trim();
           if (!meioTexto) meioTexto = textoMeioDeDetect(detUser);
@@ -2292,7 +2297,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       }
 
       case "parcelar_compra_empresa": {
-        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa, ctx);
         if ("erro" in empresa) return JSON.stringify(empresa);
 
         const { listarCartoes, cartaoDoUsuario, competenciaDaCompra } = await import("./fatura-pj.service");
@@ -2464,6 +2469,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         return JSON.stringify({
           success: true,
           empresa: empresaNome,
+          descricao: args.descricao || "Compra parcelada",
           compra_grupo: r.compra_grupo,
           parcelas: r.parcelas,
           valor_parcela: r.valor_parcela,
@@ -2485,7 +2491,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       }
 
       case "resumo_empresa": {
-        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa, ctx);
         if ("erro" in empresa) return JSON.stringify(empresa);
         const periodo = periodoDeArgs(args);
         const resumo = await storage.getEmpresaResumo(empresa.id, periodo);
@@ -2506,14 +2512,14 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       }
 
       case "dre_empresa": {
-        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa, ctx);
         if ("erro" in empresa) return JSON.stringify(empresa);
         const dre = await storage.getEmpresaDRE(empresa.id, periodoDeArgs(args));
         return JSON.stringify({ empresa: empresa.nome_fantasia || empresa.razao_social, ...dre });
       }
 
       case "comparar_periodos_empresa": {
-        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa, ctx);
         if ("erro" in empresa) return JSON.stringify(empresa);
         const anoCorrente = new Date().getFullYear();
         const pA = periodoDeArgs({ mes: args.mes_a, ano: args.ano_a ?? anoCorrente });
@@ -2537,7 +2543,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       }
 
       case "gastos_por_conta_empresa": {
-        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa, ctx);
         if ("erro" in empresa) return JSON.stringify(empresa);
         const periodo = periodoDeArgs(args);
         const txs = await storage.getEmpresaTransacoesByEmpresaId(empresa.id, periodo);
@@ -2563,7 +2569,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       }
 
       case "fluxo_caixa_empresa": {
-        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa, ctx);
         if ("erro" in empresa) return JSON.stringify(empresa);
         const ano = Number(args.ano) || new Date().getFullYear();
         const fluxo = await storage.getEmpresaFluxoCaixaMensal(empresa.id, ano);
@@ -2591,7 +2597,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       }
 
       case "buscar_transacao_empresa_por_filtro": {
-        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa, ctx);
         if ("erro" in empresa) return JSON.stringify(empresa);
         const achados = await buscarEmpresaTransacoesPorFiltro(empresa.id, {
           descricao: args.descricao,
@@ -2604,7 +2610,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       }
 
       case "busca_transacao_empresa": {
-        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa, ctx);
         if ("erro" in empresa) return JSON.stringify(empresa);
         // Isolamento: o lançamento tem que ser DESSA empresa.
         const daEmpresa = await empresaTransacaoPertenceAEmpresa(args.id_transacao, empresa.id);
@@ -2620,7 +2626,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       }
 
       case "atualiza_transacao_empresa": {
-        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa, ctx);
         if ("erro" in empresa) return JSON.stringify(empresa);
 
         const dados: any = {};
@@ -2654,7 +2660,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       }
 
       case "mover_lancamentos_empresa": {
-        const empresaMv = await resolverEmpresa(ctx.userId, args.empresa);
+        const empresaMv = await resolverEmpresa(ctx.userId, args.empresa, ctx);
         if ("erro" in empresaMv) return JSON.stringify(empresaMv);
         const { moverLancamentosPj } = await import("./mover-meio.service");
         const r = await moverLancamentosPj(empresaMv.id, ctx.userId, args.ids, String(args.destino || ""));
@@ -2673,7 +2679,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       }
 
       case "pagar_transacao_empresa": {
-        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa, ctx);
         if ("erro" in empresa) return JSON.stringify(empresa);
         const r = await baixarTransacaoEmpresa(empresa.id, args.id_transacao, ctx.userId, args.data_pagamento);
         if (!r.ok) return JSON.stringify({ success: false, error: r.error });
@@ -2686,7 +2692,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       }
 
       case "criar_conta_empresa": {
-        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa, ctx);
         if ("erro" in empresa) return JSON.stringify(empresa);
         const tipo = args.tipo === "Receita" ? "Receita" : "Despesa";
         // Código sai da sequência do grupo — nunca vem do usuário.
@@ -2707,7 +2713,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       }
 
       case "criar_conta_e_mover_empresa": {
-        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa, ctx);
         if ("erro" in empresa) return JSON.stringify(empresa);
 
         if (args.resposta_usuario) {
@@ -2753,7 +2759,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       }
 
       case "cadastrar_cartao_empresa": {
-        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa, ctx);
         if ("erro" in empresa) return JSON.stringify(empresa);
         const cartao = await criarCartaoPj(empresa.id, {
           nome: args.nome,
@@ -2777,7 +2783,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       }
 
       case "criar_conta_bancaria_empresa": {
-        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa, ctx);
         if ("erro" in empresa) return JSON.stringify(empresa);
         const nome = String(args.nome || "").trim();
         if (!nome) {
@@ -2812,7 +2818,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       }
 
       case "listar_cartoes_empresa": {
-        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa, ctx);
         if ("erro" in empresa) return JSON.stringify(empresa);
         const cartoes = await listarCartoesPj(empresa.id);
         const { getContasBancariasByEmpresa } = await import("../storage");
@@ -2833,7 +2839,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       }
 
       case "fatura_cartao_empresa": {
-        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa, ctx);
         if ("erro" in empresa) return JSON.stringify(empresa);
         const cartoes = await listarCartoesPj(empresa.id);
         const alvo = String(args.cartao || "").toLowerCase().trim();
@@ -2849,7 +2855,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       }
 
       case "saldo_cartao_empresa": {
-        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa, ctx);
         if ("erro" in empresa) return JSON.stringify(empresa);
         const cartoes = await listarCartoesPj(empresa.id);
         const alvo = String(args.cartao || "").toLowerCase().trim();
@@ -2870,7 +2876,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       }
 
       case "cadastrar_forma_empresa": {
-        const empresa = await resolverEmpresa(ctx.userId, args.empresa);
+        const empresa = await resolverEmpresa(ctx.userId, args.empresa, ctx);
         if ("erro" in empresa) return JSON.stringify(empresa);
         return JSON.stringify({
           success: false,
@@ -2929,27 +2935,25 @@ function respostaBusca(achados: CandidatoTransacao[]) {
   };
 }
 
-// Resolve a empresa do usuário por nome/parte; garante que pertence a ele.
+// Resolve a empresa do usuário. Em modo PJ usa SEMPRE ctx.empresaAtiva
+// (o modelo não escolhe empresa — um login = uma empresa).
 async function resolverEmpresa(
   userId: number,
-  nome: string,
+  _nome: string,
+  ctx?: ToolContext,
 ): Promise<any> {
+  if (ctx?.empresaAtiva?.id) {
+    const full = await storage.getEmpresaById(ctx.empresaAtiva.id);
+    if (full && full.usuario_id === userId) return full;
+  }
   const empresas = await storage.getEmpresasByUsuarioId(userId);
   if (empresas.length === 0) return { erro: true, error: "Nenhuma empresa cadastrada." };
-  const alvo = (nome || "").toString().toLowerCase().trim();
-  if (!alvo) {
-    if (empresas.length === 1) return empresas[0];
-    return { erro: true, error: "Especifique a empresa.", empresas: empresas.map((e) => e.nome_fantasia || e.razao_social) };
-  }
-  const matches = empresas.filter(
-    (e) => (e.nome_fantasia || "").toLowerCase().includes(alvo) || (e.razao_social || "").toLowerCase().includes(alvo),
-  );
-  if (matches.length === 1) return matches[0];
-  if (matches.length === 0) {
-    if (empresas.length === 1) return empresas[0];
-    return { erro: true, error: `Empresa '${nome}' não encontrada.`, empresas: empresas.map((e) => e.nome_fantasia || e.razao_social) };
-  }
-  return { erro: true, error: "Mais de uma empresa corresponde; peça para o usuário especificar.", empresas: matches.map((e) => e.nome_fantasia || e.razao_social) };
+  if (empresas.length === 1) return empresas[0];
+  return {
+    erro: true,
+    error: "Mais de uma empresa neste login — contate o suporte.",
+    empresas: empresas.map((e) => e.nome_fantasia || e.razao_social),
+  };
 }
 
 // ============================================
@@ -3222,7 +3226,7 @@ ${ctx.categories.map(c => `- ${c.nome} (${c.tipo})`).join("\n")}`;
       }
       // Se já gravou nesta rodada, devolve recibo em vez de falhar sem feedback.
       if (escritasNestaRodada.length > 0) {
-        return finalizarRespostaAgente({ content: "", escritas: escritasNestaRodada });
+        return finalizarRespostaAgente({ content: "", escritas: escritasNestaRodada, userMessage });
       }
       throw chatErr;
     }
@@ -3236,6 +3240,7 @@ ${ctx.categories.map(c => `- ${c.nome} (${c.tipo})`).join("\n")}`;
       return finalizarRespostaAgente({
         content: assistantMessage.content || "Pronto!",
         escritas: escritasNestaRodada,
+        userMessage,
       });
     }
 
@@ -3350,7 +3355,7 @@ ${ctx.categories.map(c => `- ${c.nome} (${c.tipo})`).join("\n")}`;
   }
 
   if (escritasNestaRodada.length > 0) {
-    return finalizarRespostaAgente({ content: "", escritas: escritasNestaRodada });
+    return finalizarRespostaAgente({ content: "", escritas: escritasNestaRodada, userMessage });
   }
 
   if (ultimoResultadoTool && ultimaToolExecutada === "listar_metas") {
