@@ -588,14 +588,31 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
 
     // Buscar empresa ativa se for usuário PJ
     let empresaAtiva = null;
-    if (user.tipo_pessoa === "juridica" && user.ativo) {
+    if (user.tipo_pessoa === "juridica") {
+      if (!user.ativo) {
+        // Já deveria ter sido barrado no onboarding; rede de segurança.
+        await uazapiService.sendText(BaseUrl, token, chatid, msgEmAnalise(user.nome));
+        return;
+      }
       const empresas = await storage.getEmpresasByUsuarioId(user.id);
       const comCnpj = empresas.find(e => e.cnpj && e.cnpj.trim().length > 0);
       if (comCnpj) {
         empresaAtiva = { id: comCnpj.id, nome: comCnpj.nome_fantasia || comCnpj.razao_social, cnpj: comCnpj.cnpj, segmento: (comCnpj as any).segmento || null };
       } else if (empresas.length > 0) {
-        // Fallback: usa a primeira empresa mesmo sem CNPJ (onboarding em andamento)
         empresaAtiva = { id: empresas[0].id, nome: empresas[0].nome_fantasia || empresas[0].razao_social, cnpj: null, segmento: (empresas[0] as any).segmento || null };
+      }
+      // Isolamento: PJ sem empresa NÃO cai no fluxo PF (insere_transacao).
+      if (!empresaAtiva) {
+        console.error(
+          `[UazAPI Webhook] PJ user=${user.id} ativo sem empresa — bloqueando lançamento PF`,
+        );
+        await uazapiService.sendText(
+          BaseUrl,
+          token,
+          chatid,
+          "Sua conta é *empresarial*, mas ainda não há empresa configurada. Não consigo registrar lançamentos assim.\n\nConclua o cadastro da empresa no app ou fale com o suporte — não uso a carteira pessoal para não misturar seus dados.",
+        );
+        return;
       }
     }
 

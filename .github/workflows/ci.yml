@@ -51,6 +51,7 @@ jobs:
           npm run test:chave-cartao
           npm run test:feature-flags
           npm run test:flags-ciclo
+          npm run test:resumo-semanal
           npm run flags:auditar
 
       - name: Baterias com lógica pura / scripts

@@ -34,12 +34,13 @@ interface UserWithWallet {
   nome: string;
   remotejid: string;
   wallet_id: number;
+  tipo_pessoa: string | null;
 }
 
 // Buscar usuários ativos com remotejid (WhatsApp)
 async function getActiveUsersWithWhatsApp(): Promise<UserWithWallet[]> {
   const rows = await db.execute(sql`
-    SELECT u.id, u.nome, u.remotejid, c.id AS wallet_id
+    SELECT u.id, u.nome, u.remotejid, u.tipo_pessoa, c.id AS wallet_id
     FROM usuarios u
     JOIN carteiras c ON c.usuario_id = u.id
     WHERE u.ativo = true
@@ -47,11 +48,12 @@ async function getActiveUsersWithWhatsApp(): Promise<UserWithWallet[]> {
       AND u.remotejid != ''
       AND u.remotejid NOT LIKE '%@g.us'
   `);
-  return (rows as any[]).map(r => ({
+  return (rows as any[]).map((r) => ({
     id: r.id,
     nome: r.nome,
     remotejid: r.remotejid,
-    wallet_id: r.wallet_id
+    wallet_id: r.wallet_id,
+    tipo_pessoa: r.tipo_pessoa ?? null,
   }));
 }
 
@@ -161,49 +163,50 @@ async function checkBudgetAlertsPJ(): Promise<void> {
 // 2. RESUMO SEMANAL (toda segunda)
 // ============================================
 async function sendWeeklySummary(): Promise<void> {
+  const {
+    deveEnviarResumoSemanal,
+    periodoSemanaAnterior,
+    calcularResumoSemanalPf,
+    calcularResumoSemanalPj,
+    montarMensagemResumoSemanal,
+    resolverEmpresaParaResumo,
+  } = await import("../services/resumo-semanal.service");
+
   const now = new Date();
-  // Só roda na segunda-feira entre 8h e 9h (SP)
   const spNow = new Date(now.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
-  if (spNow.getDay() !== 1 || spNow.getHours() < 8 || spNow.getHours() > 9) return;
+  if (!deveEnviarResumoSemanal(spNow)) return;
 
   console.log("[Alerts] Enviando resumo semanal...");
 
+  const { de, ate } = periodoSemanaAnterior(spNow);
   const users = await getActiveUsersWithWhatsApp();
 
   for (const user of users) {
     try {
-      // Semana passada (seg-dom)
-      const monday = new Date(spNow);
-      monday.setDate(spNow.getDate() - 7);
-      const sunday = new Date(monday);
-      sunday.setDate(monday.getDate() + 6);
-      const de = monday.toISOString().slice(0, 10);
-      const ate = sunday.toISOString().slice(0, 10);
+      const ehPj = String(user.tipo_pessoa || "").toLowerCase() === "juridica";
+      let resumo;
 
-      const rows = await db.execute(sql`
-        SELECT
-          COALESCE(SUM(CASE WHEN tipo = 'Receita' THEN valor::numeric ELSE 0 END), 0) AS receita,
-          COALESCE(SUM(CASE WHEN tipo = 'Despesa' THEN valor::numeric ELSE 0 END), 0) AS despesa,
-          COUNT(*) AS qtd
-        FROM transacoes
-        WHERE carteira_id = ${user.wallet_id}
-          AND data_transacao >= ${de}
-          AND data_transacao <= ${ate}
-      `);
+      if (ehPj) {
+        const emp = await resolverEmpresaParaResumo(user.id);
+        if (!emp) {
+          console.log(
+            `[Alerts] Resumo semanal: PJ ${user.nome} (id=${user.id}) sem empresa — não envia resumo PF.`,
+          );
+          continue;
+        }
+        resumo = await calcularResumoSemanalPj(emp.id, de, ate, emp.nome);
+        console.log(
+          `[Alerts] Resumo PJ empresa=${emp.id} (${emp.nome}) user=${user.id} qtd=${resumo.qtd}`,
+        );
+      } else {
+        resumo = await calcularResumoSemanalPf(user.wallet_id, de, ate);
+      }
 
-      const row = (rows as any[])[0];
-      const receita = parseFloat(row?.receita) || 0;
-      const despesa = parseFloat(row?.despesa) || 0;
-      const saldo = receita - despesa;
+      if (resumo.qtd === 0) continue;
 
-      // Só envia se tiver transações na semana
-      if (parseInt(row?.qtd) === 0) continue;
-
-      const emoji = saldo >= 0 ? "✅" : "🔴";
-      const msg = `📊 *Resumo Semanal*\n🗓 ${de} a ${ate}\n\n💰 Receitas: R$ ${receita.toFixed(2)}\n💸 Despesas: R$ ${despesa.toFixed(2)}\n${emoji} Saldo: R$ ${saldo.toFixed(2)}\n📝 ${row.qtd} transações\n\nBoa semana! 🚀`;
-
+      const msg = montarMensagemResumoSemanal(resumo);
       await uazapiService.sendText(UAZAPI_BASE_URL, UAZAPI_TOKEN, user.remotejid, msg);
-      console.log(`[Alerts] Resumo semanal enviado para ${user.nome}`);
+      console.log(`[Alerts] Resumo semanal enviado para ${user.nome} (${resumo.escopo})`);
     } catch (err: any) {
       console.error(`[Alerts] Erro resumo semanal para ${user.nome}:`, err.message);
     }

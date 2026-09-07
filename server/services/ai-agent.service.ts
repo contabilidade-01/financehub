@@ -1156,7 +1156,13 @@ function buildTools(ctx?: ToolContext) {
     },
   ];
 
-  if (!emModoPj(ctx)) return todas;
+  if (!emModoPj(ctx)) {
+    // Conta jurídica sem empresa: zero tools de escrita (nem PF nem PJ).
+    if (ctx?.tipoPessoa === "juridica") {
+      return [];
+    }
+    return todas;
+  }
   return todas.filter((t) => TOOLS_PJ.has(t.function.name));
 }
 
@@ -1166,6 +1172,22 @@ function buildTools(ctx?: ToolContext) {
 
 async function executeTool(name: string, args: any, ctx: ToolContext): Promise<string> {
   try {
+    // Isolamento: usuário PJ nunca grava na carteira pessoal — mesmo sem empresaAtiva.
+    if (
+      ctx.tipoPessoa === "juridica" &&
+      !emModoPj(ctx) &&
+      (name === "insere_transacao" ||
+        name === "parcelar_compra" ||
+        name === "editar_ultima_compra" ||
+        name === "atualiza_transacao")
+    ) {
+      return JSON.stringify({
+        erro: true,
+        error:
+          "Conta empresarial sem empresa ativa. Não é permitido lançar na carteira pessoal. Oriente o usuário a concluir o cadastro da empresa ou falar com o suporte.",
+      });
+    }
+
     // Isolamento PF × PJ: se o modelo insistir numa ferramenta pessoal com
     // empresa ativa, não lê a carteira PF — devolve o equivalente PJ.
     if (emModoPj(ctx) && !TOOLS_PJ.has(name)) {
