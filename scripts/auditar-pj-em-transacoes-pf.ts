@@ -25,8 +25,8 @@ async function main() {
       t.valor,
       t.tipo,
       t.data_transacao,
-      t.origem,
-      t.status
+      t.status,
+      t.metodo_pagamento
     FROM usuarios u
     JOIN carteiras c ON c.usuario_id = u.id
     JOIN transacoes t ON t.carteira_id = c.id
@@ -50,7 +50,7 @@ async function main() {
     console.log(`— #${uid} ${u.nome} (${u.email}) ativo=${u.ativo} · ${txs.length} tx`);
     for (const t of txs.slice(0, 15)) {
       console.log(
-        `   tx#${t.tx_id} ${t.data_transacao} ${t.tipo} R$ ${t.valor} · ${String(t.descricao || "").slice(0, 60)} · origem=${t.origem}`,
+        `   tx#${t.tx_id} ${t.data_transacao} ${t.tipo} R$ ${t.valor} · ${String(t.descricao || "").slice(0, 60)} · status=${t.status} meio=${t.metodo_pagamento || "-"}`,
       );
     }
     if (txs.length > 15) console.log(`   … +${txs.length - 15} mais`);
