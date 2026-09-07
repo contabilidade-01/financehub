@@ -1,5 +1,5 @@
 import axios from "axios";
-import { storage, getDailySummary, getPeriodSummary, getWeeklySummary, getCategoryBreakdown, comparePeriods, createMeta, getMetasByUsuarioId, depositarMeta, deleteMeta, ajustarSaldoMeta, sacarMeta, verificarOrcamentos, getStatusOrcamentoContaPJ, getContasAPagar, marcarComoPaga, marcarRecorrente, getFluxoCaixaResumo, getSaldoCartao, getCartoesComSaldo, getFaturaCartao, resolveMemoriaCategoria, aprenderMemoriaCategoria, resolveOuCriaFormaPagamento, criarCompraParcelada, getUltimaCompra, editarTransacoesPorIds, getStatusOrcamentoCategoria, softDeleteTransacao, softDeleteTodasTransacoes, restaurarUltimaExcluida, transacaoPertenceAoWallet, cadastrarOuAtualizarCartao, resolveMemoriaGlobal } from "../storage";
+import { storage, getDailySummary, getPeriodSummary, getWeeklySummary, getCategoryBreakdown, comparePeriods, createMeta, getMetasByUsuarioId, depositarMeta, deleteMeta, ajustarSaldoMeta, sacarMeta, verificarOrcamentos, getStatusOrcamentoContaPJ, getContasAPagar, marcarComoPaga, marcarRecorrente, getFluxoCaixaResumo, getSaldoCartao, getCartoesComSaldo, getFaturaCartao, resolveMemoriaCategoria, aprenderMemoriaCategoria, resolveOuCriaFormaPagamento, criarCompraParcelada, getUltimaCompra, editarTransacoesPorIds, getStatusOrcamentoCategoria, softDeleteTransacao, softDeleteTodasTransacoes, restaurarUltimaExcluida, softDeleteEmpresaTransacao, restaurarUltimaExcluidaPJ, transacaoPertenceAoWallet, cadastrarOuAtualizarCartao, resolveMemoriaGlobal } from "../storage";
 import { buscarTransacoesPorFiltro, buscarEmpresaTransacoesPorFiltro, empresaTransacaoPertenceAEmpresa, type CandidatoTransacao } from "../storage";
 import { FINANCIAL_AGENT_SYSTEM_PROMPT, buildDynamicContext } from "../prompts/financial-agent";
 import { insertTransactionSchema } from "../../shared/schema";
@@ -181,6 +181,8 @@ const TOOLS_PJ = new Set([
   "buscar_transacao_empresa_por_filtro",
   "busca_transacao_empresa",
   "atualiza_transacao_empresa",
+  "deleta_transacao_empresa",
+  "restaurar_transacao_empresa",
   "mover_lancamentos_empresa",
   "pagar_transacao_empresa",
   "criar_conta_empresa",
@@ -205,6 +207,8 @@ const EQUIVALENTE_PJ: Record<string, string> = {
   insere_transacao: "lancar_empresa",
   parcelar_compra: "parcelar_compra_empresa",
   atualiza_transacao: "atualiza_transacao_empresa",
+  deleta_transacao: "deleta_transacao_empresa",
+  restaurar_transacao: "restaurar_transacao_empresa",
   busca_transacao: "busca_transacao_empresa",
   buscar_transacao_por_filtro: "buscar_transacao_empresa_por_filtro",
   listar_todas_transacoes: "listar_todas_transacoes_empresa",
@@ -364,6 +368,28 @@ function buildTools(ctx?: ToolContext) {
       function: {
         name: "restaurar_transacao",
         description: "Restaura a ÚLTIMA transação excluída (desfaz a exclusão). Use quando disserem 'me arrependi', 'volta o que apaguei', 'desfazer exclusão', 'restaura'.",
+        parameters: { type: "object", properties: {} },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "deleta_transacao_empresa",
+        description: "Remove um lançamento da EMPRESA pelo ID (vai para a lixeira, recuperável por 30 dias). Só para usuário PJ.",
+        parameters: {
+          type: "object",
+          properties: {
+            id_transacao: { type: "number", description: "ID do lançamento em empresas_transacoes" },
+          },
+          required: ["id_transacao"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "restaurar_transacao_empresa",
+        description: "Restaura a ÚLTIMA exclusão da empresa (desfazer). Use em 'me arrependi', 'volta o que apaguei', 'desfazer'.",
         parameters: { type: "object", properties: {} },
       },
     },
@@ -1424,12 +1450,14 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         }
 
         for (const transacao of transacoesFiltradas) {
-          await storage.deleteTransaction(transacao.id);
+          await softDeleteTransacao(transacao.id, ctx.walletId, ctx.userId);
         }
 
         return JSON.stringify({
           success: true,
+          recuperavel: true,
           excluidos: transacoesFiltradas.length,
+          msg: `${transacoesFiltradas.length} movida(s) para a lixeira (recuperáveis por 30 dias).`,
           transacoes: transacoesFiltradas.map(t => ({
             id: t.id,
             descricao: t.descricao,
@@ -1448,6 +1476,26 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         const r = await restaurarUltimaExcluida(ctx.walletId);
         if (!r.restaurada) return JSON.stringify({ success: false, error: "Não há transações excluídas para restaurar." });
         return JSON.stringify({ success: true, restaurada: r.descricao || "última transação" });
+      }
+
+      case "deleta_transacao_empresa": {
+        if (!ctx.empresaAtiva) {
+          return JSON.stringify({ error: "Nenhuma empresa ativa." });
+        }
+        const okPj = await softDeleteEmpresaTransacao(args.id_transacao, ctx.empresaAtiva.id, ctx.userId);
+        if (!okPj) return JSON.stringify({ success: false, error: "Lançamento não encontrado nesta empresa." });
+        return JSON.stringify({ success: true, recuperavel: true, msg: "Excluído da empresa (dá pra restaurar por 30 dias)." });
+      }
+
+      case "restaurar_transacao_empresa": {
+        if (!ctx.empresaAtiva) {
+          return JSON.stringify({ error: "Nenhuma empresa ativa." });
+        }
+        const rPj = await restaurarUltimaExcluidaPJ(ctx.empresaAtiva.id);
+        if (!rPj.restaurada) {
+          return JSON.stringify({ success: false, error: "Não há exclusões da empresa para restaurar." });
+        }
+        return JSON.stringify({ success: true, restaurada: rPj.descricao || "último lançamento" });
       }
 
       case "insere_lembrete": {
@@ -3174,6 +3222,7 @@ Este usuário NÃO tem carteira pessoal ativa. Toda consulta, edição e cadastr
 - DRE, margem, lucro → 'dre_empresa'. Comparar dois meses → 'comparar_periodos_empresa'.
 - Onde a empresa mais gasta / gasto por conta → 'gastos_por_conta_empresa'. Evolução do ano → 'fluxo_caixa_empresa'.
 - Editar/corrigir um lançamento → 'buscar_transacao_empresa_por_filtro' → 'atualiza_transacao_empresa' (siga o fluxo da seção 5, sempre confirmando antes).
+- Excluir lançamento → 'deleta_transacao_empresa' (confirma antes; vai à lixeira ~30 dias). Desfazer → 'restaurar_transacao_empresa'.
 - Criar conta no plano → 'criar_conta_empresa'. Para criar E mover lançamento que caiu em Outras → 'criar_conta_e_mover_empresa'. O CÓDIGO é gerado automaticamente: não peça nem invente.
 - Cartão de crédito da empresa → 'cadastrar_cartao_empresa' (peça dia de fechamento e dia de vencimento numa pergunta só; nunca invente esses dias), 'listar_cartoes_empresa', 'fatura_cartao_empresa', 'saldo_cartao_empresa' (limite/usado/disponível).
 - Compra no cartão à vista (sem o usuário dizer parcelado) → 'lancar_empresa' com o nome do cartão (1x na fatura).

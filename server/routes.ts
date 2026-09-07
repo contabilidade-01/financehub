@@ -208,6 +208,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     checkImpersonation,
     transactionController.createTransaction,
   );
+  // Lixeira PF (antes de :id para não capturar "lixeira" como id)
+  app.get(
+    "/api/transactions/lixeira",
+    combinedAuth,
+    checkImpersonation,
+    transactionController.listarLixeiraPf,
+  );
+  app.post(
+    "/api/transactions/lixeira/restaurar",
+    combinedAuth,
+    checkImpersonation,
+    transactionController.restaurarLixeiraPf,
+  );
   app.get(
     "/api/transactions/:id",
     combinedAuth,

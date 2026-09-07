@@ -263,7 +263,11 @@ export const deleteEmpresaTransacao = async (req: Request, res: Response) => {
     const deletado = await softDeleteEmpresaTransacao(transacaoId, empresaId, userId);
     if (!deletado) return res.status(500).json({ error: "Erro ao deletar transação." });
 
-    return res.status(204).send();
+    return res.status(200).json({
+      message: "Transação movida para a lixeira",
+      recuperavel: true,
+      dias: 30,
+    });
   } catch (err) {
     console.error("deleteEmpresaTransacao:", err);
     return res.status(500).json({ error: "Erro interno." });

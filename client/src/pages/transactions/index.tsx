@@ -5,6 +5,7 @@ import { TransactionForm } from "@/components/shared/TransactionForm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -870,13 +871,50 @@ export default function Transactions() {
       queryClient.invalidateQueries({ queryKey: ["/api/payment-methods/totals"] });
       toast({
         title: t('transactions.transaction_deleted', 'Transação excluída'),
-        description: t('transactions.delete_success', 'A transação foi excluída com sucesso.'),
+        description: t('transactions.delete_success_undo', 'Foi para a lixeira. Você pode desfazer por 30 dias.'),
+        action: (
+          <ToastAction
+            altText="Desfazer"
+            onClick={async () => {
+              try {
+                await apiRequest("/api/transactions/lixeira/restaurar", { method: "POST" });
+                queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+                queryClient.invalidateQueries({ queryKey: ["/api/wallet/current"] });
+                queryClient.invalidateQueries({ queryKey: ["/api/dashboard/summary"] });
+                toast({ title: "Transação restaurada" });
+              } catch {
+                toast({ title: "Não foi possível restaurar", variant: "destructive" });
+              }
+            }}
+          >
+            Desfazer
+          </ToastAction>
+        ),
       });
       setDeletingTransaction(null);
     } catch (error) {
       toast({
         title: t('transactions.error', 'Erro'),
         description: t('transactions.delete_error', 'Não foi possível excluir a transação.'),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRestaurarUltima = async () => {
+    try {
+      const r = await apiRequest("/api/transactions/lixeira/restaurar", { method: "POST" });
+      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/wallet/current"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/summary"] });
+      toast({
+        title: "Transação restaurada",
+        description: r?.descricao ? String(r.descricao) : undefined,
+      });
+    } catch {
+      toast({
+        title: "Nada para restaurar",
+        description: "Não há exclusão recente na lixeira.",
         variant: "destructive",
       });
     }
@@ -987,6 +1025,10 @@ export default function Transactions() {
             <p className="text-gray-400">{t('transactions.subtitle', 'Gerencie suas transações financeiras')}</p>
           </div>
           <div className="flex gap-2">
+            <Button variant="outline" onClick={handleRestaurarUltima} title="Restaura a última exclusão (lixeira)">
+              <RotateCcw className="mr-2 h-4 w-4" />
+              Restaurar última
+            </Button>
             <Button variant="outline" onClick={exportXlsx} disabled={filteredTransactions.length === 0}>
               <FileSpreadsheet className="mr-2 h-4 w-4" />
               XLSX
@@ -1481,7 +1523,7 @@ export default function Transactions() {
           <AlertDialogHeader>
             <AlertDialogTitle>{t('transactions.delete_transaction', 'Excluir transação')}</AlertDialogTitle>
             <AlertDialogDescription>
-              {t('transactions.confirm_delete', 'Tem certeza que deseja excluir esta transação? Esta ação não pode ser desfeita.')}
+              {t('transactions.confirm_delete', 'Tem certeza que deseja excluir esta transação? Ela vai para a lixeira e pode ser restaurada por 30 dias.')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

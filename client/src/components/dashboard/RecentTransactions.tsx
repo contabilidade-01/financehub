@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { ArrowRight as ArrowRightIcon } from "lucide-react";
 import { ArrowUpIcon, ArrowDownIcon, ArrowRightFromLine, MoreVertical, Pencil, Trash2 } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -75,7 +76,25 @@ export default function RecentTransactions({ isLoading, transactions, onRefetch 
       onRefetch();
       toast({
         title: t('transactions.transaction_deleted', 'Transação excluída'),
-        description: t('transactions.delete_success', 'A transação foi excluída com sucesso.'),
+        description: t('transactions.delete_success_undo', 'Foi para a lixeira. Você pode desfazer por 30 dias.'),
+        action: (
+          <ToastAction
+            altText="Desfazer"
+            onClick={async () => {
+              try {
+                await apiRequest("/api/transactions/lixeira/restaurar", { method: "POST" });
+                queryClient.invalidateQueries({ queryKey: ["/api/transactions/recent"] });
+                queryClient.invalidateQueries({ queryKey: ["/api/wallet/current"] });
+                onRefetch();
+                toast({ title: "Transação restaurada" });
+              } catch {
+                toast({ title: "Não foi possível restaurar", variant: "destructive" });
+              }
+            }}
+          >
+            Desfazer
+          </ToastAction>
+        ),
       });
       setDeletingTransaction(null);
     } catch (error) {
@@ -317,7 +336,7 @@ export default function RecentTransactions({ isLoading, transactions, onRefetch 
           <AlertDialogHeader>
             <AlertDialogTitle>{t('transactions.delete_transaction', 'Excluir transação')}</AlertDialogTitle>
             <AlertDialogDescription>
-              {t('transactions.confirm_delete', 'Tem certeza que deseja excluir esta transação? Esta ação não pode ser desfeita.')}
+              {t('transactions.confirm_delete', 'Tem certeza que deseja excluir esta transação? Ela vai para a lixeira e pode ser restaurada por 30 dias.')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

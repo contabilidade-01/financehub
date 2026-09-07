@@ -6,8 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, Edit2, Search, X, CheckCircle2, RotateCcw } from "lucide-react";
+import { Plus, Trash2, Edit2, Search, X, CheckCircle2, RotateCcw, Undo2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import type { EmpresaTransacaoWithDetails, EmpresaConta } from "@shared/schema";
 
 type ContaBancariaPj = { id: number; banco: string; nome?: string | null; tipo?: string; ativo?: boolean };
@@ -424,11 +425,48 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
     mutationFn: async (id: number) => {
       const res = await fetch(`/api/empresas/${empresaId}/transacoes/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Erro ao excluir");
+      return res.json().catch(() => ({}));
     },
     onSuccess: () => {
       invalidar();
-      toast({ title: "Transação removida." });
+      toast({
+        title: "Transação removida",
+        description: "Foi para a lixeira. Você pode desfazer por 30 dias.",
+        action: (
+          <ToastAction
+            altText="Desfazer"
+            onClick={async () => {
+              try {
+                const res = await fetch(`/api/empresas/${empresaId}/lixeira/restaurar`, { method: "POST" });
+                const data = await res.json();
+                if (!res.ok || !data.restaurada) throw new Error(data.message || "Falha");
+                invalidar();
+                toast({ title: "Transação restaurada", description: data.descricao });
+              } catch (e: any) {
+                toast({ title: "Não foi possível restaurar", description: e?.message, variant: "destructive" });
+              }
+            }}
+          >
+            Desfazer
+          </ToastAction>
+        ),
+      });
     },
+  });
+
+  const restaurarMut = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/empresas/${empresaId}/lixeira/restaurar`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok || !data.restaurada) throw new Error(data.message || "Nada na lixeira");
+      return data;
+    },
+    onSuccess: (data) => {
+      invalidar();
+      toast({ title: "Transação restaurada", description: data.descricao });
+    },
+    onError: (err: any) =>
+      toast({ title: "Nada para restaurar", description: err.message, variant: "destructive" }),
   });
 
   // Edição completa: qualquer campo do lançamento (antes só trocava a conta).
@@ -549,9 +587,20 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
     <div className="space-y-4 p-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Transações PJ</h1>
-        <Button onClick={() => setShowForm(!showForm)} size="sm">
-          <Plus className="h-4 w-4 mr-1" /> Nova
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => restaurarMut.mutate()}
+            disabled={restaurarMut.isPending}
+            title="Restaura a última exclusão (lixeira)"
+          >
+            <Undo2 className="h-4 w-4 mr-1" /> Restaurar última
+          </Button>
+          <Button onClick={() => setShowForm(!showForm)} size="sm">
+            <Plus className="h-4 w-4 mr-1" /> Nova
+          </Button>
+        </div>
       </div>
 
       {showForm && (

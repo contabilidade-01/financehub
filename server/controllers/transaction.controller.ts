@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { storage } from "../storage";
+import { storage, softDeleteTransacao, restaurarUltimaExcluida, listarLixeira } from "../storage";
 import { insertTransactionSchema, updateTransactionSchema, type TransactionWithDetails } from "../../shared/schema";
 import { z } from "zod";
 import { db } from "../db";
@@ -591,8 +591,8 @@ export async function deleteTransaction(req: Request, res: Response) {
       return res.status(403).json({ message: "Acesso negado" });
     }
     
-    // Delete transaction
-    const success = await storage.deleteTransaction(transactionId);
+    // Soft-delete → lixeira (recuperável ~30 dias)
+    const success = await softDeleteTransacao(transactionId, wallet.id, userId);
     if (!success) {
       return res.status(500).json({ message: "Erro ao excluir transação" });
     }
@@ -614,17 +614,53 @@ export async function deleteTransaction(req: Request, res: Response) {
         transactionId: transactionId,
         transaction: transaction,
         userId: req.user.id,
-        isImpersonated: req.isImpersonating || false
+        isImpersonated: req.isImpersonating || false,
+        recuperavel: true,
       }
     };
 
     // Enviar para o usuário que excluiu a transação (considerando personificação)
     broadcastNotification(notification, [req.user.id.toString()]);
     
-    res.status(200).json({ message: "Transação excluída com sucesso" });
+    res.status(200).json({
+      message: "Transação movida para a lixeira",
+      recuperavel: true,
+      dias: 30,
+    });
   } catch (error) {
     console.error("Error in deleteTransaction:", error);
     res.status(500).json({ message: "Erro ao excluir transação" });
+  }
+}
+
+/** GET /api/transactions/lixeira — itens recuperáveis da carteira PF */
+export async function listarLixeiraPf(req: Request, res: Response) {
+  try {
+    if (!req.user) return res.status(401).json({ error: "Não autenticado" });
+    const wallet = await storage.getWalletByUserId(req.user.id);
+    if (!wallet) return res.status(404).json({ message: "Carteira não encontrada" });
+    const items = await listarLixeira(wallet.id);
+    res.json(items);
+  } catch (error) {
+    console.error("Error in listarLixeiraPf:", error);
+    res.status(500).json({ message: "Erro ao listar lixeira" });
+  }
+}
+
+/** POST /api/transactions/lixeira/restaurar — restaura a última exclusão PF */
+export async function restaurarLixeiraPf(req: Request, res: Response) {
+  try {
+    if (!req.user) return res.status(401).json({ error: "Não autenticado" });
+    const wallet = await storage.getWalletByUserId(req.user.id);
+    if (!wallet) return res.status(404).json({ message: "Carteira não encontrada" });
+    const result = await restaurarUltimaExcluida(wallet.id);
+    if (!result.restaurada) {
+      return res.status(404).json({ restaurada: false, message: "Nada na lixeira para restaurar" });
+    }
+    res.json(result);
+  } catch (error) {
+    console.error("Error in restaurarLixeiraPf:", error);
+    res.status(500).json({ message: "Erro ao restaurar transação" });
   }
 }
 
