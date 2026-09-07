@@ -35,6 +35,7 @@
     "test:resumo-semanal": "tsx scripts/testar-resumo-semanal.ts",
     "flags:auditar": "tsx scripts/auditar-flags.ts",
     "audit:pj-em-pf": "tsx scripts/auditar-pj-em-transacoes-pf.ts",
+    "limpar:fantasmas-pj-em-pf": "tsx scripts/limpar-fantasmas-pj-em-pf.ts",
     "flags:check-literals": "tsx scripts/check-flag-literals.ts",
     "test:recibo": "tsx scripts/testar-recibo-agente.ts",
     "check:tsc-baseline": "tsx scripts/check-tsc-baseline.ts",
