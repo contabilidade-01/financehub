@@ -6,6 +6,7 @@ import { WhatsAppOnboardingService } from "../services/whatsapp-onboarding.servi
 import { gerarLinkDefinirSenha } from "./password-reset.controller";
 import { transcribeAudio, analyzeWithGemini, runAgent } from "../services/ai-agent.service";
 import { classifyAiError } from "../utils/ai-errors";
+import { limparTextoWhatsapp } from "../services/limpar-texto-whatsapp";
 import { notificarAdmin } from "../services/admin-notify";
 import { generateRandomPassword } from "../utils/password-generator";
 import {
@@ -369,7 +370,8 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
     }
 
     const { BaseUrl, token, message } = body;
-    const { chatid, messageType, text, messageid, senderName } = message;
+    const { chatid, messageType, messageid, senderName } = message;
+    const text = limparTextoWhatsapp(message.text || "");
 
     // Debounce: ignorar mensagem duplicada
     if (isDuplicate(messageid)) {

@@ -179,7 +179,8 @@ export function detectarMeio(texto: string): MeioDetectado {
     const palavras = isolado.split(/\s+/).filter(Boolean);
     const pareceFraseCompra =
       palavras.length > 5 ||
-      /\b(compra|mercadoria|valor|reais|despesa|receita|lancamento|gastei|paguei|recebi)\b/.test(
+      /\d/.test(isolado) ||
+      /\b(compra|mercadoria|valor|reais|despesa|receita|lancamento|gastei|paguei|recebi|abastecimento|gasolina)\b/.test(
         isolado,
       );
     if (!pareceFraseCompra) {

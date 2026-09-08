@@ -4,6 +4,8 @@
  */
 import { detectarMeio, textoMeioDeDetect } from "../server/services/parse-meio";
 import { casaNomeMeio, classificarMatchesMeioPorNome } from "../server/services/meio-pagamento-pj";
+import { pareceLancamentoSemMeio, respostaEhSoMeio } from "../server/services/atalho-meio-pj";
+import { limparTextoWhatsapp } from "../server/services/limpar-texto-whatsapp";
 
 let falhas = 0;
 const ok = (n: string) => console.log("ok  ", n);
@@ -160,6 +162,27 @@ expectTipo("compra de 20 no Nubank", "nome", "nubank");
   if (variosCc.tipo !== "varios_cartoes" || variosCc.cartoes.length !== 2) {
     fail("vários cartões Inter", JSON.stringify(variosCc));
   } else ok("vários cartões mesma marca → perguntar qual");
+}
+
+{
+  const l = pareceLancamentoSemMeio("abastecimento do carro 124,50");
+  if (!l || l.valor !== 124.5 || !/abastecimento/i.test(l.descricao)) {
+    fail("abastecimento sem meio", JSON.stringify(l));
+  } else ok("abastecimento 124,50 → pede meio, não cartão");
+}
+if (pareceLancamentoSemMeio("abastecimento do carro 124,50 em dinheiro")) {
+  fail("com dinheiro", "não deveria ser sem meio");
+} else ok("dinheiro na frase → não intercepta");
+if (respostaEhSoMeio("dinheiro") !== "dinheiro") fail("so meio", "dinheiro");
+else ok("resposta dinheiro");
+
+{
+  const sujo = limparTextoWhatsapp(
+    "abastecimento do carro 120 <style>.icon-hover{display:inline-flex}</style>",
+  );
+  if (!sujo.includes("abastecimento") || /icon-hover|style/i.test(sujo)) {
+    fail("limpar html", sujo);
+  } else ok("limpa CSS do WhatsApp Web");
 }
 
 if (falhas) {

@@ -9,6 +9,14 @@ import { atualizarTransacaoEmpresa, baixarTransacaoEmpresa } from "./empresa-tra
 import { listarCartoes as listarCartoesPj, criarCartao as criarCartaoPj, listarFaturas as listarFaturasPj, getSaldoCartaoEmpresa } from "./fatura-pj.service";
 import { sugerirNomeConta } from "./confirmacao-usuario";
 import {
+  pareceLancamentoSemMeio,
+  registrarPendenteMeio,
+  obterPendenteMeio,
+  limparPendenteMeio,
+  mensagemPedirMeio,
+  respostaEhSoMeio,
+} from "./atalho-meio-pj";
+import {
   registrarOfertaCriarConta,
   limparOfertaCriarConta,
   criarContaEMoverLancamento,
@@ -3116,6 +3124,43 @@ export async function runAgent(
     if (resolved.handled) return resolved.reply;
   }
 
+  // PJ: "desc + valor" sem meio → uma pergunta só (não deixa o modelo pedir cartão).
+  if (emModoPj(ctx) && ctx.empresaAtiva) {
+    const empNome = ctx.empresaAtiva.nome;
+    const soMeio = respostaEhSoMeio(userMessage);
+    const pend = obterPendenteMeio(ctx.userId);
+    if (pend && soMeio) {
+      const raw = await executeTool(
+        "lancar_empresa",
+        {
+          empresa: pend.empresaNome || empNome,
+          descricao: pend.descricao,
+          valor: pend.valor,
+          tipo: pend.tipo,
+          forma_pagamento: soMeio,
+        },
+        ctx,
+      );
+      let parsed: any = null;
+      try { parsed = JSON.parse(raw); } catch { parsed = null; }
+      if (parsed?.id) {
+        limparPendenteMeio(ctx.userId);
+        const { montarReciboDeEscrita } = await import("./recibo-agente");
+        return montarReciboDeEscrita({ tool: "lancar_empresa", raw, parsed });
+      }
+      if (parsed?.mensagem || parsed?.error) {
+        return String(parsed.mensagem || parsed.error);
+      }
+      return "Não consegui lançar com esse meio. Diga dinheiro, pix + banco, ou o nome do cartão.";
+    }
+
+    const semMeio = pareceLancamentoSemMeio(userMessage);
+    if (semMeio) {
+      registrarPendenteMeio(ctx.userId, empNome, semMeio);
+      return mensagemPedirMeio(semMeio);
+    }
+  }
+
   let pjInstructions = "";
   if (ctx.tipoPessoa === "juridica" && (ctx as any).empresaAtiva) {
     const emp = (ctx as any).empresaAtiva as { id: number; nome: string; segmento?: string | null };
@@ -3159,7 +3204,7 @@ export async function runAgent(
 - **Meio de pagamento (decida na tool; perguntar é exceção):**
   1. Disse dinheiro / espécie / caixinha / "via caixa" / "em dinheiro" → é **Caixinha**. Chame 'lancar_empresa' (pode omitir forma_pagamento — a tool lê a frase). Avise "Lancei na Caixinha". NÃO pergunte conta.
   2. Disse Pix / débito / TED / boleto → pergunte **qual conta bancária** (liste as contas). Se a tool devolver precisa=cadastrar_conta (não há conta bancária, só Caixinha ou nenhuma), ofereça cadastrar com 'criar_conta_bancaria_empresa' (confirme banco/nome antes). **Não** grave Pix na Caixinha.
-  3. Não disse nada → pergunte as **três** opções: conta bancária, Caixinha (dinheiro) ou cartão.
+  3. Não disse nada → pergunte as **três** opções numa frase só: conta bancária, Caixinha (dinheiro) ou cartão. NUNCA assuma cartão. NUNCA escreva "Nenhum cartão cadastrado" nem peça fechamento/vencimento se o usuário não falou em cartão.
   6. **Ao perguntar, escreva os nomes reais** da seção "Meios de pagamento desta empresa" abaixo. Eles já estão aqui: não chame tool só para listar e NUNCA escreva marcador do tipo "[Lista de contas bancárias]".
   4. Se a mesma pergunta já foi feita e a resposta veio parecida (ex.: "em dinheiro" de novo), **não repita** — use o que ele disse e chame a tool.
   5. Se a tool devolver precisa_meio / aviso_meio, use mensagem/sugestões/contas/cartoes.
