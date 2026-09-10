@@ -1,5 +1,5 @@
 import axios from "axios";
-import { storage, getDailySummary, getPeriodSummary, getWeeklySummary, getCategoryBreakdown, comparePeriods, createMeta, getMetasByUsuarioId, depositarMeta, deleteMeta, ajustarSaldoMeta, sacarMeta, verificarOrcamentos, getStatusOrcamentoContaPJ, getContasAPagar, marcarComoPaga, marcarRecorrente, getFluxoCaixaResumo, getSaldoCartao, getCartoesComSaldo, getFaturaCartao, resolveMemoriaCategoria, aprenderMemoriaCategoria, resolveOuCriaFormaPagamento, criarCompraParcelada, getUltimaCompra, editarTransacoesPorIds, getStatusOrcamentoCategoria, softDeleteTransacao, softDeleteTodasTransacoes, restaurarUltimaExcluida, softDeleteEmpresaTransacao, restaurarUltimaExcluidaPJ, transacaoPertenceAoWallet, cadastrarOuAtualizarCartao, resolveMemoriaGlobal } from "../storage";
+import { storage, getDailySummary, getPeriodSummary, getWeeklySummary, getCategoryBreakdown, comparePeriods, createMeta, getMetasByUsuarioId, depositarMeta, deleteMeta, ajustarSaldoMeta, sacarMeta, verificarOrcamentos, getStatusOrcamentoContaPJ, getContasAPagar, marcarComoPaga, marcarRecorrente, getFluxoCaixaResumo, getSaldoCartao, getCartoesComSaldo, getFaturaCartao, conferirFaturaCartao, resolveMemoriaCategoria, aprenderMemoriaCategoria, resolveOuCriaFormaPagamento, criarCompraParcelada, getUltimaCompra, editarTransacoesPorIds, getStatusOrcamentoCategoria, softDeleteTransacao, softDeleteTodasTransacoes, restaurarUltimaExcluida, softDeleteEmpresaTransacao, restaurarUltimaExcluidaPJ, transacaoPertenceAoWallet, cadastrarOuAtualizarCartao, resolveMemoriaGlobal } from "../storage";
 import { buscarTransacoesPorFiltro, buscarEmpresaTransacoesPorFiltro, empresaTransacaoPertenceAEmpresa, type CandidatoTransacao } from "../storage";
 import { FINANCIAL_AGENT_SYSTEM_PROMPT, buildDynamicContext } from "../prompts/financial-agent";
 import { insertTransactionSchema } from "../../shared/schema";
@@ -715,13 +715,44 @@ function buildTools(ctx?: ToolContext) {
       type: "function" as const,
       function: {
         name: "fatura_cartao",
-        description: "Lista todas as transações da fatura atual de um cartão (conciliação). Use quando pedirem 'fatura do cartão', 'o que gastei no cartão'.",
+        description: "Lista todas as transações da fatura de um cartão (conciliação). Sem mes/ano usa a fatura atual. Use quando pedirem 'fatura do cartão', 'o que gastei no cartão'.",
         parameters: {
           type: "object",
           properties: {
             nome_cartao: { type: "string", description: "Nome do cartão" },
+            mes: { type: "number", description: "Mês da competência (1-12). Opcional — sem ele, fatura atual." },
+            ano: { type: "number", description: "Ano da competência (ex.: 2026). Opcional — padrão é o ano corrente." },
           },
           required: ["nome_cartao"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "conferir_fatura_cartao",
+        description: "CONFERE uma fatura de cartão que o usuário ditou contra os lançamentos já registrados. SOMENTE LEITURA — nunca cria, edita nem exclui nada. Use quando pedirem 'conferir a fatura', 'ver se esses lançamentos já existem', 'validar a fatura do cartão'. Passe TODOS os itens que o usuário ditou de uma vez.",
+        parameters: {
+          type: "object",
+          properties: {
+            nome_cartao: { type: "string", description: "Nome do cartão da fatura." },
+            mes: { type: "number", description: "Mês da competência da fatura (1-12). Sem ele, usa a fatura atual." },
+            ano: { type: "number", description: "Ano da competência (ex.: 2026). Padrão: ano corrente." },
+            itens: {
+              type: "array",
+              description: "Itens da fatura ditados pelo usuário.",
+              items: {
+                type: "object",
+                properties: {
+                  descricao: { type: "string", description: "Descrição do item na fatura." },
+                  valor: { type: "number", description: "Valor do item." },
+                  data: { type: "string", description: "AAAA-MM-DD, se o usuário informou a data. Opcional." },
+                },
+                required: ["descricao", "valor"],
+              },
+            },
+          },
+          required: ["nome_cartao", "itens"],
         },
       },
     },
@@ -1944,8 +1975,33 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         const todos = [...cartoes, ...globalPMs];
         const cartao = todos.find(c => c.nome.toLowerCase().includes(args.nome_cartao.toLowerCase()));
         if (!cartao) return JSON.stringify({ error: `Cartão '${args.nome_cartao}' não encontrado.` });
-        const fatura = await getFaturaCartao(cartao.id, ctx.walletId);
+        const fatura = await getFaturaCartao(cartao.id, ctx.walletId, args.mes, args.ano);
         return JSON.stringify(fatura);
+      }
+
+      // Conferência de fatura — PF, somente leitura. Não escreve nada no banco.
+      case "conferir_fatura_cartao": {
+        const itens = Array.isArray(args.itens) ? args.itens : [];
+        if (itens.length === 0) {
+          return JSON.stringify({ error: "Nenhum item informado. Peça ao usuário a lista de lançamentos da fatura (descrição e valor)." });
+        }
+        const doUsuario = await storage.getPaymentMethodsByUserId(ctx.userId);
+        const globais = await storage.getGlobalPaymentMethods();
+        const cartao = [...doUsuario, ...globais].find(c => c.nome.toLowerCase().includes(String(args.nome_cartao || "").toLowerCase()));
+        if (!cartao) return JSON.stringify({ error: `Cartão '${args.nome_cartao}' não encontrado.` });
+
+        const r = await conferirFaturaCartao(
+          ctx.walletId,
+          cartao.id,
+          itens.map((i: any) => ({ descricao: String(i.descricao || ""), valor: Number(i.valor), data: i.data })),
+          args.mes,
+          args.ano,
+        );
+        return JSON.stringify({
+          ...r,
+          somente_leitura: true,
+          instrucao: "Isto é CONFERÊNCIA. Não lance, não edite e não exclua nada a partir deste resultado. Mostre o período conferido, depois os itens agrupados por status (confere / valor_divergente / descricao_divergente / outra_competencia / duplicado / nao_encontrado), depois os lançamentos em 'nao_informados' (estão no sistema e o usuário não citou) e, por fim, total lançado x total informado. Se algo faltar, apenas diga o que falta — não ofereça lançar sozinho.",
+        });
       }
 
       case "quanto_posso_gastar": {

@@ -2407,30 +2407,53 @@ export async function getCartoesComSaldo(userId: number, walletId: number): Prom
 }
 
 /**
- * Lista transações de um cartão específico no período da fatura atual (para conciliação).
+ * Janela de uma fatura de cartão: [inicio, fim) — fim é EXCLUSIVO.
+ *
+ * A competência é o mês em que a fatura ABRE (o mês das compras): com
+ * fechamento no dia 1, a competência 8/2026 vai de 2026-08-01 a 2026-09-01.
+ * Sem mês/ano informados devolve a fatura ATUAL, com a mesma regra de sempre
+ * (se hoje já passou do fechamento, a fatura aberta é a que começou neste mês).
  */
-export async function getFaturaCartao(cartaoId: number, walletId: number): Promise<{
+export function janelaFatura(diaFechamento: number, mes?: number, ano?: number): { inicio: string; fim: string } {
+  const diaFech = diaFechamento || 1;
+  const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+  // Fechamento no dia 31 num mês de 30 (ou em fevereiro) tem que cair no último
+  // dia do mês. Sem isso a data transborda e a fatura vaza para o mês seguinte.
+  const ultimoDia = (a: number, m: number) => new Date(a, m + 1, 0).getDate();
+  const noMes = (a: number, m: number) => new Date(a, m, Math.min(diaFech, ultimoDia(a, m)));
+
+  let anoIni: number;
+  let mesIni: number; // 0-based
+
+  if (mes && mes >= 1 && mes <= 12) {
+    anoIni = ano || new Date().getFullYear();
+    mesIni = mes - 1;
+  } else {
+    const now = new Date();
+    anoIni = now.getFullYear();
+    const fechEsteMes = Math.min(diaFech, ultimoDia(now.getFullYear(), now.getMonth()));
+    mesIni = now.getDate() >= fechEsteMes ? now.getMonth() : now.getMonth() - 1;
+  }
+
+  return {
+    inicio: iso(noMes(anoIni, mesIni)),
+    fim: iso(noMes(anoIni, mesIni + 1)),
+  };
+}
+
+/**
+ * Lista transações de um cartão específico no período de uma fatura (para
+ * conciliação). Sem mês/ano usa a fatura atual.
+ */
+export async function getFaturaCartao(cartaoId: number, walletId: number, mes?: number, ano?: number): Promise<{
   cartao: string; periodo_de: string; periodo_ate: string; total: number; transacoes: any[]
 }> {
   const cartaoRows = await db.select().from(paymentMethods).where(eq(paymentMethods.id, cartaoId)).limit(1);
   const cartao = cartaoRows[0];
   if (!cartao) throw new Error("Cartão não encontrado");
 
-  const diaFech = cartao.dia_fechamento || 1;
-  const now = new Date();
-
-  let inicioFatura: string;
-  let fimFatura: string;
-
-  if (now.getDate() >= diaFech) {
-    inicioFatura = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(diaFech).padStart(2, '0')}`;
-    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, diaFech);
-    fimFatura = nextMonth.toISOString().slice(0, 10);
-  } else {
-    const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, diaFech);
-    inicioFatura = prevMonth.toISOString().slice(0, 10);
-    fimFatura = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(diaFech).padStart(2, '0')}`;
-  }
+  const { inicio: inicioFatura, fim: fimFatura } = janelaFatura(cartao.dia_fechamento || 1, mes, ano);
 
   const rows = await db.execute(sql`
     SELECT t.id, t.descricao, t.valor, t.data_transacao, t.reembolsavel, c.nome AS categoria
@@ -3547,6 +3570,201 @@ export async function buscarEmpresaTransacoesPorFiltro(
     LIMIT ${LIMITE_CANDIDATOS}
   `);
   return rows as unknown as CandidatoTransacao[];
+}
+
+// ============================================
+// Conferência de fatura de cartão — SOMENTE PF, SOMENTE LEITURA.
+// O usuário dita os itens da fatura do cartão e a gente diz, item a item,
+// se já existe lançamento equivalente na competência. NADA é escrito aqui.
+// ============================================
+
+export interface ItemFaturaInformado {
+  descricao: string;
+  valor: number;
+  data?: string;
+}
+
+export type StatusConferencia =
+  | "confere"
+  | "valor_divergente"      // descrição casa, valor não
+  | "descricao_divergente"  // valor casa, descrição não
+  | "outra_competencia"     // existe, mas em outra fatura do mesmo cartão
+  | "duplicado"             // mais de um lançamento igual dentro da fatura
+  | "nao_encontrado";
+
+export interface ItemConferido {
+  informado: ItemFaturaInformado;
+  status: StatusConferencia;
+  lancamentos: CandidatoTransacao[];
+  observacao?: string;
+}
+
+// Quantos meses ao redor da competência olhamos para dizer "está lançado, mas
+// na fatura errada" em vez de simplesmente "não achei".
+const MESES_VIZINHOS_FATURA = 4;
+
+function normalizarTexto(s: string): string {
+  return (s || "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function tokensDescricao(s: string): string[] {
+  return normalizarTexto(s).split(/\s+/).filter((t) => t.length >= 3);
+}
+
+// Aqui a tolerância é MUITO menor que a da busca por filtro (5%): conferir
+// fatura é justamente achar diferença de valor. 5% deixaria 175 passar por
+// 180,50 como se conferisse. Só centavos de arredondamento são tolerados.
+const TOLERANCIA_CONFERENCIA = 0.001;
+
+function valorCasa(a: number, b: number): boolean {
+  const margem = Math.max(Math.abs(a) * TOLERANCIA_CONFERENCIA, 0.02);
+  return Math.abs(a - b) <= margem;
+}
+
+function descricaoCasa(informada: string, lancada: string): boolean {
+  const alvo = normalizarTexto(lancada);
+  const termos = tokensDescricao(informada);
+  if (termos.length === 0) return alvo.includes(normalizarTexto(informada));
+  return termos.some((t) => alvo.includes(t));
+}
+
+/**
+ * Confere uma lista de itens ditados pelo usuário contra os lançamentos do
+ * cartão na competência. Não altera nada — só compara e classifica.
+ */
+export async function conferirFaturaCartao(
+  walletId: number,
+  cartaoId: number,
+  itens: ItemFaturaInformado[],
+  mes?: number,
+  ano?: number,
+): Promise<{
+  cartao: string;
+  periodo_de: string;
+  periodo_ate: string;
+  total_lancado: number;
+  total_informado: number;
+  diferenca: number;
+  itens: ItemConferido[];
+  nao_informados: CandidatoTransacao[];
+}> {
+  const cartaoRows = await db.select().from(paymentMethods).where(eq(paymentMethods.id, cartaoId)).limit(1);
+  const cartao = cartaoRows[0];
+  if (!cartao) throw new Error("Cartão não encontrado");
+
+  const { inicio, fim } = janelaFatura(cartao.dia_fechamento || 1, mes, ano);
+
+  // Janela alargada: serve só para dizer em que outra fatura o lançamento está.
+  const desloca = (iso: string, meses: number) => {
+    const [a, m, d] = iso.split("-").map(Number);
+    const dt = new Date(a, m - 1 + meses, d);
+    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+  };
+  const inicioAmplo = desloca(inicio, -MESES_VIZINHOS_FATURA);
+  const fimAmplo = desloca(fim, MESES_VIZINHOS_FATURA);
+
+  const rows = await db.execute(sql`
+    SELECT t.id, t.descricao, t.valor::float8 AS valor, t.data_transacao::text AS data,
+           t.tipo, c.nome AS categoria
+    FROM transacoes t
+    LEFT JOIN categorias c ON c.id = t.categoria_id
+    WHERE t.carteira_id = ${walletId}
+      AND t.forma_pagamento_id = ${cartaoId}
+      AND t.tipo = 'Despesa'
+      AND t.data_transacao >= ${inicioAmplo}
+      AND t.data_transacao < ${fimAmplo}
+    ORDER BY t.data_transacao ASC, t.id ASC
+  `);
+
+  const todos = rows as unknown as CandidatoTransacao[];
+  const naFatura = todos.filter((t) => t.data >= inicio && t.data < fim);
+  const foraDaFatura = todos.filter((t) => t.data < inicio || t.data >= fim);
+
+  // Um lançamento só pode confirmar UM item ditado — senão dois itens iguais na
+  // fatura seriam ambos dados como conferidos pelo mesmo lançamento.
+  const usados = new Set<number>();
+  const conferidos: ItemConferido[] = [];
+
+  for (const item of itens) {
+    const valor = Number(item.valor);
+    const livres = naFatura.filter((t) => !usados.has(t.id));
+
+    const casamPleno = livres.filter((t) => valorCasa(valor, t.valor) && descricaoCasa(item.descricao, t.descricao));
+    if (casamPleno.length === 1) {
+      usados.add(casamPleno[0].id);
+      conferidos.push({ informado: item, status: "confere", lancamentos: casamPleno });
+      continue;
+    }
+    if (casamPleno.length > 1) {
+      casamPleno.forEach((t) => usados.add(t.id));
+      conferidos.push({
+        informado: item,
+        status: "duplicado",
+        lancamentos: casamPleno,
+        observacao: `A fatura tem 1 item, mas há ${casamPleno.length} lançamentos iguais na competência.`,
+      });
+      continue;
+    }
+
+    const soDescricao = livres.filter((t) => descricaoCasa(item.descricao, t.descricao));
+    if (soDescricao.length > 0) {
+      // Descrição batendo com um único lançamento é o mesmo item com valor
+      // errado — consome, senão ele reapareceria em 'nao_informados'. Com
+      // descrição casando em vários, não consome nada: o usuário escolhe.
+      if (soDescricao.length === 1) usados.add(soDescricao[0].id);
+      conferidos.push({
+        informado: item,
+        status: "valor_divergente",
+        lancamentos: soDescricao,
+        observacao: "Achei a descrição na competência, mas com outro valor.",
+      });
+      continue;
+    }
+
+    const soValor = livres.filter((t) => valorCasa(valor, t.valor));
+    if (soValor.length > 0) {
+      conferidos.push({
+        informado: item,
+        status: "descricao_divergente",
+        lancamentos: soValor,
+        observacao: "Achei o valor na competência, mas com outra descrição.",
+      });
+      continue;
+    }
+
+    const vizinhos = foraDaFatura.filter((t) => valorCasa(valor, t.valor) && descricaoCasa(item.descricao, t.descricao));
+    if (vizinhos.length > 0) {
+      conferidos.push({
+        informado: item,
+        status: "outra_competencia",
+        lancamentos: vizinhos,
+        observacao: "Está lançado no cartão, mas fora do período desta fatura.",
+      });
+      continue;
+    }
+
+    conferidos.push({ informado: item, status: "nao_encontrado", lancamentos: [] });
+  }
+
+  const naoInformados = naFatura.filter((t) => !usados.has(t.id));
+  const totalLancado = naFatura.reduce((s, t) => s + (Number(t.valor) || 0), 0);
+  const totalInformado = itens.reduce((s, i) => s + (Number(i.valor) || 0), 0);
+  const cent = (n: number) => Math.round(n * 100) / 100;
+
+  return {
+    cartao: cartao.nome,
+    periodo_de: inicio,
+    periodo_ate: fim,
+    total_lancado: cent(totalLancado),
+    total_informado: cent(totalInformado),
+    diferenca: cent(totalLancado - totalInformado),
+    itens: conferidos,
+    nao_informados: naoInformados,
+  };
 }
 
 // Soft delete: move a transação para a lixeira (mantém 30 dias) e remove da tabela.
