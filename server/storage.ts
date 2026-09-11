@@ -108,7 +108,10 @@ export function filtrarPlanosPorTipo<T extends { tipoPessoa?: string | null }>(
   planos: T[],
   tipoPessoa: string | null | undefined,
 ): T[] {
-  const doTipo = tipoPessoa ? planos.filter((p) => p.tipoPessoa === tipoPessoa) : [];
+  // Sem tipo definido → tratar como PF (evita cliente antigo/nulo ficar sem plano
+  // depois que o plano único NULL vira tipado). Ver plano de separação PF/PJ.
+  const t = tipoPessoa || "fisica";
+  const doTipo = planos.filter((p) => p.tipoPessoa === t);
   if (doTipo.length > 0) return doTipo;
   return planos.filter((p) => !p.tipoPessoa);
 }

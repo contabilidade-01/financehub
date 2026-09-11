@@ -69,6 +69,8 @@ import ContasCartoesPage from "@/pages/contas-cartoes";
 import ImportarLancamentos from "@/pages/importar";
 import FluxoProjetadoPF from "@/pages/fluxo-projetado";
 import ReembolsosPage from "@/pages/reembolsos";
+import VendasPF from "@/pages/vendas/pf";
+import VendasPJ from "@/pages/vendas/pj";
 
 function Router() {
   const [location] = useLocation();
@@ -122,6 +124,7 @@ function Router() {
     location === "/forgot-password" ||
     location === "/reset-password" ||
     location === "/subscription-expired" ||
+    location.startsWith("/assinar") ||
     location.startsWith("/checkout/plans");
 
   // Adicionar /setup apenas se estiver em modo setup
@@ -145,6 +148,9 @@ function Router() {
       <Switch key={location}>
         {/* Checkout externo precisa existir logado ou deslogado (link do Asaas) */}
         <Route path="/checkout/plans" component={ExternalCheckout} />
+        {/* Páginas de vendas (marketing) — funcionam logado ou deslogado */}
+        <Route path="/assinar/pf" component={VendasPF} />
+        <Route path="/assinar/pj" component={VendasPJ} />
         {!isAuthenticated ? (
           <>
             <Route path="/" component={Login} />

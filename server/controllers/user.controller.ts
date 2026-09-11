@@ -29,6 +29,9 @@ export async function register(req: Request, res: Response) {
       }, "Telefone deve ser numérico, começar com 55 e ter 12 ou 13 dígitos"),
       remoteJid: z.string().optional(),
       tipo_usuario: z.string().optional(),
+      // PF/PJ: vem da página de vendas (?tipo). Default PF. Define qual plano
+      // (39,90 PF / 79,90 PJ) o checkout vai oferecer e cobrar no Asaas.
+      tipo_pessoa: z.enum(["fisica", "juridica"]).optional(),
     });
     const userData = registerSchema.parse(req.body);
     
@@ -66,7 +69,8 @@ export async function register(req: Request, res: Response) {
     // Create user
     const userDataToSave = {
       ...userData,
-      telefone: telefoneNum ? telefoneNum.toString() : undefined
+      telefone: telefoneNum ? telefoneNum.toString() : undefined,
+      tipo_pessoa: userData.tipo_pessoa || "fisica", // garante tipo p/ escolher o plano certo
     };
     const newUser = await storage.createUser(userDataToSave);
 

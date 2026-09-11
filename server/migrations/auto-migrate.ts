@@ -731,6 +731,25 @@ const STEPS: Step[] = [
     },
   },
   {
+    name: "planos: separar PF (39,90) e PJ (79,90)",
+    run: async () => {
+      // Converte o plano único atual (tipo NULL) em plano PF de R$ 39,90.
+      // Mantém o id (preserva qualquer user_subscriptions.plan_id existente).
+      await db.execute(sql`
+        UPDATE subscription_plans
+        SET tipo_pessoa = 'fisica', price_monthly = 39.90, name = 'Plano Mensal PF', active = true
+        WHERE plan_code = 'mensal'
+      `);
+      // Cria o plano PJ de R$ 79,90 se ainda não existir.
+      await db.execute(sql`
+        INSERT INTO subscription_plans (plan_code, name, description, price_monthly, tipo_pessoa, features, active)
+        SELECT 'mensal_pj', 'Plano Mensal PJ', 'Assinatura mensal para Pessoa Jurídica',
+               79.90, 'juridica', '[]', true
+        WHERE NOT EXISTS (SELECT 1 FROM subscription_plans WHERE plan_code = 'mensal_pj')
+      `);
+    },
+  },
+  {
     // Contas bancárias compartilhadas PF+PJ: empresa_id opcional (PF = null).
     // Novas colunas de apresentação + vínculo das transações PF a conta/fatura.
     name: "contas PF + cols transacoes (conta_bancaria, fatura, competencia, movimenta_caixa)",

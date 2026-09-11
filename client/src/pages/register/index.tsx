@@ -74,7 +74,14 @@ export default function Register() {
   const { theme } = useTheme();
   const { t } = useTranslation();
   const { config: systemConfig } = useSystemConfig();
-  
+
+  // Tipo de pessoa vindo da página de vendas: /register?tipo=juridica (default PF).
+  // Define qual plano (PF 39,90 / PJ 79,90) o checkout vai oferecer e cobrar no Asaas.
+  const tipoParam = typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search).get("tipo")
+    : null;
+  const tipoPessoa: "fisica" | "juridica" = tipoParam === "juridica" ? "juridica" : "fisica";
+
   // Schema de validação com localização
   const registerSchema = z.object({
     nome: z.string().min(2, t('validation.name_min_length', 'Nome deve ter pelo menos 2 caracteres')),
@@ -150,7 +157,7 @@ export default function Register() {
       }
       await apiRequest("/api/auth/register", {
         method: "POST",
-        data: { ...userData, telefone }
+        data: { ...userData, telefone, tipo_pessoa: tipoPessoa }
       });
       toast({
         title: t('register.success_title', 'Conta criada com sucesso'),
@@ -195,6 +202,11 @@ export default function Register() {
             <CardDescription>
               {t('register.description', 'Preencha os dados abaixo para criar sua conta')}
             </CardDescription>
+            {tipoPessoa === "juridica" && (
+              <div className="mt-2 inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
+                <i className="ri-building-2-line"></i> Cadastro Pessoa Jurídica (PJ)
+              </div>
+            )}
           </CardHeader>
           <CardContent>
             <Form {...form}>
