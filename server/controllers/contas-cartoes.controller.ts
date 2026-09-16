@@ -322,3 +322,50 @@ export async function listarVencimentos(req: Request, res: Response) {
     return res.status(500).json({ error: e?.message || "Erro ao listar vencimentos" });
   }
 }
+
+/**
+ * Resumo de faturas do PF — compacto e pronto para a IA (WhatsApp) responder
+ * "qual o saldo/valor da minha fatura". Autenticável por apikey (MasterToken).
+ * GET /api/cartoes/resumo
+ */
+export async function resumoFaturas(req: Request, res: Response) {
+  try {
+    const userId = req.user!.id;
+    const cartoes = await faturaPf.listarCartoesPf(userId);
+    let totalGeral = 0;
+    const out = [];
+    for (const c of cartoes as any[]) {
+      const saldo = await faturaPf.getSaldoCartaoPf(c.id);
+      const faturas = await faturaPf.listarFaturasPf(c.id);
+      const abertas = (faturas as any[])
+        .filter((f) => f.status !== "paga")
+        .map((f) => ({
+          competencia: f.competencia,
+          total: Math.round((Number(f.total) || 0) * 100) / 100,
+          vencimento: f.data_vencimento,
+          status: f.status,
+        }))
+        .sort((a, b) => String(a.competencia).localeCompare(String(b.competencia)));
+      const totalAberto = abertas.reduce((s, f) => s + f.total, 0);
+      totalGeral += totalAberto;
+      const limiteDisponivel = saldo.sem_limite
+        ? null
+        : Math.round(((Number(saldo.limite) || 0) - totalAberto) * 100) / 100;
+      out.push({
+        cartao: c.nome,
+        limite: saldo.limite,
+        sem_limite: saldo.sem_limite,
+        total_em_aberto: Math.round(totalAberto * 100) / 100,
+        limite_disponivel: limiteDisponivel,
+        proxima_fatura: abertas[0] || null,
+        faturas_abertas: abertas,
+      });
+    }
+    return res.json({
+      cartoes: out,
+      total_geral_em_aberto: Math.round(totalGeral * 100) / 100,
+    });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || "Erro ao gerar resumo de faturas" });
+  }
+}

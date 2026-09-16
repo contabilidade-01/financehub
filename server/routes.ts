@@ -1368,6 +1368,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/contas/:id", combinedAuth, checkImpersonation, contasCartoesCtrl.atualizarConta);
   app.delete("/api/contas/:id", combinedAuth, checkImpersonation, contasCartoesCtrl.excluirConta);
   app.get("/api/cartoes", combinedAuth, checkImpersonation, contasCartoesCtrl.listarCartoes);
+  // Resumo compacto de faturas (para a IA do WhatsApp responder saldo de fatura). Antes de /:id.
+  app.get("/api/cartoes/resumo", combinedAuth, checkImpersonation, contasCartoesCtrl.resumoFaturas);
   app.post("/api/cartoes", combinedAuth, checkImpersonation, contasCartoesCtrl.criarCartao);
   app.get("/api/cartoes/:id/lancamentos", combinedAuth, checkImpersonation, contasCartoesCtrl.lancamentosCartao);
   app.put("/api/cartoes/:id", combinedAuth, checkImpersonation, contasCartoesCtrl.atualizarCartao);

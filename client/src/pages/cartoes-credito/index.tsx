@@ -10,9 +10,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { CheckCircle2, CreditCard, ReceiptText, Trash2 } from "lucide-react";
+import { CheckCircle2, CreditCard, Plus, ReceiptText, Trash2 } from "lucide-react";
 
 type Cartao = {
   id: number;
@@ -74,6 +83,10 @@ export default function CartoesCreditoPage() {
   const [cardId, setCardId] = useState<number | null>(null);
   const [faturaId, setFaturaId] = useState<number | null>(null);
   const [contaPagamentoId, setContaPagamentoId] = useState<string>("");
+  const hoje = new Date().toISOString().slice(0, 10);
+  const freshNovo = () => ({ descricao: "", valor: "", data: hoje, categoria_id: "", parcelas: "1" });
+  const [novoOpen, setNovoOpen] = useState(false);
+  const [novoForm, setNovoForm] = useState(freshNovo());
 
   const { data: cartoes = [], isLoading: loadingCartoes } = useQuery<Cartao[]>({
     queryKey: ["/api/cartoes"],
@@ -160,18 +173,64 @@ export default function CartoesCreditoPage() {
     onError: (e: any) => toast({ title: "Erro", description: e?.message || e?.error, variant: "destructive" }),
   });
 
+  const { data: categorias = [] } = useQuery<{ id: number; nome: string; tipo: string }[]>({
+    queryKey: ["/api/categories"],
+  });
+  const categoriasDespesa = useMemo(() => categorias.filter((c) => c.tipo === "Despesa"), [categorias]);
+
+  const criarLancamento = useMutation({
+    mutationFn: (data: any) => apiRequest("/api/transactions", { method: "POST", data }),
+    onSuccess: () => {
+      invalidate();
+      setNovoOpen(false);
+      setNovoForm(freshNovo());
+      toast({ title: "Lançamento adicionado ao cartão" });
+    },
+    onError: (e: any) => toast({ title: "Erro", description: e?.message || e?.error, variant: "destructive" }),
+  });
+
+  const submitNovo = () => {
+    if (!cardId) {
+      toast({ title: "Selecione um cartão", variant: "destructive" });
+      return;
+    }
+    const valor = Number(String(novoForm.valor).replace(",", "."));
+    if (!novoForm.descricao.trim() || !(valor > 0)) {
+      toast({ title: "Informe descrição e valor válidos", variant: "destructive" });
+      return;
+    }
+    if (!novoForm.categoria_id) {
+      toast({ title: "Escolha a categoria", variant: "destructive" });
+      return;
+    }
+    criarLancamento.mutate({
+      tipo: "Despesa",
+      descricao: novoForm.descricao.trim(),
+      valor,
+      data_transacao: novoForm.data,
+      categoria_id: Number(novoForm.categoria_id),
+      forma_pagamento_id: cardId,
+      parcelas: Number(novoForm.parcelas) || 1,
+    });
+  };
+
   const faturaSel = detalhe?.fatura;
   const compras = detalhe?.compras || [];
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold flex items-center gap-2">
-          <CreditCard className="h-7 w-7" /> Cartões de Crédito
-        </h1>
-        <p className="text-muted-foreground">
-          Escolha um cartão, navegue pelas faturas e confira os lançamentos de cada mês.
-        </p>
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold flex items-center gap-2">
+            <CreditCard className="h-7 w-7" /> Cartões de Crédito
+          </h1>
+          <p className="text-muted-foreground">
+            Escolha um cartão, navegue pelas faturas e confira os lançamentos de cada mês.
+          </p>
+        </div>
+        <Button onClick={() => { setNovoForm(freshNovo()); setNovoOpen(true); }} disabled={!cardId}>
+          <Plus className="h-4 w-4 mr-2" /> Novo lançamento
+        </Button>
       </div>
 
       {/* Seletor de cartões */}
@@ -444,6 +503,86 @@ export default function CartoesCreditoPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Modal: novo lançamento no cartão */}
+      <Dialog open={novoOpen} onOpenChange={setNovoOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Novo lançamento no cartão</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              {cartaoSel ? cartaoSel.nome : "Selecione um cartão"} — a compra entra automaticamente na fatura do mês.
+            </p>
+            <div className="space-y-1.5">
+              <Label>Descrição *</Label>
+              <Input
+                value={novoForm.descricao}
+                onChange={(e) => setNovoForm({ ...novoForm, descricao: e.target.value })}
+                placeholder="Ex.: Mercado, Assinatura…"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Valor {Number(novoForm.parcelas) > 1 ? "total" : ""} (R$) *</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={novoForm.valor}
+                  onChange={(e) => setNovoForm({ ...novoForm, valor: e.target.value })}
+                  placeholder="0,00"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Data</Label>
+                <Input
+                  type="date"
+                  value={novoForm.data}
+                  onChange={(e) => setNovoForm({ ...novoForm, data: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Categoria *</Label>
+                <Select
+                  value={novoForm.categoria_id}
+                  onValueChange={(v) => setNovoForm({ ...novoForm, categoria_id: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Escolha" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categoriasDespesa.map((c) => (
+                      <SelectItem key={c.id} value={String(c.id)}>
+                        {c.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Parcelas</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={48}
+                  value={novoForm.parcelas}
+                  onChange={(e) => setNovoForm({ ...novoForm, parcelas: e.target.value })}
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNovoOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={submitNovo} disabled={criarLancamento.isPending}>
+              Adicionar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
