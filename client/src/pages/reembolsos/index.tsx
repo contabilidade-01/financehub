@@ -35,7 +35,7 @@ interface Reembolso {
   forma_pagamento: string | null;
 }
 
-const OPCOES_PERIODO: Periodo[] = ["current_month", "last_month", "next_month", "custom"];
+const OPCOES_PERIODO: Periodo[] = ["all", "month", "custom"];
 
 const fmt = (valor: string | number) =>
   Number(valor).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -104,7 +104,7 @@ export default function ReembolsosPage() {
   };
 
   // Filtros
-  const [periodo, setPeriodo] = useState<Periodo>("current_month");
+  const [periodo, setPeriodo] = useState<Periodo>("all");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const range = rangeDoPeriodo(periodo, customFrom, customTo);
