@@ -1377,10 +1377,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/cartoes/:id/faturas", combinedAuth, checkImpersonation, contasCartoesCtrl.listarFaturas);
   app.get("/api/cartoes/:id/saldo", combinedAuth, checkImpersonation, contasCartoesCtrl.saldoCartao);
   app.post("/api/cartoes/:id/recalcular-faturas", combinedAuth, checkImpersonation, contasCartoesCtrl.recalcularFaturasCartao);
+  app.post("/api/faturas/expandir-parcelas", combinedAuth, checkImpersonation, contasCartoesCtrl.expandirParcelasFatura);
+  app.post("/api/faturas/mover-lancamento", combinedAuth, checkImpersonation, contasCartoesCtrl.moverLancamentoFatura);
   app.get("/api/faturas/:id", combinedAuth, checkImpersonation, contasCartoesCtrl.detalheFatura);
   app.post("/api/faturas/:id/pagar", combinedAuth, checkImpersonation, contasCartoesCtrl.pagarFatura);
   app.post("/api/faturas/:id/reabrir", combinedAuth, checkImpersonation, contasCartoesCtrl.reabrirFatura);
-  app.post("/api/faturas/mover-lancamento", combinedAuth, checkImpersonation, contasCartoesCtrl.moverLancamentoFatura);
   app.get("/api/vencimentos", combinedAuth, checkImpersonation, contasCartoesCtrl.listarVencimentos);
 
   // Marcar como recorrente

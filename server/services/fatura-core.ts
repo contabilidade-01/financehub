@@ -62,8 +62,8 @@ export function competenciaMaisMeses(competencia: string, meses: number): string
   const [y, m] = competencia.split("-").map(Number);
   const total = (m - 1) + meses;
   const ano = y + Math.floor(total / 12);
-  const mes = (total % 12) + 1;
-  return `${ano}-${pad2(mes)}`;
+  const mes0 = ((total % 12) + 12) % 12;
+  return `${ano}-${pad2(mes0 + 1)}`;
 }
 
 /**

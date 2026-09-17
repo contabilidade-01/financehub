@@ -22,6 +22,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { ArrowLeftRight, CheckCircle2, CreditCard, Edit, Plus, ReceiptText, Trash2 } from "lucide-react";
+import { rotuloParcela } from "@shared/parcela-descricao";
 
 type Cartao = {
   id: number;
@@ -92,10 +93,15 @@ export default function CartoesCreditoPage() {
   const [cartaoOpen, setCartaoOpen] = useState(false);
   const [editingCartao, setEditingCartao] = useState<Cartao | null>(null);
   const [cartaoForm, setCartaoForm] = useState(emptyCartao);
-  // Mover lançamento (para outro cartão / competência)
-  const [moverTx, setMoverTx] = useState<{ id: number; descricao: string } | null>(null);
+  // Mover lançamento (para outro cartão / competência) — um ou vários
+  const [moverIds, setMoverIds] = useState<number[] | null>(null);
+  const [moverLabel, setMoverLabel] = useState("");
   const [moverCartaoId, setMoverCartaoId] = useState<string>("");
   const [moverComp, setMoverComp] = useState<string>("");
+  const [todasParcelas, setTodasParcelas] = useState(true);
+  const [recalcularComp, setRecalcularComp] = useState(false);
+  const [previewParcelas, setPreviewParcelas] = useState<{ extra: number; ids: number[] } | null>(null);
+  const [sel, setSel] = useState<Set<number>>(new Set());
 
   const { data: cartoes = [], isLoading: loadingCartoes } = useQuery<Cartao[]>({
     queryKey: ["/api/cartoes"],
@@ -135,6 +141,28 @@ export default function CartoesCreditoPage() {
     () => (lancsResp?.lancamentos || []).filter((l) => l.fatura_id == null),
     [lancsResp],
   );
+
+  useEffect(() => {
+    setSel(new Set());
+  }, [faturaId, cardId]);
+
+  useEffect(() => {
+    if (!moverIds?.length || !todasParcelas) {
+      setPreviewParcelas(null);
+      return;
+    }
+    let cancel = false;
+    apiRequest("/api/faturas/expandir-parcelas", { method: "POST", data: { transacao_ids: moverIds } })
+      .then((r: any) => {
+        if (!cancel) setPreviewParcelas({ extra: Number(r?.extra) || 0, ids: r?.ids || [] });
+      })
+      .catch(() => {
+        if (!cancel) setPreviewParcelas(null);
+      });
+    return () => {
+      cancel = true;
+    };
+  }, [moverIds, todasParcelas]);
 
   // Seleciona o primeiro cartão automaticamente.
   useEffect(() => {
@@ -243,12 +271,19 @@ export default function CartoesCreditoPage() {
   });
 
   const moverLancamento = useMutation({
-    mutationFn: (data: { transacao_id: number; cartao_id: number; competencia: string }) =>
-      apiRequest("/api/faturas/mover-lancamento", { method: "POST", data }),
-    onSuccess: () => {
+    mutationFn: (data: {
+      transacao_ids: number[];
+      cartao_id: number;
+      competencia?: string;
+      todas_parcelas: boolean;
+    }) => apiRequest("/api/faturas/mover-lancamento", { method: "POST", data }),
+    onSuccess: (r: any) => {
       invalidate();
-      setMoverTx(null);
-      toast({ title: "Lançamento movido" });
+      setMoverIds(null);
+      setSel(new Set());
+      const extra = r?.extra_parcelas ? ` (+${r.extra_parcelas} parcela(s) da mesma compra)` : "";
+      const pagos = r?.ignorados_pagos ? ` ${r.ignorados_pagos} em fatura paga foram ignorados.` : "";
+      toast({ title: `${r?.movidos ?? 0} lançamento(s) movido(s)${extra}`, description: pagos || undefined });
     },
     onError: (e: any) => toast({ title: "Erro", description: e?.message || e?.error, variant: "destructive" }),
   });
@@ -298,21 +333,47 @@ export default function CartoesCreditoPage() {
       },
     });
   };
-  const abrirMover = (l: { id: number; descricao: string }) => {
-    setMoverTx(l);
+  const abrirMover = (itens: { id: number; descricao: string }[]) => {
+    if (!itens.length) return;
+    setMoverIds(itens.map((i) => i.id));
+    setMoverLabel(itens.length === 1 ? itens[0].descricao : `${itens.length} lançamentos selecionados`);
     setMoverCartaoId(cardId ? String(cardId) : (cartoes[0] ? String(cartoes[0].id) : ""));
     setMoverComp(detalhe?.fatura?.competencia || compAtual());
+    setTodasParcelas(true);
+    setRecalcularComp(itens.length > 1);
+    setPreviewParcelas(null);
   };
   const submitMover = () => {
-    if (!moverTx || !moverCartaoId || !/^\d{4}-\d{2}$/.test(moverComp)) {
-      toast({ title: "Escolha o cartão e a competência (AAAA-MM)", variant: "destructive" });
+    if (!moverIds?.length || !moverCartaoId) {
+      toast({ title: "Escolha o cartão de destino", variant: "destructive" });
       return;
     }
-    moverLancamento.mutate({ transacao_id: moverTx.id, cartao_id: Number(moverCartaoId), competencia: moverComp });
+    if (!recalcularComp && !/^\d{4}-\d{2}$/.test(moverComp)) {
+      toast({ title: "Escolha a competência (AAAA-MM) ou marque recalcular", variant: "destructive" });
+      return;
+    }
+    moverLancamento.mutate({
+      transacao_ids: moverIds,
+      cartao_id: Number(moverCartaoId),
+      competencia: recalcularComp ? undefined : moverComp,
+      todas_parcelas: todasParcelas,
+    });
+  };
+
+  const toggleSel = (id: number, on?: boolean) => {
+    setSel((prev) => {
+      const n = new Set(prev);
+      const next = on ?? !n.has(id);
+      if (next) n.add(id);
+      else n.delete(id);
+      return n;
+    });
   };
 
   const faturaSel = detalhe?.fatura;
   const compras = detalhe?.compras || [];
+  const idsFatura = compras.map((c) => c.id);
+  const todosFaturaSel = idsFatura.length > 0 && idsFatura.every((id) => sel.has(id));
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -559,10 +620,48 @@ export default function CartoesCreditoPage() {
                 </div>
 
                 {/* Lançamentos da fatura */}
-                <div className="mt-5 overflow-x-auto">
+                <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm text-muted-foreground">
+                    {sel.size > 0 ? `${sel.size} selecionado(s)` : "Selecione para mover em massa"}
+                  </p>
+                  {sel.size > 0 && (
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" onClick={() => setSel(new Set())}>
+                        Limpar
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          const mapa = new Map<number, string>();
+                          compras.forEach((c) => mapa.set(c.id, c.descricao));
+                          semFatura.forEach((c) => mapa.set(c.id, c.descricao));
+                          abrirMover(Array.from(sel).map((id) => ({ id, descricao: mapa.get(id) || `#${id}` })));
+                        }}
+                      >
+                        <ArrowLeftRight className="h-4 w-4 mr-1" /> Mover selecionados
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                <div className="mt-2 overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="text-xs text-muted-foreground border-b border-border">
+                        <th className="py-2 pr-2 w-8">
+                          <input
+                            type="checkbox"
+                            aria-label="Selecionar todos"
+                            checked={todosFaturaSel}
+                            onChange={(e) => {
+                              const on = e.target.checked;
+                              setSel((prev) => {
+                                const n = new Set(prev);
+                                idsFatura.forEach((id) => (on ? n.add(id) : n.delete(id)));
+                                return n;
+                              });
+                            }}
+                          />
+                        </th>
                         <th className="text-left font-medium py-2 pr-3">DATA</th>
                         <th className="text-left font-medium py-2 pr-3">DESCRIÇÃO</th>
                         <th className="text-left font-medium py-2 pr-3">PARCELA</th>
@@ -573,17 +672,25 @@ export default function CartoesCreditoPage() {
                     <tbody>
                       {compras.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="py-6 text-center text-muted-foreground">
+                          <td colSpan={6} className="py-6 text-center text-muted-foreground">
                             Nenhum lançamento nesta fatura.
                           </td>
                         </tr>
                       ) : (
                         compras.map((l) => (
-                          <tr key={l.id} className="border-b border-border/50">
+                          <tr key={l.id} className={`border-b border-border/50 ${sel.has(l.id) ? "bg-primary/5" : ""}`}>
+                            <td className="py-2.5 pr-2">
+                              <input
+                                type="checkbox"
+                                checked={sel.has(l.id)}
+                                onChange={() => toggleSel(l.id)}
+                                aria-label={`Selecionar ${l.descricao}`}
+                              />
+                            </td>
                             <td className="py-2.5 pr-3 whitespace-nowrap">{dataBR(l.data_transacao)}</td>
                             <td className="py-2.5 pr-3">{l.descricao}</td>
                             <td className="py-2.5 pr-3 text-muted-foreground">
-                              {l.parcela_num && l.parcela_total ? `${l.parcela_num}/${l.parcela_total}` : "—"}
+                              {rotuloParcela(l) || "—"}
                             </td>
                             <td className="py-2.5 pr-3 text-right font-numeric font-semibold whitespace-nowrap">
                               {money(Number(l.valor) || 0)}
@@ -594,7 +701,7 @@ export default function CartoesCreditoPage() {
                                   type="button"
                                   className="text-muted-foreground hover:text-primary transition-colors"
                                   title="Mover para outro cartão/competência"
-                                  onClick={() => abrirMover({ id: l.id, descricao: l.descricao })}
+                                  onClick={() => abrirMover([{ id: l.id, descricao: l.descricao }])}
                                 >
                                   <ArrowLeftRight className="h-4 w-4" />
                                 </button>
@@ -629,21 +736,49 @@ export default function CartoesCreditoPage() {
             <p className="font-semibold">Lançamentos sem fatura vinculada</p>
             <p className="text-sm text-muted-foreground mb-3">
               Estes lançamentos estão no cartão mas não entram em nenhuma fatura.
+              {sel.size > 0 && (
+                <>
+                  {" "}
+                  <button
+                    type="button"
+                    className="text-primary underline-offset-2 hover:underline"
+                    onClick={() => {
+                      const mapa = new Map<number, string>();
+                      semFatura.forEach((c) => mapa.set(c.id, c.descricao));
+                      abrirMover(
+                        Array.from(sel)
+                          .filter((id) => mapa.has(id))
+                          .map((id) => ({ id, descricao: mapa.get(id) || `#${id}` })),
+                      );
+                    }}
+                  >
+                    Mover selecionados
+                  </button>
+                </>
+              )}
             </p>
             <div className="divide-y divide-border/50">
               {semFatura.map((l) => (
                 <div key={l.id} className="flex items-center justify-between gap-3 py-2.5">
-                  <p className="text-sm">
-                    <span className="text-muted-foreground">{dataBR(l.data_transacao)}</span> · {l.descricao}
-                    {l.parcela_num && l.parcela_total ? ` (${l.parcela_num}/${l.parcela_total})` : ""}
-                  </p>
+                  <label className="flex items-start gap-2 min-w-0 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={sel.has(l.id)}
+                      onChange={() => toggleSel(l.id)}
+                    />
+                    <p className="text-sm">
+                      <span className="text-muted-foreground">{dataBR(l.data_transacao)}</span> · {l.descricao}
+                      {rotuloParcela(l) ? ` (${rotuloParcela(l)})` : ""}
+                    </p>
+                  </label>
                   <div className="flex items-center gap-3 shrink-0">
                     <span className="text-sm font-numeric font-semibold">{money(Number(l.valor) || 0)}</span>
                     <button
                       type="button"
                       className="text-muted-foreground hover:text-primary transition-colors"
                       title="Mover para uma fatura/cartão"
-                      onClick={() => abrirMover({ id: l.id, descricao: l.descricao })}
+                      onClick={() => abrirMover([{ id: l.id, descricao: l.descricao }])}
                     >
                       <ArrowLeftRight className="h-4 w-4" />
                     </button>
@@ -822,14 +957,34 @@ export default function CartoesCreditoPage() {
       </Dialog>
 
       {/* Modal: mover lançamento para outro cartão/competência */}
-      <Dialog open={!!moverTx} onOpenChange={(o) => { if (!o) setMoverTx(null); }}>
+      <Dialog open={!!moverIds} onOpenChange={(o) => { if (!o) setMoverIds(null); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Mover lançamento</DialogTitle>
+            <DialogTitle>{(moverIds?.length || 0) > 1 ? "Mover lançamentos" : "Mover lançamento"}</DialogTitle>
           </DialogHeader>
-          {moverTx && (
+          {moverIds && (
             <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">{moverTx.descricao}</p>
+              <p className="text-sm text-muted-foreground">{moverLabel}</p>
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={todasParcelas}
+                  onChange={(e) => setTodasParcelas(e.target.checked)}
+                />
+                <span>
+                  Mover todas as parcelas desta compra
+                  {previewParcelas?.extra ? (
+                    <span className="block text-xs text-muted-foreground">
+                      +{previewParcelas.extra} parcela(s) em outras faturas serão incluídas ({previewParcelas.ids.length} no total)
+                    </span>
+                  ) : (
+                    <span className="block text-xs text-muted-foreground">
+                      Se for parcelada (ex.: 4/7), as irmãs vão junto para o cartão certo.
+                    </span>
+                  )}
+                </span>
+              </label>
               <div className="space-y-1.5">
                 <Label>Cartão *</Label>
                 <Select value={moverCartaoId} onValueChange={setMoverCartaoId}>
@@ -843,21 +998,37 @@ export default function CartoesCreditoPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1.5">
-                <Label>Competência (fatura) *</Label>
-                <Input
-                  type="month"
-                  value={moverComp}
-                  onChange={(e) => setMoverComp(e.target.value)}
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={recalcularComp}
+                  onChange={(e) => setRecalcularComp(e.target.checked)}
                 />
-                <p className="text-xs text-muted-foreground">
-                  O vencimento é calculado pelos dias do cartão escolhido.
-                </p>
-              </div>
+                <span>
+                  Recalcular a fatura pela data da compra
+                  <span className="block text-xs text-muted-foreground">
+                    Usa o fechamento do cartão destino. Desmarque para escolher a competência na mão.
+                  </span>
+                </span>
+              </label>
+              {!recalcularComp && (
+                <div className="space-y-1.5">
+                  <Label>Competência (fatura) *</Label>
+                  <Input
+                    type="month"
+                    value={moverComp}
+                    onChange={(e) => setMoverComp(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Vale para o lançamento selecionado; as outras parcelas seguem nos meses seguintes.
+                  </p>
+                </div>
+              )}
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setMoverTx(null)}>Cancelar</Button>
+            <Button variant="outline" onClick={() => setMoverIds(null)}>Cancelar</Button>
             <Button onClick={submitMover} disabled={moverLancamento.isPending}>Mover</Button>
           </DialogFooter>
         </DialogContent>
