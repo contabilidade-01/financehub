@@ -731,3 +731,25 @@ export async function getDashboardSummary(req: Request, res: Response) {
     res.status(500).json({ message: "Erro ao obter resumo do dashboard" });
   }
 }
+
+/** POST /api/transactions/alterar-dia  { transacao_ids, dia, todas_parcelas? } */
+export async function alterarDiaMassa(req: Request, res: Response) {
+  try {
+    if (!req.user) return res.status(401).json({ error: "Não autenticado" });
+    const wallet = await storage.getWalletByUserId(req.user.id);
+    if (!wallet) return res.status(404).json({ error: "Carteira não encontrada" });
+    const { idsLimpos } = await import("../services/mover-meio.service");
+    const { alterarDiaTransacoesPf } = await import("../services/alterar-dia.service");
+    const ids = idsLimpos(req.body?.transacao_ids ?? req.body?.transacao_id);
+    const r = await alterarDiaTransacoesPf({
+      userId: req.user.id,
+      walletId: wallet.id,
+      ids,
+      dia: Number(req.body?.dia),
+      todasParcelas: req.body?.todas_parcelas !== false,
+    });
+    return res.json({ success: true, ...r });
+  } catch (e: any) {
+    return res.status(400).json({ error: e?.message || "Erro ao alterar o dia" });
+  }
+}

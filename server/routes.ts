@@ -221,6 +221,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     checkImpersonation,
     transactionController.restaurarLixeiraPf,
   );
+  app.post(
+    "/api/transactions/alterar-dia",
+    combinedAuth,
+    checkImpersonation,
+    transactionController.alterarDiaMassa,
+  );
   app.get(
     "/api/transactions/:id",
     combinedAuth,
@@ -1533,6 +1539,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const simularWaCtrl = await import("./controllers/simular-whatsapp.controller");
   app.post("/api/admin/simular-whatsapp", combinedAuth, checkImpersonation, requireSuperAdmin, simularWaCtrl.simularWhatsapp);
+
+  // Orquestrador admin — DeepSeek only (não mexe no WhatsApp/OpenAI)
+  const orqCtrl = await import("./controllers/orquestrador.controller");
+  app.get("/api/admin/orquestrador/status", combinedAuth, checkImpersonation, requireSuperAdmin, orqCtrl.statusOrquestrador);
+  app.post("/api/admin/orquestrador/chat", combinedAuth, checkImpersonation, requireSuperAdmin, orqCtrl.chatOrquestrador);
 
   {
     const { getAppVersion } = await import("./services/app-version");
