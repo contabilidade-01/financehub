@@ -110,7 +110,7 @@ function Sidebar() {
     items: [
       { icon: <LayoutDashboard className="mr-3 h-4 w-4" />, text: t('navigation.dashboard', 'Dashboard'), path: "/" },
       { icon: <PlusCircle className="mr-3 h-4 w-4" />, text: t('navigation.transactions', 'Transações'), path: "/transactions" },
-      { icon: <Wallet className="mr-3 h-4 w-4" />, text: 'Contas e Cartões', path: "/contas-cartoes" },
+      { icon: <Wallet className="mr-3 h-4 w-4" />, text: 'Contas', path: "/contas-cartoes" },
       { icon: <CreditCard className="mr-3 h-4 w-4" />, text: 'Cartões de Crédito', path: "/cartoes" },
       { icon: <TrendingUp className="mr-3 h-4 w-4" />, text: 'Vencimentos', path: "/contas-pagar" },
       { icon: <HandCoins className="mr-3 h-4 w-4" />, text: 'A Receber', path: "/reembolsos" },
