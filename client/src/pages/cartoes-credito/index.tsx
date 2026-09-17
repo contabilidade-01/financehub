@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { ArrowLeftRight, CheckCircle2, CreditCard, Edit, Plus, ReceiptText, Trash2 } from "lucide-react";
+import { ArrowLeftRight, CalendarDays, CheckCircle2, CreditCard, Edit, Plus, ReceiptText, Trash2 } from "lucide-react";
 import { rotuloParcela } from "@shared/parcela-descricao";
 
 type Cartao = {
@@ -102,6 +102,9 @@ export default function CartoesCreditoPage() {
   const [recalcularComp, setRecalcularComp] = useState(false);
   const [previewParcelas, setPreviewParcelas] = useState<{ extra: number; ids: number[] } | null>(null);
   const [sel, setSel] = useState<Set<number>>(new Set());
+  const [diaOpen, setDiaOpen] = useState(false);
+  const [diaValor, setDiaValor] = useState("5");
+  const [diaTodasParcelas, setDiaTodasParcelas] = useState(true);
 
   const { data: cartoes = [], isLoading: loadingCartoes } = useQuery<Cartao[]>({
     queryKey: ["/api/cartoes"],
@@ -284,6 +287,25 @@ export default function CartoesCreditoPage() {
       const extra = r?.extra_parcelas ? ` (+${r.extra_parcelas} parcela(s) da mesma compra)` : "";
       const pagos = r?.ignorados_pagos ? ` ${r.ignorados_pagos} em fatura paga foram ignorados.` : "";
       toast({ title: `${r?.movidos ?? 0} lançamento(s) movido(s)${extra}`, description: pagos || undefined });
+    },
+    onError: (e: any) => toast({ title: "Erro", description: e?.message || e?.error, variant: "destructive" }),
+  });
+
+  const alterarDia = useMutation({
+    mutationFn: (data: { transacao_ids: number[]; dia: number; todas_parcelas: boolean }) =>
+      apiRequest("/api/transactions/alterar-dia", { method: "POST", data }),
+    onSuccess: (r: any) => {
+      invalidate();
+      qc.invalidateQueries({ predicate: (q) => String(q.queryKey[0] || "").startsWith("/api/transactions") });
+      setDiaOpen(false);
+      setSel(new Set());
+      const extra = r?.extra_parcelas ? ` (+${r.extra_parcelas} parcela(s) da mesma compra)` : "";
+      toast({
+        title: `Dia alterado em ${r?.alterados ?? 0} lançamento(s)${extra}`,
+        description: r?.ignorados_pagos
+          ? `${r.ignorados_pagos} em fatura paga foram ignorados.`
+          : "Faturas recalculadas pelo novo dia.",
+      });
     },
     onError: (e: any) => toast({ title: "Erro", description: e?.message || e?.error, variant: "destructive" }),
   });
@@ -628,6 +650,18 @@ export default function CartoesCreditoPage() {
                     <div className="flex gap-2">
                       <Button size="sm" variant="outline" onClick={() => setSel(new Set())}>
                         Limpar
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          const fech = cartaoSel?.dia_fechamento;
+                          setDiaValor(fech ? String(fech) : "5");
+                          setDiaTodasParcelas(true);
+                          setDiaOpen(true);
+                        }}
+                      >
+                        <CalendarDays className="h-4 w-4 mr-1" /> Alterar dia
                       </Button>
                       <Button
                         size="sm"
@@ -1030,6 +1064,70 @@ export default function CartoesCreditoPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setMoverIds(null)}>Cancelar</Button>
             <Button onClick={submitMover} disabled={moverLancamento.isPending}>Mover</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={diaOpen} onOpenChange={setDiaOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Alterar dia da transação</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              {sel.size} lançamento(s). O mês de cada um permanece; só o dia muda.
+              Compras depois do fechamento do cartão caem na fatura seguinte — por isso setembro
+              estava virando outubro. Use um dia igual ou anterior ao fechamento.
+            </p>
+            <div className="space-y-1.5">
+              <Label>Novo dia (1–31) *</Label>
+              <Input
+                type="number"
+                min={1}
+                max={31}
+                value={diaValor}
+                onChange={(e) => setDiaValor(e.target.value)}
+              />
+              {cartaoSel?.dia_fechamento != null && (
+                <p className="text-xs text-muted-foreground">
+                  Este cartão fecha no dia {cartaoSel.dia_fechamento}. Dia {cartaoSel.dia_fechamento} ainda entra nesta fatura.
+                </p>
+              )}
+            </div>
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={diaTodasParcelas}
+                onChange={(e) => setDiaTodasParcelas(e.target.checked)}
+              />
+              <span>
+                Aplicar em todas as parcelas da compra
+                <span className="block text-xs text-muted-foreground">
+                  Cada parcela mantém o próprio mês (4/7 em set, 5/7 em out…), só o dia muda.
+                </span>
+              </span>
+            </label>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDiaOpen(false)}>Cancelar</Button>
+            <Button
+              disabled={alterarDia.isPending || sel.size === 0}
+              onClick={() => {
+                const dia = Number(diaValor);
+                if (!(dia >= 1 && dia <= 31)) {
+                  toast({ title: "Informe um dia entre 1 e 31", variant: "destructive" });
+                  return;
+                }
+                alterarDia.mutate({
+                  transacao_ids: Array.from(sel),
+                  dia,
+                  todas_parcelas: diaTodasParcelas,
+                });
+              }}
+            >
+              Aplicar
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

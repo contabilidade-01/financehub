@@ -3105,17 +3105,30 @@ async function resolverEmpresa(
 // AGENT LOOP — function calling até resposta
 // ============================================
 
-// Chama o modelo de chat com FALLBACK: tenta o principal (OpenAI) e, se falhar,
-// um reserva (qualquer endpoint compatível com a API da OpenAI — ex.: Groq,
-// OpenRouter, ou outro modelo). Configurar via env:
-//   AI_FALLBACK_API_KEY, AI_FALLBACK_BASE_URL (default OpenAI), AI_MODEL_FALLBACK
-async function callChatCompletion(messages: any[], tools: any[]): Promise<any> {
+// Chama o modelo de chat.
+// - llm "openai" (padrão WhatsApp): OpenAI + fallback AI_FALLBACK_* / Groq
+// - llm "deepseek": só DeepSeek (orquestrador admin) — não mistura com OpenAI
+async function callChatCompletion(
+  messages: any[],
+  tools: any[],
+  opts?: { llm?: "openai" | "deepseek" },
+): Promise<any> {
+  const llm = opts?.llm || "openai";
+  const payload = { messages, tools, tool_choice: "auto" as const, temperature: 0.3 };
+
+  if (llm === "deepseek") {
+    const { deepseekChatCompletions } = await import("./deepseek.service");
+    return await withRetry(
+      () => deepseekChatCompletions(payload),
+      { provider: "deepseek-orquestrador" },
+    );
+  }
+
   const primaryKey = process.env.OPENAI_API_KEY;
   const primaryModel = process.env.AI_MODEL || "gpt-4o-mini";
 
   try {
     if (!primaryKey) throw new Error("OPENAI_API_KEY não configurada");
-    const payload = { messages, tools, tool_choice: "auto", temperature: 0.3 };
     return await withRetry(
       () => axios.post(
         "https://api.openai.com/v1/chat/completions",
@@ -3126,7 +3139,7 @@ async function callChatCompletion(messages: any[], tools: any[]): Promise<any> {
     );
   } catch (primaryErr) {
     const fbKey = process.env.AI_FALLBACK_API_KEY || process.env.GROQ_API_KEY;
-    if (!fbKey) throw primaryErr; // sem reserva configurado
+    if (!fbKey) throw primaryErr;
     const isGroq = !process.env.AI_FALLBACK_API_KEY && !!process.env.GROQ_API_KEY;
     const fbUrl = isGroq
       ? "https://api.groq.com/openai/v1/chat/completions"
@@ -3135,7 +3148,6 @@ async function callChatCompletion(messages: any[], tools: any[]): Promise<any> {
 
     console.warn(`[AI] modelo principal falhou — usando reserva (${fbModel} em ${fbUrl})`);
 
-    // LIMPEZA PARA FALLBACK: Modelos como Llama/Groq não suportam campos extras como 'annotations' em mensagens do assistant
     const cleanMessages = messages.map(m => {
       const { annotations, ...rest } = m;
       return rest;
@@ -3152,13 +3164,24 @@ async function callChatCompletion(messages: any[], tools: any[]): Promise<any> {
   }
 }
 
+export type AgentLlm = "openai" | "deepseek";
+
 export async function runAgent(
   userMessage: string,
   ctx: ToolContext,
   history: { role: string; content: string }[] = [],
+  opts?: { llm?: AgentLlm },
 ): Promise<string> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error("OPENAI_API_KEY não configurada");
+  const llm: AgentLlm = opts?.llm || "openai";
+  if (llm === "openai" && !process.env.OPENAI_API_KEY) {
+    throw new Error("OPENAI_API_KEY não configurada");
+  }
+  if (llm === "deepseek") {
+    const { deepseekConfig } = await import("./deepseek.service");
+    if (!deepseekConfig().configured) {
+      throw new Error("DEEPSEEK_API_KEY não configurada — orquestrador indisponível");
+    }
+  }
 
   // Disponibiliza o texto atual para os handlers (ex.: casar meta pelo contexto).
   ctx.userMessage = userMessage;
@@ -3392,7 +3415,7 @@ ${ctx.categories.map(c => `- ${c.nome} (${c.tipo})`).join("\n")}`;
   for (let i = 0; i < maxIterations; i++) {
     let response;
     try {
-      response = await callChatCompletion(messages, tools);
+      response = await callChatCompletion(messages, tools, { llm });
     } catch (chatErr: any) {
       console.error(`[AI Agent] Erro em callChatCompletion na iteração ${i}:`, chatErr?.message);
       if (ultimoResultadoTool) {

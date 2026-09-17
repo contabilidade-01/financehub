@@ -1,8 +1,8 @@
 /**
- * Parser de parcela no texto do lançamento (sem banco).
+ * Parser de parcela no texto do lançamento + regra de dia/competência (sem banco).
  */
 import { basesParcelasIguais, parseParcelaNaDescricao, rotuloParcela } from "../shared/parcela-descricao";
-import { competenciaMaisMeses } from "../server/services/fatura-core";
+import { comDiaNoMes, competenciaDaCompra, competenciaMaisMeses } from "../server/services/fatura-core";
 
 let falhas = 0;
 const ok = (n: string) => console.log("ok  ", n);
@@ -42,6 +42,20 @@ const fail = (n: string, d: string) => { falhas++; console.error("FAIL", n, "—
   else ok("competência recua virando o ano");
   if (competenciaMaisMeses("2026-09", 3) !== "2026-12") fail("comp positiva", competenciaMaisMeses("2026-09", 3));
   else ok("competência avança meses");
+}
+
+{
+  if (comDiaNoMes("2026-09-28", 5) !== "2026-09-05") fail("comDiaNoMes set", comDiaNoMes("2026-09-28", 5));
+  else ok("troca só o dia, mantém mês");
+  if (comDiaNoMes("2026-02-10", 31) !== "2026-02-28") fail("fev 31", comDiaNoMes("2026-02-10", 31));
+  else ok("dia 31 em fevereiro vira último dia do mês");
+  // Fecha dia 10: compra dia 28 cai na fatura seguinte; dia 5 fica na do mês.
+  const afrente = competenciaDaCompra("2026-09-28", 10, 17).competencia;
+  const certa = competenciaDaCompra("2026-09-05", 10, 17).competencia;
+  if (afrente !== "2026-10") fail("28 depois do fechamento", afrente);
+  else ok("dia 28 com fecha 10 → competência outubro");
+  if (certa !== "2026-09") fail("5 antes do fechamento", certa);
+  else ok("dia 5 com fecha 10 → competência setembro");
 }
 
 console.log(falhas ? `\n${falhas} falha(s)` : "\nParcela na descrição: OK");
