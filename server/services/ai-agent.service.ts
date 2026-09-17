@@ -260,7 +260,7 @@ function buildTools(ctx?: ToolContext) {
       type: "function" as const,
       function: {
         name: "insere_transacao",
-        description: "Insere uma nova transação (receita ou despesa). OBRIGATÓRIO informar forma_pagamento (Pix, boleto, dinheiro, nome do cartão…). Se o usuário não disse como pagou, NÃO chame esta tool — pergunte antes.",
+        description: "Insere uma nova transação (receita ou despesa). forma_pagamento é OPCIONAL: se o usuário NÃO disse como pagou (ou disse 'dinheiro', 'caixinha', 'à vista', 'em espécie'), registre na CAIXINHA (dinheiro) — não precisa perguntar. Só use conta/cartão quando o usuário citar (ex.: 'no cartão Inter', 'pix da conta Nubank'). NUNCA invente nome de cartão/banco que o usuário não disse.",
         parameters: {
           type: "object",
           properties: {
@@ -269,9 +269,9 @@ function buildTools(ctx?: ToolContext) {
             tipo: { type: "string", enum: ["Receita", "Despesa"], description: "Tipo da transação" },
             data_transacao: { type: "string", description: "Data no formato YYYY-MM-DD" },
             categoria: { type: "string", description: "Nome da categoria (ex: Alimentação, Transporte)" },
-            forma_pagamento: { type: "string", description: "Como pagou/recebeu: 'Pix', 'Boleto', 'Dinheiro', nome da conta ou do cartão. Obrigatório. NUNCA invente nome de cartão/banco que o usuário não disse." },
+            forma_pagamento: { type: "string", description: "OPCIONAL. Como pagou/recebeu: omita ou use 'Dinheiro'/'Caixinha' para a caixinha; ou 'Pix', 'Boleto', nome da conta, ou nome do cartão. NUNCA invente nome de cartão/banco." },
           },
-          required: ["descricao", "valor", "tipo", "data_transacao", "categoria", "forma_pagamento"],
+          required: ["descricao", "valor", "tipo", "data_transacao", "categoria"],
         },
       },
     },
@@ -1272,25 +1272,13 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           ? "Receita"
           : "Despesa";
 
-        // Exige forma de pagamento — não inventa PIX nem deixa em branco.
+        // forma_pagamento é OPCIONAL. Sem forma (ou "dinheiro/caixinha/à vista/espécie")
+        // => CAIXINHA (dinheiro): o usuário novo consegue lançar de cara, só para saber
+        // para onde o dinheiro vai. Conta/cartão só quando o usuário citar.
         const formaInformada = String(args.forma_pagamento || "").trim();
-        if (!formaInformada) {
-          const cartoes = await getCartoesComSaldo(ctx.userId, ctx.walletId).catch(() => []);
-          const nomesCartoes = (cartoes as any[]).map((c) => c.cartao_nome || c.nome).filter(Boolean);
-          const sugestoes = [
-            "Pix", "Boleto", "Dinheiro", "Débito",
-            ...nomesCartoes.slice(0, 5),
-          ];
-          return JSON.stringify({
-            precisa_forma: true,
-            error: "Forma de pagamento não informada.",
-            mensagem: "Pergunte ao usuário como pagou/recebeu antes de registrar. Não invente Pix.",
-            sugestoes,
-            exemplo: nomesCartoes.length
-              ? `Foi no Pix, boleto, dinheiro ou no cartão (${nomesCartoes.join(", ")})?`
-              : "Foi no Pix, boleto, dinheiro ou em qual cartão?",
-          });
-        }
+        const ehCaixinha =
+          !formaInformada ||
+          /^(dinheiro|caixinha|em dinheiro|à vista|a vista|esp[ée]cie|em esp[ée]cie|em m[ãa]os|cash)$/i.test(formaInformada);
 
         // Resolver categoria pelo nome (case-insensitive), preferindo o tipo.
         const nomeBusca = (args.categoria || "").toLowerCase();
@@ -1352,11 +1340,12 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         let formaPagId: number | undefined;
         let formaPagNome: string | undefined;
         let cartaoIncompleto: any = undefined;
-        if (args.forma_pagamento) {
-          const fp = await resolveOuCriaFormaPagamento(ctx.userId, args.forma_pagamento);
+        if (!ehCaixinha && formaInformada) {
+          const fp = await resolveOuCriaFormaPagamento(ctx.userId, formaInformada);
           if (fp.id) { formaPagId = fp.id; formaPagNome = fp.nome; }
           if (fp.incompleto) cartaoIncompleto = { nome: fp.nome, faltando: fp.faltando };
         }
+        if (ehCaixinha) formaPagNome = "Caixinha";
 
         const today = new Date().toISOString().slice(0, 10);
         const txData: any = {
