@@ -1,41 +1,21 @@
-import { Pool } from 'pg';
-import 'dotenv/config';
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
-
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const db_ts_1 = require("./server/db.ts");
+const drizzle_orm_1 = require("drizzle-orm");
+const schema_ts_1 = require("./shared/schema.ts");
 async function run() {
-  try {
-    const client = await pool.connect();
-
-    // Buscar carteira do usuário 5
-    const walletRes = await client.query('SELECT * FROM carteiras WHERE usuario_id = 5');
-    console.log('Carteiras do usuário 5:', walletRes.rows);
-
-    if (walletRes.rows.length > 0) {
-      const walletId = walletRes.rows[0].id;
-      const txRes = await client.query('SELECT * FROM transacoes WHERE carteira_id = $1 ORDER BY data_transacao DESC', [walletId]);
-      console.log(`Total de transações para carteira ${walletId}:`, txRes.rows.length);
-      console.log('Transações:', JSON.stringify(txRes.rows, null, 2));
-
-      // Calcular soma real
-      let totalReceita = 0;
-      let totalDespesa = 0;
-      for (const t of txRes.rows) {
-        const val = parseFloat(t.valor) || 0;
-        if (t.tipo === 'Receita') totalReceita += val;
-        if (t.tipo === 'Despesa') totalDespesa += val;
-      }
-      console.log(`Soma Real — Receitas: R$ ${totalReceita}, Despesas: R$ ${totalDespesa}, Saldo: R$ ${totalReceita - totalDespesa}`);
+    try {
+        const wallet = await db_ts_1.db.select().from(schema_ts_1.wallets).where((0, drizzle_orm_1.eq)(schema_ts_1.wallets.usuario_id, 5)).limit(1);
+        console.log('Carteira do usuário 5:', wallet);
+        if (wallet.length > 0) {
+            const txs = await db_ts_1.db.select().from(schema_ts_1.transactions).where((0, drizzle_orm_1.eq)(schema_ts_1.transactions.carteira_id, wallet[0].id));
+            console.log('Total de transações:', txs.length);
+            console.log('Transações:', JSON.stringify(txs, null, 2));
+        }
     }
-
-    client.release();
-  } catch (err) {
-    console.error('Erro ao consultar banco:', err);
-  } finally {
-    await pool.end();
-  }
+    catch (error) {
+        console.error('Erro:', error);
+    }
+    process.exit(0);
 }
-
 run();

@@ -1,0 +1,1169 @@
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+var __rest = (this && this.__rest) || function (s, e) {
+    var t = {};
+    for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
+        t[p] = s[p];
+    if (s != null && typeof Object.getOwnPropertySymbols === "function")
+        for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) {
+            if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i]))
+                t[p[i]] = s[p[i]];
+        }
+    return t;
+};
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.registerRoutes = registerRoutes;
+const http_1 = require("http");
+const storage_1 = require("./storage");
+const auth_middleware_1 = require("./middleware/auth.middleware");
+const combinedAuth_middleware_1 = require("./middleware/combinedAuth.middleware");
+const security_middleware_1 = require("./middleware/security.middleware");
+const passwordResetController = __importStar(require("./controllers/password-reset.controller"));
+const adminAuth_middleware_1 = require("./middleware/adminAuth.middleware");
+const localization_middleware_1 = require("./middleware/localization.middleware");
+const swagger_1 = require("./swagger");
+const websocket_1 = require("./websocket");
+const waha_webhook_controller_1 = require("./controllers/waha-webhook.controller");
+const waha_session_webhooks_controller_1 = require("./controllers/waha-session-webhooks.controller");
+const localizationController = __importStar(require("./controllers/localization.controller"));
+const multer_1 = __importDefault(require("multer"));
+const path_1 = __importDefault(require("path"));
+const fs_1 = __importDefault(require("fs"));
+// Garante que o diretório public/ existe
+const publicDir = path_1.default.resolve(process.cwd(), 'public');
+if (!fs_1.default.existsSync(publicDir)) {
+    fs_1.default.mkdirSync(publicDir, { recursive: true });
+}
+// Configuração do multer para upload do logo
+const upload = (0, multer_1.default)({
+    storage: multer_1.default.diskStorage({
+        destination: (req, file, cb) => {
+            // Em produção, os logos vão para dist/public, em desenvolvimento para public/
+            const isProduction = process.env.NODE_ENV === 'production';
+            const publicPath = isProduction ? 'dist/public' : 'public';
+            const destination = path_1.default.resolve(process.cwd(), publicPath);
+            // Garantir que o diretório existe
+            if (!fs_1.default.existsSync(destination)) {
+                fs_1.default.mkdirSync(destination, { recursive: true, mode: 0o755 });
+            }
+            cb(null, destination);
+        },
+        filename: (req, file, cb) => {
+            // Salva como logo-light ou logo-dark conforme o campo
+            if (file.fieldname === 'logo_light') {
+                cb(null, file.mimetype === 'image/svg+xml' ? 'logo-light.svg' : 'logo-light.png');
+            }
+            else if (file.fieldname === 'logo_dark') {
+                cb(null, file.mimetype === 'image/svg+xml' ? 'logo-dark.svg' : 'logo-dark.png');
+            }
+            else {
+                cb(null, file.originalname);
+            }
+        }
+    }),
+    limits: { fileSize: 1024 * 1024 }, // 1MB
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype === 'image/png' || file.mimetype === 'image/svg+xml') {
+            cb(null, true);
+        }
+        else {
+            cb(new Error('Apenas PNG ou SVG são permitidos'));
+        }
+    }
+});
+// Controllers
+const userController = __importStar(require("./controllers/user.controller"));
+const transactionController = __importStar(require("./controllers/transaction.controller"));
+const categoryController = __importStar(require("./controllers/category.controller"));
+const walletController = __importStar(require("./controllers/wallet.controller"));
+const apiTokenController = __importStar(require("./controllers/apiToken.controller"));
+const apiGuideController = __importStar(require("./controllers/apiGuide.controller"));
+const reminderController = __importStar(require("./controllers/reminder.controller"));
+const adminController = __importStar(require("./controllers/admin.controller"));
+const chartController = __importStar(require("./controllers/chart-svg.controller"));
+const chartBarController = __importStar(require("./controllers/chart.controller"));
+const reportController = __importStar(require("./controllers/report-image.controller"));
+const paymentMethodController = __importStar(require("./controllers/payment-method.controller"));
+const paymentSettingsController = __importStar(require("./controllers/payment-settings.controller"));
+const analytics_controller_1 = require("./controllers/analytics.controller");
+const subscription_controller_1 = require("./controllers/subscription.controller");
+const databaseController = __importStar(require("./controllers/database.controller"));
+const backupController = __importStar(require("./controllers/backup.controller"));
+const setupController = __importStar(require("./controllers/setup.controller"));
+const welcomeMessagesController = __importStar(require("./controllers/welcome-messages.controller"));
+const wahaConfigController = __importStar(require("./controllers/waha-config.controller"));
+const notificationController = __importStar(require("./controllers/notification.controller"));
+const themes_1 = __importDefault(require("./routes/themes"));
+const systemSettingsController = __importStar(require("./controllers/system-settings.controller"));
+const maintenance_controller_1 = require("./controllers/maintenance.controller");
+// Asaas Payment Integration
+const subscriptionPlanController = __importStar(require("./controllers/subscription-plan.controller"));
+const billingController = __importStar(require("./controllers/billing.controller"));
+const asaasWebhookController = __importStar(require("./controllers/asaas-webhook.controller"));
+const checkSubscription_middleware_1 = require("./middleware/checkSubscription.middleware");
+async function registerRoutes(app) {
+    // Configurar documentação Swagger
+    (0, swagger_1.setupSwagger)(app);
+    // Aplicar middleware de localização em todas as rotas
+    app.use(localization_middleware_1.localizationMiddleware);
+    // Chart Image Generation (DEVE VIR PRIMEIRO para evitar interceptação)
+    app.get("/api/charts/bar", combinedAuth_middleware_1.combinedAuth, chartController.generateBarChartSVG);
+    app.get("/api/charts/pizza", combinedAuth_middleware_1.combinedAuth, chartController.generatePieChartSVG);
+    app.get("/api/charts/bar2", combinedAuth_middleware_1.combinedAuth, chartBarController.generateBarChartImage);
+    app.get("/api/charts/report", combinedAuth_middleware_1.combinedAuth, reportController.generateWeeklyReportImage);
+    app.get("/api/charts/download/:filename", chartController.downloadChartFile);
+    // PDF Reports (DEVE VIR PRIMEIRO para evitar interceptação)
+    const pdfController = await Promise.resolve().then(() => __importStar(require("./controllers/pdf-simple.controller")));
+    app.get("/api/reports/pdf", (req, res, next) => {
+        console.log("=== ROTA PDF INTERCEPTADA ===");
+        next();
+    }, combinedAuth_middleware_1.combinedAuth, pdfController.generateSimpleReportPDF);
+    app.get("/api/reports/download/:filename", async (req, res) => {
+        const { downloadReportPDF } = await Promise.resolve().then(() => __importStar(require("./controllers/pdf.controller")));
+        downloadReportPDF(req, res);
+    });
+    // Note: Using middleware already imported at the top from adminAuth.middleware.ts
+    // Auth routes
+    app.post("/api/auth/register", security_middleware_1.authLimiter, userController.register);
+    app.post("/api/auth/login", security_middleware_1.authLimiter, userController.login);
+    app.post("/api/auth/logout", userController.logout);
+    app.post("/api/auth/forgot-password", security_middleware_1.forgotPasswordLimiter, passwordResetController.forgotPassword);
+    app.get("/api/auth/reset-token", security_middleware_1.resetPasswordLimiter, passwordResetController.checkResetToken);
+    app.post("/api/auth/reset-password", security_middleware_1.resetPasswordLimiter, passwordResetController.resetPassword);
+    // Endpoint para verificação de sessão (usado pelo WebSocket)
+    app.get("/api/auth/verify", auth_middleware_1.auth, (req, res) => {
+        try {
+            if (req.user) {
+                res.json({
+                    success: true,
+                    user: req.user,
+                    message: 'Sessão válida'
+                });
+            }
+            else {
+                res.status(401).json({
+                    success: false,
+                    error: 'Usuário não autenticado'
+                });
+            }
+        }
+        catch (error) {
+            console.error('Erro na verificação de sessão:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Erro interno do servidor'
+            });
+        }
+    });
+    app.get("/api/auth/me", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, userController.getCurrentUser);
+    // User routes
+    app.get("/api/users/profile", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, userController.getProfile);
+    app.put("/api/users/profile", auth_middleware_1.auth, adminAuth_middleware_1.checkImpersonation, userController.updateProfile);
+    app.put("/api/users/password", auth_middleware_1.auth, adminAuth_middleware_1.checkImpersonation, userController.updatePassword);
+    // Wallet routes
+    app.get("/api/wallet/current", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, walletController.getCurrentWallet);
+    app.put("/api/wallet/current", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, walletController.updateWallet);
+    // Transaction routes
+    app.get("/api/transactions", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, transactionController.getTransactions);
+    app.get("/api/transactions/recent", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, transactionController.getRecentTransactions);
+    app.post("/api/transactions", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, transactionController.createTransaction);
+    // Lixeira PF (antes de :id para não capturar "lixeira" como id)
+    app.get("/api/transactions/lixeira", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, transactionController.listarLixeiraPf);
+    app.post("/api/transactions/lixeira/restaurar", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, transactionController.restaurarLixeiraPf);
+    app.post("/api/transactions/alterar-dia", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, transactionController.alterarDiaMassa);
+    app.get("/api/transactions/:id", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, transactionController.getTransaction);
+    app.put("/api/transactions/:id", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, transactionController.updateTransaction);
+    app.patch("/api/transactions/:id", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, transactionController.updateTransaction); // Adicionar suporte a PATCH
+    app.delete("/api/transactions/:id", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, transactionController.deleteTransaction);
+    // Category routes
+    app.get("/api/categories", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, categoryController.getCategories);
+    app.post("/api/categories", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, categoryController.createCategory);
+    app.get("/api/categories/:id", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, categoryController.getCategory);
+    app.put("/api/categories/:id", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, categoryController.updateCategory);
+    app.delete("/api/categories/:id", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, categoryController.deleteCategory);
+    // Payment Method routes
+    app.get("/api/payment-methods", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, paymentMethodController.getPaymentMethods);
+    app.get("/api/payment-methods/global", paymentMethodController.getGlobalPaymentMethods);
+    app.get("/api/payment-methods/totals", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, paymentMethodController.getPaymentMethodTotals);
+    app.post("/api/payment-methods", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, paymentMethodController.createPaymentMethod);
+    app.put("/api/payment-methods/:id", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, paymentMethodController.updatePaymentMethod);
+    app.delete("/api/payment-methods/:id", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, paymentMethodController.deletePaymentMethod);
+    // Rota duplicada removida - agora está no topo
+    // Dashboard summary
+    app.get("/api/dashboard/summary", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, transactionController.getDashboardSummary);
+    // API Tokens routes
+    app.get("/api/tokens", auth_middleware_1.auth, adminAuth_middleware_1.checkImpersonation, apiTokenController.getApiTokens);
+    app.post("/api/tokens", auth_middleware_1.auth, adminAuth_middleware_1.checkImpersonation, apiTokenController.createApiToken);
+    app.get("/api/tokens/:id", auth_middleware_1.auth, adminAuth_middleware_1.checkImpersonation, apiTokenController.getApiToken);
+    app.put("/api/tokens/:id", auth_middleware_1.auth, adminAuth_middleware_1.checkImpersonation, apiTokenController.updateApiToken);
+    app.delete("/api/tokens/:id", auth_middleware_1.auth, adminAuth_middleware_1.checkImpersonation, apiTokenController.deleteApiToken);
+    app.post("/api/tokens/:id/rotate", auth_middleware_1.auth, adminAuth_middleware_1.checkImpersonation, apiTokenController.rotateApiToken);
+    // API Guide (documentação pública de uso da API)
+    app.get("/api/api-guide", apiGuideController.getApiGuide);
+    // Reminder routes
+    app.get("/api/reminders", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, reminderController.getReminders);
+    app.post("/api/reminders", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, reminderController.createReminder);
+    app.get("/api/reminders/calendar", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, reminderController.getRemindersByDateRange);
+    app.get("/api/reminders/:id", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, reminderController.getReminder);
+    app.put("/api/reminders/:id", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, reminderController.updateReminder);
+    app.patch("/api/reminders/:id", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, reminderController.updateReminder);
+    app.delete("/api/reminders/:id", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, reminderController.deleteReminder);
+    // Subscription routes (legacy - manter para compatibilidade)
+    app.post("/api/subscription/cancel", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, subscription_controller_1.SubscriptionController.cancelSubscription);
+    app.get("/api/subscription/status", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, subscription_controller_1.SubscriptionController.getSubscriptionStatus);
+    // ============================================
+    // ASAAS PAYMENT INTEGRATION ROUTES
+    // ============================================
+    // Subscription Plans (Public - listar planos ativos)
+    app.get("/api/subscription-plans", subscriptionPlanController.getActivePlans);
+    app.get("/api/subscription-plans/:id", subscriptionPlanController.getPlanById);
+    // Subscription Plans (Admin - CRUD completo)
+    app.get("/api/admin/subscription-plans", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, subscriptionPlanController.getAllPlans);
+    app.post("/api/admin/subscription-plans", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, subscriptionPlanController.createPlan);
+    app.put("/api/admin/subscription-plans/:id", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, subscriptionPlanController.updatePlan);
+    app.delete("/api/admin/subscription-plans/:id", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, subscriptionPlanController.deletePlan);
+    // Admin Billing Dashboard Routes
+    app.get("/api/admin/billing/metrics", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, billingController.getBillingMetrics);
+    app.get("/api/admin/subscriptions", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, billingController.getAllSubscriptions);
+    // Admin Payment Search & Management Routes
+    app.get("/api/admin/payments/search", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, billingController.searchPayments);
+    app.get("/api/admin/payments/:id", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, billingController.getPaymentDetails);
+    app.post("/api/admin/payments/:id/retry", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, billingController.retryPayment);
+    // Billing & Checkout (User routes)
+    // Rota pública para obter ambiente do Asaas (sandbox ou production)
+    app.get("/api/billing/environment", billingController.getAsaasEnvironment);
+    // Rota pública para validar token de checkout externo
+    app.get("/api/billing/checkout/validate", billingController.validateExternalCheckoutToken);
+    app.get("/api/billing/checkout/validate/:token", billingController.validateExternalCheckoutToken);
+    // Checkout com suporte tanto para usuários autenticados quanto para checkout externo (com token)
+    app.post("/api/billing/checkout", (req, res, next) => {
+        // Se houver checkoutToken no body, permitir acesso sem autenticação
+        if (req.body.checkoutToken) {
+            return next();
+        }
+        // Caso contrário, exigir autenticação normal
+        (0, combinedAuth_middleware_1.combinedAuth)(req, res, next);
+    }, (req, res, next) => {
+        // Pular middleware de impersonation check se for checkout externo
+        if (req.body.checkoutToken) {
+            return next();
+        }
+        (0, adminAuth_middleware_1.checkImpersonation)(req, res, next);
+    }, (req, res, next) => {
+        // Pular middleware de subscription check se for checkout externo
+        if (req.body.checkoutToken) {
+            return next();
+        }
+        (0, checkSubscription_middleware_1.requireNoSubscription)(req, res, next);
+    }, billingController.checkout);
+    app.post("/api/billing/renew-link", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, billingController.createRenewLink);
+    app.get("/api/billing/subscription", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, billingController.getCurrentSubscription);
+    app.get("/api/billing/invoices", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, billingController.getInvoices);
+    app.get("/api/billing/invoice/:id", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, billingController.getInvoiceById);
+    app.get("/api/billing/payment-history", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, billingController.getPaymentHistory);
+    app.post("/api/billing/cancel", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, billingController.cancelSubscription);
+    app.put("/api/billing/update-card", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, billingController.updateCreditCard);
+    // Asaas Webhooks (Public - sem auth, mas validado internamente)
+    app.post("/api/webhooks/asaas", asaasWebhookController.handleAsaasWebhook);
+    // Asaas Webhooks Admin (Gerenciar webhooks recebidos)
+    app.get("/api/admin/webhooks", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, asaasWebhookController.listWebhooks);
+    app.post("/api/admin/webhooks/:id/retry", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, asaasWebhookController.retryWebhook);
+    // ============================================
+    // Notification routes - require super admin access
+    app.post("/api/notifications/send", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, notificationController.sendNotification);
+    app.post("/api/notifications/broadcast", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, notificationController.broadcastNotificationToSuperAdmins);
+    app.post("/api/notifications/test", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, notificationController.sendTestNotification);
+    // WAHA Webhook routes - sem autenticação para receber eventos externos
+    app.post("/api/waha/webhook/:hash", waha_webhook_controller_1.WahaWebhookController.receiveWahaEvent); // Com hash de segurança
+    app.post("/api/waha/webhook", waha_webhook_controller_1.WahaWebhookController.receiveWahaEvent); // Fallback sem hash
+    app.get("/api/waha/webhook/stats", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, waha_webhook_controller_1.WahaWebhookController.getWebhookStats);
+    // WAHA Session Webhooks routes - gerenciamento de webhooks por sessão
+    app.get("/api/admin/waha-sessions/:sessionName/webhook", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, waha_session_webhooks_controller_1.WahaSessionWebhooksController.getSessionWebhook);
+    app.post("/api/admin/waha-sessions/:sessionName/webhook/regenerate", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, waha_session_webhooks_controller_1.WahaSessionWebhooksController.regenerateSessionWebhook);
+    app.patch("/api/admin/waha-sessions/:sessionName/webhook/toggle", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, waha_session_webhooks_controller_1.WahaSessionWebhooksController.toggleSessionWebhook);
+    app.get("/api/admin/waha-session-webhooks", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, waha_session_webhooks_controller_1.WahaSessionWebhooksController.listSessionWebhooks);
+    // Admin routes - require super admin access
+    app.get("/api/admin/stats", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, adminController.getAdminStats);
+    app.get("/api/admin/recent-users", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, adminController.RecentUsersController.getRecentUsers);
+    app.get("/api/admin/analytics", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, analytics_controller_1.AnalyticsController.getAnalyticsData);
+    app.get("/api/admin/users", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, adminController.getAdminUsers);
+    app.post("/api/admin/users", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, adminController.createUser);
+    app.put("/api/admin/users/:id", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, adminController.updateUser);
+    app.delete("/api/admin/users/:id", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, adminController.deleteUser);
+    // Assinaturas — ciclo (mensal/trimestral/anual) + vencimento
+    app.get("/api/admin/assinaturas", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, adminController.getAssinaturas);
+    app.post("/api/admin/assinaturas/:id/definir", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, adminController.definirAssinatura);
+    app.post("/api/admin/assinaturas/:id/renovar", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, adminController.renovarAssinatura);
+    app.post("/api/admin/assinaturas/:id/gerar-link", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, adminController.gerarLinkCobranca);
+    // Exportação CSV de relatórios administrativos
+    app.get("/api/admin/export/users-csv", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, adminController.exportUsersCsv);
+    app.get("/api/admin/export/transactions-csv", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, adminController.exportTransactionsCsv);
+    app.post("/api/admin/impersonate", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, adminController.impersonateUser);
+    app.post("/api/admin/stop-impersonation", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminController.stopImpersonation);
+    app.get("/api/admin/impersonation-status", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminController.getImpersonationStatus);
+    app.patch("/api/admin/users/:id/status", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, adminController.updateUserStatus);
+    app.post("/api/admin/users/:id/reset", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, adminController.resetUserData);
+    app.post("/api/admin/reset-globals", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.requireSuperAdmin, adminController.resetGlobals);
+    app.get("/api/admin/audit-log", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, adminController.getAuditLog);
+    // Database management routes (super admin only)
+    app.get("/api/admin/database/tables", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, databaseController.getAllTables);
+    app.get("/api/admin/database/ddl", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, databaseController.generateDatabaseDDL);
+    // Backups do banco (super admin) — 3x/dia automatico + download manual
+    app.get("/api/admin/backups", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, backupController.listar);
+    app.post("/api/admin/backups", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, backupController.gerarAgora);
+    app.get("/api/admin/backups/:id/download", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, backupController.baixar);
+    // Setup routes (public access when SETUP=true)
+    app.get("/api/setup/status", setupController.getSetupStatus);
+    app.post("/api/setup/test-connection", setupController.testDatabaseConnection);
+    app.post("/api/setup/save-db-url", setupController.saveDbUrl);
+    app.post("/api/setup/create-admin", setupController.createAdmin);
+    app.post("/api/setup/run", setupController.runSetup);
+    app.post("/api/setup/finish", setupController.finishSetup);
+    // Endpoint para upload dos logos (apenas superadmin)
+    app.post('/api/admin/logo', combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.requireSuperAdmin, upload.fields([
+        { name: 'logo_light', maxCount: 1 },
+        { name: 'logo_dark', maxCount: 1 }
+    ]), async (req, res) => {
+        if (!req.files || (Object.keys(req.files).length === 0)) {
+            return res.status(400).json({ error: 'Nenhum arquivo enviado' });
+        }
+        // Apenas upload, não salva nada no banco
+        res.json({ success: true });
+    });
+    // Endpoint público para servir o logo customizado conforme o tema
+    app.get('/api/logo', (req, res) => {
+        const theme = req.query.theme === 'dark' ? 'dark' : 'light';
+        // Em produção, os logos estão em dist/public, em desenvolvimento em public/
+        const isProduction = process.env.NODE_ENV === 'production';
+        const publicPath = isProduction ? 'dist/public' : 'public';
+        // Tenta servir SVG primeiro, depois PNG
+        const svgPath = path_1.default.resolve(process.cwd(), `${publicPath}/logo-${theme}.svg`);
+        const pngPath = path_1.default.resolve(process.cwd(), `${publicPath}/logo-${theme}.png`);
+        if (fs_1.default.existsSync(svgPath)) {
+            res.sendFile(svgPath);
+        }
+        else if (fs_1.default.existsSync(pngPath)) {
+            res.sendFile(pngPath);
+        }
+        else {
+            res.status(404).json({ error: 'Logo não encontrado' });
+        }
+    });
+    // Endpoint para deletar o logo customizado (apenas superadmin)
+    app.delete('/api/admin/logo', combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.requireSuperAdmin, async (req, res) => {
+        const theme = req.query.theme === 'dark' ? 'dark' : 'light';
+        const exts = ['png', 'svg'];
+        let removed = false;
+        // Em produção, os logos estão em dist/public, em desenvolvimento em public/
+        const isProduction = process.env.NODE_ENV === 'production';
+        const publicPath = isProduction ? 'dist/public' : 'public';
+        for (const ext of exts) {
+            const filePath = path_1.default.resolve(process.cwd(), `${publicPath}/logo-${theme}.${ext}`);
+            if (fs_1.default.existsSync(filePath)) {
+                try {
+                    fs_1.default.unlinkSync(filePath);
+                    removed = true;
+                }
+                catch (err) {
+                    console.error('Erro ao remover arquivo do logo:', err);
+                }
+            }
+        }
+        // Não remove nada do banco
+        res.json({ success: true, removed });
+    });
+    // Welcome Messages endpoints (apenas superadmin)
+    // LGPD — consentimento
+    app.get("/api/lgpd/status", combinedAuth_middleware_1.combinedAuth, async (req, res) => {
+        try {
+            const aceito = await (0, storage_1.jaConsentiuLgpd)(req.user.id, storage_1.LGPD_VERSAO_ATUAL);
+            res.json({ aceito, versao: storage_1.LGPD_VERSAO_ATUAL });
+        }
+        catch (e) {
+            res.status(500).json({ error: e === null || e === void 0 ? void 0 : e.message });
+        }
+    });
+    app.post("/api/lgpd/aceitar", combinedAuth_middleware_1.combinedAuth, async (req, res) => {
+        var _a, _b;
+        try {
+            const ip = (((_a = req.headers["x-forwarded-for"]) === null || _a === void 0 ? void 0 : _a.toString().split(",")[0]) || req.ip || "").slice(0, 60);
+            const ua = (_b = req.headers["user-agent"]) === null || _b === void 0 ? void 0 : _b.toString();
+            await (0, storage_1.registrarConsentimentoLgpd)(req.user.id, storage_1.LGPD_VERSAO_ATUAL, ip, ua);
+            res.json({ ok: true, versao: storage_1.LGPD_VERSAO_ATUAL });
+        }
+        catch (e) {
+            res.status(500).json({ error: e === null || e === void 0 ? void 0 : e.message });
+        }
+    });
+    // LGPD — portabilidade: o titular baixa numa planilha tudo que é dele.
+    app.get("/api/lgpd/exportar", combinedAuth_middleware_1.combinedAuth, async (req, res) => {
+        try {
+            const { exportarDadosUsuario } = await Promise.resolve().then(() => __importStar(require("./services/lgpd-dados.service")));
+            const { buffer, nome } = await exportarDadosUsuario(req.user.id);
+            res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+            res.setHeader("Content-Disposition", `attachment; filename="${nome}"`);
+            res.send(buffer);
+        }
+        catch (e) {
+            console.error("[LGPD] exportar:", e === null || e === void 0 ? void 0 : e.message);
+            res.status(500).json({ error: "Não foi possível gerar a exportação." });
+        }
+    });
+    // LGPD — eliminação: pedido, situação e desistência. Nada é apagado na hora;
+    // o expurgo só acontece depois da carência (job diário no boot).
+    app.get("/api/lgpd/exclusao", combinedAuth_middleware_1.combinedAuth, async (req, res) => {
+        try {
+            const { statusExclusao } = await Promise.resolve().then(() => __importStar(require("./services/lgpd-dados.service")));
+            res.json(await statusExclusao(req.user.id));
+        }
+        catch (e) {
+            res.status(500).json({ error: e === null || e === void 0 ? void 0 : e.message });
+        }
+    });
+    app.post("/api/lgpd/exclusao", combinedAuth_middleware_1.combinedAuth, async (req, res) => {
+        var _a, _b;
+        try {
+            const { solicitarExclusao, DIAS_CARENCIA_EXCLUSAO } = await Promise.resolve().then(() => __importStar(require("./services/lgpd-dados.service")));
+            // Confirmação explícita por palavra: depois da carência não tem volta.
+            if (String(((_a = req.body) === null || _a === void 0 ? void 0 : _a.confirmacao) || "").trim().toUpperCase() !== "EXCLUIR") {
+                return res.status(400).json({ error: "Para confirmar, envie a palavra EXCLUIR." });
+            }
+            const status = await solicitarExclusao(req.user.id, (_b = req.body) === null || _b === void 0 ? void 0 : _b.motivo);
+            res.json(Object.assign(Object.assign({}, status), { carencia_dias: DIAS_CARENCIA_EXCLUSAO }));
+        }
+        catch (e) {
+            res.status(500).json({ error: e === null || e === void 0 ? void 0 : e.message });
+        }
+    });
+    app.delete("/api/lgpd/exclusao", combinedAuth_middleware_1.combinedAuth, async (req, res) => {
+        try {
+            const { cancelarExclusao } = await Promise.resolve().then(() => __importStar(require("./services/lgpd-dados.service")));
+            res.json(await cancelarExclusao(req.user.id));
+        }
+        catch (e) {
+            res.status(500).json({ error: e === null || e === void 0 ? void 0 : e.message });
+        }
+    });
+    app.get("/api/admin/lgpd/consentimentos", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.requireSuperAdmin, async (req, res) => {
+        try {
+            const limit = req.query.limit ? Number(req.query.limit) : 200;
+            const offset = req.query.offset ? Number(req.query.offset) : 0;
+            res.json(await (0, storage_1.listarConsentimentosLgpd)({ limit, offset }));
+        }
+        catch (e) {
+            res.status(500).json({ error: e === null || e === void 0 ? void 0 : e.message });
+        }
+    });
+    // Log de ingestão por IA (diagnóstico de falhas: sem_credito × transitorio × bug)
+    app.get("/api/admin/ingestion-events", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.requireSuperAdmin, async (req, res) => {
+        try {
+            const resultado = req.query.resultado;
+            const limit = req.query.limit ? Number(req.query.limit) : 100;
+            const offset = req.query.offset ? Number(req.query.offset) : 0;
+            const eventos = await (0, storage_1.listIngestionEvents)({ resultado, limit, offset });
+            res.json(eventos);
+        }
+        catch (e) {
+            res.status(500).json({ error: "Erro ao listar eventos de ingestão", detail: e === null || e === void 0 ? void 0 : e.message });
+        }
+    });
+    app.get("/api/admin/welcome-messages", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.requireSuperAdmin, welcomeMessagesController.getWelcomeMessages);
+    app.get("/api/admin/welcome-messages/:type", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.requireSuperAdmin, welcomeMessagesController.getWelcomeMessageByType);
+    app.put("/api/admin/welcome-messages/:type", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.requireSuperAdmin, welcomeMessagesController.updateWelcomeMessage);
+    app.post("/api/admin/welcome-messages", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.requireSuperAdmin, welcomeMessagesController.createWelcomeMessage);
+    // Endpoint para buscar mensagem processada para um usuário específico (com tags substituídas)
+    app.get("/api/welcome-messages/:type/user/:userId", welcomeMessagesController.getProcessedWelcomeMessage);
+    // Maintenance Routes (Super Admin only)
+    app.get("/api/maintenance/categories", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.requireSuperAdmin, maintenance_controller_1.MaintenanceController.getAllCategories);
+    app.put("/api/maintenance/categories/:id", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.requireSuperAdmin, maintenance_controller_1.MaintenanceController.updateCategoryColor);
+    app.post("/api/maintenance/fix-category-colors", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.requireSuperAdmin, maintenance_controller_1.MaintenanceController.fixCategoryColors);
+    /**
+     * @swagger
+     * /api/system/settings:
+     *   get:
+     *     summary: Buscar todas as configurações do sistema
+     *     description: Retorna todas as configurações personalizáveis do sistema (nome, slogan, email, etc). Rota pública.
+     *     tags: [System Settings]
+     *     responses:
+     *       200:
+     *         description: Configurações recuperadas com sucesso
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 success:
+     *                   type: boolean
+     *                 data:
+     *                   type: object
+     *                   properties:
+     *                     system_name:
+     *                       type: object
+     *                       properties:
+     *                         value:
+     *                           type: string
+     *                         metadata:
+     *                           type: object
+     *       500:
+     *         description: Erro ao buscar configurações
+     */
+    app.get("/api/system/settings", systemSettingsController.getSystemSettings);
+    /**
+     * @swagger
+     * /api/admin/system/settings:
+     *   put:
+     *     summary: Atualizar configurações do sistema
+     *     description: Permite que o Super Admin atualize configurações globais do sistema
+     *     tags: [System Settings]
+     *     security:
+     *       - cookieAuth: []
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             properties:
+     *               system_name:
+     *                 type: string
+     *                 example: "Meu Sistema Financeiro"
+     *               system_name_short:
+     *                 type: string
+     *                 example: "meusistema"
+     *               system_tagline:
+     *                 type: string
+     *                 example: "Gestão financeira simplificada"
+     *               support_email:
+     *                 type: string
+     *                 format: email
+     *                 example: "suporte@meusistema.com"
+     *               system_url:
+     *                 type: string
+     *                 format: uri
+     *                 example: "https://meusistema.com"
+     *     responses:
+     *       200:
+     *         description: Configurações atualizadas com sucesso
+     *       400:
+     *         description: Dados inválidos
+     *       401:
+     *         description: Não autenticado
+     *       403:
+     *         description: Apenas Super Admin pode atualizar
+     *       500:
+     *         description: Erro ao atualizar configurações
+     */
+    app.put("/api/admin/system/settings", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.requireSuperAdmin, systemSettingsController.updateSystemSettings);
+    /**
+     * @swagger
+     * /api/admin/system/settings/{key}:
+     *   get:
+     *     summary: Buscar uma configuração específica
+     *     description: Retorna uma configuração do sistema por chave
+     *     tags: [System Settings]
+     *     security:
+     *       - cookieAuth: []
+     *     parameters:
+     *       - in: path
+     *         name: key
+     *         required: true
+     *         schema:
+     *           type: string
+     *         description: Chave da configuração
+     *     responses:
+     *       200:
+     *         description: Configuração encontrada
+     *       404:
+     *         description: Configuração não encontrada
+     *       500:
+     *         description: Erro ao buscar configuração
+     */
+    app.get("/api/admin/system/settings/:key", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.requireSuperAdmin, systemSettingsController.getSystemSetting);
+    // Payment Settings endpoints (apenas superadmin)
+    app.get("/api/admin/payment-settings", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.requireSuperAdmin, paymentSettingsController.getPaymentSettings);
+    app.put("/api/admin/payment-settings", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.requireSuperAdmin, paymentSettingsController.updatePaymentSettings);
+    app.post("/api/admin/payment-settings/test", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.requireSuperAdmin, paymentSettingsController.testPaymentConnection);
+    app.get("/api/admin/payment-settings/reveal", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.requireSuperAdmin, paymentSettingsController.revealPaymentSettings);
+    app.post("/api/admin/payment-settings/test-webhook", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.requireSuperAdmin, paymentSettingsController.testWebhook);
+    // WAHA Config endpoints (apenas superadmin)
+    app.get("/api/admin/waha-config", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.requireSuperAdmin, wahaConfigController.getWahaConfig);
+    app.put("/api/admin/waha-config", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.requireSuperAdmin, wahaConfigController.updateWahaConfig);
+    app.post("/api/admin/waha-config/test", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.requireSuperAdmin, wahaConfigController.testWahaConnection);
+    app.get("/api/admin/waha-sessions", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.requireSuperAdmin, wahaConfigController.getWahaSessions);
+    // WAHA Session management endpoints (apenas superadmin)
+    app.post("/api/admin/waha-sessions", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.requireSuperAdmin, wahaConfigController.createWahaSession);
+    app.put("/api/admin/waha-sessions/:sessionName", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.requireSuperAdmin, wahaConfigController.updateWahaSession);
+    app.post("/api/admin/waha-sessions/:sessionName/start", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.requireSuperAdmin, wahaConfigController.startWahaSession);
+    app.post("/api/admin/waha-sessions/:sessionName/stop", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.requireSuperAdmin, wahaConfigController.stopWahaSession);
+    app.delete("/api/admin/waha-sessions/:sessionName", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.requireSuperAdmin, wahaConfigController.deleteWahaSession);
+    // WAHA Session authentication endpoints (QR Code e pareamento por código)
+    app.get("/api/admin/waha-sessions/:sessionName/qr", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.requireSuperAdmin, wahaConfigController.getSessionQRCode);
+    app.post("/api/admin/waha-sessions/:sessionName/pairing-code", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.requireSuperAdmin, wahaConfigController.sendPairingCode);
+    app.post("/api/admin/waha-sessions/:sessionName/confirm-code", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.requireSuperAdmin, wahaConfigController.confirmPairingCode);
+    // Debug endpoint para testar todos os endpoints WAHA possíveis
+    app.get("/api/admin/waha-debug", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.requireSuperAdmin, wahaConfigController.debugWahaEndpoints);
+    // Teste específico de endpoints de QR Code
+    app.get("/api/admin/waha-test-qr", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.requireSuperAdmin, wahaConfigController.testQRCodeEndpoints);
+    // Theme routes - rotas públicas para temas ativos, demais exigem super admin
+    // Primeiro registrar as rotas públicas específicas
+    app.get("/api/themes/active/light", async (req, res) => {
+        const { default: themesRouter } = await Promise.resolve().then(() => __importStar(require("./routes/themes")));
+        // Pegar o handler específico da rota
+        const router = themesRouter;
+        // Como é complexo extrair handlers específicos, vamos duplicar a lógica aqui
+        try {
+            const result = await (await Promise.resolve().then(() => __importStar(require("./db")))).db.execute((await Promise.resolve().then(() => __importStar(require("drizzle-orm")))).sql `
+          SELECT 
+            id, 
+            name, 
+            light_config as lightConfig,
+            dark_config as darkConfig,
+            is_default as isDefault,
+            is_active_light as isActiveLight,
+            is_active_dark as isActiveDark,
+            created_at as createdAt,
+            updated_at as updatedAt
+          FROM custom_themes 
+          WHERE is_active_light = true
+          LIMIT 1
+        `);
+            if (result.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Nenhum tema ativo para light mode'
+                });
+            }
+            res.json({
+                success: true,
+                data: result[0]
+            });
+        }
+        catch (error) {
+            console.error('Erro ao buscar tema ativo para light mode:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Erro interno do servidor'
+            });
+        }
+    });
+    app.get("/api/themes/active/dark", async (req, res) => {
+        try {
+            const result = await (await Promise.resolve().then(() => __importStar(require("./db")))).db.execute((await Promise.resolve().then(() => __importStar(require("drizzle-orm")))).sql `
+          SELECT 
+            id, 
+            name, 
+            light_config as lightConfig,
+            dark_config as darkConfig,
+            is_default as isDefault,
+            is_active_light as isActiveLight,
+            is_active_dark as isActiveDark,
+            created_at as createdAt,
+            updated_at as updatedAt
+          FROM custom_themes 
+          WHERE is_active_dark = true
+          LIMIT 1
+        `);
+            if (result.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Nenhum tema ativo para dark mode'
+                });
+            }
+            res.json({
+                success: true,
+                data: result[0]
+            });
+        }
+        catch (error) {
+            console.error('Erro ao buscar tema ativo para dark mode:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Erro interno do servidor'
+            });
+        }
+    });
+    app.get("/api/themes/active/current", async (req, res) => {
+        try {
+            const result = await (await Promise.resolve().then(() => __importStar(require("./db")))).db.execute((await Promise.resolve().then(() => __importStar(require("drizzle-orm")))).sql `
+          SELECT 
+            id, 
+            name, 
+            light_config as lightConfig,
+            dark_config as darkConfig,
+            is_default as isDefault,
+            created_at as createdAt,
+            updated_at as updatedAt
+          FROM custom_themes 
+          WHERE is_default = true
+          LIMIT 1
+        `);
+            if (result.length === 0) {
+                // Retornar tema padrão hardcoded
+                const defaultTheme = {
+                    name: 'Padrão Khesef',
+                    lightConfig: {
+                        background: '0 0% 98%',
+                        foreground: '240 10% 3.9%',
+                        primary: '255 100% 70%',
+                        primaryForeground: '0 0% 98%',
+                        secondary: '157 100% 50%',
+                        secondaryForeground: '0 0% 9%',
+                        muted: '240 4.8% 95.9%',
+                        mutedForeground: '240 3.8% 46.1%',
+                        accent: '240 4.8% 95.9%',
+                        accentForeground: '240 5.9% 10%',
+                        border: '240 5.9% 90%',
+                        card: '0 0% 100%',
+                        cardForeground: '240 10% 3.9%',
+                        destructive: '0 84.2% 60.2%',
+                        destructiveForeground: '0 0% 98%',
+                    },
+                    darkConfig: {
+                        background: '240 10% 3.9%',
+                        foreground: '0 0% 98%',
+                        primary: '255 100% 70%',
+                        primaryForeground: '0 0% 98%',
+                        secondary: '157 100% 50%',
+                        secondaryForeground: '0 0% 9%',
+                        muted: '240 3.7% 15.9%',
+                        mutedForeground: '240 5% 64.9%',
+                        accent: '240 3.7% 15.9%',
+                        accentForeground: '0 0% 98%',
+                        border: '240 3.7% 15.9%',
+                        card: '240 10% 3.9%',
+                        cardForeground: '0 0% 98%',
+                        destructive: '0 62.8% 30.6%',
+                        destructiveForeground: '0 0% 98%',
+                    },
+                    isDefault: true
+                };
+                return res.json({
+                    success: true,
+                    data: defaultTheme
+                });
+            }
+            res.json({
+                success: true,
+                data: result[0]
+            });
+        }
+        catch (error) {
+            console.error('Erro ao buscar tema ativo:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Erro interno do servidor'
+            });
+        }
+    });
+    // Demais rotas de temas exigem autenticação de super admin
+    app.use("/api/themes", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.requireSuperAdmin, themes_1.default);
+    // Changelog endpoint - public access for version info  
+    app.get("/api/changelog", (req, res) => {
+        try {
+            Promise.resolve().then(() => __importStar(require('fs'))).then((fs) => {
+                const changelogData = JSON.parse(fs.readFileSync('CHANGELOG.json', 'utf8'));
+                res.json(changelogData);
+            }).catch((error) => {
+                console.error('Error reading changelog:', error);
+                res.status(500).json({ error: "Failed to read changelog" });
+            });
+        }
+        catch (error) {
+            console.error('Error reading changelog:', error);
+            res.status(500).json({ error: "Failed to read changelog" });
+        }
+    });
+    // ==========================================
+    // ROTAS DE LOCALIZAÇÃO
+    // ==========================================
+    // Rotas públicas de localização
+    app.get('/api/localization/default', localizationController.getDefaultLocale);
+    app.get('/api/localization/strings/:localeCode', localizationController.getLocalizationStrings);
+    // Rotas de administração de localização (apenas super admin)
+    app.get('/api/admin/localization', auth_middleware_1.auth, adminAuth_middleware_1.requireSuperAdmin, localizationController.getLocales);
+    app.post('/api/admin/localization', auth_middleware_1.auth, adminAuth_middleware_1.requireSuperAdmin, localizationController.createLocale);
+    app.put('/api/admin/localization/:id', auth_middleware_1.auth, adminAuth_middleware_1.requireSuperAdmin, localizationController.updateLocale);
+    app.delete('/api/admin/localization/:id', auth_middleware_1.auth, adminAuth_middleware_1.requireSuperAdmin, localizationController.deleteLocale);
+    app.get('/api/admin/localization/active', auth_middleware_1.auth, adminAuth_middleware_1.requireSuperAdmin, localizationController.getActiveLocales);
+    // Importação de strings via JSON (apenas super admin)
+    app.post('/api/admin/localization/:localeCode/import', auth_middleware_1.auth, adminAuth_middleware_1.requireSuperAdmin, localizationController.importStringsFromJson);
+    // Ativar/desativar idioma
+    app.put('/api/admin/localization/:localeCode/toggle', auth_middleware_1.auth, adminAuth_middleware_1.requireSuperAdmin, localizationController.toggleLanguageStatus);
+    // Definir idioma como padrão
+    app.put('/api/admin/localization/:localeCode/set-default', auth_middleware_1.auth, adminAuth_middleware_1.requireSuperAdmin, localizationController.setDefaultLanguage);
+    // ==========================================
+    // METAS FINANCEIRAS + CONTAS A PAGAR
+    // ==========================================
+    // Metas (caixinhas, sonhos, reservas, limites)
+    app.get("/api/metas", combinedAuth_middleware_1.combinedAuth, async (req, res) => {
+        try {
+            const { getMetasByUsuarioId } = await Promise.resolve().then(() => __importStar(require("./storage")));
+            const metas = await getMetasByUsuarioId(req.user.id);
+            res.json(metas);
+        }
+        catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+    app.post("/api/metas", combinedAuth_middleware_1.combinedAuth, async (req, res) => {
+        try {
+            const { createMeta } = await Promise.resolve().then(() => __importStar(require("./storage")));
+            const meta = await createMeta(req.user.id, req.body);
+            res.status(201).json(meta);
+        }
+        catch (err) {
+            res.status(400).json({ error: err.message });
+        }
+    });
+    // Garante que a meta existe E pertence ao usuário logado (evita IDOR).
+    const metaDoUsuario = async (metaId, userId) => {
+        if (!Number.isFinite(metaId))
+            return null;
+        const { getMetaById } = await Promise.resolve().then(() => __importStar(require("./storage")));
+        const meta = await getMetaById(metaId);
+        return meta && meta.usuario_id === userId ? meta : null;
+    };
+    // Editar meta (faltava — por isso "edição de meta" quebrava).
+    app.put("/api/metas/:id", combinedAuth_middleware_1.combinedAuth, async (req, res) => {
+        try {
+            const id = parseInt(req.params.id);
+            if (!(await metaDoUsuario(id, req.user.id)))
+                return res.status(404).json({ error: "Meta não encontrada" });
+            const { updateMeta } = await Promise.resolve().then(() => __importStar(require("./storage")));
+            // Não deixa trocar o dono nem reativar via update.
+            const _a = req.body || {}, { usuario_id } = _a, patch = __rest(_a, ["usuario_id"]);
+            const meta = await updateMeta(id, patch);
+            res.json(meta);
+        }
+        catch (err) {
+            res.status(400).json({ error: err.message });
+        }
+    });
+    app.post("/api/metas/:id/depositar", combinedAuth_middleware_1.combinedAuth, async (req, res) => {
+        var _a;
+        try {
+            const id = parseInt(req.params.id);
+            if (!(await metaDoUsuario(id, req.user.id)))
+                return res.status(404).json({ error: "Meta não encontrada" });
+            const valor = Number((_a = req.body) === null || _a === void 0 ? void 0 : _a.valor);
+            if (!Number.isFinite(valor) || valor <= 0)
+                return res.status(400).json({ error: "Valor de depósito inválido" });
+            const { depositarMeta } = await Promise.resolve().then(() => __importStar(require("./storage")));
+            const result = await depositarMeta(id, valor);
+            res.json(result);
+        }
+        catch (err) {
+            res.status(400).json({ error: err.message });
+        }
+    });
+    app.delete("/api/metas/:id", combinedAuth_middleware_1.combinedAuth, async (req, res) => {
+        try {
+            const id = parseInt(req.params.id);
+            if (!(await metaDoUsuario(id, req.user.id)))
+                return res.status(404).json({ error: "Meta não encontrada" });
+            const { deleteMeta } = await Promise.resolve().then(() => __importStar(require("./storage")));
+            await deleteMeta(id);
+            res.status(204).send();
+        }
+        catch (err) {
+            res.status(400).json({ error: err.message });
+        }
+    });
+    // Contas a pagar (lista transações pendentes com data_vencimento)
+    app.get("/api/contas-pagar", combinedAuth_middleware_1.combinedAuth, async (req, res) => {
+        try {
+            const { getContasAPagar } = await Promise.resolve().then(() => __importStar(require("./storage")));
+            const wallet = await storage_1.storage.getWalletByUserId(req.user.id);
+            if (!wallet)
+                return res.status(404).json({ error: "Carteira não encontrada" });
+            const status = req.query.status || undefined;
+            const contas = await getContasAPagar(wallet.id, status);
+            res.json(contas);
+        }
+        catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+    // Valores gastos no cartão em nome de terceiros, ainda a receber.
+    app.get("/api/reembolsos", combinedAuth_middleware_1.combinedAuth, async (req, res) => {
+        try {
+            const { getReembolsosAReceber } = await Promise.resolve().then(() => __importStar(require("./storage")));
+            const wallet = await storage_1.storage.getWalletByUserId(req.user.id);
+            if (!wallet)
+                return res.status(404).json({ error: "Carteira não encontrada" });
+            res.json(await getReembolsosAReceber(wallet.id));
+        }
+        catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+    app.put("/api/reembolsos/:id/receber", combinedAuth_middleware_1.combinedAuth, async (req, res) => {
+        try {
+            const { marcarReembolsoRecebido } = await Promise.resolve().then(() => __importStar(require("./storage")));
+            const wallet = await storage_1.storage.getWalletByUserId(req.user.id);
+            if (!wallet)
+                return res.status(404).json({ error: "Carteira não encontrada" });
+            const result = await marcarReembolsoRecebido(parseInt(req.params.id), wallet.id);
+            if (!result)
+                return res.status(404).json({ error: "Reembolso não encontrado" });
+            res.json(result);
+        }
+        catch (err) {
+            res.status(400).json({ error: err.message });
+        }
+    });
+    // Marcar transação como paga
+    app.put("/api/transactions/:id/pagar", combinedAuth_middleware_1.combinedAuth, async (req, res) => {
+        try {
+            const { marcarComoPaga, transacaoPertenceAoWallet } = await Promise.resolve().then(() => __importStar(require("./storage")));
+            const wallet = await storage_1.storage.getWalletByUserId(req.user.id);
+            if (!wallet)
+                return res.status(404).json({ error: "Carteira não encontrada" });
+            const id = parseInt(req.params.id);
+            if (!(await transacaoPertenceAoWallet(id, wallet.id))) {
+                return res.status(404).json({ error: "Transação não encontrada" });
+            }
+            const result = await marcarComoPaga(id);
+            if (!result)
+                return res.status(404).json({ error: "Transação não encontrada" });
+            res.json(result);
+        }
+        catch (err) {
+            res.status(400).json({ error: err.message });
+        }
+    });
+    app.put("/api/transactions/:id/reabrir", combinedAuth_middleware_1.combinedAuth, async (req, res) => {
+        try {
+            const { reabrirTransacao, transacaoPertenceAoWallet } = await Promise.resolve().then(() => __importStar(require("./storage")));
+            const wallet = await storage_1.storage.getWalletByUserId(req.user.id);
+            if (!wallet)
+                return res.status(404).json({ error: "Carteira não encontrada" });
+            const id = parseInt(req.params.id);
+            if (!(await transacaoPertenceAoWallet(id, wallet.id))) {
+                return res.status(404).json({ error: "Transação não encontrada" });
+            }
+            const result = await reabrirTransacao(id);
+            if (!result)
+                return res.status(404).json({ error: "Transação não encontrada" });
+            res.json(result);
+        }
+        catch (err) {
+            res.status(400).json({ error: err.message });
+        }
+    });
+    // Contas, cartões e faturas PF
+    const contasCartoesCtrl = await Promise.resolve().then(() => __importStar(require("./controllers/contas-cartoes.controller")));
+    app.get("/api/contas", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, contasCartoesCtrl.listarContas);
+    app.post("/api/contas", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, contasCartoesCtrl.criarConta);
+    app.get("/api/contas/:id/lancamentos", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, contasCartoesCtrl.lancamentosConta);
+    app.put("/api/contas/:id", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, contasCartoesCtrl.atualizarConta);
+    app.delete("/api/contas/:id", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, contasCartoesCtrl.excluirConta);
+    app.get("/api/cartoes", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, contasCartoesCtrl.listarCartoes);
+    // Resumo compacto de faturas (para a IA do WhatsApp responder saldo de fatura). Antes de /:id.
+    app.get("/api/cartoes/resumo", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, contasCartoesCtrl.resumoFaturas);
+    app.post("/api/cartoes", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, contasCartoesCtrl.criarCartao);
+    app.get("/api/cartoes/:id/lancamentos", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, contasCartoesCtrl.lancamentosCartao);
+    app.put("/api/cartoes/:id", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, contasCartoesCtrl.atualizarCartao);
+    app.delete("/api/cartoes/:id", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, contasCartoesCtrl.excluirCartao);
+    app.get("/api/cartoes/:id/faturas", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, contasCartoesCtrl.listarFaturas);
+    app.get("/api/cartoes/:id/saldo", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, contasCartoesCtrl.saldoCartao);
+    app.post("/api/cartoes/:id/recalcular-faturas", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, contasCartoesCtrl.recalcularFaturasCartao);
+    app.post("/api/faturas/expandir-parcelas", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, contasCartoesCtrl.expandirParcelasFatura);
+    app.post("/api/faturas/mover-lancamento", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, contasCartoesCtrl.moverLancamentoFatura);
+    app.get("/api/faturas/:id", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, contasCartoesCtrl.detalheFatura);
+    app.post("/api/faturas/:id/pagar", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, contasCartoesCtrl.pagarFatura);
+    app.post("/api/faturas/:id/reabrir", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, contasCartoesCtrl.reabrirFatura);
+    app.get("/api/vencimentos", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, contasCartoesCtrl.listarVencimentos);
+    // Marcar como recorrente
+    app.put("/api/transactions/:id/recorrente", combinedAuth_middleware_1.combinedAuth, async (req, res) => {
+        var _a;
+        try {
+            const { marcarRecorrente } = await Promise.resolve().then(() => __importStar(require("./storage")));
+            const result = await marcarRecorrente(parseInt(req.params.id), (_a = req.body.recorrente) !== null && _a !== void 0 ? _a : true);
+            if (!result)
+                return res.status(404).json({ error: "Transação não encontrada" });
+            res.json(result);
+        }
+        catch (err) {
+            res.status(400).json({ error: err.message });
+        }
+    });
+    // Fluxo de caixa resumo
+    app.get("/api/fluxo-caixa/resumo", combinedAuth_middleware_1.combinedAuth, async (req, res) => {
+        try {
+            const { getFluxoCaixaResumo } = await Promise.resolve().then(() => __importStar(require("./storage")));
+            const wallet = await storage_1.storage.getWalletByUserId(req.user.id);
+            if (!wallet)
+                return res.status(404).json({ error: "Carteira não encontrada" });
+            const mes = req.query.mes ? parseInt(req.query.mes) : undefined;
+            const ano = req.query.ano ? parseInt(req.query.ano) : undefined;
+            const resumo = await getFluxoCaixaResumo(wallet.id, mes, ano);
+            res.json(resumo);
+        }
+        catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+    // Fluxo de caixa projetado (PF) — matriz categorias × meses
+    const fluxoProjetadoCtrl = await Promise.resolve().then(() => __importStar(require("./controllers/fluxo-projetado.controller")));
+    app.get("/api/fluxo-caixa/projetado", combinedAuth_middleware_1.combinedAuth, fluxoProjetadoCtrl.getFluxoProjetadoPessoal);
+    // ==========================================
+    // PJ — ROTAS EMPRESAS / PLANO DE CONTAS / TRANSAÇÕES
+    // Convivem ao lado das rotas PF sem alterá-las.
+    // Auth: combinedAuth (cookie ou apikey) — mesmo padrão do PF.
+    // N8N usa POST /api/empresas/:id/transacoes com a mesma apikey do usuário.
+    // ==========================================
+    const empresaCtrl = await Promise.resolve().then(() => __importStar(require("./controllers/empresa.controller")));
+    const empresaContaCtrl = await Promise.resolve().then(() => __importStar(require("./controllers/empresaConta.controller")));
+    const empresaTransacaoCtrl = await Promise.resolve().then(() => __importStar(require("./controllers/empresaTransacao.controller")));
+    // CRUD de empresas
+    app.get("/api/empresas", combinedAuth_middleware_1.combinedAuth, empresaCtrl.listEmpresas);
+    app.post("/api/empresas", combinedAuth_middleware_1.combinedAuth, empresaCtrl.createEmpresa);
+    app.get("/api/empresas/:id", combinedAuth_middleware_1.combinedAuth, empresaCtrl.getEmpresa);
+    app.put("/api/empresas/:id", combinedAuth_middleware_1.combinedAuth, empresaCtrl.updateEmpresa);
+    app.delete("/api/empresas/:id", combinedAuth_middleware_1.combinedAuth, empresaCtrl.deleteEmpresa);
+    // Plano de contas PJ
+    app.get("/api/empresas/:id/contas", combinedAuth_middleware_1.combinedAuth, empresaContaCtrl.listEmpresasContas);
+    app.post("/api/empresas/:id/contas", combinedAuth_middleware_1.combinedAuth, empresaContaCtrl.createEmpresaConta);
+    app.put("/api/empresas/:id/contas/:contaId", combinedAuth_middleware_1.combinedAuth, empresaContaCtrl.updateEmpresaConta);
+    app.delete("/api/empresas/:id/contas/:contaId", combinedAuth_middleware_1.combinedAuth, empresaContaCtrl.deleteEmpresaConta);
+    // Transações PJ (endpoint principal para o N8N)
+    app.post("/api/empresas/:id/transacoes", combinedAuth_middleware_1.combinedAuth, empresaTransacaoCtrl.createEmpresaTransacao);
+    app.get("/api/empresas/:id/transacoes", combinedAuth_middleware_1.combinedAuth, empresaTransacaoCtrl.listEmpresaTransacoes);
+    app.get("/api/empresas/:id/transacoes/:transacaoId", combinedAuth_middleware_1.combinedAuth, empresaTransacaoCtrl.getEmpresaTransacao);
+    app.put("/api/empresas/:id/transacoes/:transacaoId", combinedAuth_middleware_1.combinedAuth, empresaTransacaoCtrl.updateEmpresaTransacao);
+    app.put("/api/empresas/:id/transacoes/:transacaoId/pagar", combinedAuth_middleware_1.combinedAuth, empresaTransacaoCtrl.pagarEmpresaTransacao);
+    app.put("/api/empresas/:id/transacoes/:transacaoId/reabrir", combinedAuth_middleware_1.combinedAuth, empresaTransacaoCtrl.reabrirEmpresaTransacao);
+    app.delete("/api/empresas/:id/transacoes/:transacaoId", combinedAuth_middleware_1.combinedAuth, empresaTransacaoCtrl.deleteEmpresaTransacao);
+    // Formas de pagamento PJ (legado — POST bloqueado; meio = conta/Caixinha/cartão)
+    app.get("/api/empresas/:id/formas-pagamento", combinedAuth_middleware_1.combinedAuth, empresaTransacaoCtrl.listEmpresaFormas);
+    app.post("/api/empresas/:id/formas-pagamento", combinedAuth_middleware_1.combinedAuth, empresaTransacaoCtrl.createEmpresaForma);
+    app.put("/api/empresas/:id/formas-pagamento/:formaId", combinedAuth_middleware_1.combinedAuth, empresaTransacaoCtrl.updateEmpresaForma);
+    app.delete("/api/empresas/:id/formas-pagamento/:formaId", combinedAuth_middleware_1.combinedAuth, empresaTransacaoCtrl.deleteEmpresaForma);
+    // Dashboard e relatórios PJ
+    app.get("/api/empresas/:id/dashboard/resumo", combinedAuth_middleware_1.combinedAuth, empresaTransacaoCtrl.getEmpresaResumo);
+    app.get("/api/empresas/:id/relatorios/dre", combinedAuth_middleware_1.combinedAuth, empresaTransacaoCtrl.getEmpresaDRE);
+    app.get("/api/empresas/:id/relatorios/fluxo-caixa", combinedAuth_middleware_1.combinedAuth, empresaTransacaoCtrl.getEmpresaFluxoCaixa);
+    app.get("/api/empresas/:id/vencimentos", combinedAuth_middleware_1.combinedAuth, empresaTransacaoCtrl.listarVencimentosPj);
+    // Fluxo projetado PJ — matriz plano de contas da empresa × meses
+    app.get("/api/empresas/:id/relatorios/fluxo-projetado", combinedAuth_middleware_1.combinedAuth, fluxoProjetadoCtrl.getFluxoProjetadoEmpresa);
+    // Fatura de cartão PJ (competência × caixa)
+    const empresaFaturaCtrl = await Promise.resolve().then(() => __importStar(require("./controllers/empresaFatura.controller")));
+    const uploadFatura = (0, multer_1.default)({ storage: multer_1.default.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
+    app.get("/api/empresas/:id/cartoes", combinedAuth_middleware_1.combinedAuth, empresaFaturaCtrl.listarCartoes);
+    app.get("/api/empresas/:id/cartoes-com-saldo", combinedAuth_middleware_1.combinedAuth, empresaFaturaCtrl.listarCartoesComSaldo);
+    app.get("/api/empresas/:id/cartoes/:cartaoId/lancamentos", combinedAuth_middleware_1.combinedAuth, empresaFaturaCtrl.lancamentosCartao);
+    app.post("/api/empresas/:id/cartoes", combinedAuth_middleware_1.combinedAuth, empresaFaturaCtrl.criarCartao);
+    app.delete("/api/empresas/:id/cartoes/:cartaoId", combinedAuth_middleware_1.combinedAuth, empresaFaturaCtrl.excluirCartao);
+    app.post("/api/empresas/:id/cartoes/:cartaoId/compras", combinedAuth_middleware_1.combinedAuth, empresaFaturaCtrl.registrarCompra);
+    app.get("/api/empresas/:id/cartoes/:cartaoId/faturas", combinedAuth_middleware_1.combinedAuth, empresaFaturaCtrl.listarFaturas);
+    app.get("/api/empresas/:id/cartoes/:cartaoId/saldo", combinedAuth_middleware_1.combinedAuth, empresaFaturaCtrl.saldoCartao);
+    app.get("/api/empresas/:id/faturas/:faturaId", combinedAuth_middleware_1.combinedAuth, empresaFaturaCtrl.detalheFatura);
+    app.post("/api/empresas/:id/faturas/:faturaId/fechar", combinedAuth_middleware_1.combinedAuth, empresaFaturaCtrl.fecharFatura);
+    app.post("/api/empresas/:id/faturas/:faturaId/reabrir", combinedAuth_middleware_1.combinedAuth, empresaFaturaCtrl.reabrirFatura);
+    app.post("/api/empresas/:id/faturas/:faturaId/pagar", combinedAuth_middleware_1.combinedAuth, empresaFaturaCtrl.pagarFatura);
+    app.post("/api/empresas/:id/faturas/:faturaId/conciliar", combinedAuth_middleware_1.combinedAuth, uploadFatura.single("arquivo"), empresaFaturaCtrl.conciliarFatura);
+    // Lixeira PJ (soft-delete/undo)
+    const { restaurarUltimaExcluidaPJ, listarLixeiraPJ } = await Promise.resolve().then(() => __importStar(require("./storage")));
+    app.get("/api/empresas/:id/lixeira", combinedAuth_middleware_1.combinedAuth, async (req, res) => {
+        const emp = await (await Promise.resolve().then(() => __importStar(require("./storage")))).storage.getEmpresaById(parseInt(req.params.id));
+        if (!emp || emp.usuario_id !== req.user.id)
+            return res.status(404).json({ error: "Empresa não encontrada" });
+        const items = await listarLixeiraPJ(emp.id);
+        res.json(items);
+    });
+    app.post("/api/empresas/:id/lixeira/restaurar", combinedAuth_middleware_1.combinedAuth, async (req, res) => {
+        const emp = await (await Promise.resolve().then(() => __importStar(require("./storage")))).storage.getEmpresaById(parseInt(req.params.id));
+        if (!emp || emp.usuario_id !== req.user.id)
+            return res.status(404).json({ error: "Empresa não encontrada" });
+        const result = await restaurarUltimaExcluidaPJ(emp.id);
+        res.json(result);
+    });
+    // Conciliação bancária (contas bancárias + import OFX + matching + IA sugere)
+    const { ConciliacaoController } = await Promise.resolve().then(() => __importStar(require("./controllers/conciliacao.controller")));
+    const uploadMemoria = (0, multer_1.default)({ storage: multer_1.default.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
+    app.get("/api/empresas/:id/contas-bancarias", combinedAuth_middleware_1.combinedAuth, ConciliacaoController.listarContas);
+    app.get("/api/empresas/:id/contas-bancarias/:contaId/lancamentos", combinedAuth_middleware_1.combinedAuth, ConciliacaoController.lancamentosConta);
+    app.post("/api/empresas/:id/contas-bancarias", combinedAuth_middleware_1.combinedAuth, ConciliacaoController.criarConta);
+    app.put("/api/empresas/:id/contas-bancarias/:contaId", combinedAuth_middleware_1.combinedAuth, ConciliacaoController.atualizarConta);
+    app.delete("/api/empresas/:id/contas-bancarias/:contaId", combinedAuth_middleware_1.combinedAuth, ConciliacaoController.removerConta);
+    app.post("/api/empresas/:id/conciliacao/importar", combinedAuth_middleware_1.combinedAuth, uploadMemoria.single("arquivo"), ConciliacaoController.importar);
+    app.get("/api/empresas/:id/conciliacao/movimentos", combinedAuth_middleware_1.combinedAuth, ConciliacaoController.listarMovimentos);
+    app.post("/api/empresas/:id/conciliacao/movimentos/:mid/lancar", combinedAuth_middleware_1.combinedAuth, ConciliacaoController.lancar);
+    app.post("/api/empresas/:id/conciliacao/movimentos/:mid/conciliar", combinedAuth_middleware_1.combinedAuth, ConciliacaoController.conciliar);
+    app.post("/api/empresas/:id/conciliacao/movimentos/:mid/ignorar", combinedAuth_middleware_1.combinedAuth, ConciliacaoController.ignorar);
+    app.post("/api/empresas/:id/conciliacao/aceitar-sugestoes", combinedAuth_middleware_1.combinedAuth, ConciliacaoController.aceitarSugestoes);
+    app.get("/api/empresas/:id/conciliacao/bater-saldo", combinedAuth_middleware_1.combinedAuth, ConciliacaoController.baterSaldo);
+    // Importação de lançamentos PF (planilha -> contas a pagar; cria formas/cartões e vincula)
+    const { ImportLancamentosController } = await Promise.resolve().then(() => __importStar(require("./controllers/import-lancamentos.controller")));
+    app.post("/api/importacao/lancamentos/preview", combinedAuth_middleware_1.combinedAuth, uploadMemoria.single("arquivo"), ImportLancamentosController.preview);
+    app.post("/api/importacao/lancamentos", combinedAuth_middleware_1.combinedAuth, uploadMemoria.single("arquivo"), ImportLancamentosController.importar);
+    const { ImportLancamentosPjController, ReembolsosPjController } = await Promise.resolve().then(() => __importStar(require("./controllers/import-lancamentos-pj.controller")));
+    app.post("/api/empresas/:id/importacao/lancamentos/preview", combinedAuth_middleware_1.combinedAuth, uploadMemoria.single("arquivo"), ImportLancamentosPjController.preview);
+    app.post("/api/empresas/:id/importacao/lancamentos", combinedAuth_middleware_1.combinedAuth, uploadMemoria.single("arquivo"), ImportLancamentosPjController.importar);
+    app.get("/api/empresas/:id/reembolsos-pessoais", combinedAuth_middleware_1.combinedAuth, ReembolsosPjController.listar);
+    app.put("/api/empresas/:id/reembolsos-pessoais/:transacaoId/receber", combinedAuth_middleware_1.combinedAuth, ReembolsosPjController.receber);
+    app.put("/api/empresas/:id/reembolsos-pessoais/:transacaoId/pagar", combinedAuth_middleware_1.combinedAuth, ReembolsosPjController.pagar);
+    // ==========================================
+    // Feature flags + simulador WhatsApp + health
+    // ==========================================
+    const featureFlagsCtrl = await Promise.resolve().then(() => __importStar(require("./controllers/feature-flags.controller")));
+    app.get("/api/flags", combinedAuth_middleware_1.combinedAuth, featureFlagsCtrl.minhasFlags);
+    app.get("/api/admin/flags", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, featureFlagsCtrl.listarFlags);
+    app.post("/api/admin/flags", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, featureFlagsCtrl.criar);
+    app.post("/api/admin/flags/:chave/liberar-todos", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, featureFlagsCtrl.liberarTodos);
+    app.post("/api/admin/flags/:chave/desligar-todos", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, featureFlagsCtrl.desligarTodos);
+    app.post("/api/admin/flags/:chave/usuarios", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, featureFlagsCtrl.ligarUser);
+    app.delete("/api/admin/flags/:chave/usuarios/:usuarioId", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, featureFlagsCtrl.desligarUser);
+    app.delete("/api/admin/flags/:chave", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, featureFlagsCtrl.aposentar);
+    app.get("/api/admin/flags/buscar-usuarios", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, featureFlagsCtrl.buscarUsuarios);
+    const simularWaCtrl = await Promise.resolve().then(() => __importStar(require("./controllers/simular-whatsapp.controller")));
+    app.post("/api/admin/simular-whatsapp", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, simularWaCtrl.simularWhatsapp);
+    // Orquestrador admin — DeepSeek only (não mexe no WhatsApp/OpenAI)
+    const orqCtrl = await Promise.resolve().then(() => __importStar(require("./controllers/orquestrador.controller")));
+    app.get("/api/admin/orquestrador/status", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, orqCtrl.statusOrquestrador);
+    app.post("/api/admin/orquestrador/chat", combinedAuth_middleware_1.combinedAuth, adminAuth_middleware_1.checkImpersonation, adminAuth_middleware_1.requireSuperAdmin, orqCtrl.chatOrquestrador);
+    {
+        const { getAppVersion } = await Promise.resolve().then(() => __importStar(require("./services/app-version")));
+        app.get("/api/health", (_req, res) => {
+            const v = getAppVersion();
+            res.json(Object.assign(Object.assign({ ok: true }, v), { time: new Date().toISOString() }));
+        });
+    }
+    // ==========================================
+    // WEBHOOK UAZAPI — Pipeline IA internalizado (substitui N8N)
+    // Recebe mensagens do WhatsApp via UazAPI, processa com IA, insere transação, responde.
+    // Sem auth Express — validado por token no body do UazAPI.
+    // ==========================================
+    const uazapiWebhookCtrl = await Promise.resolve().then(() => __importStar(require("./controllers/uazapi-webhook.controller")));
+    app.post("/api/webhook/uazapi", uazapiWebhookCtrl.handleUazapiWebhook);
+    const httpServer = (0, http_1.createServer)(app);
+    // Inicializar WebSocket server para notificações em tempo real
+    (0, websocket_1.initializeWebSocketServer)(httpServer);
+    return httpServer;
+}
