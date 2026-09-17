@@ -5,7 +5,7 @@
  */
 import { db } from "../db";
 import { sql } from "drizzle-orm";
-import { competenciaDaCompra, datasDaCompetencia, ehFormaCartaoCredito, num } from "./fatura-core";
+import { competenciaDaCompra, datasDaCompetencia, competenciaMaisMeses, ehFormaCartaoCredito, num } from "./fatura-core";
 
 export { ehFormaCartaoCredito };
 
@@ -107,20 +107,51 @@ export async function recalcularFaturasCartaoPf(
   const diaF = Number(cartao.dia_fechamento) || 1;
   const diaV = Number(cartao.dia_vencimento) || 10;
 
-  // 1) Re-resolve cada COMPRA do cartão pela data + dias atuais (ignora pagamentos de fatura).
+  // 1) Re-resolve cada COMPRA do cartão (ignora pagamentos de fatura).
+  //    À VISTA: pela DATA + dias do cartão.
+  //    PARCELADO: pela SEQUÊNCIA (base + i meses), espelhando a criação — a data
+  //    FIXA da parcela NÃO reaplica a regra de fechamento (senão, no fim de mês,
+  //    duas parcelas colapsavam na mesma fatura / deslocavam).
   const txs = await db.execute(sql`
-    SELECT t.id, t.data_transacao
+    SELECT t.id, t.data_transacao, t.parcela_num, t.parcela_total, t.compra_grupo
     FROM transacoes t
     WHERE t.forma_pagamento_id = ${cartao.id}
       AND t.carteira_id = ${carteiraId}
       AND t.tipo = 'Despesa'
       AND NOT EXISTS (SELECT 1 FROM faturas fp WHERE fp.transacao_pagamento_id = t.id)
+    ORDER BY t.compra_grupo NULLS LAST, t.parcela_num NULLS LAST, t.data_transacao, t.id
   `);
+
+  // Competência-base de cada compra parcelada = a da 1ª parcela (menor parcela_num),
+  // decidida UMA vez pela data dela + dias atuais do cartão.
+  const baseGrupo = new Map<string, string>();
+  for (const t of txs as any[]) {
+    const grupo = t.compra_grupo;
+    if (!grupo || Number(t.parcela_total) <= 1) continue;
+    if (!baseGrupo.has(grupo)) {
+      baseGrupo.set(
+        grupo,
+        competenciaDaCompra(String(t.data_transacao).slice(0, 10), diaF, diaV).competencia,
+      );
+    }
+  }
+
   let movidas = 0;
   for (const t of txs as any[]) {
-    const { fatura, competencia } = await resolverFaturaPf(
-      usuarioId, carteiraId, cartao, String(t.data_transacao).slice(0, 10),
-    );
+    const ehParcelado = t.compra_grupo && Number(t.parcela_total) > 1;
+    let fatura: any;
+    let competencia: string;
+    if (ehParcelado && baseGrupo.has(t.compra_grupo)) {
+      const base = baseGrupo.get(t.compra_grupo)!;
+      const comp = competenciaMaisMeses(base, (Number(t.parcela_num) || 1) - 1);
+      const r = await resolverFaturaPfPorCompetencia(usuarioId, carteiraId, cartao, comp);
+      fatura = r.fatura;
+      competencia = r.competencia;
+    } else {
+      const r = await resolverFaturaPf(usuarioId, carteiraId, cartao, String(t.data_transacao).slice(0, 10));
+      fatura = r.fatura;
+      competencia = r.competencia;
+    }
     await db.execute(sql`
       UPDATE transacoes
       SET fatura_id = ${fatura.id}, competencia = ${competencia},
