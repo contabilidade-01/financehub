@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -37,14 +37,24 @@ export default function OrquestradorPage() {
   const [texto, setTexto] = useState("");
   const [msgs, setMsgs] = useState<Msg[]>([]);
 
-  const { data: flagsMe } = useQuery({
+  const { data: flagsPayload } = useQuery({
     queryKey: ["minhas-flags"],
     enabled: !!user && !isSuperAdmin,
-    queryFn: async () => (await api("/api/flags")).flags as Record<string, boolean>,
+    queryFn: async () => (await api("/api/flags")) as { flags: Record<string, boolean> },
   });
 
+  const flagsMe = flagsPayload?.flags;
   const liberadoPorFlag = !!flagsMe?.orquestrador_deepseek;
   const podeAcessar = isSuperAdmin || liberadoPorFlag;
+
+  // Usuário liberado: alvo = própria carteira (sem esperar useEffect)
+  const alvoId = isSuperAdmin ? usuarioId : user?.id ?? null;
+  const alvoLabel = isSuperAdmin
+    ? usuarioLabel
+    : user
+      ? `${user.nome} · ${user.email}`
+      : "";
+  const conversaLiberada = !!alvoId;
 
   const { data: status } = useQuery({
     queryKey: ["orquestrador-status"],
@@ -72,19 +82,13 @@ export default function OrquestradorPage() {
       (await api(`/api/admin/flags/buscar-usuarios?q=${encodeURIComponent(buscaLiberar.trim())}`)).usuarios as any[],
   });
 
-  // Usuário liberado: alvo = ele mesmo; conversa já liberada
-  useEffect(() => {
-    if (!isSuperAdmin && user && liberadoPorFlag) {
-      setUsuarioId(user.id);
-      setUsuarioLabel(`${user.nome} · ${user.email}`);
-    }
-  }, [isSuperAdmin, user, liberadoPorFlag]);
+  // (alvo já definido acima para usuário liberado)
 
   const mutChat = useMutation({
     mutationFn: () =>
       api(isSuperAdmin ? "/api/admin/orquestrador/chat" : "/api/orquestrador/chat", {
         method: "POST",
-        body: JSON.stringify({ usuario_id: usuarioId, texto }),
+        body: JSON.stringify({ usuario_id: alvoId, texto }),
       }),
     onSuccess: (data) => {
       setMsgs((prev) => [
@@ -125,10 +129,10 @@ export default function OrquestradorPage() {
   });
 
   if (!user) return null;
-  if (!podeAcessar && flagsMe !== undefined) {
+  if (!podeAcessar && flagsPayload !== undefined) {
     return <Redirect to="/" />;
   }
-  if (!isSuperAdmin && flagsMe === undefined) {
+  if (!isSuperAdmin && flagsPayload === undefined) {
     return (
       <div className="p-8 flex justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -136,15 +140,14 @@ export default function OrquestradorPage() {
     );
   }
 
-  const conversaLiberada = !!usuarioId;
   const podeEnviar = conversaLiberada && !!texto.trim() && !mutChat.isPending;
 
   const enviar = () => {
     if (!podeEnviar) return;
     if (!status?.configured) {
       toast({
-        title: "DEEPSEEK_API_KEY ausente no servidor",
-        description: "Defina a variável no EasyPanel / .env e reinicie.",
+        title: "DeepSeek não configurada",
+        description: "Defina DEEPSEEK_API_KEY (ou AI_FALLBACK_*) no EasyPanel e reinicie.",
         variant: "destructive",
       });
       return;
@@ -169,7 +172,7 @@ export default function OrquestradorPage() {
           {status?.configured ? (
             <Badge className="bg-emerald-500/15 text-emerald-600">DeepSeek ok · {status.model}</Badge>
           ) : (
-            <Badge variant="destructive">DEEPSEEK_API_KEY ausente</Badge>
+            <Badge variant="destructive">DeepSeek não configurada</Badge>
           )}
           {status?.key_prefix && (
             <p className="text-xs text-muted-foreground">{status.key_prefix}</p>
@@ -289,10 +292,10 @@ export default function OrquestradorPage() {
         </Card>
       )}
 
-      {!isSuperAdmin && usuarioId && (
+      {!isSuperAdmin && alvoId && (
         <p className="text-sm text-muted-foreground flex items-center gap-2">
           <Badge variant="outline">Sua carteira</Badge>
-          #{usuarioId} {usuarioLabel}
+          #{alvoId} {alvoLabel}
         </p>
       )}
 

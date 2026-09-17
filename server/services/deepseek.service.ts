@@ -10,11 +10,20 @@
 import axios from "axios";
 
 export function deepseekConfig() {
-  const apiKey = String(process.env.DEEPSEEK_API_KEY || "").trim();
-  const baseUrl = String(process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com")
+  // Preferência: DEEPSEEK_*. Se ausente, reusa AI_FALLBACK_* (muitos envs já têm DeepSeek aí).
+  const apiKey = String(
+    process.env.DEEPSEEK_API_KEY || process.env.AI_FALLBACK_API_KEY || "",
+  ).trim();
+  const baseUrl = String(
+    process.env.DEEPSEEK_BASE_URL ||
+      process.env.AI_FALLBACK_BASE_URL ||
+      "https://api.deepseek.com",
+  )
     .trim()
     .replace(/\/$/, "");
-  const model = String(process.env.DEEPSEEK_MODEL || "deepseek-chat").trim();
+  const model = String(
+    process.env.DEEPSEEK_MODEL || process.env.AI_MODEL_FALLBACK || "deepseek-chat",
+  ).trim();
   return { apiKey, baseUrl, model, configured: apiKey.length > 0 && apiKey.startsWith("sk-") };
 }
 
