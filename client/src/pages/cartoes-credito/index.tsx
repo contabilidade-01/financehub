@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { CheckCircle2, CreditCard, Plus, ReceiptText, Trash2 } from "lucide-react";
+import { ArrowLeftRight, CheckCircle2, CreditCard, Edit, Plus, ReceiptText, Trash2 } from "lucide-react";
 
 type Cartao = {
   id: number;
@@ -87,6 +87,15 @@ export default function CartoesCreditoPage() {
   const freshNovo = () => ({ descricao: "", valor: "", data: hoje, categoria_id: "", parcelas: "1" });
   const [novoOpen, setNovoOpen] = useState(false);
   const [novoForm, setNovoForm] = useState(freshNovo());
+  // Cartão (criar/editar)
+  const emptyCartao = { nome: "", banco: "", limite: "", dia_fechamento: "", dia_vencimento: "", cor: "#6366F1" };
+  const [cartaoOpen, setCartaoOpen] = useState(false);
+  const [editingCartao, setEditingCartao] = useState<Cartao | null>(null);
+  const [cartaoForm, setCartaoForm] = useState(emptyCartao);
+  // Mover lançamento (para outro cartão / competência)
+  const [moverTx, setMoverTx] = useState<{ id: number; descricao: string } | null>(null);
+  const [moverCartaoId, setMoverCartaoId] = useState<string>("");
+  const [moverComp, setMoverComp] = useState<string>("");
 
   const { data: cartoes = [], isLoading: loadingCartoes } = useQuery<Cartao[]>({
     queryKey: ["/api/cartoes"],
@@ -214,6 +223,82 @@ export default function CartoesCreditoPage() {
     });
   };
 
+  const salvarCartao = useMutation({
+    mutationFn: ({ id, data }: { id: number | null; data: any }) =>
+      id ? apiRequest(`/api/cartoes/${id}`, { method: "PUT", data }) : apiRequest("/api/cartoes", { method: "POST", data }),
+    onSuccess: () => {
+      invalidate();
+      setCartaoOpen(false);
+      setEditingCartao(null);
+      setCartaoForm(emptyCartao);
+      toast({ title: "Cartão salvo" });
+    },
+    onError: (e: any) => toast({ title: "Erro", description: e?.message || e?.error, variant: "destructive" }),
+  });
+
+  const excluirCartao = useMutation({
+    mutationFn: (id: number) => apiRequest(`/api/cartoes/${id}`, { method: "DELETE" }),
+    onSuccess: () => { invalidate(); toast({ title: "Cartão removido" }); },
+    onError: (e: any) => toast({ title: "Erro", description: e?.message || e?.error, variant: "destructive" }),
+  });
+
+  const moverLancamento = useMutation({
+    mutationFn: (data: { transacao_id: number; cartao_id: number; competencia: string }) =>
+      apiRequest("/api/faturas/mover-lancamento", { method: "POST", data }),
+    onSuccess: () => {
+      invalidate();
+      setMoverTx(null);
+      toast({ title: "Lançamento movido" });
+    },
+    onError: (e: any) => toast({ title: "Erro", description: e?.message || e?.error, variant: "destructive" }),
+  });
+
+  const openNovoCartao = () => { setEditingCartao(null); setCartaoForm(emptyCartao); setCartaoOpen(true); };
+  const openEditarCartao = (c: Cartao) => {
+    setEditingCartao(c);
+    setCartaoForm({
+      nome: c.nome || "",
+      banco: c.bandeira || "",
+      limite: c.limite != null && c.limite !== "" ? String(c.limite) : "",
+      dia_fechamento: c.dia_fechamento != null ? String(c.dia_fechamento) : "",
+      dia_vencimento: c.dia_vencimento != null ? String(c.dia_vencimento) : "",
+      cor: c.cor || "#6366F1",
+    });
+    setCartaoOpen(true);
+  };
+  const submitCartao = () => {
+    const fech = Number(cartaoForm.dia_fechamento);
+    const venc = Number(cartaoForm.dia_vencimento);
+    if (!cartaoForm.nome.trim()) { toast({ title: "Informe o nome", variant: "destructive" }); return; }
+    if (!(fech >= 1 && fech <= 31) || !(venc >= 1 && venc <= 31)) {
+      toast({ title: "Fechamento/vencimento devem ser 1–31", variant: "destructive" }); return;
+    }
+    salvarCartao.mutate({
+      id: editingCartao?.id ?? null,
+      data: {
+        nome: cartaoForm.nome.trim(),
+        banco: cartaoForm.banco.trim() || null,
+        bandeira: cartaoForm.banco.trim() || null,
+        limite: cartaoForm.limite !== "" ? Number(cartaoForm.limite) : null,
+        dia_fechamento: fech,
+        dia_vencimento: venc,
+        cor: cartaoForm.cor || null,
+      },
+    });
+  };
+  const abrirMover = (l: { id: number; descricao: string }) => {
+    setMoverTx(l);
+    setMoverCartaoId(cardId ? String(cardId) : (cartoes[0] ? String(cartoes[0].id) : ""));
+    setMoverComp(detalhe?.fatura?.competencia || compAtual());
+  };
+  const submitMover = () => {
+    if (!moverTx || !moverCartaoId || !/^\d{4}-\d{2}$/.test(moverComp)) {
+      toast({ title: "Escolha o cartão e a competência (AAAA-MM)", variant: "destructive" });
+      return;
+    }
+    moverLancamento.mutate({ transacao_id: moverTx.id, cartao_id: Number(moverCartaoId), competencia: moverComp });
+  };
+
   const faturaSel = detalhe?.fatura;
   const compras = detalhe?.compras || [];
 
@@ -228,9 +313,14 @@ export default function CartoesCreditoPage() {
             Escolha um cartão, navegue pelas faturas e confira os lançamentos de cada mês.
           </p>
         </div>
-        <Button onClick={() => { setNovoForm(freshNovo()); setNovoOpen(true); }} disabled={!cardId}>
-          <Plus className="h-4 w-4 mr-2" /> Novo lançamento
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={openNovoCartao}>
+            <Plus className="h-4 w-4 mr-2" /> Novo cartão
+          </Button>
+          <Button onClick={() => { setNovoForm(freshNovo()); setNovoOpen(true); }} disabled={!cardId}>
+            <Plus className="h-4 w-4 mr-2" /> Novo lançamento
+          </Button>
+        </div>
       </div>
 
       {/* Seletor de cartões */}
@@ -243,7 +333,7 @@ export default function CartoesCreditoPage() {
       ) : cartoes.length === 0 ? (
         <Card>
           <CardContent className="py-10 text-center text-muted-foreground">
-            Nenhum cartão cadastrado. Cadastre um cartão em <b>Contas e Cartões</b> para começar.
+            Nenhum cartão cadastrado. Use o botão <b>Novo cartão</b> acima para começar.
           </CardContent>
         </Card>
       ) : (
@@ -251,16 +341,36 @@ export default function CartoesCreditoPage() {
           {cartoes.map((c) => {
             const ativo = c.id === cardId;
             const cor = c.cor || "#6366F1";
+            const semDias = c.dia_fechamento == null || c.dia_vencimento == null;
             return (
-              <button
+              <div
                 key={c.id}
-                type="button"
+                role="button"
+                tabIndex={0}
                 onClick={() => setCardId(c.id)}
-                className={`text-left rounded-xl border p-4 transition-colors ${
+                className={`relative cursor-pointer text-left rounded-xl border p-4 transition-colors ${
                   ativo ? "border-primary ring-1 ring-primary bg-primary/5" : "border-border hover:bg-muted/40"
                 }`}
               >
-                <div className="flex items-center gap-2">
+                <div className="absolute top-2 right-2 flex gap-1">
+                  <button
+                    type="button"
+                    className="text-muted-foreground hover:text-foreground p-1"
+                    title="Editar cartão"
+                    onClick={(e) => { e.stopPropagation(); openEditarCartao(c); }}
+                  >
+                    <Edit className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    className="text-muted-foreground hover:text-red-500 p-1"
+                    title="Remover cartão"
+                    onClick={(e) => { e.stopPropagation(); if (confirm("Remover este cartão?")) excluirCartao.mutate(c.id); }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 pr-14">
                   <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: cor }} />
                   <span className="font-semibold">{c.nome}</span>
                 </div>
@@ -268,9 +378,14 @@ export default function CartoesCreditoPage() {
                   {c.bandeira ? `${c.bandeira} · ` : ""}fecha dia {c.dia_fechamento ?? "—"} · vence dia{" "}
                   {c.dia_vencimento ?? "—"}
                 </p>
+                {semDias && (
+                  <p className="text-[11px] text-amber-600 mt-1">
+                    ⚠️ defina fechamento/vencimento para as faturas saírem certas
+                  </p>
+                )}
                 <p className="text-[11px] text-muted-foreground mt-3">Limite</p>
                 <p className="text-xl font-numeric font-semibold">{money(Number(c.limite) || 0)}</p>
-              </button>
+              </div>
             );
           })}
         </div>
@@ -424,7 +539,7 @@ export default function CartoesCreditoPage() {
                         <th className="text-left font-medium py-2 pr-3">DESCRIÇÃO</th>
                         <th className="text-left font-medium py-2 pr-3">PARCELA</th>
                         <th className="text-right font-medium py-2 pr-3">VALOR</th>
-                        <th className="py-2 w-8"></th>
+                        <th className="py-2 w-20"></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -446,16 +561,26 @@ export default function CartoesCreditoPage() {
                               {money(Number(l.valor) || 0)}
                             </td>
                             <td className="py-2.5 text-right">
-                              <button
-                                type="button"
-                                className="text-muted-foreground hover:text-red-500 transition-colors"
-                                title="Excluir lançamento"
-                                onClick={() => {
-                                  if (confirm("Excluir este lançamento?")) excluirLancamento.mutate(l.id);
-                                }}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  type="button"
+                                  className="text-muted-foreground hover:text-primary transition-colors"
+                                  title="Mover para outro cartão/competência"
+                                  onClick={() => abrirMover({ id: l.id, descricao: l.descricao })}
+                                >
+                                  <ArrowLeftRight className="h-4 w-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  className="text-muted-foreground hover:text-red-500 transition-colors"
+                                  title="Excluir lançamento"
+                                  onClick={() => {
+                                    if (confirm("Excluir este lançamento?")) excluirLancamento.mutate(l.id);
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))
@@ -486,6 +611,14 @@ export default function CartoesCreditoPage() {
                   </p>
                   <div className="flex items-center gap-3 shrink-0">
                     <span className="text-sm font-numeric font-semibold">{money(Number(l.valor) || 0)}</span>
+                    <button
+                      type="button"
+                      className="text-muted-foreground hover:text-primary transition-colors"
+                      title="Mover para uma fatura/cartão"
+                      onClick={() => abrirMover({ id: l.id, descricao: l.descricao })}
+                    >
+                      <ArrowLeftRight className="h-4 w-4" />
+                    </button>
                     <button
                       type="button"
                       className="text-muted-foreground hover:text-red-500 transition-colors"
@@ -580,6 +713,124 @@ export default function CartoesCreditoPage() {
             <Button onClick={submitNovo} disabled={criarLancamento.isPending}>
               Adicionar
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: criar/editar cartão */}
+      <Dialog open={cartaoOpen} onOpenChange={setCartaoOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingCartao ? "Editar cartão" : "Novo cartão"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Nome *</Label>
+              <Input
+                value={cartaoForm.nome}
+                onChange={(e) => setCartaoForm({ ...cartaoForm, nome: e.target.value })}
+                placeholder="Ex.: Inter, Nubank Roxinho"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Banco/bandeira</Label>
+                <Input
+                  value={cartaoForm.banco}
+                  onChange={(e) => setCartaoForm({ ...cartaoForm, banco: e.target.value })}
+                  placeholder="Visa, Master…"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Limite (opcional)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={cartaoForm.limite}
+                  onChange={(e) => setCartaoForm({ ...cartaoForm, limite: e.target.value })}
+                  placeholder="Sem limite"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label>Fecha dia *</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={31}
+                  value={cartaoForm.dia_fechamento}
+                  onChange={(e) => setCartaoForm({ ...cartaoForm, dia_fechamento: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Vence dia *</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={31}
+                  value={cartaoForm.dia_vencimento}
+                  onChange={(e) => setCartaoForm({ ...cartaoForm, dia_vencimento: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Cor</Label>
+                <Input
+                  type="color"
+                  value={cartaoForm.cor}
+                  onChange={(e) => setCartaoForm({ ...cartaoForm, cor: e.target.value })}
+                />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              O dia de fechamento define em qual fatura cada compra entra. Corrigir esses dias acerta as próximas faturas.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCartaoOpen(false)}>Cancelar</Button>
+            <Button onClick={submitCartao} disabled={salvarCartao.isPending}>Salvar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: mover lançamento para outro cartão/competência */}
+      <Dialog open={!!moverTx} onOpenChange={(o) => { if (!o) setMoverTx(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Mover lançamento</DialogTitle>
+          </DialogHeader>
+          {moverTx && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">{moverTx.descricao}</p>
+              <div className="space-y-1.5">
+                <Label>Cartão *</Label>
+                <Select value={moverCartaoId} onValueChange={setMoverCartaoId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Escolha o cartão" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {cartoes.map((c) => (
+                      <SelectItem key={c.id} value={String(c.id)}>{c.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Competência (fatura) *</Label>
+                <Input
+                  type="month"
+                  value={moverComp}
+                  onChange={(e) => setMoverComp(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  O vencimento é calculado pelos dias do cartão escolhido.
+                </p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMoverTx(null)}>Cancelar</Button>
+            <Button onClick={submitMover} disabled={moverLancamento.isPending}>Mover</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

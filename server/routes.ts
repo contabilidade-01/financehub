@@ -1379,6 +1379,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/faturas/:id", combinedAuth, checkImpersonation, contasCartoesCtrl.detalheFatura);
   app.post("/api/faturas/:id/pagar", combinedAuth, checkImpersonation, contasCartoesCtrl.pagarFatura);
   app.post("/api/faturas/:id/reabrir", combinedAuth, checkImpersonation, contasCartoesCtrl.reabrirFatura);
+  app.post("/api/faturas/mover-lancamento", combinedAuth, checkImpersonation, contasCartoesCtrl.moverLancamentoFatura);
   app.get("/api/vencimentos", combinedAuth, checkImpersonation, contasCartoesCtrl.listarVencimentos);
 
   // Marcar como recorrente

@@ -369,3 +369,51 @@ export async function resumoFaturas(req: Request, res: Response) {
     return res.status(500).json({ error: e?.message || "Erro ao gerar resumo de faturas" });
   }
 }
+
+/**
+ * Move um lançamento de cartão para outro CARTÃO e/ou COMPETÊNCIA (YYYY-MM).
+ * A fatura de destino é resolvida pelas DATAS do cartão (fechamento/vencimento),
+ * então o vencimento sai correto. Também anexa um lançamento "sem fatura" a uma
+ * competência escolhida. Ferramenta de correção/realocação manual.
+ * POST /api/faturas/mover-lancamento  { transacao_id, cartao_id, competencia }
+ */
+export async function moverLancamentoFatura(req: Request, res: Response) {
+  try {
+    const userId = req.user!.id;
+    const txId = Number(req.body?.transacao_id);
+    const cartaoId = Number(req.body?.cartao_id);
+    const competencia = String(req.body?.competencia || "").slice(0, 7);
+    if (!txId || !cartaoId || !/^\d{4}-\d{2}$/.test(competencia)) {
+      return res.status(400).json({ error: "Informe transacao_id, cartao_id e competencia (YYYY-MM)." });
+    }
+    const cartao = await faturaPf.cartaoPfDoUsuario(cartaoId, userId);
+    if (!cartao || Number(cartao.usuario_id) !== userId) {
+      return res.status(404).json({ error: "Cartão não encontrado" });
+    }
+    const wallet = await storage.getWalletByUserId(userId);
+    if (!wallet) return res.status(404).json({ error: "Carteira não encontrada" });
+    const txRows = await db.execute(sql`
+      SELECT id, tipo FROM transacoes WHERE id = ${txId} AND carteira_id = ${wallet.id} LIMIT 1
+    `);
+    const tx = (txRows as any[])[0];
+    if (!tx) return res.status(404).json({ error: "Lançamento não encontrado" });
+    if (tx.tipo !== "Despesa") {
+      return res.status(400).json({ error: "Só despesas de cartão podem ser movidas para fatura." });
+    }
+    const { fatura, competencia: comp } = await faturaPf.resolverFaturaPfPorCompetencia(
+      userId, wallet.id, cartao as any, competencia,
+    );
+    await db.execute(sql`
+      UPDATE transacoes
+      SET forma_pagamento_id = ${cartaoId},
+          fatura_id = ${fatura.id},
+          competencia = ${comp},
+          conta_bancaria_id = NULL,
+          movimenta_caixa = false
+      WHERE id = ${txId} AND carteira_id = ${wallet.id}
+    `);
+    return res.json({ success: true, fatura_id: fatura.id, competencia: comp, vencimento: fatura.data_vencimento });
+  } catch (e: any) {
+    return res.status(400).json({ error: e?.message || "Erro ao mover lançamento" });
+  }
+}
