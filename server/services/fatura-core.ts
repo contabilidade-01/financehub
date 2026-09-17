@@ -57,13 +57,22 @@ function diaDoMes(ano: number, mes0: number, dia: number): number {
   return Math.min(Math.max(1, Math.floor(dia) || 1), ultimo);
 }
 
+/** Troca só o dia, mantendo ano-mês. Dia 31 em fevereiro vira 28/29. */
+export function comDiaNoMes(iso: string, dia: number): string {
+  const [ys, ms] = String(iso).slice(0, 10).split("-");
+  const y = Number(ys);
+  const m = Number(ms);
+  if (!y || !m) return String(iso).slice(0, 10);
+  return `${y}-${pad2(m)}-${pad2(diaDoMes(y, m - 1, dia))}`;
+}
+
 /** Avança N meses a partir de uma competência YYYY-MM. */
 export function competenciaMaisMeses(competencia: string, meses: number): string {
   const [y, m] = competencia.split("-").map(Number);
   const total = (m - 1) + meses;
   const ano = y + Math.floor(total / 12);
-  const mes = (total % 12) + 1;
-  return `${ano}-${pad2(mes)}`;
+  const mes0 = ((total % 12) + 12) % 12;
+  return `${ano}-${pad2(mes0 + 1)}`;
 }
 
 /**

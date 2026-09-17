@@ -1,0 +1,215 @@
+"use strict";
+/**
+ * Interpreta frases de compra parcelada em PT-BR.
+ * Usado pelo agente como rede de segurança quando o modelo erra args
+ * ou o usuário manda tudo numa frase só.
+ *
+ * Exemplos cobertos:
+ * - "3x100", "3x de 100", "3 x R$ 100,00" → parcela
+ * - "compra parcelada de 300 em 3x" → total
+ * - "parcelada no valor de 300 em 3x" → total
+ * - "300 reais em 3 vezes" → total
+ * - "em duas vezes" / "duas parcelas" → qtd (extenso)
+ * - "em 5x no Itaú" (só qtd; valor vem à parte)
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.numParcelasDeToken = numParcelasDeToken;
+exports.textoSugereParcelamento = textoSugereParcelamento;
+exports.parseParcelamentoDoTexto = parseParcelamentoDoTexto;
+exports.resolverValoresParcelamento = resolverValoresParcelamento;
+/** Números por extenso comuns em parcelamento (2–12). */
+const EXTENSO_PARCELAS = {
+    dois: 2,
+    duas: 2,
+    tres: 3,
+    três: 3,
+    quatro: 4,
+    cinco: 5,
+    seis: 6,
+    sete: 7,
+    oito: 8,
+    nove: 9,
+    dez: 10,
+    onze: 11,
+    doze: 12,
+};
+const EXTENSO_ALT = Object.keys(EXTENSO_PARCELAS).join("|");
+function parseMoneyBR(raw) {
+    const t = String(raw || "")
+        .trim()
+        .replace(/R\$\s?/i, "")
+        .replace(/\s/g, "");
+    if (!t)
+        return null;
+    let n;
+    if (/^\d{1,3}(\.\d{3})+,\d{1,2}$/.test(t) || /^\d+,\d{1,2}$/.test(t)) {
+        n = Number(t.replace(/\./g, "").replace(",", "."));
+    }
+    else if (/^\d+\.\d{1,2}$/.test(t)) {
+        n = Number(t);
+    }
+    else {
+        n = Number(t.replace(",", "."));
+    }
+    return Number.isFinite(n) && n > 0 ? n : null;
+}
+/** Aceita "3", "duas", "três" → número de parcelas (2–60). */
+function numParcelasDeToken(raw) {
+    var _a;
+    const t = String(raw || "")
+        .trim()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+    if (!t)
+        return null;
+    if (/^\d{1,2}$/.test(t)) {
+        const n = Number(t);
+        return n >= 2 && n <= 60 ? n : null;
+    }
+    const n = (_a = EXTENSO_PARCELAS[t]) !== null && _a !== void 0 ? _a : EXTENSO_PARCELAS[String(raw || "").trim().toLowerCase()];
+    return n != null && n >= 2 && n <= 60 ? n : null;
+}
+const CARTAO_COM_PALAVRA = /(?:no\s+)?(?:cart[aã]o|cc)\s+(?:do\s+|da\s+|de\s+)?([A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9.\s]{0,30}?)(?=\s*$|[,.!?]|\s+em\s+\d|\s+\d+\s*[x×])/i;
+// Evitar \\b após acentos (JS trata "ú" como não-word → cortava "Itaú" em "Ita").
+const CARTAO_NO_NOME = /\b(?:no|na)\s+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9.]*(?:\s+(?:Luiza|PJ|Business|Empresarial|Visa|Master))?)(?=\s|$|[,.!?]|em\s+\d|\d+\s*[x×])/i;
+/**
+ * Detecta se o texto fala em parcelamento (mesmo sem extrair números).
+ */
+function textoSugereParcelamento(texto) {
+    const t = (texto || "").toLowerCase();
+    const ext = `(?:${EXTENSO_ALT}|\\d+)`;
+    return new RegExp(`parcelad|parcelamento|\\d+\\s*[x×]\\s*|em\\s+${ext}\\s*[x×]|em\\s+${ext}\\s*vezes|${ext}\\s+parcelas?|dividid[oa]\\s+em`, "i").test(t);
+}
+function extrairCartaoHint(raw) {
+    const m1 = raw.match(CARTAO_COM_PALAVRA);
+    if (m1 === null || m1 === void 0 ? void 0 : m1[1]) {
+        const nome = m1[1].trim().replace(/\s+/g, " ");
+        if (nome && !/^(parcelad|valor|reais|vezes|compra)/i.test(nome))
+            return nome;
+    }
+    const m2 = raw.match(CARTAO_NO_NOME);
+    if (m2 === null || m2 === void 0 ? void 0 : m2[1]) {
+        const nome = m2[1].trim();
+        if (!/^(cart[aã]o|cc|valor|parcel|compra|vezes|reais|credito|cr[eé]dito)/i.test(nome)) {
+            return nome;
+        }
+    }
+    return null;
+}
+/**
+ * Extrai parcelas / valores / dica de cartão de uma frase livre.
+ */
+function parseParcelamentoDoTexto(texto) {
+    const raw = String(texto || "").trim();
+    const out = {
+        parcelas: null,
+        valorParcela: null,
+        valorTotal: null,
+        modo: null,
+        cartaoHint: null,
+    };
+    if (!raw)
+        return out;
+    out.cartaoHint = extrairCartaoHint(raw);
+    // "Nx de V" / "Nx V" → valor da parcela
+    const mParcela = raw.match(/(\d{1,2})\s*[x×]\s*(?:de\s+)?(?:R\$\s*)?([\d.]+,\d{2}|\d+(?:[.,]\d{1,2})?)/i) ||
+        raw.match(/(\d{1,2})\s*[x×]\s*(?:de\s+)?([\d.]+,\d{2}|\d+)/i);
+    if (mParcela) {
+        const n = Number(mParcela[1]);
+        const v = parseMoneyBR(mParcela[2]);
+        if (n >= 2 && n <= 60 && v) {
+            out.parcelas = n;
+            out.valorParcela = v;
+            out.modo = "parcela";
+            out.valorTotal = Math.round(v * n * 100) / 100;
+            return out;
+        }
+    }
+    // "valor de 300 em 3x" / "parcelada de 300 em 3x" / "300 em 3x" / "300 em duas vezes"
+    const qtdCap = `(\\d{1,2}|${EXTENSO_ALT})`;
+    const mTotal = raw.match(new RegExp(`(?:valor\\s+de|parcelad[oa]s?(?:\\s+no\\s+valor\\s+de)?|compra\\s+parcelada(?:\\s+de)?|total\\s+de)\\s*(?:R\\$\\s*)?([\\d.]+,\\d{2}|\\d+(?:[.,]\\d{1,2})?)\\s*(?:reais)?\\s*(?:em|dividid[oa]\\s+em)\\s*${qtdCap}\\s*(?:[x×]|vezes)?`, "i")) ||
+        raw.match(new RegExp(`(?:R\\$\\s*)?([\\d.]+,\\d{2}|\\d+(?:[.,]\\d{1,2})?)\\s*(?:reais)?\\s+(?:em|dividid[oa]\\s+em)\\s+${qtdCap}\\s*(?:[x×]|vezes)`, "i"));
+    if (mTotal) {
+        const v = parseMoneyBR(mTotal[1]);
+        const n = numParcelasDeToken(mTotal[2]);
+        if (v && n) {
+            out.parcelas = n;
+            out.valorTotal = v;
+            out.modo = "total";
+            out.valorParcela = Math.round((v / n) * 100) / 100;
+            return out;
+        }
+    }
+    // Só "em 5x" / "em duas vezes" / "duas parcelas" / "parcelada em 5x"
+    const mSoQtd = raw.match(new RegExp(`(?:em|parcelad[oa]s?\\s+em|dividid[oa]\\s+em)\\s+${qtdCap}\\s*(?:[x×]|vezes)`, "i")) ||
+        raw.match(new RegExp(`\\b${qtdCap}\\s+parcelas?\\b`, "i"));
+    if (mSoQtd) {
+        const n = numParcelasDeToken(mSoQtd[1]);
+        if (n)
+            out.parcelas = n;
+    }
+    return out;
+}
+/**
+ * Mescla args da tool com o que veio no texto do usuário.
+ * Prioridade: args explícitos da tool > parse do texto.
+ */
+function resolverValoresParcelamento(opts) {
+    const parsed = parseParcelamentoDoTexto(opts.userMessage || "");
+    const args = opts.args || {};
+    let parcelas = Math.min(60, Math.max(0, Number(args.parcelas) || 0));
+    if (parcelas < 2 && parsed.parcelas)
+        parcelas = parsed.parcelas;
+    let valorParcela = Number(args.valor_parcela) || 0;
+    let valorTotal = args.valor_total != null && Number(args.valor_total) > 0 ? Number(args.valor_total) : 0;
+    // Args: só "valor" sem valor_total → no parcelamento, costuma ser a parcela
+    // (exceto se o texto deixou claro que é total).
+    if (!valorParcela && !valorTotal && Number(args.valor) > 0) {
+        if (parsed.modo === "total") {
+            valorTotal = Number(args.valor);
+        }
+        else {
+            valorParcela = Number(args.valor);
+        }
+    }
+    if (!valorParcela && parsed.valorParcela)
+        valorParcela = parsed.valorParcela;
+    if (!valorTotal && parsed.valorTotal && parsed.modo === "total")
+        valorTotal = parsed.valorTotal;
+    if (parcelas < 2) {
+        return {
+            parcelas: 0,
+            valorTotal: 0,
+            valorParcela: 0,
+            fonte: "incompleto",
+            incompleto: "Quantas parcelas? (ex.: 3x, 5 vezes)",
+        };
+    }
+    if (valorTotal > 0 && !valorParcela) {
+        valorParcela = Math.round((valorTotal / parcelas) * 100) / 100;
+    }
+    if (valorParcela > 0 && !valorTotal) {
+        valorTotal = Math.round(valorParcela * parcelas * 100) / 100;
+    }
+    if (!(valorTotal > 0) || !(valorParcela > 0)) {
+        return {
+            parcelas,
+            valorTotal: 0,
+            valorParcela: 0,
+            fonte: "incompleto",
+            incompleto: "Faltou o valor. Digite tipo '3x de 100' (parcela) ou '300 em 3x' (total).",
+        };
+    }
+    // Se vieram os dois e não batem (~1 centavo), preferir valor_total informado.
+    const produto = Math.round(valorParcela * parcelas * 100) / 100;
+    if (args.valor_total != null && Math.abs(produto - valorTotal) > 0.05) {
+        valorParcela = Math.round((valorTotal / parcelas) * 100) / 100;
+    }
+    return {
+        parcelas,
+        valorTotal,
+        valorParcela,
+        fonte: args.valor_parcela || args.valor_total || args.parcelas ? "args+texto" : "texto",
+    };
+}

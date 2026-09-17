@@ -1,0 +1,276 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.getFluxoProjetadoPF = getFluxoProjetadoPF;
+exports.getFluxoProjetadoPJ = getFluxoProjetadoPJ;
+/**
+ * Fluxo de caixa projetado — PF e PJ.
+ *
+ * Monta uma matriz plano de contas × meses somando TUDO que cai na janela
+ * (efetivado + pendente), usando o vencimento como data de referência. O saldo
+ * inicial vem só do que já foi efetivado antes da janela, então não há dupla
+ * contagem entre o saldo de partida e a projeção.
+ *
+ * PF e PJ compartilham a forma da resposta, mas cada um usa o seu plano de
+ * contas: `categorias` (do usuário + globais) no PF, `empresas_contas` no PJ.
+ */
+const drizzle_orm_1 = require("drizzle-orm");
+const db_1 = require("../db");
+const round2 = (n) => Math.round(n * 100) / 100;
+/** Lista de 'YYYY-MM' cobrindo a janela, inclusive. */
+function mesesDaJanela(de, ate) {
+    const [ay, am] = de.split("-").map(Number);
+    const [by, bm] = ate.split("-").map(Number);
+    const out = [];
+    let y = ay, m = am;
+    // Trava de segurança: janelas absurdas viram no máximo 10 anos de colunas.
+    while ((y < by || (y === by && m <= bm)) && out.length < 120) {
+        out.push(`${y}-${String(m).padStart(2, "0")}`);
+        m++;
+        if (m > 12) {
+            m = 1;
+            y++;
+        }
+    }
+    return out;
+}
+const ABREV = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+function rotuloMes(ym) {
+    const [y, m] = ym.split("-").map(Number);
+    return `${ABREV[m - 1]}/${String(y).slice(2)}`;
+}
+const mesAtual = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+};
+/**
+ * Converte as linhas agregadas em linhas de plano de contas + os totais mensais.
+ * `contas` traz nome/código/grupo de cada conta_id conforme o plano do ambiente.
+ */
+function montar(escopo, janela, meses, agregado, contas, saldoInicial, extrasTitulo) {
+    var _a, _b, _c;
+    const idxMes = new Map(meses.map((m, i) => [m, i]));
+    const linhas = new Map();
+    for (const r of agregado) {
+        const i = idxMes.get(r.mes);
+        if (i === undefined)
+            continue;
+        const meta = contas.get(r.conta_id);
+        const tipo = r.tipo === "Receita" ? "Receita" : "Despesa";
+        const chave = `${r.extra ? "x" : "n"}|${tipo}|${r.conta_id}`;
+        let linha = linhas.get(chave);
+        if (!linha) {
+            linha = {
+                conta_id: r.conta_id,
+                codigo: (_a = meta === null || meta === void 0 ? void 0 : meta.codigo) !== null && _a !== void 0 ? _a : null,
+                nome: (_b = meta === null || meta === void 0 ? void 0 : meta.nome) !== null && _b !== void 0 ? _b : "Sem categoria",
+                tipo,
+                grupo: r.extra ? extrasTitulo : ((_c = meta === null || meta === void 0 ? void 0 : meta.grupo) !== null && _c !== void 0 ? _c : (tipo === "Receita" ? "Receitas" : "Despesas")),
+                valores: meses.map(() => 0),
+                previstos: meses.map(() => 0),
+                total: 0,
+                total_previsto: 0,
+            };
+            linhas.set(chave, linha);
+        }
+        linha.valores[i] = round2(linha.valores[i] + r.total);
+        linha.previstos[i] = round2(linha.previstos[i] + r.previsto);
+        linha.total = round2(linha.total + r.total);
+        linha.total_previsto = round2(linha.total_previsto + r.previsto);
+    }
+    const todas = [...linhas.values()];
+    const ordenar = (a, b) => (a.codigo || "zzz").localeCompare(b.codigo || "zzz") || a.nome.localeCompare(b.nome);
+    const extras = todas.filter((l) => l.grupo === extrasTitulo).sort(ordenar);
+    const operacionais = todas.filter((l) => l.grupo !== extrasTitulo);
+    const receitas = operacionais.filter((l) => l.tipo === "Receita").sort(ordenar);
+    const despesas = operacionais.filter((l) => l.tipo === "Despesa").sort(ordenar);
+    const agora = mesAtual();
+    let saldo = round2(saldoInicial);
+    const mesesOut = meses.map((ym, i) => {
+        const soma = (arr, campo) => round2(arr.reduce((s, l) => s + l[campo][i], 0));
+        const entradas = soma(receitas, "valores");
+        const saidas = soma(despesas, "valores");
+        const resultado = round2(entradas - saidas);
+        const saldoInicialMes = saldo;
+        saldo = round2(saldo + resultado);
+        return {
+            mes: ym,
+            rotulo: rotuloMes(ym),
+            passado: ym < agora,
+            entradas,
+            saidas,
+            resultado,
+            saldo_inicial: saldoInicialMes,
+            saldo_final: saldo,
+            entradas_previstas: soma(receitas, "previstos"),
+            saidas_previstas: soma(despesas, "previstos"),
+        };
+    });
+    const totalEntradas = round2(mesesOut.reduce((s, m) => s + m.entradas, 0));
+    const totalSaidas = round2(mesesOut.reduce((s, m) => s + m.saidas, 0));
+    return {
+        escopo,
+        periodo: janela,
+        saldo_inicial: round2(saldoInicial),
+        meses: mesesOut,
+        receitas,
+        despesas,
+        extras,
+        extras_titulo: extrasTitulo,
+        totais: {
+            entradas: totalEntradas,
+            saidas: totalSaidas,
+            resultado: round2(totalEntradas - totalSaidas),
+            saldo_final: mesesOut.length ? mesesOut[mesesOut.length - 1].saldo_final : round2(saldoInicial),
+            extras: round2(extras.reduce((s, l) => s + l.total, 0)),
+        },
+    };
+}
+// ---------------------------------------------------------------- PF
+async function getFluxoProjetadoPF(walletId, userId, janela, conn = db_1.db) {
+    var _a;
+    const meses = mesesDaJanela(janela.de, janela.ate);
+    const ref = (0, drizzle_orm_1.sql) `COALESCE(t.data_vencimento, t.data_transacao)`;
+    const rows = await conn.execute((0, drizzle_orm_1.sql) `
+    SELECT t.categoria_id AS conta_id,
+           to_char(${ref}, 'YYYY-MM') AS mes,
+           t.tipo,
+           COALESCE(t.reembolsavel, false) AS extra,
+           SUM(t.valor::numeric) AS total,
+           SUM(CASE WHEN t.status <> 'Efetivada' THEN t.valor::numeric ELSE 0 END) AS previsto
+    FROM transacoes t
+    WHERE t.carteira_id = ${walletId}
+      AND ${ref} >= ${janela.de}
+      AND ${ref} <= ${janela.ate}
+    GROUP BY t.categoria_id, to_char(${ref}, 'YYYY-MM'), t.tipo, COALESCE(t.reembolsavel, false)
+  `);
+    // Saldo de partida: só o efetivado antes da janela. Despesa reembolsável não
+    // reduz caixa (mesma regra de calculateWalletBalance).
+    const saldoRows = await conn.execute((0, drizzle_orm_1.sql) `
+    SELECT COALESCE(SUM(
+      CASE WHEN t.tipo = 'Receita' THEN t.valor::numeric
+           WHEN t.tipo = 'Despesa' AND COALESCE(t.reembolsavel, false) = false THEN -t.valor::numeric
+           ELSE 0 END
+    ), 0) AS saldo
+    FROM transacoes t
+    WHERE t.carteira_id = ${walletId}
+      AND t.status = 'Efetivada'
+      AND ${ref} < ${janela.de}
+  `);
+    const saldoInicial = parseFloat((_a = saldoRows[0]) === null || _a === void 0 ? void 0 : _a.saldo) || 0;
+    const catRows = await conn.execute((0, drizzle_orm_1.sql) `
+    SELECT id, nome, tipo
+    FROM categorias
+    WHERE usuario_id = ${userId} OR global = true
+  `);
+    const contas = new Map();
+    for (const c of catRows) {
+        contas.set(Number(c.id), {
+            codigo: null,
+            nome: String(c.nome),
+            grupo: String(c.tipo) === "Receita" ? "Receitas" : "Despesas",
+        });
+    }
+    const agregado = rows.map((r) => ({
+        conta_id: Number(r.conta_id),
+        mes: String(r.mes),
+        tipo: String(r.tipo),
+        extra: r.extra === true || r.extra === "true",
+        total: parseFloat(r.total) || 0,
+        previsto: parseFloat(r.previsto) || 0,
+    }));
+    return montar("PF", janela, meses, agregado, contas, saldoInicial, "Reembolsáveis (a receber)");
+}
+// ---------------------------------------------------------------- PJ
+async function getFluxoProjetadoPJ(empresaId, janela, conn = db_1.db) {
+    var _a, _b, _c;
+    const meses = mesesDaJanela(janela.de, janela.ate);
+    const ref = (0, drizzle_orm_1.sql) `COALESCE(t.data_vencimento, t.data_transacao)`;
+    const rows = await conn.execute((0, drizzle_orm_1.sql) `
+    SELECT t.categoria_id AS conta_id,
+           to_char(${ref}, 'YYYY-MM') AS mes,
+           t.tipo,
+           COALESCE(t.reembolso_pessoal, false) AS extra,
+           SUM(t.valor::numeric) AS total,
+           SUM(CASE WHEN t.status <> 'Efetivada' THEN t.valor::numeric ELSE 0 END) AS previsto
+    FROM empresas_transacoes t
+    WHERE t.empresa_id = ${empresaId}
+      AND ${ref} >= ${janela.de}
+      AND ${ref} <= ${janela.ate}
+      -- Compra no cartão não é saída de caixa na data da compra (o dinheiro sai
+      -- no vencimento da fatura). Mesmo filtro do fluxo de caixa realizado.
+      AND COALESCE(t.movimenta_caixa, true) = true
+    GROUP BY t.categoria_id, to_char(${ref}, 'YYYY-MM'), t.tipo, COALESCE(t.reembolso_pessoal, false)
+  `);
+    // As faturas ainda NÃO pagas entram como previsão na data de VENCIMENTO,
+    // rateadas pelas contas das compras — senão o cartão sumiria da projeção.
+    // (A fatura já paga não entra aqui: ela virou a saída de caixa da query acima.)
+    let faturasRows = [];
+    try {
+        faturasRows = (await conn.execute((0, drizzle_orm_1.sql) `
+      SELECT t.categoria_id AS conta_id,
+             to_char(f.data_vencimento::date, 'YYYY-MM') AS mes,
+             'Despesa' AS tipo,
+             false AS extra,
+             SUM(t.valor::numeric) AS total,
+             SUM(t.valor::numeric) AS previsto
+      FROM empresas_faturas f
+      JOIN empresas_transacoes t ON t.fatura_id = f.id
+      WHERE f.empresa_id = ${empresaId}
+        AND f.status <> 'paga'
+        AND COALESCE(t.movimenta_caixa, true) = false
+        AND f.data_vencimento >= ${janela.de}
+        AND f.data_vencimento <= ${janela.ate}
+      GROUP BY t.categoria_id, to_char(f.data_vencimento::date, 'YYYY-MM')
+    `));
+    }
+    catch (_d) {
+        /* empresa sem cartão / tabela ainda não migrada — projeção segue sem fatura */
+    }
+    // Saldo de partida = saldo declarado das contas bancárias + movimento já
+    // efetivado nelas antes da janela (mesma conta do fluxo de caixa realizado).
+    const bancoRows = await conn.execute((0, drizzle_orm_1.sql) `
+    SELECT COALESCE(SUM(saldo_inicial::numeric), 0) AS total
+    FROM contas_bancarias
+    WHERE empresa_id = ${empresaId} AND ativo = true
+  `);
+    const movRows = await conn.execute((0, drizzle_orm_1.sql) `
+    SELECT COALESCE(SUM(
+      CASE WHEN t.tipo = 'Receita' THEN t.valor::numeric ELSE -t.valor::numeric END
+    ), 0) AS total
+    FROM empresas_transacoes t
+    WHERE t.empresa_id = ${empresaId}
+      AND t.conta_bancaria_id IS NOT NULL
+      AND COALESCE(t.movimenta_caixa, true) = true
+      AND t.status = 'Efetivada'
+      AND ${ref} < ${janela.de}
+  `);
+    const saldoInicial = (parseFloat((_a = bancoRows[0]) === null || _a === void 0 ? void 0 : _a.total) || 0) + (parseFloat((_b = movRows[0]) === null || _b === void 0 ? void 0 : _b.total) || 0);
+    const contaRows = await conn.execute((0, drizzle_orm_1.sql) `
+    SELECT id, codigo, nome, tipo, classificacao
+    FROM empresas_contas
+    WHERE empresa_id = ${empresaId}
+  `);
+    const GRUPO = {
+        FIXA: "Despesas Fixas",
+        VARIAVEL: "Despesas Variáveis",
+        OUTRA: "Outras Despesas",
+    };
+    const contas = new Map();
+    for (const c of contaRows) {
+        const receita = String(c.tipo) === "Receita";
+        contas.set(Number(c.id), {
+            codigo: c.codigo ? String(c.codigo) : null,
+            nome: String(c.nome),
+            grupo: receita ? "Receitas" : ((_c = GRUPO[String(c.classificacao)]) !== null && _c !== void 0 ? _c : "Outras Despesas"),
+        });
+    }
+    const agregado = [...rows, ...faturasRows].map((r) => ({
+        conta_id: Number(r.conta_id),
+        mes: String(r.mes),
+        tipo: String(r.tipo),
+        extra: r.extra === true || r.extra === "true",
+        total: parseFloat(r.total) || 0,
+        previsto: parseFloat(r.previsto) || 0,
+    }));
+    return montar("PJ", janela, meses, agregado, contas, saldoInicial, "Reembolsos a Pagar — Pessoal");
+}

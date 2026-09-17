@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Transaction, TransactionStatus, TransactionType, Category, PaymentMethod } from "@shared/schema";
 import { TransactionForm } from "@/components/shared/TransactionForm";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -44,6 +52,7 @@ import {
   CheckCircle2,
   RotateCcw,
   FileSpreadsheet,
+  CalendarDays,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -735,6 +744,38 @@ export default function Transactions() {
   const [valorMax, setValorMax] = useState("");
   const [ordenacao, setOrdenacao] = useState<Ordenacao>("data_desc");
   const { toast } = useToast();
+  const [sel, setSel] = useState<Set<number>>(new Set());
+  const [diaOpen, setDiaOpen] = useState(false);
+  const [diaValor, setDiaValor] = useState("5");
+  const [diaTodasParcelas, setDiaTodasParcelas] = useState(true);
+
+  const alterarDia = useMutation({
+    mutationFn: (data: { transacao_ids: number[]; dia: number; todas_parcelas: boolean }) =>
+      apiRequest("/api/transactions/alterar-dia", { method: "POST", data }),
+    onSuccess: (r: any) => {
+      refetch();
+      queryClient.invalidateQueries({ predicate: (q) => String(q.queryKey[0] || "").startsWith("/api/cartoes") });
+      queryClient.invalidateQueries({ predicate: (q) => String(q.queryKey[0] || "").startsWith("/api/faturas") });
+      setDiaOpen(false);
+      setSel(new Set());
+      const extra = r?.extra_parcelas ? ` (+${r.extra_parcelas} parcela(s))` : "";
+      toast({
+        title: `Dia alterado em ${r?.alterados ?? 0} lançamento(s)${extra}`,
+        description: "Faturas de cartão foram recalculadas pelo novo dia.",
+      });
+    },
+    onError: (e: any) =>
+      toast({ title: "Erro", description: e?.message || e?.error, variant: "destructive" }),
+  });
+
+  const toggleSel = (id: number) => {
+    setSel((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  };
   
   // WebSocket para atualizações em tempo real
   const { isConnected, connectionError, badges, dismissBadge, clearAllBadges, markAsViewed, totalCount, shakingTransactions, triggerTransactionShake, clearTransactionShake } = useWebSocket();
@@ -1154,6 +1195,7 @@ export default function Transactions() {
                       setValorMin("");
                       setValorMax("");
                       setOrdenacao("data_desc");
+                      setSel(new Set());
                     }}
                     className="bg-dark-purple/10"
                   >
@@ -1222,12 +1264,51 @@ export default function Transactions() {
             />
           </div>
 
+          {sel.size > 0 && (
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-primary/5 px-3 py-2">
+              <p className="text-sm text-muted-foreground">{sel.size} selecionado(s)</p>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" onClick={() => setSel(new Set())}>
+                  Limpar
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setDiaValor("5");
+                    setDiaTodasParcelas(true);
+                    setDiaOpen(true);
+                  }}
+                >
+                  <CalendarDays className="h-4 w-4 mr-1" /> Alterar dia
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* Desktop Table View */}
           <div className="hidden md:block">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[640px]">
                 <thead>
                   <tr>
+                    <th className="pb-4 pr-2 w-8">
+                      <input
+                        type="checkbox"
+                        aria-label="Selecionar todos"
+                        checked={
+                          filteredTransactions.length > 0 &&
+                          filteredTransactions.every((t) => sel.has(t.id))
+                        }
+                        onChange={(e) => {
+                          const on = e.target.checked;
+                          setSel((prev) => {
+                            const n = new Set(prev);
+                            filteredTransactions.forEach((t) => (on ? n.add(t.id) : n.delete(t.id)));
+                            return n;
+                          });
+                        }}
+                      />
+                    </th>
                     <th className="text-left pb-4 text-xs font-label text-gray-400">{t('transactions.table.description', 'DESCRIÇÃO')}</th>
                     <th className="text-left pb-4 text-xs font-label text-gray-400">FORMA</th>
                     <th className="text-left pb-4 text-xs font-label text-gray-400">{t('transactions.table.category', 'CATEGORIA')}</th>
@@ -1240,19 +1321,28 @@ export default function Transactions() {
                 <tbody>
                   {isLoading ? (
                     <tr>
-                      <td colSpan={7} className="py-4 text-center">{t('common.loading', 'Carregando...')}</td>
+                      <td colSpan={8} className="py-4 text-center">{t('common.loading', 'Carregando...')}</td>
                     </tr>
                   ) : filteredTransactions.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-4 text-center">{t('transactions.table.no_transactions', 'Nenhuma transação encontrada')}</td>
+                      <td colSpan={8} className="py-4 text-center">{t('transactions.table.no_transactions', 'Nenhuma transação encontrada')}</td>
                     </tr>
                   ) : (
                     filteredTransactions.map((transaction) => (
                       <TransactionRow 
                         key={transaction.id} 
                         isShaking={shakingTransactions.has(transaction.id)}
-                        className="cursor-pointer border-t border-white/5"
+                        className={`cursor-pointer border-t border-white/5 ${sel.has(transaction.id) ? "bg-primary/5" : ""}`}
                       >
+                        <td className="py-4 pr-2">
+                          <input
+                            type="checkbox"
+                            checked={sel.has(transaction.id)}
+                            onChange={() => toggleSel(transaction.id)}
+                            onClick={(e) => e.stopPropagation()}
+                            aria-label={`Selecionar ${transaction.descricao}`}
+                          />
+                        </td>
                         <td className="py-4 pr-4">
                           <div className="flex items-center">
                             <div className={`w-8 h-8 rounded-full ${transaction.tipo === TransactionType.INCOME ? 'bg-green-500/20' : 'bg-red-500/20'} flex items-center justify-center mr-3`}>
@@ -1363,6 +1453,13 @@ export default function Transactions() {
                 >
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center flex-1">
+                      <input
+                        type="checkbox"
+                        className="mr-2 mt-1 flex-shrink-0"
+                        checked={sel.has(transaction.id)}
+                        onChange={() => toggleSel(transaction.id)}
+                        aria-label={`Selecionar ${transaction.descricao}`}
+                      />
                       <div className={`w-10 h-10 rounded-full ${transaction.tipo === TransactionType.INCOME ? 'bg-green-500/20' : 'bg-red-500/20'} flex items-center justify-center mr-3 flex-shrink-0`}>
                         {transaction.tipo === TransactionType.INCOME ? (
                           <ArrowUpIcon className="h-5 w-5 text-green-500" />
@@ -1537,6 +1634,65 @@ export default function Transactions() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={diaOpen} onOpenChange={setDiaOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Alterar dia da transação</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              {sel.size} lançamento(s). O mês de cada um permanece; só o dia muda.
+              Em cartão, compra depois do fechamento cai na fatura seguinte — por isso setembro
+              virava outubro. Use um dia ≤ ao fechamento do cartão.
+            </p>
+            <div className="space-y-1.5">
+              <Label>Novo dia (1–31) *</Label>
+              <Input
+                type="number"
+                min={1}
+                max={31}
+                value={diaValor}
+                onChange={(e) => setDiaValor(e.target.value)}
+              />
+            </div>
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={diaTodasParcelas}
+                onChange={(e) => setDiaTodasParcelas(e.target.checked)}
+              />
+              <span>
+                Aplicar em todas as parcelas da compra
+                <span className="block text-xs text-muted-foreground">
+                  Cada parcela mantém o próprio mês; só o dia muda. A fatura é recalculada.
+                </span>
+              </span>
+            </label>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDiaOpen(false)}>Cancelar</Button>
+            <Button
+              disabled={alterarDia.isPending || sel.size === 0}
+              onClick={() => {
+                const dia = Number(diaValor);
+                if (!(dia >= 1 && dia <= 31)) {
+                  toast({ title: "Informe um dia entre 1 e 31", variant: "destructive" });
+                  return;
+                }
+                alterarDia.mutate({
+                  transacao_ids: Array.from(sel),
+                  dia,
+                  todas_parcelas: diaTodasParcelas,
+                });
+              }}
+            >
+              Aplicar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

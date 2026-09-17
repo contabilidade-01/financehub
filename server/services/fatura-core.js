@@ -1,0 +1,120 @@
+"use strict";
+/**
+ * Núcleo puro de faturas de cartão — compartilhado PF e PJ.
+ * Sem I/O: só regras de competência e helpers numéricos.
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.num = exports.pad2 = void 0;
+exports.competenciaDaCompra = competenciaDaCompra;
+exports.datasDaCompetencia = datasDaCompetencia;
+exports.comDiaNoMes = comDiaNoMes;
+exports.competenciaMaisMeses = competenciaMaisMeses;
+exports.valoresParcelas = valoresParcelas;
+exports.ehFormaCartaoCredito = ehFormaCartaoCredito;
+const pad2 = (n) => String(n).padStart(2, "0");
+exports.pad2 = pad2;
+const num = (v) => (v == null ? 0 : parseFloat(v) || 0);
+exports.num = num;
+/**
+ * A qual fatura (competência) uma compra pertence, dado o dia de fechamento.
+ * Extraído de fatura-pj.service — função pura, sem dependência de tabelas.
+ */
+function competenciaDaCompra(dataISO, diaFech, diaVenc) {
+    const d = new Date(String(dataISO).slice(0, 10) + "T00:00:00");
+    let ano = d.getFullYear();
+    let mes = d.getMonth(); // 0-11
+    // Compra NO dia do fechamento ainda entra nesta fatura; a partir do dia
+    // seguinte vai para a próxima.
+    if (d.getDate() > diaFech) {
+        mes += 1;
+        if (mes > 11) {
+            mes = 0;
+            ano += 1;
+        }
+    }
+    return datasDaCompetencia(`${ano}-${(0, exports.pad2)(mes + 1)}`, diaFech, diaVenc);
+}
+/**
+ * Fechamento e vencimento de uma competência já conhecida.
+ *
+ * Existe para o parcelamento: a fatura da parcela i é a da 1ª mais i meses,
+ * decidida por competência e não reaplicando a regra de fechamento sobre uma
+ * data deslocada. Deslocar a data quebra em fim de mês — compra dia 31 com
+ * fechamento dia 30 caía na competência seguinte, e a 2ª parcela, com a data
+ * grudada em 28 de fevereiro, voltava para a MESMA fatura da 1ª.
+ */
+function datasDaCompetencia(competencia, diaFech, diaVenc) {
+    const [ano, mes1] = String(competencia).split("-").map(Number);
+    const mes = (mes1 || 1) - 1; // 0-11
+    const dataFech = `${ano}-${(0, exports.pad2)(mes + 1)}-${(0, exports.pad2)(diaDoMes(ano, mes, diaFech))}`;
+    let vMes = mes, vAno = ano;
+    if (diaVenc < diaFech) {
+        vMes += 1;
+        if (vMes > 11) {
+            vMes = 0;
+            vAno += 1;
+        }
+    }
+    const dataVenc = `${vAno}-${(0, exports.pad2)(vMes + 1)}-${(0, exports.pad2)(diaDoMes(vAno, vMes, diaVenc))}`;
+    return { competencia: `${ano}-${(0, exports.pad2)(mes + 1)}`, dataFech, dataVenc };
+}
+/**
+ * O dia N daquele mês, limitado ao último dia real (30/02 → 28 ou 29).
+ *
+ * Antes isso era `Math.min(dia, 28)`, o que mentia a data: cartão que vence
+ * dia 29 aparecia vencendo dia 28, e cartão que fecha dia 30 mostrava
+ * fechamento no dia 28 — antes de compras do dia 29 que estavam na fatura.
+ */
+function diaDoMes(ano, mes0, dia) {
+    const ultimo = new Date(Date.UTC(ano, mes0 + 1, 0)).getUTCDate();
+    return Math.min(Math.max(1, Math.floor(dia) || 1), ultimo);
+}
+/** Troca só o dia, mantendo ano-mês. Dia 31 em fevereiro vira 28/29. */
+function comDiaNoMes(iso, dia) {
+    const [ys, ms] = String(iso).slice(0, 10).split("-");
+    const y = Number(ys);
+    const m = Number(ms);
+    if (!y || !m)
+        return String(iso).slice(0, 10);
+    return `${y}-${(0, exports.pad2)(m)}-${(0, exports.pad2)(diaDoMes(y, m - 1, dia))}`;
+}
+/** Avança N meses a partir de uma competência YYYY-MM. */
+function competenciaMaisMeses(competencia, meses) {
+    const [y, m] = competencia.split("-").map(Number);
+    const total = (m - 1) + meses;
+    const ano = y + Math.floor(total / 12);
+    const mes0 = ((total % 12) + 12) % 12;
+    return `${ano}-${(0, exports.pad2)(mes0 + 1)}`;
+}
+/**
+ * Divide um valor em N parcelas em centavos; a última absorve o resto
+ * (R$ 100 / 3 → 33,33 + 33,33 + 33,34). A soma SEMPRE fecha no total.
+ *
+ * Cada parcela vai para o centavo MAIS PRÓXIMO. Truncar empilhava a diferença
+ * inteira na última — R$ 50 em 12x dava onze de 4,16 e uma de 4,24, que o
+ * cliente lê como acréscimo. Arredondando, a última cai um pouco em vez de
+ * subir, que é o que cartão e loja mostram.
+ */
+function valoresParcelas(total, parcelas) {
+    const n = Math.floor(Number(parcelas));
+    if (!Number.isFinite(total) || n < 1)
+        return [];
+    const cents = Math.round(Number(total) * 100);
+    let base = Math.round(cents / n);
+    // Valor minúsculo em muitas parcelas (R$ 0,10 em 12x) faria base×(n−1) passar
+    // do total e a última virar NEGATIVA. Nesse canto, truncar é o certo.
+    if (base * (n - 1) > cents)
+        base = Math.floor(cents / n);
+    const out = [];
+    let alocado = 0;
+    for (let i = 0; i < n; i++) {
+        const c = i === n - 1 ? cents - alocado : base;
+        alocado += c;
+        out.push(c / 100);
+    }
+    return out;
+}
+/** Cartão de crédito = tem dias de fechamento e vencimento (limite é opcional). */
+function ehFormaCartaoCredito(f) {
+    return f.dia_fechamento != null && f.dia_vencimento != null;
+}

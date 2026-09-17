@@ -59,6 +59,7 @@ import AdminBillingDashboard from "@/pages/admin/billing-dashboard";
 import AdminAssinaturas from "@/pages/admin/assinaturas";
 import FeatureFlagsPage from "@/pages/admin/feature-flags";
 import SimularWhatsappPage from "@/pages/admin/simular-whatsapp";
+import OrquestradorPage from "@/pages/admin/orquestrador";
 import PaymentSettingsPage from "@/pages/admin/payment-settings";
 import AdminPaymentsPage from "@/pages/admin/payments";
 import ExternalCheckout from "@/pages/checkout/ExternalCheckout";
@@ -323,6 +324,11 @@ function Router() {
             <Route path="/admin/simular-whatsapp">
               <MainLayout>
                 <SimularWhatsappPage />
+              </MainLayout>
+            </Route>
+            <Route path="/admin/orquestrador">
+              <MainLayout>
+                <OrquestradorPage />
               </MainLayout>
             </Route>
             <Route path="/billing/checkout">
