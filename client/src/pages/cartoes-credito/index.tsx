@@ -100,6 +100,7 @@ export default function CartoesCreditoPage() {
   const [moverComp, setMoverComp] = useState<string>("");
   const [todasParcelas, setTodasParcelas] = useState(true);
   const [recalcularComp, setRecalcularComp] = useState(false);
+  const [criarNovaFatura, setCriarNovaFatura] = useState(false);
   const [previewParcelas, setPreviewParcelas] = useState<{ extra: number; ids: number[] } | null>(null);
   const [sel, setSel] = useState<Set<number>>(new Set());
   const [diaOpen, setDiaOpen] = useState(false);
@@ -126,6 +127,19 @@ export default function CartoesCreditoPage() {
     queryKey: [`/api/cartoes/${cardId}/lancamentos`],
     enabled: !!cardId,
   });
+
+  // Faturas do cartão de DESTINO do "mover" (pode ser diferente do cartão em tela).
+  const { data: moverFaturasResp } = useQuery<{ cartao: Cartao; faturas: Fatura[] }>({
+    queryKey: [`/api/cartoes/${moverCartaoId}/faturas`],
+    enabled: !!moverIds && !!moverCartaoId,
+  });
+  const moverFaturas = useMemo(
+    () =>
+      [...(moverFaturasResp?.faturas || [])]
+        .filter((f) => f.status !== "paga")
+        .sort((a, b) => a.competencia.localeCompare(b.competencia)),
+    [moverFaturasResp],
+  );
 
   const cartaoSel = useMemo(() => cartoes.find((c) => c.id === cardId) || null, [cartoes, cardId]);
   const faturas = useMemo(
@@ -166,6 +180,15 @@ export default function CartoesCreditoPage() {
       cancel = true;
     };
   }, [moverIds, todasParcelas]);
+
+  // Ao abrir o mover / carregar as faturas do destino: se a competência-alvo já
+  // existe entre as faturas do cartão de destino, seleciona-a; senão, entra em
+  // modo "criar nova fatura".
+  useEffect(() => {
+    if (!moverIds) return;
+    const existe = moverFaturas.some((f) => f.competencia === moverComp);
+    setCriarNovaFatura(!existe);
+  }, [moverFaturas, moverIds, moverCartaoId]);
 
   // Seleciona o primeiro cartão automaticamente.
   useEffect(() => {
@@ -1048,14 +1071,45 @@ export default function CartoesCreditoPage() {
               </label>
               {!recalcularComp && (
                 <div className="space-y-1.5">
-                  <Label>Competência (fatura) *</Label>
-                  <Input
-                    type="month"
-                    value={moverComp}
-                    onChange={(e) => setMoverComp(e.target.value)}
-                  />
+                  <Label>Fatura de destino *</Label>
+                  <Select
+                    value={criarNovaFatura ? "__nova__" : moverComp}
+                    onValueChange={(v) => {
+                      if (v === "__nova__") {
+                        setCriarNovaFatura(true);
+                      } else {
+                        setCriarNovaFatura(false);
+                        setMoverComp(v);
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Escolha a fatura" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {moverFaturas.map((f) => (
+                        <SelectItem key={f.id} value={f.competencia}>
+                          {compLabel(f.competencia)} · vence {dataBR(f.data_vencimento)} · {money(Number(f.total) || 0)}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value="__nova__">+ Criar nova fatura (escolher mês)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {criarNovaFatura && (
+                    <div className="space-y-1 pt-1">
+                      <Label className="text-xs">Mês da nova fatura (competência)</Label>
+                      <Input
+                        type="month"
+                        value={moverComp}
+                        onChange={(e) => setMoverComp(e.target.value)}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Usa/cria a fatura desse mês no cartão de destino; o vencimento é calculado pelos dias do cartão.
+                      </p>
+                    </div>
+                  )}
                   <p className="text-xs text-muted-foreground">
-                    Vale para o lançamento selecionado; as outras parcelas seguem nos meses seguintes.
+                    Escolha pela data em que a fatura vence. Se for parcelada, as outras parcelas seguem nos meses seguintes.
                   </p>
                 </div>
               )}
