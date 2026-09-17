@@ -253,6 +253,18 @@ export default function CartoesCreditoPage() {
     onError: (e: any) => toast({ title: "Erro", description: e?.message || e?.error, variant: "destructive" }),
   });
 
+  const recalcularFaturas = useMutation({
+    mutationFn: (id: number) => apiRequest(`/api/cartoes/${id}/recalcular-faturas`, { method: "POST", data: {} }),
+    onSuccess: (r: any) => {
+      invalidate();
+      toast({
+        title: "Faturas recalculadas",
+        description: `${r?.movidas ?? 0} lançamento(s) reorganizado(s), ${r?.faturasRemovidas ?? 0} fatura(s) vazia(s) removida(s).`,
+      });
+    },
+    onError: (e: any) => toast({ title: "Erro", description: e?.message || e?.error, variant: "destructive" }),
+  });
+
   const openNovoCartao = () => { setEditingCartao(null); setCartaoForm(emptyCartao); setCartaoOpen(true); };
   const openEditarCartao = (c: Cartao) => {
     setEditingCartao(c);
@@ -425,9 +437,25 @@ export default function CartoesCreditoPage() {
       {cartaoSel && (
         <Card>
           <CardContent className="py-4 space-y-3">
-            <div className="flex items-center gap-2">
-              <ReceiptText className="h-4 w-4 text-muted-foreground" />
-              <p className="font-semibold">Faturas</p>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <ReceiptText className="h-4 w-4 text-muted-foreground" />
+                <p className="font-semibold">Faturas</p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!cardId || recalcularFaturas.isPending}
+                onClick={() => {
+                  if (!cardId) return;
+                  if (confirm("Recalcular as faturas deste cartão usando os dias de fechamento/vencimento atuais? Faturas pagas não são alteradas.")) {
+                    recalcularFaturas.mutate(cardId);
+                  }
+                }}
+                title="Reorganiza os lançamentos nas faturas certas pelos dias atuais do cartão"
+              >
+                Recalcular faturas
+              </Button>
             </div>
             {loadingFaturas ? (
               <div className="flex gap-2 flex-wrap">

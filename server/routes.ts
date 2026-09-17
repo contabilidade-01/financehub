@@ -1376,6 +1376,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/cartoes/:id", combinedAuth, checkImpersonation, contasCartoesCtrl.excluirCartao);
   app.get("/api/cartoes/:id/faturas", combinedAuth, checkImpersonation, contasCartoesCtrl.listarFaturas);
   app.get("/api/cartoes/:id/saldo", combinedAuth, checkImpersonation, contasCartoesCtrl.saldoCartao);
+  app.post("/api/cartoes/:id/recalcular-faturas", combinedAuth, checkImpersonation, contasCartoesCtrl.recalcularFaturasCartao);
   app.get("/api/faturas/:id", combinedAuth, checkImpersonation, contasCartoesCtrl.detalheFatura);
   app.post("/api/faturas/:id/pagar", combinedAuth, checkImpersonation, contasCartoesCtrl.pagarFatura);
   app.post("/api/faturas/:id/reabrir", combinedAuth, checkImpersonation, contasCartoesCtrl.reabrirFatura);

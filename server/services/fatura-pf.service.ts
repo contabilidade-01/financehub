@@ -94,6 +94,70 @@ export async function resolverFaturaPfPorCompetencia(
   return { fatura, competencia: comp };
 }
 
+/**
+ * Recalcula TODAS as faturas de um cartão PF a partir das DATAS ATUAIS do cartão
+ * (dia_fechamento/dia_vencimento). Corrige o estrago de cartões que estavam sem
+ * dias (competência/vencimento errados). NÃO toca em faturas já PAGAS.
+ */
+export async function recalcularFaturasCartaoPf(
+  usuarioId: number,
+  carteiraId: number,
+  cartao: { id: number; dia_fechamento: number; dia_vencimento: number; nome: string },
+): Promise<{ movidas: number; faturasCorrigidas: number; faturasRemovidas: number }> {
+  const diaF = Number(cartao.dia_fechamento) || 1;
+  const diaV = Number(cartao.dia_vencimento) || 10;
+
+  // 1) Re-resolve cada COMPRA do cartão pela data + dias atuais (ignora pagamentos de fatura).
+  const txs = await db.execute(sql`
+    SELECT t.id, t.data_transacao
+    FROM transacoes t
+    WHERE t.forma_pagamento_id = ${cartao.id}
+      AND t.carteira_id = ${carteiraId}
+      AND t.tipo = 'Despesa'
+      AND NOT EXISTS (SELECT 1 FROM faturas fp WHERE fp.transacao_pagamento_id = t.id)
+  `);
+  let movidas = 0;
+  for (const t of txs as any[]) {
+    const { fatura, competencia } = await resolverFaturaPf(
+      usuarioId, carteiraId, cartao, String(t.data_transacao).slice(0, 10),
+    );
+    await db.execute(sql`
+      UPDATE transacoes
+      SET fatura_id = ${fatura.id}, competencia = ${competencia},
+          movimenta_caixa = false, conta_bancaria_id = NULL
+      WHERE id = ${t.id}
+    `);
+    movidas++;
+  }
+
+  // 2) Corrige data_fechamento/data_vencimento das faturas NÃO pagas pelos dias atuais.
+  const faturas = await db.execute(sql`
+    SELECT id, competencia FROM faturas
+    WHERE forma_pagamento_id = ${cartao.id} AND status <> 'paga'
+  `);
+  let faturasCorrigidas = 0;
+  for (const f of faturas as any[]) {
+    const { dataFech, dataVenc } = datasDaCompetencia(String(f.competencia), diaF, diaV);
+    await db.execute(sql`
+      UPDATE faturas SET data_fechamento = ${dataFech}, data_vencimento = ${dataVenc}
+      WHERE id = ${f.id}
+    `);
+    faturasCorrigidas++;
+  }
+
+  // 3) Remove faturas NÃO pagas e VAZIAS (ex.: as de outubro que ficaram sem lançamentos).
+  const del = await db.execute(sql`
+    DELETE FROM faturas f
+    WHERE f.forma_pagamento_id = ${cartao.id}
+      AND f.status <> 'paga'
+      AND NOT EXISTS (SELECT 1 FROM transacoes t WHERE t.fatura_id = f.id)
+    RETURNING f.id
+  `);
+  const faturasRemovidas = (del as any[]).length;
+
+  return { movidas, faturasCorrigidas, faturasRemovidas };
+}
+
 export async function getFaturaTotalPf(faturaId: number): Promise<number> {
   const r = await db.execute(sql`
     SELECT COALESCE(SUM(valor::numeric), 0) AS total

@@ -417,3 +417,27 @@ export async function moverLancamentoFatura(req: Request, res: Response) {
     return res.status(400).json({ error: e?.message || "Erro ao mover lançamento" });
   }
 }
+
+/**
+ * Recalcula todas as faturas de um cartão pelas datas atuais do cartão.
+ * POST /api/cartoes/:id/recalcular-faturas
+ */
+export async function recalcularFaturasCartao(req: Request, res: Response) {
+  try {
+    const userId = req.user!.id;
+    const cartaoId = Number(req.params.id);
+    const cartao = await faturaPf.cartaoPfDoUsuario(cartaoId, userId);
+    if (!cartao || Number(cartao.usuario_id) !== userId) {
+      return res.status(404).json({ error: "Cartão não encontrado" });
+    }
+    if (cartao.dia_fechamento == null || cartao.dia_vencimento == null) {
+      return res.status(400).json({ error: "Defina o dia de fechamento e de vencimento do cartão antes de recalcular." });
+    }
+    const wallet = await storage.getWalletByUserId(userId);
+    if (!wallet) return res.status(404).json({ error: "Carteira não encontrada" });
+    const r = await faturaPf.recalcularFaturasCartaoPf(userId, wallet.id, cartao as any);
+    return res.json({ success: true, ...r });
+  } catch (e: any) {
+    return res.status(400).json({ error: e?.message || "Erro ao recalcular faturas" });
+  }
+}
