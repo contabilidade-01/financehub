@@ -10,6 +10,7 @@ import { db } from "../db";
 import { sql } from "drizzle-orm";
 import {
   FLAG_AGENTE_MEIO_PAGAMENTO,
+  FLAG_ORQUESTRADOR_DEEPSEEK,
   FLAGS_NO_CODIGO,
   DIAS_PARA_APOSENTAR,
   avaliarFlag,
@@ -20,6 +21,7 @@ import {
 
 export {
   FLAG_AGENTE_MEIO_PAGAMENTO,
+  FLAG_ORQUESTRADOR_DEEPSEEK,
   FLAGS_NO_CODIGO,
   DIAS_PARA_APOSENTAR,
   avaliarFlag,
@@ -62,6 +64,16 @@ async function garantirTabelas(): Promise<void> {
       ${FLAG_AGENTE_MEIO_PAGAMENTO},
       ${"Regras avançadas de meio (conta×cartão, ambiguidade, Inter≈Banco Inter). Desligar volta ao modo básico."},
       true
+    )
+    ON CONFLICT (chave) DO NOTHING
+  `);
+  // Orquestrador DeepSeek: nasce off — liberar por usuário no admin.
+  await db.execute(sql`
+    INSERT INTO feature_flags (chave, descricao, ativo_todos)
+    VALUES (
+      ${FLAG_ORQUESTRADOR_DEEPSEEK},
+      ${"Chat orquestrador (DeepSeek) no app. Super admin sempre acessa; demais só se marcados aqui."},
+      false
     )
     ON CONFLICT (chave) DO NOTHING
   `);

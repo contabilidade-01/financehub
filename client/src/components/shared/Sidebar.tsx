@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import {
@@ -102,6 +103,18 @@ function Sidebar() {
   const isImpersonating = userData && 'isImpersonating' in userData && userData.isImpersonating;
   const shouldApplyAdminOffset = isDirectAdmin || isImpersonating;
 
+  const { data: flagsData } = useQuery({
+    queryKey: ["minhas-flags"],
+    enabled: !!userData && !isDirectAdmin,
+    queryFn: async () => {
+      const res = await fetch("/api/flags", { credentials: "include" });
+      if (!res.ok) return { flags: {} as Record<string, boolean> };
+      return res.json();
+    },
+  });
+  const temOrquestrador =
+    isDirectAdmin || !!(flagsData?.flags as Record<string, boolean> | undefined)?.orquestrador_deepseek;
+
   // Verificar se usuário tem empresa PJ
   const isPJ = userData?.tipo_pessoa === 'juridica';
 
@@ -179,8 +192,7 @@ function Sidebar() {
         { icon: <Wrench className="mr-3 h-4 w-4" />, text: t('navigation.maintenance', 'Manutenção'), path: "/admin/maintenance" },
         { icon: <Flag className="mr-3 h-4 w-4" />, text: 'Feature flags', path: "/admin/feature-flags" },
         { icon: <MessageSquare className="mr-3 h-4 w-4" />, text: 'Simulador WhatsApp', path: "/admin/simular-whatsapp" },
-        // Orquestrador: só super_admin (API também exige requireSuperAdmin)
-        ...(isDirectAdmin
+        ...(temOrquestrador
           ? [{ icon: <Bot className="mr-3 h-4 w-4" />, text: 'Orquestrador (DeepSeek)', path: "/admin/orquestrador" }]
           : []),
         { icon: <Shield className="mr-3 h-4 w-4" />, text: 'Consentimentos LGPD', path: "/admin/lgpd" }
@@ -190,9 +202,24 @@ function Sidebar() {
   ];
 
   // Combinar menus baseado no tipo de usuário
-  const allMenuItems = shouldShowAdminItems 
-    ? [...userMenuItems, ...adminMenuItems]
-    : userMenuItems;
+  const orquestradorItem: MenuItem = {
+    icon: <Bot className="mr-3 h-4 w-4" />,
+    text: "Orquestrador (DeepSeek)",
+    path: "/admin/orquestrador",
+  };
+
+  const allMenuItems = (() => {
+    let groups = shouldShowAdminItems
+      ? [...userMenuItems, ...adminMenuItems]
+      : [...userMenuItems];
+    if (temOrquestrador && !shouldShowAdminItems) {
+      groups = [
+        ...groups,
+        { label: "IA", items: [orquestradorItem] },
+      ];
+    }
+    return groups;
+  })();
 
   const isActive = (path: string) => {
     if (path === "/" && location === "/") return true;

@@ -4,7 +4,12 @@
 
 /** Constantes — única forma permitida de nomear flags no código. */
 export const FLAG_AGENTE_MEIO_PAGAMENTO = "agente_meio_pagamento";
-export const FLAGS_NO_CODIGO: readonly string[] = [FLAG_AGENTE_MEIO_PAGAMENTO];
+/** Chat orquestrador (DeepSeek) liberado para o usuário (além de super_admin). */
+export const FLAG_ORQUESTRADOR_DEEPSEEK = "orquestrador_deepseek";
+export const FLAGS_NO_CODIGO: readonly string[] = [
+  FLAG_AGENTE_MEIO_PAGAMENTO,
+  FLAG_ORQUESTRADOR_DEEPSEEK,
+];
 
 export const DIAS_PARA_APOSENTAR = 30;
 

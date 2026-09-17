@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import React, { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { Bot, Loader2, Send } from "lucide-react";
+import { Bot, Loader2, Send, UserPlus, UserMinus, MessageSquare } from "lucide-react";
 
 type Msg = { role: "user" | "assistant"; content: string; tools?: any[]; ms?: number };
 
@@ -27,17 +27,35 @@ async function api(path: string, init?: RequestInit) {
 export default function OrquestradorPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const qc = useQueryClient();
+  const isSuperAdmin = user?.tipo_usuario === "super_admin";
+
   const [busca, setBusca] = useState("");
+  const [buscaLiberar, setBuscaLiberar] = useState("");
   const [usuarioId, setUsuarioId] = useState<number | null>(null);
   const [usuarioLabel, setUsuarioLabel] = useState("");
   const [texto, setTexto] = useState("");
   const [msgs, setMsgs] = useState<Msg[]>([]);
-  const isSuperAdmin = user?.tipo_usuario === "super_admin";
+
+  const { data: flagsMe } = useQuery({
+    queryKey: ["minhas-flags"],
+    enabled: !!user && !isSuperAdmin,
+    queryFn: async () => (await api("/api/flags")).flags as Record<string, boolean>,
+  });
+
+  const liberadoPorFlag = !!flagsMe?.orquestrador_deepseek;
+  const podeAcessar = isSuperAdmin || liberadoPorFlag;
 
   const { data: status } = useQuery({
     queryKey: ["orquestrador-status"],
+    enabled: podeAcessar,
+    queryFn: () => api(isSuperAdmin ? "/api/admin/orquestrador/status" : "/api/orquestrador/status"),
+  });
+
+  const { data: liberados, refetch: refetchLiberados } = useQuery({
+    queryKey: ["orquestrador-liberados"],
     enabled: isSuperAdmin,
-    queryFn: () => api("/api/admin/orquestrador/status"),
+    queryFn: () => api("/api/admin/orquestrador/liberados"),
   });
 
   const { data: usuarios } = useQuery({
@@ -47,9 +65,24 @@ export default function OrquestradorPage() {
       (await api(`/api/admin/flags/buscar-usuarios?q=${encodeURIComponent(busca.trim())}`)).usuarios as any[],
   });
 
-  const mut = useMutation({
+  const { data: usuariosLiberar } = useQuery({
+    queryKey: ["orq-busca-liberar", buscaLiberar],
+    enabled: isSuperAdmin && buscaLiberar.trim().length >= 2,
+    queryFn: async () =>
+      (await api(`/api/admin/flags/buscar-usuarios?q=${encodeURIComponent(buscaLiberar.trim())}`)).usuarios as any[],
+  });
+
+  // Usuário liberado: alvo = ele mesmo; conversa já liberada
+  useEffect(() => {
+    if (!isSuperAdmin && user && liberadoPorFlag) {
+      setUsuarioId(user.id);
+      setUsuarioLabel(`${user.nome} · ${user.email}`);
+    }
+  }, [isSuperAdmin, user, liberadoPorFlag]);
+
+  const mutChat = useMutation({
     mutationFn: () =>
-      api("/api/admin/orquestrador/chat", {
+      api(isSuperAdmin ? "/api/admin/orquestrador/chat" : "/api/orquestrador/chat", {
         method: "POST",
         body: JSON.stringify({ usuario_id: usuarioId, texto }),
       }),
@@ -66,10 +99,58 @@ export default function OrquestradorPage() {
     },
   });
 
-  // API exige requireSuperAdmin — espelha no frontend
-  if (!isSuperAdmin) {
+  const mutLiberar = useMutation({
+    mutationFn: (id: number) =>
+      api("/api/admin/orquestrador/liberar", {
+        method: "POST",
+        body: JSON.stringify({ usuario_id: id }),
+      }),
+    onSuccess: (data) => {
+      toast({ title: `Liberado: ${data.usuario?.nome || data.usuario?.id}` });
+      setBuscaLiberar("");
+      refetchLiberados();
+      qc.invalidateQueries({ queryKey: ["minhas-flags"] });
+    },
+    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
+  });
+
+  const mutRevogar = useMutation({
+    mutationFn: (id: number) =>
+      api(`/api/admin/orquestrador/liberar/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      toast({ title: "Acesso revogado" });
+      refetchLiberados();
+    },
+    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
+  });
+
+  if (!user) return null;
+  if (!podeAcessar && flagsMe !== undefined) {
     return <Redirect to="/" />;
   }
+  if (!isSuperAdmin && flagsMe === undefined) {
+    return (
+      <div className="p-8 flex justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  const conversaLiberada = !!usuarioId;
+  const podeEnviar = conversaLiberada && !!texto.trim() && !mutChat.isPending;
+
+  const enviar = () => {
+    if (!podeEnviar) return;
+    if (!status?.configured) {
+      toast({
+        title: "DEEPSEEK_API_KEY ausente no servidor",
+        description: "Defina a variável no EasyPanel / .env e reinicie.",
+        variant: "destructive",
+      });
+      return;
+    }
+    mutChat.mutate();
+  };
 
   return (
     <div className="space-y-6 p-4 md:p-6 max-w-4xl mx-auto">
@@ -79,8 +160,9 @@ export default function OrquestradorPage() {
             <Bot className="h-6 w-6" /> Orquestrador (DeepSeek)
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Chat admin que usa <strong>somente DeepSeek</strong>. WhatsApp continua no OpenAI/Gemini.
-            Escolha o usuário e peça ajustes (ex.: alterar dia, mover cartão).
+            {isSuperAdmin
+              ? "Marque usuários para liberar o chat. Escolha o alvo e converse — as tools agem na carteira dele."
+              : "Chat com DeepSeek na sua carteira. WhatsApp continua no OpenAI/Gemini."}
           </p>
         </div>
         <div className="text-right text-sm space-y-1">
@@ -95,55 +177,145 @@ export default function OrquestradorPage() {
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Usuário alvo</CardTitle>
-          <CardDescription>As tools do agente agem na carteira deste usuário.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <Label>Buscar</Label>
-          <Input
-            placeholder="Nome ou e-mail…"
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-          />
-          {usuarioId && (
-            <p className="text-sm">
-              Selecionado: <strong>#{usuarioId}</strong> {usuarioLabel}
-            </p>
-          )}
-          {usuarios && usuarios.length > 0 && (
-            <ul className="border rounded text-sm divide-y max-h-36 overflow-auto">
-              {usuarios.map((u) => (
-                <li key={u.id}>
-                  <button
-                    type="button"
-                    className="w-full text-left px-2 py-1.5 hover:bg-muted"
-                    onClick={() => {
-                      setUsuarioId(u.id);
-                      setUsuarioLabel(`${u.nome} · ${u.email}`);
-                      setBusca("");
-                      setMsgs([]);
-                    }}
-                  >
-                    #{u.id} {u.nome} · {u.email}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
+      {isSuperAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <UserPlus className="h-4 w-4" /> Liberar acesso ao orquestrador
+            </CardTitle>
+            <CardDescription>
+              Usuário marcado passa a ver o menu e usar o chat na própria carteira.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Label>Buscar para liberar</Label>
+            <Input
+              placeholder="Nome ou e-mail…"
+              value={buscaLiberar}
+              onChange={(e) => setBuscaLiberar(e.target.value)}
+            />
+            {usuariosLiberar && usuariosLiberar.length > 0 && (
+              <ul className="border rounded text-sm divide-y max-h-36 overflow-auto">
+                {usuariosLiberar.map((u) => (
+                  <li key={u.id} className="flex items-center justify-between gap-2 px-2 py-1.5">
+                    <span>
+                      #{u.id} {u.nome} · {u.email}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={mutLiberar.isPending}
+                      onClick={() => mutLiberar.mutate(u.id)}
+                    >
+                      Liberar
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {(liberados?.usuarios?.length ?? 0) > 0 && (
+              <div className="pt-2 space-y-1">
+                <p className="text-xs font-medium text-muted-foreground uppercase">Já liberados</p>
+                <ul className="border rounded text-sm divide-y">
+                  {liberados.usuarios.map((u: any) => (
+                    <li key={u.id} className="flex items-center justify-between gap-2 px-2 py-1.5">
+                      <span>
+                        #{u.id} {u.nome} · {u.email}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive"
+                        disabled={mutRevogar.isPending}
+                        onClick={() => mutRevogar.mutate(u.id)}
+                      >
+                        <UserMinus className="h-4 w-4 mr-1" /> Revogar
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
-      <Card>
+      {isSuperAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Usuário alvo (carteira)</CardTitle>
+            <CardDescription>
+              Selecione para liberar a conversa abaixo. As tools agem nesta carteira.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <Label>Buscar</Label>
+            <Input
+              placeholder="Nome ou e-mail…"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+            />
+            {usuarioId && (
+              <p className="text-sm flex items-center gap-2">
+                <Badge variant="outline" className="font-normal">
+                  Conversa liberada
+                </Badge>
+                <span>
+                  <strong>#{usuarioId}</strong> {usuarioLabel}
+                </span>
+              </p>
+            )}
+            {usuarios && usuarios.length > 0 && (
+              <ul className="border rounded text-sm divide-y max-h-36 overflow-auto">
+                {usuarios.map((u) => (
+                  <li key={u.id}>
+                    <button
+                      type="button"
+                      className="w-full text-left px-2 py-1.5 hover:bg-muted"
+                      onClick={() => {
+                        setUsuarioId(u.id);
+                        setUsuarioLabel(`${u.nome} · ${u.email}`);
+                        setBusca("");
+                        setMsgs([]);
+                      }}
+                    >
+                      #{u.id} {u.nome} · {u.email}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {!isSuperAdmin && usuarioId && (
+        <p className="text-sm text-muted-foreground flex items-center gap-2">
+          <Badge variant="outline">Sua carteira</Badge>
+          #{usuarioId} {usuarioLabel}
+        </p>
+      )}
+
+      <Card className={!conversaLiberada ? "opacity-60" : undefined}>
         <CardHeader>
-          <CardTitle className="text-base">Conversa</CardTitle>
+          <CardTitle className="text-base flex items-center gap-2">
+            <MessageSquare className="h-4 w-4" /> Conversa
+            {conversaLiberada ? (
+              <Badge className="bg-emerald-500/15 text-emerald-600 font-normal">Liberada</Badge>
+            ) : (
+              <Badge variant="secondary" className="font-normal">
+                Selecione o usuário alvo
+              </Badge>
+            )}
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="min-h-[220px] max-h-[420px] overflow-y-auto space-y-3 rounded-lg border border-border/60 p-3 bg-muted/20">
             {msgs.length === 0 && (
               <p className="text-sm text-muted-foreground">
-                Ex.: “liste as despesas deste mês no Magalu” · “altere o dia dessas compras de cartão para 5”
+                {conversaLiberada
+                  ? 'Ex.: "liste as despesas deste mês" · "altere o dia dessas compras de cartão para 5"'
+                  : "Escolha o usuário alvo acima para liberar o chat."}
               </p>
             )}
             {msgs.map((m, i) => (
@@ -170,21 +342,27 @@ export default function OrquestradorPage() {
           <div className="space-y-2">
             <Textarea
               rows={3}
-              placeholder="Mensagem para o orquestrador…"
+              placeholder={
+                conversaLiberada
+                  ? "Mensagem para o orquestrador…"
+                  : "Selecione um usuário alvo para liberar a conversa…"
+              }
               value={texto}
+              disabled={!conversaLiberada}
               onChange={(e) => setTexto(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  if (usuarioId && texto.trim() && !mut.isPending && status?.configured) mut.mutate();
+                  enviar();
                 }
               }}
             />
-            <Button
-              disabled={!usuarioId || !texto.trim() || mut.isPending || !status?.configured}
-              onClick={() => mut.mutate()}
-            >
-              {mut.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+            <Button disabled={!podeEnviar} onClick={enviar}>
+              {mutChat.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Send className="h-4 w-4 mr-2" />
+              )}
               Enviar
             </Button>
           </div>

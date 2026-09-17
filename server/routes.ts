@@ -1540,10 +1540,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const simularWaCtrl = await import("./controllers/simular-whatsapp.controller");
   app.post("/api/admin/simular-whatsapp", combinedAuth, checkImpersonation, requireSuperAdmin, simularWaCtrl.simularWhatsapp);
 
-  // Orquestrador admin — DeepSeek only (não mexe no WhatsApp/OpenAI)
+  // Orquestrador admin — DeepSeek (super_admin gerencia liberação; chat exige acesso)
   const orqCtrl = await import("./controllers/orquestrador.controller");
   app.get("/api/admin/orquestrador/status", combinedAuth, checkImpersonation, requireSuperAdmin, orqCtrl.statusOrquestrador);
+  app.get("/api/admin/orquestrador/liberados", combinedAuth, checkImpersonation, requireSuperAdmin, orqCtrl.listarLiberados);
+  app.post("/api/admin/orquestrador/liberar", combinedAuth, checkImpersonation, requireSuperAdmin, orqCtrl.liberarUsuario);
+  app.delete("/api/admin/orquestrador/liberar/:usuarioId", combinedAuth, checkImpersonation, requireSuperAdmin, orqCtrl.revogarUsuario);
   app.post("/api/admin/orquestrador/chat", combinedAuth, checkImpersonation, requireSuperAdmin, orqCtrl.chatOrquestrador);
+
+  // Orquestrador para usuário liberado (própria carteira) — também acessível ao super_admin
+  app.get("/api/orquestrador/status", combinedAuth, checkImpersonation, orqCtrl.statusOrquestrador);
+  app.post("/api/orquestrador/chat", combinedAuth, checkImpersonation, orqCtrl.chatOrquestrador);
 
   {
     const { getAppVersion } = await import("./services/app-version");
