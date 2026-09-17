@@ -85,6 +85,8 @@ export default function ContasPagarPage() {
   const [de, setDe] = useState(mes.de);
   const [ate, setAte] = useState(mes.ate);
   const [contaPorFatura, setContaPorFatura] = useState<Record<number, string>>({});
+  const [busca, setBusca] = useState("");
+  const [filtroCartao, setFiltroCartao] = useState("todas");
 
   const { data, isLoading } = useQuery<{ faturas: FaturaVenc[]; boletos: BoletoVenc[] }>({
     queryKey: ["/api/vencimentos", tab, de, ate],
@@ -100,8 +102,35 @@ export default function ContasPagarPage() {
   const faturas = data?.faturas ?? [];
   const boletos = data?.boletos ?? [];
 
-  const totalFaturas = faturas.reduce((s, f) => s + (Number(f.total) || 0), 0);
-  const totalBoletos = boletos.reduce((s, b) => s + (Number(b.valor) || 0), 0);
+  const opcoesCartao = useMemo(() => {
+    const s = new Set<string>();
+    faturas.forEach((f) => f.cartao_nome && s.add(f.cartao_nome));
+    boletos.forEach((b) => b.forma_pagamento && s.add(b.forma_pagamento));
+    return Array.from(s);
+  }, [faturas, boletos]);
+
+  const faturasFiltradas = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    return faturas.filter((f) => {
+      if (q && !(f.cartao_nome || "").toLowerCase().includes(q)) return false;
+      if (filtroCartao !== "todas" && (f.cartao_nome || "") !== filtroCartao) return false;
+      return true;
+    });
+  }, [faturas, busca, filtroCartao]);
+
+  const boletosFiltrados = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    return boletos.filter((b) => {
+      if (q && !(b.descricao || "").toLowerCase().includes(q) && !(b.forma_pagamento || "").toLowerCase().includes(q)) return false;
+      if (filtroCartao !== "todas" && (b.forma_pagamento || "") !== filtroCartao) return false;
+      return true;
+    });
+  }, [boletos, busca, filtroCartao]);
+
+  const temFiltro = busca.trim() !== "" || filtroCartao !== "todas";
+
+  const totalFaturas = faturasFiltradas.reduce((s, f) => s + (Number(f.total) || 0), 0);
+  const totalBoletos = boletosFiltrados.reduce((s, b) => s + (Number(b.valor) || 0), 0);
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["/api/vencimentos"] });
@@ -148,6 +177,29 @@ export default function ContasPagarPage() {
         </div>
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-1">
+            <label className="text-xs text-muted-foreground">Buscar</label>
+            <Input
+              placeholder="Descrição/cartão…"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              className="h-10 w-[200px]"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-muted-foreground">Cartão/forma</label>
+            <Select value={filtroCartao} onValueChange={setFiltroCartao}>
+              <SelectTrigger className="h-10 w-[180px]">
+                <SelectValue placeholder="Todos" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todas">Todos</SelectItem>
+                {opcoesCartao.map((o) => (
+                  <SelectItem key={o} value={o}>{o}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1">
             <label className="text-xs text-muted-foreground">De</label>
             <Input type="date" value={de} onChange={(e) => setDe(e.target.value)} className="h-10 w-[160px]" />
           </div>
@@ -155,6 +207,11 @@ export default function ContasPagarPage() {
             <label className="text-xs text-muted-foreground">Até</label>
             <Input type="date" value={ate} onChange={(e) => setAte(e.target.value)} className="h-10 w-[160px]" />
           </div>
+          {temFiltro && (
+            <Button variant="ghost" size="sm" className="h-10" onClick={() => { setBusca(""); setFiltroCartao("todas"); }}>
+              Limpar
+            </Button>
+          )}
         </div>
       </div>
 
@@ -197,10 +254,10 @@ export default function ContasPagarPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {faturas.length === 0 ? (
+                  {faturasFiltradas.length === 0 ? (
                     <p className="text-sm text-muted-foreground py-4 text-center">Nenhuma fatura no período</p>
                   ) : (
-                    faturas.map((f) => {
+                    faturasFiltradas.map((f) => {
                       const dias = diasAte(f.data_vencimento);
                       const bd = badgeDias(dias);
                       const contaId = contaPorFatura[f.id] || (contasAtivas[0] ? String(contasAtivas[0].id) : "");
@@ -271,12 +328,12 @@ export default function ContasPagarPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {boletos.length === 0 ? (
+                  {boletosFiltrados.length === 0 ? (
                     <p className="text-sm text-muted-foreground py-4 text-center">
                       Nenhum boleto/PIX no período
                     </p>
                   ) : (
-                    boletos.map((b) => {
+                    boletosFiltrados.map((b) => {
                       const dataRef = b.data_vencimento || b.data_transacao;
                       return (
                         <div
