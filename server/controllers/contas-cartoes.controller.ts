@@ -4,6 +4,9 @@ import * as contas from "../services/conta-bancaria.service";
 import { db } from "../db";
 import { sql } from "drizzle-orm";
 import { storage } from "../storage";
+import { idsLimpos } from "../services/mover-meio.service";
+import { chaveGrupoParcela, expandirIdsComParcelasPf } from "../services/parcelas-grupo.service";
+import { competenciaDaCompra, competenciaMaisMeses } from "../services/fatura-core";
 
 /**
  * Contas, cartões e faturas do PF.
@@ -371,48 +374,155 @@ export async function resumoFaturas(req: Request, res: Response) {
 }
 
 /**
- * Move um lançamento de cartão para outro CARTÃO e/ou COMPETÊNCIA (YYYY-MM).
- * A fatura de destino é resolvida pelas DATAS do cartão (fechamento/vencimento),
- * então o vencimento sai correto. Também anexa um lançamento "sem fatura" a uma
- * competência escolhida. Ferramenta de correção/realocação manual.
- * POST /api/faturas/mover-lancamento  { transacao_id, cartao_id, competencia }
+ * Preview: quais lançamentos seriam incluídos (todas as parcelas da compra).
+ * POST /api/faturas/expandir-parcelas  { transacao_ids: number[] }
+ */
+export async function expandirParcelasFatura(req: Request, res: Response) {
+  try {
+    const userId = req.user!.id;
+    const ids = idsLimpos(req.body?.transacao_ids ?? req.body?.transacao_id);
+    if (!ids.length) return res.status(400).json({ error: "Informe transacao_ids." });
+    const wallet = await storage.getWalletByUserId(userId);
+    if (!wallet) return res.status(404).json({ error: "Carteira não encontrada" });
+    const exp = await expandirIdsComParcelasPf(wallet.id, ids);
+    return res.json({
+      ids_originais: ids,
+      ids: exp.ids,
+      extra: Math.max(0, exp.ids.length - ids.length),
+      lancamentos: exp.linhas.map((l) => ({
+        id: l.id,
+        descricao: l.descricao,
+        parcela: l.parcela_num && l.parcela_total ? `${l.parcela_num}/${l.parcela_total}` : null,
+      })),
+    });
+  } catch (e: any) {
+    return res.status(400).json({ error: e?.message || "Erro ao expandir parcelas" });
+  }
+}
+
+/**
+ * Move um ou vários lançamentos de cartão para outro CARTÃO.
+ * POST /api/faturas/mover-lancamento
+ * { transacao_id | transacao_ids, cartao_id, competencia?, todas_parcelas? }
+ *
+ * competencia (YYYY-MM): vale para o item escolhido; as outras parcelas da mesma
+ * compra andam mês a mês. Se omitida, recalcula pela data + fechamento do cartão.
+ * todas_parcelas (default true): inclui irmãs da compra (grupo ou texto 4/7).
  */
 export async function moverLancamentoFatura(req: Request, res: Response) {
   try {
     const userId = req.user!.id;
-    const txId = Number(req.body?.transacao_id);
+    const idsIn = idsLimpos(req.body?.transacao_ids ?? req.body?.transacao_id);
     const cartaoId = Number(req.body?.cartao_id);
-    const competencia = String(req.body?.competencia || "").slice(0, 7);
-    if (!txId || !cartaoId || !/^\d{4}-\d{2}$/.test(competencia)) {
-      return res.status(400).json({ error: "Informe transacao_id, cartao_id e competencia (YYYY-MM)." });
+    const competenciaIn = String(req.body?.competencia || "").slice(0, 7);
+    const temComp = /^\d{4}-\d{2}$/.test(competenciaIn);
+    const todasParcelas = req.body?.todas_parcelas !== false;
+    if (!idsIn.length || !cartaoId) {
+      return res.status(400).json({ error: "Informe transacao_id(s) e cartao_id." });
     }
     const cartao = await faturaPf.cartaoPfDoUsuario(cartaoId, userId);
-    if (!cartao || Number(cartao.usuario_id) !== userId) {
+    if (!cartao || Number((cartao as any).usuario_id) !== userId) {
       return res.status(404).json({ error: "Cartão não encontrado" });
     }
     const wallet = await storage.getWalletByUserId(userId);
     if (!wallet) return res.status(404).json({ error: "Carteira não encontrada" });
-    const txRows = await db.execute(sql`
-      SELECT id, tipo FROM transacoes WHERE id = ${txId} AND carteira_id = ${wallet.id} LIMIT 1
-    `);
-    const tx = (txRows as any[])[0];
-    if (!tx) return res.status(404).json({ error: "Lançamento não encontrado" });
-    if (tx.tipo !== "Despesa") {
-      return res.status(400).json({ error: "Só despesas de cartão podem ser movidas para fatura." });
+
+    const exp = await expandirIdsComParcelasPf(wallet.id, idsIn);
+    const linhasBase = todasParcelas ? exp.linhas : exp.linhas.filter((l) => idsIn.includes(l.id));
+    if (!linhasBase.length) {
+      return res.status(404).json({ error: "Lançamento não encontrado" });
     }
-    const { fatura, competencia: comp } = await faturaPf.resolverFaturaPfPorCompetencia(
-      userId, wallet.id, cartao as any, competencia,
-    );
-    await db.execute(sql`
-      UPDATE transacoes
-      SET forma_pagamento_id = ${cartaoId},
-          fatura_id = ${fatura.id},
-          competencia = ${comp},
-          conta_bancaria_id = NULL,
-          movimenta_caixa = false
-      WHERE id = ${txId} AND carteira_id = ${wallet.id}
-    `);
-    return res.json({ success: true, fatura_id: fatura.id, competencia: comp, vencimento: fatura.data_vencimento });
+
+    const faturaIds = linhasBase.map((l) => l.fatura_id).filter((x): x is number => !!x);
+    let ignoradosPagos = 0;
+    const pagas = new Set<number>();
+    if (faturaIds.length) {
+      const listaF = sql.join(faturaIds.map((i) => sql`${i}`), sql`, `);
+      const rPagas = (await db.execute(sql`
+        SELECT id FROM faturas WHERE id IN (${listaF}) AND status = 'paga'
+      `)) as any[];
+      for (const p of rPagas) pagas.add(Number(p.id));
+    }
+    const linhasOk = linhasBase.filter((l) => {
+      if (l.fatura_id && pagas.has(l.fatura_id)) {
+        ignoradosPagos++;
+        return false;
+      }
+      return true;
+    });
+    if (!linhasOk.length) {
+      return res.status(400).json({
+        error: "Todos os lançamentos estão em fatura já paga. Reabra a fatura antes de mover.",
+      });
+    }
+
+    const diaF = Number((cartao as any).dia_fechamento) || 1;
+    const diaV = Number((cartao as any).dia_vencimento) || 10;
+
+    const ancoraGrupo = new Map<string, { parcela: number; competencia: string }>();
+    if (temComp) {
+      const selecionadas = new Set(idsIn);
+      const porGrupo = new Map<string, typeof linhasOk>();
+      for (const l of linhasOk) {
+        const k = chaveGrupoParcela(l);
+        const arr = porGrupo.get(k) || [];
+        arr.push(l);
+        porGrupo.set(k, arr);
+      }
+      for (const [k, arr] of porGrupo) {
+        const noOrigem = arr.filter((l) => selecionadas.has(l.id) || selecionadas.has(l.origem));
+        const ancora = [...(noOrigem.length ? noOrigem : arr)].sort(
+          (a, b) => (a.parcela_num || 1) - (b.parcela_num || 1),
+        )[0];
+        ancoraGrupo.set(k, { parcela: ancora.parcela_num || 1, competencia: competenciaIn });
+      }
+    }
+
+    const faturas = new Set<string>();
+    for (const l of linhasOk) {
+      let competencia: string;
+      if (temComp) {
+        const anc = ancoraGrupo.get(chaveGrupoParcela(l));
+        if (anc && l.parcela_num && l.parcela_total) {
+          competencia = competenciaMaisMeses(anc.competencia, (l.parcela_num || 1) - anc.parcela);
+        } else {
+          competencia = competenciaIn;
+        }
+      } else {
+        const grupo = linhasOk
+          .filter((x) => chaveGrupoParcela(x) === chaveGrupoParcela(l))
+          .sort((a, b) => (a.parcela_num || 1) - (b.parcela_num || 1));
+        const primeira = grupo[0] || l;
+        const base = competenciaDaCompra(String(primeira.data_transacao).slice(0, 10), diaF, diaV).competencia;
+        if (l.parcela_num && primeira.parcela_num && l.id !== primeira.id) {
+          competencia = competenciaMaisMeses(base, (l.parcela_num || 1) - (primeira.parcela_num || 1));
+        } else {
+          competencia = competenciaDaCompra(String(l.data_transacao).slice(0, 10), diaF, diaV).competencia;
+        }
+      }
+      const { fatura, competencia: comp } = await faturaPf.resolverFaturaPfPorCompetencia(
+        userId, wallet.id, cartao as any, competencia,
+      );
+      faturas.add(comp);
+      await db.execute(sql`
+        UPDATE transacoes
+        SET forma_pagamento_id = ${cartaoId},
+            fatura_id = ${fatura.id},
+            competencia = ${comp},
+            conta_bancaria_id = NULL,
+            movimenta_caixa = false
+        WHERE id = ${l.id} AND carteira_id = ${wallet.id} AND tipo = 'Despesa'
+      `);
+    }
+
+    return res.json({
+      success: true,
+      movidos: linhasOk.length,
+      extra_parcelas: Math.max(0, (todasParcelas ? exp.ids.length : idsIn.length) - idsIn.length),
+      ignorados_pagos: ignoradosPagos,
+      competencias: Array.from(faturas).sort(),
+      ids: linhasOk.map((l) => l.id),
+    });
   } catch (e: any) {
     return res.status(400).json({ error: e?.message || "Erro ao mover lançamento" });
   }
