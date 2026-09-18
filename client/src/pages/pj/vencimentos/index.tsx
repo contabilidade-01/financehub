@@ -160,6 +160,26 @@ export default function PjVencimentos({ empresaId }: { empresaId: number }) {
       toast({ title: "Erro", description: e?.message || e?.error, variant: "destructive" }),
   });
 
+  const reabrirFatura = useMutation({
+    mutationFn: (id: number) => apiRequest(`${base}/faturas/${id}/reabrir`, { method: "POST" }),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Fatura reaberta — voltou para 'Em aberto'" });
+    },
+    onError: (e: any) =>
+      toast({ title: "Erro", description: e?.message || e?.error, variant: "destructive" }),
+  });
+
+  const reabrirBoleto = useMutation({
+    mutationFn: (id: number) => apiRequest(`${base}/transacoes/${id}/reabrir`, { method: "PUT", data: {} }),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Lançamento reaberto" });
+    },
+    onError: (e: any) =>
+      toast({ title: "Erro", description: e?.message || e?.error, variant: "destructive" }),
+  });
+
   const rotuloBanco = (b: ContaBanc) => b.nome || b.banco;
 
   return (
@@ -312,6 +332,19 @@ export default function PjVencimentos({ empresaId }: { empresaId: number }) {
                                 </Button>
                               </>
                             )}
+                            {tab === "paga" && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={reabrirFatura.isPending}
+                                onClick={() => {
+                                  if (confirm(`Reabrir a fatura de ${f.cartao_nome} (${f.competencia})? Ela volta para 'Em aberto' e o pagamento é desfeito.`))
+                                    reabrirFatura.mutate(f.id);
+                                }}
+                              >
+                                Reabrir
+                              </Button>
+                            )}
                           </div>
                         </div>
                       );
@@ -368,6 +401,16 @@ export default function PjVencimentos({ empresaId }: { empresaId: number }) {
                                 onClick={() => baixarBoleto.mutate(b.id)}
                               >
                                 <CheckCircle2 className="h-4 w-4 mr-1" /> Baixar
+                              </Button>
+                            )}
+                            {tab === "paga" && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={reabrirBoleto.isPending}
+                                onClick={() => reabrirBoleto.mutate(b.id)}
+                              >
+                                Reabrir
                               </Button>
                             )}
                           </div>

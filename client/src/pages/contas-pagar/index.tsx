@@ -168,6 +168,15 @@ export default function ContasPagarPage() {
     onError: (e: any) => toast({ title: "Erro", description: e?.message || e?.error, variant: "destructive" }),
   });
 
+  const reabrirFatura = useMutation({
+    mutationFn: (id: number) => apiRequest(`/api/faturas/${id}/reabrir`, { method: "POST" }),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Fatura reaberta — voltou para 'Em aberto'" });
+    },
+    onError: (e: any) => toast({ title: "Erro", description: e?.message || e?.error, variant: "destructive" }),
+  });
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
@@ -311,7 +320,20 @@ export default function ContasPagarPage() {
                                 </Button>
                               </>
                             ) : (
-                              <Badge className="bg-emerald-500/15 text-emerald-600">Paga</Badge>
+                              <>
+                                <Badge className="bg-emerald-500/15 text-emerald-600">Paga</Badge>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={reabrirFatura.isPending}
+                                  onClick={() => {
+                                    if (confirm(`Reabrir a fatura de ${f.cartao_nome} (${f.competencia})? Ela volta para 'Em aberto' e o pagamento é desfeito.`))
+                                      reabrirFatura.mutate(f.id);
+                                  }}
+                                >
+                                  Reabrir
+                                </Button>
+                              </>
                             )}
                           </div>
                         </div>
