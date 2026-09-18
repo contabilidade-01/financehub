@@ -77,6 +77,28 @@ const compAtual = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 };
 
+const pad2 = (n: number) => String(n).padStart(2, "0");
+const compToNum = (c: string) => {
+  const [y, m] = String(c).split("-").map(Number);
+  return (y || 0) * 12 + ((m || 1) - 1);
+};
+const numToComp = (n: number) => `${Math.floor(n / 12)}-${pad2((n % 12) + 1)}`;
+const ultimoDiaMes = (ano: number, mes0: number) => new Date(Date.UTC(ano, mes0 + 1, 0)).getUTCDate();
+const diaLimitado = (ano: number, mes0: number, dia: number) =>
+  Math.min(Math.max(1, Math.floor(dia) || 1), ultimoDiaMes(ano, mes0));
+// Vencimento de uma competência dados os dias do cartão (espelha datasDaCompetencia do servidor).
+const vencimentoDaComp = (comp: string, diaFech: number, diaVenc: number) => {
+  const [ano, mes1] = String(comp).split("-").map(Number);
+  const mes = (mes1 || 1) - 1;
+  let vMes = mes;
+  let vAno = ano;
+  if (diaVenc < diaFech) {
+    vMes += 1;
+    if (vMes > 11) { vMes = 0; vAno += 1; }
+  }
+  return `${vAno}-${pad2(vMes + 1)}-${pad2(diaLimitado(vAno, vMes, diaVenc))}`;
+};
+
 export default function CartoesCreditoPage() {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -133,13 +155,31 @@ export default function CartoesCreditoPage() {
     queryKey: [`/api/cartoes/${moverCartaoId}/faturas`],
     enabled: !!moverIds && !!moverCartaoId,
   });
-  const moverFaturas = useMemo(
-    () =>
-      [...(moverFaturasResp?.faturas || [])]
-        .filter((f) => f.status !== "paga")
-        .sort((a, b) => a.competencia.localeCompare(b.competencia)),
-    [moverFaturasResp],
-  );
+  // Meses candidatos para o destino do "mover": faturas existentes + uma janela ao
+  // redor do mês atual, para que meses ainda SEM fatura (ex.: setembro) também
+  // possam ser escolhidos — o backend cria a fatura sob demanda ao mover.
+  const moverOpcoes = useMemo(() => {
+    const card = moverFaturasResp?.cartao;
+    const diaF = Number(card?.dia_fechamento) || 1;
+    const diaV = Number(card?.dia_vencimento) || 10;
+    const todas = moverFaturasResp?.faturas || [];
+    const porComp = new Map(todas.map((f) => [f.competencia, f]));
+    const comps = new Set<string>();
+    const base = compToNum(compAtual());
+    for (let n = base - 6; n <= base + 6; n++) comps.add(numToComp(n));
+    for (const f of todas) comps.add(f.competencia);
+    return [...comps]
+      .sort()
+      .map((comp) => {
+        const f = porComp.get(comp);
+        return {
+          competencia: comp,
+          vencimento: f?.data_vencimento || vencimentoDaComp(comp, diaF, diaV),
+          total: f ? Number(f.total) || 0 : null,
+          paga: f?.status === "paga",
+        };
+      });
+  }, [moverFaturasResp]);
 
   const cartaoSel = useMemo(() => cartoes.find((c) => c.id === cardId) || null, [cartoes, cardId]);
   const faturas = useMemo(
@@ -186,9 +226,9 @@ export default function CartoesCreditoPage() {
   // modo "criar nova fatura".
   useEffect(() => {
     if (!moverIds) return;
-    const existe = moverFaturas.some((f) => f.competencia === moverComp);
+    const existe = moverOpcoes.some((o) => o.competencia === moverComp && !o.paga);
     setCriarNovaFatura(!existe);
-  }, [moverFaturas, moverIds, moverCartaoId]);
+  }, [moverOpcoes, moverIds, moverCartaoId]);
 
   // Seleciona o primeiro cartão automaticamente.
   useEffect(() => {
@@ -1087,12 +1127,13 @@ export default function CartoesCreditoPage() {
                       <SelectValue placeholder="Escolha a fatura" />
                     </SelectTrigger>
                     <SelectContent>
-                      {moverFaturas.map((f) => (
-                        <SelectItem key={f.id} value={f.competencia}>
-                          {compLabel(f.competencia)} · vence {dataBR(f.data_vencimento)} · {money(Number(f.total) || 0)}
+                      {moverOpcoes.map((o) => (
+                        <SelectItem key={o.competencia} value={o.competencia} disabled={o.paga}>
+                          {compLabel(o.competencia)} · vence {dataBR(o.vencimento)}
+                          {o.paga ? " · paga" : o.total != null ? ` · ${money(o.total)}` : " · nova"}
                         </SelectItem>
                       ))}
-                      <SelectItem value="__nova__">+ Criar nova fatura (escolher mês)</SelectItem>
+                      <SelectItem value="__nova__">+ Outro mês…</SelectItem>
                     </SelectContent>
                   </Select>
                   {criarNovaFatura && (
