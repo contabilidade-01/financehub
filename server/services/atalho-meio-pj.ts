@@ -121,6 +121,10 @@ export function respostaEhSoMeio(texto: string): string | null {
   if (det.tipo === "nenhum") return null;
   // Frase longa com descrição+valor não é "só o meio".
   if (pareceLancamentoSemMeio(raw)) return null;
+  // Resposta que carrega um VALOR próprio (ex.: "128,36 gasolina na caixinha") é um
+  // lançamento novo — não a resposta "só o meio" da pergunta pendente. Não pode
+  // reaproveitar a descrição/valor do pendente anterior.
+  if (parseValorBR(raw) != null) return null;
   const meio = textoMeioDeDetect(det);
   return meio || null;
 }

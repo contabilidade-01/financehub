@@ -23,6 +23,11 @@ import {
   tentarResolverOfertaCriarConta,
   obterOfertaCriarConta,
 } from "./oferta-criar-conta-pj";
+import {
+  detectarComandoRepetir,
+  prepararRepetir,
+  tentarResolverRepetir,
+} from "./repetir-ultima-despesa";
 
 /**
  * AI Agent Service — processa mensagens financeiras com function calling.
@@ -3185,6 +3190,27 @@ export async function runAgent(
 
   // Disponibiliza o texto atual para os handlers (ex.: casar meta pelo contexto).
   ctx.userMessage = userMessage;
+
+  // Atalho "adiciona/adicionar/mais/outro/outra <valor>" = repetir a ÚLTIMA despesa
+  // (mesma descrição/conta/meio, só o valor muda). SEMPRE confirma antes. PF e PJ.
+  {
+    const repResolvido = await tentarResolverRepetir(ctx.userId, userMessage);
+    if (repResolvido.handled) return repResolvido.reply;
+    const cmdRep = detectarComandoRepetir(userMessage);
+    if (cmdRep) {
+      const modoPj = emModoPj(ctx) && !!ctx.empresaAtiva;
+      return await prepararRepetir(
+        {
+          userId: ctx.userId,
+          modoPj,
+          walletId: ctx.walletId ?? null,
+          empresaId: modoPj ? (ctx.empresaAtiva?.id ?? null) : null,
+          empresaNome: modoPj ? (ctx.empresaAtiva?.nome ?? null) : null,
+        },
+        cmdRep.valor,
+      );
+    }
+  }
 
   // Oferta "criar conta e mover" (PJ): respostas curtas sim/não executam sem depender do LLM.
   if (emModoPj(ctx)) {
