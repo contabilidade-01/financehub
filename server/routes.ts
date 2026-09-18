@@ -1390,6 +1390,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/faturas/:id/reabrir", combinedAuth, checkImpersonation, contasCartoesCtrl.reabrirFatura);
   app.get("/api/vencimentos", combinedAuth, checkImpersonation, contasCartoesCtrl.listarVencimentos);
 
+  // Mensalidades (recorrências mensais) — PF e PJ (empresa_id na query/body)
+  const mensalidadesCtrl = await import("./controllers/mensalidades.controller");
+  app.get("/api/mensalidades", combinedAuth, checkImpersonation, mensalidadesCtrl.listar);
+  app.post("/api/mensalidades", combinedAuth, checkImpersonation, mensalidadesCtrl.criar);
+  app.put("/api/mensalidades/:id", combinedAuth, checkImpersonation, mensalidadesCtrl.atualizar);
+  app.delete("/api/mensalidades/:id", combinedAuth, checkImpersonation, mensalidadesCtrl.excluir);
+
   // Marcar como recorrente
   app.put("/api/transactions/:id/recorrente", combinedAuth, async (req: Request, res: Response) => {
     try {

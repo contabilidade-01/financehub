@@ -983,6 +983,35 @@ const STEPS: Step[] = [
       console.log(`[AutoMigrate] PJ txs remapeadas de forma solta → conta/Caixinha: ${remapeadas}`);
     },
   },
+  {
+    name: "mensalidades (recorrências mensais PF/PJ)",
+    run: async () => {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS mensalidades (
+          id                        SERIAL PRIMARY KEY,
+          usuario_id                INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+          empresa_id                INTEGER REFERENCES empresas(id) ON DELETE CASCADE,
+          carteira_id               INTEGER REFERENCES carteiras(id),
+          descricao                 VARCHAR(255) NOT NULL,
+          valor                     NUMERIC(12,2) NOT NULL,
+          dia_vencimento            INTEGER NOT NULL,
+          tipo_meio                 VARCHAR(10) NOT NULL,
+          categoria_id              INTEGER,
+          conta_bancaria_id         INTEGER,
+          forma_pagamento_id        INTEGER,
+          cartao_id                 INTEGER,
+          ativo                     BOOLEAN NOT NULL DEFAULT true,
+          data_inicio               DATE,
+          data_fim                  DATE,
+          ultima_competencia_gerada VARCHAR(7),
+          origem                    VARCHAR(20) NOT NULL DEFAULT 'app',
+          data_criacao              TIMESTAMPTZ DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')
+        )
+      `);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_mensalidades_usuario ON mensalidades(usuario_id)`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_mensalidades_empresa ON mensalidades(empresa_id)`);
+    },
+  },
 ];
 
 export async function runAutoMigrations(): Promise<void> {

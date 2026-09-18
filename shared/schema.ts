@@ -1147,3 +1147,30 @@ export const auditoriaAdmin = pgTable("auditoria_admin", {
 
 export type AuditoriaAdmin = typeof auditoriaAdmin.$inferSelect;
 export type InsertAuditoriaAdmin = typeof auditoriaAdmin.$inferInsert;
+
+// Mensalidades — recorrências mensais (assinaturas/contas fixas) que o job gera
+// todo mês como boleto (conta a pagar) ou lançamento na fatura do cartão.
+// empresa_id NULL = PF (usa carteira_id); empresa_id preenchido = PJ.
+export const mensalidades = pgTable("mensalidades", {
+  id: serial("id").primaryKey(),
+  usuario_id: integer("usuario_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  empresa_id: integer("empresa_id").references(() => empresas.id, { onDelete: 'cascade' }),
+  carteira_id: integer("carteira_id").references(() => wallets.id),
+  descricao: varchar("descricao", { length: 255 }).notNull(),
+  valor: decimal("valor", { precision: 12, scale: 2 }).notNull(),
+  dia_vencimento: integer("dia_vencimento").notNull(), // 1–31 (limitado ao último dia do mês)
+  tipo_meio: varchar("tipo_meio", { length: 10 }).notNull(), // 'boleto' | 'cartao'
+  categoria_id: integer("categoria_id"), // PF: categorias.id | PJ: empresas_contas.id (sem FK — interpretado por contexto)
+  conta_bancaria_id: integer("conta_bancaria_id"), // boleto: conta p/ baixa (opcional)
+  forma_pagamento_id: integer("forma_pagamento_id"), // cartão PF (formas_pagamento.id)
+  cartao_id: integer("cartao_id"), // cartão PJ (empresas_cartoes.id)
+  ativo: boolean("ativo").notNull().default(true),
+  data_inicio: date("data_inicio"),
+  data_fim: date("data_fim"),
+  ultima_competencia_gerada: varchar("ultima_competencia_gerada", { length: 7 }), // 'YYYY-MM' idempotência
+  origem: varchar("origem", { length: 20 }).notNull().default('app'),
+  data_criacao: timestamp("data_criacao", { withTimezone: true }).default(sql`(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')`),
+});
+
+export type Mensalidade = typeof mensalidades.$inferSelect;
+export type InsertMensalidade = typeof mensalidades.$inferInsert;

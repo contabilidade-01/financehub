@@ -68,6 +68,7 @@ import MetasPage from "@/pages/metas";
 import ContasPagarPage from "@/pages/contas-pagar";
 import ContasCartoesPage from "@/pages/contas-cartoes";
 import CartoesCreditoPage from "@/pages/cartoes-credito";
+import MensalidadesPage from "@/pages/mensalidades";
 import ImportarLancamentos from "@/pages/importar";
 import FluxoProjetadoPF from "@/pages/fluxo-projetado";
 import ReembolsosPage from "@/pages/reembolsos";
@@ -234,6 +235,11 @@ function Router() {
             <Route path="/cartoes">
               <MainLayout>
                 <CartoesCreditoPage />
+              </MainLayout>
+            </Route>
+            <Route path="/mensalidades">
+              <MainLayout>
+                <MensalidadesPage />
               </MainLayout>
             </Route>
             <Route path="/reembolsos">

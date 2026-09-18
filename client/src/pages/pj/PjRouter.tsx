@@ -16,6 +16,7 @@ import ImportarLancamentosPj from "@/pages/pj/importar";
 import PjReembolsos from "@/pages/pj/reembolsos";
 import PjFormasPagamento from "@/pages/pj/formas-pagamento";
 import PjVencimentos from "@/pages/pj/vencimentos";
+import MensalidadesPage from "@/pages/mensalidades";
 
 /**
  * PjRouter — resolve a empresa ativa e renderiza o componente PJ correto.
@@ -87,6 +88,8 @@ export default function PjRouter() {
         return <PjFormasPagamento empresaId={empresaAtiva} />;
       case "vencimentos":
         return <PjVencimentos empresaId={empresaAtiva} />;
+      case "mensalidades":
+        return <MensalidadesPage empresaId={empresaAtiva} />;
       case "contas-bancarias":
         return <PjContasBancarias empresaId={empresaAtiva} />;
       case "conciliacao":

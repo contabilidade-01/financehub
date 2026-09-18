@@ -200,6 +200,7 @@ const TOOLS_PJ = new Set([
   "pagar_transacao_empresa",
   "criar_conta_empresa",
   "criar_conta_e_mover_empresa",
+  "criar_mensalidade",
   "cadastrar_cartao_empresa",
   "criar_conta_bancaria_empresa",
   "listar_cartoes_empresa",
@@ -625,6 +626,24 @@ function buildTools(ctx?: ToolContext) {
             recorrente: { type: "boolean", description: "Se é uma conta fixa mensal (true) ou pontual (false)" },
           },
           required: ["descricao", "valor", "data_vencimento"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "criar_mensalidade",
+        description: "Cadastra uma MENSALIDADE (assinatura/conta fixa que se repete TODO mês). Use quando disserem 'mensalidade', 'todo mês', 'assinatura', 'conta fixa' (ex.: 'mensalidade Netflix 39,90 no cartão Nubank todo dia 10', 'assinatura da academia 120 por boleto dia 5'). O sistema gera o lançamento sozinho a cada mês: boleto vira conta a pagar; cartão vira lançamento na fatura. Vale PF e (com empresa ativa) PJ.",
+        parameters: {
+          type: "object",
+          properties: {
+            descricao: { type: "string", description: "Nome da mensalidade (ex.: 'Netflix', 'Aluguel', 'Academia')" },
+            valor: { type: "number", description: "Valor mensal" },
+            dia_vencimento: { type: "number", description: "Dia do mês em que vence/cobra (1 a 31)" },
+            cartao: { type: "string", description: "Nome do cartão, se for paga no CARTÃO. Vazio/omitido = boleto/conta a pagar." },
+            categoria: { type: "string", description: "Categoria/conta da despesa (opcional; o sistema classifica se faltar)" },
+          },
+          required: ["descricao", "valor", "dia_vencimento"],
         },
       },
     },
@@ -1889,6 +1908,65 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
 
         const result = await storage.createTransaction(txData as any);
         return JSON.stringify({ success: true, id: result.id, ...txData, categoria: cat?.nome, msg: "Conta a pagar criada!" });
+      }
+
+      case "criar_mensalidade": {
+        const { criarMensalidade, gerarMensalidadeSeDevido, carteiraDoUsuario } =
+          await import("./mensalidades.service");
+        const descricao = String(args.descricao || "").trim();
+        const valor = Number(args.valor) || 0;
+        const dia = Math.min(31, Math.max(1, Math.floor(Number(args.dia_vencimento) || 0)));
+        if (!descricao || !(valor > 0) || !(dia >= 1 && dia <= 31)) {
+          return JSON.stringify({ error: "Preciso da descrição, valor e dia de vencimento (1–31) da mensalidade." });
+        }
+        const cartaoNome = String(args.cartao || "").trim();
+        const ehCartao = !!cartaoNome && !/^(boleto|conta|dinheiro|caixinha|à vista|a vista)$/i.test(cartaoNome);
+        const fmtValor = valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        if (emModoPj(ctx) && ctx.empresaAtiva) {
+          const empresaId = ctx.empresaAtiva.id;
+          let cartao_id: number | null = null;
+          if (ehCartao) {
+            const { resolverMeioPorNomePj } = await import("./meio-pagamento-pj");
+            const resolvido = await resolverMeioPorNomePj(empresaId, ctx.userId, cartaoNome);
+            if (!resolvido.ok || !resolvido.cartao_id) {
+              return JSON.stringify({ error: `Não encontrei o cartão "${cartaoNome}" na empresa. Cadastre o cartão (nome, dia de fechamento e vencimento) antes de criar a mensalidade.` });
+            }
+            cartao_id = resolvido.cartao_id;
+          }
+          const criada = await criarMensalidade({
+            usuario_id: ctx.userId, empresa_id: empresaId, carteira_id: null,
+            descricao, valor, dia_vencimento: dia,
+            tipo_meio: ehCartao ? "cartao" : "boleto",
+            categoria_id: null, conta_bancaria_id: null,
+            forma_pagamento_id: null, cartao_id, origem: "whatsapp",
+          });
+          await gerarMensalidadeSeDevido(criada.id);
+          return JSON.stringify({
+            success: true, id: criada.id,
+            msg: `Mensalidade *${descricao}* criada — R$ ${fmtValor} todo dia ${dia} (${ehCartao ? `cartão ${cartaoNome}` : "boleto"}). Já lancei a deste mês; as próximas entram sozinhas.`,
+          });
+        }
+
+        // PF
+        let forma_pagamento_id: number | null = null;
+        if (ehCartao) {
+          const fp = await resolveOuCriaFormaPagamento(ctx.userId, cartaoNome);
+          if (fp.id) forma_pagamento_id = fp.id;
+        }
+        const carteiraId = ctx.walletId || (await carteiraDoUsuario(ctx.userId));
+        const criada = await criarMensalidade({
+          usuario_id: ctx.userId, empresa_id: null, carteira_id: carteiraId,
+          descricao, valor, dia_vencimento: dia,
+          tipo_meio: ehCartao ? "cartao" : "boleto",
+          categoria_id: null, conta_bancaria_id: null,
+          forma_pagamento_id, cartao_id: null, origem: "whatsapp",
+        });
+        await gerarMensalidadeSeDevido(criada.id);
+        return JSON.stringify({
+          success: true, id: criada.id,
+          msg: `Mensalidade *${descricao}* criada — R$ ${fmtValor} todo dia ${dia} (${ehCartao ? `cartão ${cartaoNome}` : "boleto"}). Já lancei a deste mês; as próximas entram sozinhas.`,
+        });
       }
 
       case "listar_contas_pagar": {

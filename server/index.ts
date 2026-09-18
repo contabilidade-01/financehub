@@ -274,4 +274,11 @@ app.use((req, res, next) => {
   }).catch(err => {
     console.error("[Alerts] Falha ao carregar módulo de alertas:", err.message);
   });
+
+  // Inicializar geração de mensalidades (recorrências mensais) — roda a cada 6h
+  import("./jobs/mensalidades.job").then(({ initializeMensalidades }) => {
+    initializeMensalidades();
+  }).catch(err => {
+    console.error("[Mensalidades] Falha ao carregar job de mensalidades:", err.message);
+  });
 })();

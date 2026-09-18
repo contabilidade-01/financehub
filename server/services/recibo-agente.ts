@@ -11,6 +11,7 @@ export const TOOLS_ESCRITA = new Set([
   "parcelar_compra_empresa",
   "cria_lembrete",
   "criar_conta_a_pagar",
+  "criar_mensalidade",
   "pagar_transacao",
   "pagar_transacao_empresa",
   "atualiza_transacao",
