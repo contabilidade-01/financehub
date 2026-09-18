@@ -58,11 +58,32 @@ export default function ReembolsosPage() {
     queryClient.invalidateQueries({ predicate: (q) => String(q.queryKey[0] || "").startsWith("/api/cartoes") });
   };
 
+  const [sel, setSel] = useState<Set<number>>(new Set());
+  const toggleSel = (id: number, on?: boolean) =>
+    setSel((prev) => {
+      const n = new Set(prev);
+      const next = on ?? !n.has(id);
+      if (next) n.add(id);
+      else n.delete(id);
+      return n;
+    });
+
   const receber = useMutation({
     mutationFn: (id: number) => apiRequest(`/api/reembolsos/${id}/receber`, { method: "PUT" }),
     onSuccess: () => {
       invalidate();
       toast({ title: "Reembolso marcado como recebido! ✅" });
+    },
+    onError: (error: any) =>
+      toast({ title: "Erro", description: error?.message || error?.error, variant: "destructive" }),
+  });
+
+  const receberLote = useMutation({
+    mutationFn: (ids: number[]) => apiRequest("/api/reembolsos/receber-lote", { method: "PUT", data: { ids } }),
+    onSuccess: (r: any) => {
+      invalidate();
+      setSel(new Set());
+      toast({ title: `${r?.recebidos ?? 0} reembolso(s) baixado(s) em Transações ✅` });
     },
     onError: (error: any) =>
       toast({ title: "Erro", description: error?.message || error?.error, variant: "destructive" }),
@@ -198,6 +219,21 @@ export default function ReembolsosPage() {
         </CardContent>
       </Card>
 
+      {/* Barra de ação em lote */}
+      {sel.size > 0 && (
+        <div className="sticky top-2 z-10 flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-background/95 px-4 py-2 shadow-sm backdrop-blur">
+          <span className="text-sm font-medium">{sel.size} selecionado(s)</span>
+          <div className="flex gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setSel(new Set())}>
+              Limpar
+            </Button>
+            <Button size="sm" onClick={() => receberLote.mutate([...sel])} disabled={receberLote.isPending}>
+              <CheckCircle2 className="h-4 w-4 mr-1" /> Marcar {sel.size} recebido(s)
+            </Button>
+          </div>
+        </div>
+      )}
+
       {isLoading ? (
         <p className="text-muted-foreground">Carregando...</p>
       ) : (
@@ -267,6 +303,20 @@ export default function ReembolsosPage() {
                   {/* Cabeçalho do grupo com subtotal */}
                   <div className="flex items-center justify-between border-b border-border/60 pb-1">
                     <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-blue-600"
+                        title="Selecionar todos deste cartão"
+                        checked={g.itens.length > 0 && g.itens.every((i) => sel.has(i.id))}
+                        onChange={(e) => {
+                          const on = e.target.checked;
+                          setSel((prev) => {
+                            const n = new Set(prev);
+                            for (const i of g.itens) { if (on) n.add(i.id); else n.delete(i.id); }
+                            return n;
+                          });
+                        }}
+                      />
                       <CreditCard className="h-4 w-4 text-muted-foreground" />
                       <span className="font-semibold">{g.nome}</span>
                       <Badge variant="outline">{g.itens.length}</Badge>
@@ -280,6 +330,12 @@ export default function ReembolsosPage() {
                     <Card key={item.id}>
                       <CardContent className="flex flex-col gap-4 py-4 md:flex-row md:items-center md:justify-between">
                         <div className="flex items-start gap-3">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 mt-1.5 accent-blue-600"
+                            checked={sel.has(item.id)}
+                            onChange={(e) => toggleSel(item.id, e.target.checked)}
+                          />
                           <CreditCard className="h-5 w-5 mt-1 text-blue-500" />
                           <div>
                             <p className="font-medium">{item.descricao}</p>

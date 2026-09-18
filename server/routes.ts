@@ -1335,6 +1335,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (err: any) { res.status(400).json({ error: err.message }); }
   });
 
+  // Marcar vários reembolsos como recebidos de uma vez (baixa em Transações).
+  app.put("/api/reembolsos/receber-lote", combinedAuth, async (req: Request, res: Response) => {
+    try {
+      const { marcarReembolsosRecebidosLote } = await import("./storage");
+      const wallet = await storage.getWalletByUserId(req.user!.id);
+      if (!wallet) return res.status(404).json({ error: "Carteira não encontrada" });
+      const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+      const recebidos = await marcarReembolsosRecebidosLote(ids, wallet.id);
+      res.json({ success: true, recebidos });
+    } catch (err: any) { res.status(400).json({ error: err.message }); }
+  });
+
   // Marcar transação como paga
   app.put("/api/transactions/:id/pagar", combinedAuth, async (req: Request, res: Response) => {
     try {

@@ -2612,6 +2612,22 @@ export async function marcarReembolsoRecebido(transacaoId: number, walletId: num
   return (result as any[])[0];
 }
 
+export async function marcarReembolsosRecebidosLote(ids: number[], walletId: number): Promise<number> {
+  const limpos = Array.from(new Set((ids || []).map(Number).filter((n) => Number.isInteger(n) && n > 0)));
+  if (!limpos.length) return 0;
+  const today = new Date().toISOString().slice(0, 10);
+  const result = await db.execute(sql`
+    UPDATE transacoes
+    SET status = 'Efetivada', data_pagamento = ${today}
+    WHERE carteira_id = ${walletId}
+      AND COALESCE(reembolsavel, false) = true
+      AND status = 'Pendente'
+      AND id IN (${sql.join(limpos.map((n) => sql`${n}`), sql`, `)})
+    RETURNING id
+  `);
+  return (result as any[]).length;
+}
+
 export async function getFluxoCaixaResumo(walletId: number, mes?: number, ano?: number): Promise<{
   renda: number;
   dizimos: number;
