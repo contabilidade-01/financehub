@@ -13,67 +13,72 @@ import { ExpiredSubscriptionOverlay } from "@/components/subscription/ExpiredSub
 import { LocalizationProvider } from "@/contexts/LocalizationContext";
 import { SystemConfigProvider, useSystemConfig } from "@/contexts/SystemConfigContext";
 import { updateAllMetadata } from "@/utils/update-metadata";
-import { useEffect } from "react";
+import { useEffect, lazy, Suspense } from "react";
 
 interface SetupStatus {
   setupMode: boolean;
   message?: string;
 }
 
-// Pages
-import Dashboard from "@/pages/dashboard";
-import Transactions from "@/pages/transactions";
-import Categories from "@/pages/categories";
-import Settings from "@/pages/settings";
-import ForgotPassword from "@/pages/forgot-password";
-import ResetPassword from "@/pages/reset-password";
-import Login from "@/pages/login";
-import Register from "@/pages/register";
-import NotFound from "@/pages/not-found";
-import Wallet from "@/pages/wallet";
-import Reports from "@/pages/reports";
-import Reminders from "@/pages/reminders";
-import PaymentMethods from "@/pages/payment-methods";
-import AdminDashboard from "@/pages/admin/dashboard";
-import AdminUsers from "@/pages/admin/users";
-import AdminLgpd from "@/pages/admin/lgpd";
+// Componentes de layout/infra — eager (fazem parte do primeiro paint).
 import LgpdConsent from "@/components/LgpdConsent";
-import DatabasePage from "@/pages/admin/database";
-import CancelSubscription from "@/pages/subscription/cancel";
-import RenewSubscription from "@/pages/subscription/renew";
-import SubscriptionExpired from "@/pages/subscription-expired";
-import SetupWizard from "@/pages/setup";
 import MainLayout from "@/layouts/MainLayout";
 import ImpersonationBanner from "@/components/admin/ImpersonationBanner";
 import AdminStickyHeader from "@/components/admin/AdminStickyHeader";
-import CustomizePage from "@/pages/admin/customize";
-import LanguageSettings from "@/pages/admin/LanguageSettings";
-import MaintenancePage from "@/pages/admin/maintenance";
 import LoadingScreen from "@/components/shared/LoadingScreen";
 import { useTranslation } from "@/contexts/LocalizationContext";
-import CheckoutPage from "@/pages/billing/checkout";
-import BillingSuccessPage from "@/pages/billing/success";
-import InvoicesPage from "@/pages/billing/invoices";
-import BillingSettingsPage from "@/pages/billing/settings";
-import AdminBillingDashboard from "@/pages/admin/billing-dashboard";
-import AdminAssinaturas from "@/pages/admin/assinaturas";
-import FeatureFlagsPage from "@/pages/admin/feature-flags";
-import SimularWhatsappPage from "@/pages/admin/simular-whatsapp";
-import OrquestradorPage from "@/pages/admin/orquestrador";
-import PaymentSettingsPage from "@/pages/admin/payment-settings";
-import AdminPaymentsPage from "@/pages/admin/payments";
-import ExternalCheckout from "@/pages/checkout/ExternalCheckout";
-import PjRouter from "@/pages/pj/PjRouter";
-import MetasPage from "@/pages/metas";
-import ContasPagarPage from "@/pages/contas-pagar";
-import ContasCartoesPage from "@/pages/contas-cartoes";
-import CartoesCreditoPage from "@/pages/cartoes-credito";
-import MensalidadesPage from "@/pages/mensalidades";
-import ImportarLancamentos from "@/pages/importar";
-import FluxoProjetadoPF from "@/pages/fluxo-projetado";
-import ReembolsosPage from "@/pages/reembolsos";
-import VendasPF from "@/pages/vendas/pf";
-import VendasPJ from "@/pages/vendas/pj";
+
+// Páginas de entrada — eager (primeira tela / fallback), sem custo de code-split.
+import Login from "@/pages/login";
+import NotFound from "@/pages/not-found";
+
+// Demais páginas — lazy (code-splitting por rota): cada tela baixa só quando
+// acessada, reduzindo muito o bundle inicial (ganho de performance no mobile).
+const Dashboard = lazy(() => import("@/pages/dashboard"));
+const Transactions = lazy(() => import("@/pages/transactions"));
+const Categories = lazy(() => import("@/pages/categories"));
+const Settings = lazy(() => import("@/pages/settings"));
+const ForgotPassword = lazy(() => import("@/pages/forgot-password"));
+const ResetPassword = lazy(() => import("@/pages/reset-password"));
+const Register = lazy(() => import("@/pages/register"));
+const Wallet = lazy(() => import("@/pages/wallet"));
+const Reports = lazy(() => import("@/pages/reports"));
+const Reminders = lazy(() => import("@/pages/reminders"));
+const PaymentMethods = lazy(() => import("@/pages/payment-methods"));
+const AdminDashboard = lazy(() => import("@/pages/admin/dashboard"));
+const AdminUsers = lazy(() => import("@/pages/admin/users"));
+const AdminLgpd = lazy(() => import("@/pages/admin/lgpd"));
+const DatabasePage = lazy(() => import("@/pages/admin/database"));
+const CancelSubscription = lazy(() => import("@/pages/subscription/cancel"));
+const RenewSubscription = lazy(() => import("@/pages/subscription/renew"));
+const SubscriptionExpired = lazy(() => import("@/pages/subscription-expired"));
+const SetupWizard = lazy(() => import("@/pages/setup"));
+const CustomizePage = lazy(() => import("@/pages/admin/customize"));
+const LanguageSettings = lazy(() => import("@/pages/admin/LanguageSettings"));
+const MaintenancePage = lazy(() => import("@/pages/admin/maintenance"));
+const CheckoutPage = lazy(() => import("@/pages/billing/checkout"));
+const BillingSuccessPage = lazy(() => import("@/pages/billing/success"));
+const InvoicesPage = lazy(() => import("@/pages/billing/invoices"));
+const BillingSettingsPage = lazy(() => import("@/pages/billing/settings"));
+const AdminBillingDashboard = lazy(() => import("@/pages/admin/billing-dashboard"));
+const AdminAssinaturas = lazy(() => import("@/pages/admin/assinaturas"));
+const FeatureFlagsPage = lazy(() => import("@/pages/admin/feature-flags"));
+const SimularWhatsappPage = lazy(() => import("@/pages/admin/simular-whatsapp"));
+const OrquestradorPage = lazy(() => import("@/pages/admin/orquestrador"));
+const PaymentSettingsPage = lazy(() => import("@/pages/admin/payment-settings"));
+const AdminPaymentsPage = lazy(() => import("@/pages/admin/payments"));
+const ExternalCheckout = lazy(() => import("@/pages/checkout/ExternalCheckout"));
+const PjRouter = lazy(() => import("@/pages/pj/PjRouter"));
+const MetasPage = lazy(() => import("@/pages/metas"));
+const ContasPagarPage = lazy(() => import("@/pages/contas-pagar"));
+const ContasCartoesPage = lazy(() => import("@/pages/contas-cartoes"));
+const CartoesCreditoPage = lazy(() => import("@/pages/cartoes-credito"));
+const MensalidadesPage = lazy(() => import("@/pages/mensalidades"));
+const ImportarLancamentos = lazy(() => import("@/pages/importar"));
+const FluxoProjetadoPF = lazy(() => import("@/pages/fluxo-projetado"));
+const ReembolsosPage = lazy(() => import("@/pages/reembolsos"));
+const VendasPF = lazy(() => import("@/pages/vendas/pf"));
+const VendasPJ = lazy(() => import("@/pages/vendas/pj"));
 
 function Router() {
   const [location] = useLocation();
@@ -147,6 +152,7 @@ function Router() {
   return (
     <>
     <LgpdConsent />
+    <Suspense fallback={<LoadingScreen />}>
     <AnimatePresence mode="wait">
       <Switch key={location}>
         {/* Checkout externo precisa existir logado ou deslogado (link do Asaas) */}
@@ -369,6 +375,7 @@ function Router() {
         <Route component={NotFound} />
       </Switch>
     </AnimatePresence>
+    </Suspense>
     </>
   );
 }
