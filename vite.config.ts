@@ -31,24 +31,11 @@ export default defineConfig({
   build: {
     outDir: path.resolve(__dirname, "dist/public"),
     emptyOutDir: true,
-    chunkSizeWarningLimit: 900,
-    rollupOptions: {
-      output: {
-        // Separa bibliotecas grandes em chunks próprios, cacheáveis entre rotas —
-        // melhora o carregamento (especialmente no mobile).
-        manualChunks(id) {
-          if (!id.includes("node_modules")) return;
-          if (id.includes("recharts") || id.includes("/d3-") || id.includes("victory")) return "charts";
-          if (id.includes("framer-motion")) return "motion";
-          if (id.includes("react-dom") || id.includes("scheduler") || /[\\/]react[\\/]/.test(id)) return "react-vendor";
-          if (id.includes("@radix-ui")) return "radix";
-          if (id.includes("@tanstack")) return "query";
-          if (id.includes("lucide-react")) return "icons";
-          // Demais libs: deixa o Rollup dividir junto das rotas que as usam
-          // (carregam sob demanda, sem um "vendor" monolítico no início).
-        },
-      },
-    },
+    // O code-splitting por rota (React.lazy em App.tsx) já reduz o bundle inicial.
+    // Não usamos manualChunks: agrupar vendors manualmente quebrava a ordem de
+    // inicialização (ex.: recharts/d3 → "Cannot access 'S' before initialization")
+    // e deixava a tela em branco. O chunking padrão do Vite é seguro.
+    chunkSizeWarningLimit: 1200,
   },
   server: {
     port: 3000,
