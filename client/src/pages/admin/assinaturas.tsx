@@ -72,7 +72,14 @@ export default function AdminAssinaturas() {
   });
   const consultoriaMut = useMutation({
     mutationFn: ({ id, ativar }: { id: number; ativar: boolean }) => apiRequest(`/api/admin/assinaturas/${id}/consultoria`, { method: "POST", data: { ativar } }),
-    onSuccess: (r: any) => { invalidate(); toast({ title: r?.com_consultoria ? "Marcado: cobra R$ 200,00 (com consultoria)" : "Voltou ao padrão: R$ 79,90" }); },
+    onSuccess: (r: any) => {
+      invalidate();
+      const base = r?.com_consultoria ? "Marcado: R$ 200,00 (com consultoria)" : "Voltou ao padrão: R$ 79,90";
+      const desc = r?.asaas?.atualizado
+        ? "Valor já sincronizado no Asaas (recorrência e cobrança em aberto)."
+        : (r?.asaas?.motivo || "Vale na próxima cobrança/renovação.");
+      toast({ title: base, description: desc });
+    },
     onError: (err: any) => toast({ title: "Erro", description: err?.error || err?.message || "Falha", variant: "destructive" }),
   });
 

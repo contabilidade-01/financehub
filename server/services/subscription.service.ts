@@ -449,6 +449,57 @@ export class SubscriptionService {
   }
 
   /**
+   * Sincroniza o VALOR da assinatura recorrente do usuário no Asaas com o plano
+   * atual (respeitando o override plano_forcado_id). Usado quando o admin muda a
+   * marcação Base↔Consultoria: se já existe assinatura ativa/pendente no Asaas,
+   * atualiza o valor da recorrência E das cobranças em aberto (sem trabalho manual).
+   */
+  async sincronizarValorAssinatura(
+    userId: number,
+  ): Promise<{ atualizado: boolean; valor?: number; motivo?: string }> {
+    const user = await this.storage.getUserById(userId);
+    if (!user) return { atualizado: false, motivo: 'Usuário não encontrado' };
+
+    const tipoPessoa = (user as any).tipo_pessoa as string | null | undefined;
+    const ciclo = (((user as any).ciclo_assinatura || 'mensal') as 'mensal' | 'trimestral' | 'anual');
+    const cfg = CICLO_ASAAS[ciclo] || CICLO_ASAAS.mensal;
+
+    const plans = await this.storage.getActiveSubscriptionPlans();
+    const candidatos = filtrarPlanosPorTipo(plans, tipoPessoa);
+    if (!candidatos.length) return { atualizado: false, motivo: 'Sem plano ativo do tipo do usuário' };
+    let plan = candidatos[0];
+    const forcadoId = (user as any).plano_forcado_id;
+    if (forcadoId) {
+      const forcado = plans.find((p) => p.id === Number(forcadoId) && p.active);
+      if (forcado && ((forcado as any).tipoPessoa === tipoPessoa || (forcado as any).tipoPessoa == null)) {
+        plan = forcado;
+      }
+    }
+    const valor = parseFloat(plan.priceMonthly.toString()) * cfg.meses;
+
+    // Assinatura atual (ativa ou pendente) com id no Asaas.
+    const todas = await this.storage.getAllSubscriptionsByUserId(userId);
+    const atual = todas.find(
+      (s) => s.asaasSubscriptionId && (s.status === 'active' || s.status === 'pending'),
+    );
+    if (!atual?.asaasSubscriptionId) {
+      return { atualizado: false, valor, motivo: 'Sem assinatura ativa no Asaas — o novo valor vale na próxima cobrança/renovação.' };
+    }
+
+    const asaas = await this.getAsaas();
+    await asaas.updateSubscription(atual.asaasSubscriptionId, {
+      value: valor,
+      updatePendingPayments: true,
+    } as any);
+    try {
+      await this.storage.updateUserSubscription(atual.id, { planId: plan.id } as any);
+    } catch { /* referência local — não crítico */ }
+
+    console.log(`[Assinatura] Valor sincronizado no Asaas user=${userId} plano=${plan.planCode} valor=${valor}.`);
+    return { atualizado: true, valor };
+  }
+
+  /**
    * Ativar assinatura do usuário (após confirmação de pagamento)
    */
   async activateUserSubscription(userId: number, subscriptionId: number): Promise<void> {

@@ -1514,7 +1514,17 @@ export async function definirConsultoria(req: Request, res: Response) {
       plano_forcado_id = consultoria.id;
     }
     await storage.updateUser(userId, { plano_forcado_id } as any);
-    return res.json({ success: true, com_consultoria: ativar, plano_forcado_id });
+
+    // Se o cliente já tem assinatura ativa no Asaas, sincroniza o valor lá na hora
+    // (recorrência + cobrança em aberto) — sem precisar mexer manualmente no Asaas.
+    let asaas: { atualizado: boolean; valor?: number; motivo?: string } = { atualizado: false };
+    try {
+      asaas = await getSubscriptionService(storage).sincronizarValorAssinatura(userId);
+    } catch (e: any) {
+      console.warn("definirConsultoria: falha ao sincronizar valor no Asaas:", e?.message || e);
+      asaas = { atualizado: false, motivo: "Não consegui sincronizar no Asaas agora; o valor vale na próxima cobrança." };
+    }
+    return res.json({ success: true, com_consultoria: ativar, plano_forcado_id, asaas });
   } catch (err) {
     console.error("definirConsultoria:", err);
     return res.status(500).json({ error: "Erro ao definir cobrança de consultoria" });
