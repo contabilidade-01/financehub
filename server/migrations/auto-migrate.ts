@@ -1012,6 +1012,20 @@ const STEPS: Step[] = [
       await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_mensalidades_empresa ON mensalidades(empresa_id)`);
     },
   },
+  {
+    name: "PJ com consultoria (plano 200) + usuarios.plano_forcado_id",
+    run: async () => {
+      // Coluna de override de plano por usuário (manual, pelo admin).
+      await db.execute(sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS plano_forcado_id INTEGER`);
+      // Plano PJ "com consultoria" (R$ 200) — criado uma vez, se ainda não existir.
+      await db.execute(sql`
+        INSERT INTO subscription_plans (plan_code, name, description, price_monthly, tipo_pessoa, features, active)
+        SELECT 'mensal_pj_consultoria', 'Plano Mensal PJ + Consultoria',
+               'Assinatura mensal PJ com consultoria', 200.00, 'juridica', '[]', true
+        WHERE NOT EXISTS (SELECT 1 FROM subscription_plans WHERE plan_code = 'mensal_pj_consultoria')
+      `);
+    },
+  },
 ];
 
 export async function runAutoMigrations(): Promise<void> {

@@ -291,12 +291,23 @@ export class SubscriptionService {
       const rotulo = tipoPessoa === 'juridica' ? 'Pessoa Jurídica' : 'Pessoa Física';
       throw new Error(`Nenhum plano ativo para ${rotulo}. Cadastre um plano desse tipo em Pagamentos.`);
     }
-    if (candidatos.length > 1) {
+    // Padrão do tipo = plano mais barato (ex.: PJ 79,90). O admin pode FORÇAR outro
+    // plano por usuário (plano_forcado_id) — ex.: PJ "com consultoria" (200).
+    let plan = candidatos[0];
+    const forcadoId = (user as any).plano_forcado_id;
+    if (forcadoId) {
+      const forcado = plans.find((p) => p.id === Number(forcadoId) && p.active);
+      if (forcado && ((forcado as any).tipoPessoa === tipoPessoa || (forcado as any).tipoPessoa == null)) {
+        plan = forcado;
+        console.log(`[Assinatura] user=${userId} usa plano forçado ${forcado.planCode} (R$ ${forcado.priceMonthly}).`);
+      } else {
+        console.warn(`[Assinatura] plano_forcado_id=${forcadoId} inválido para user=${userId} (tipo ${tipoPessoa}); usando padrão.`);
+      }
+    } else if (candidatos.length > 1) {
       console.warn(
-        `[Assinatura] ${candidatos.length} planos ativos para tipo '${tipoPessoa}'; usando o mais barato (${candidatos[0].planCode}). Mantenha um plano por tipo.`,
+        `[Assinatura] ${candidatos.length} planos ativos para tipo '${tipoPessoa}'; usando o mais barato (${candidatos[0].planCode}). Marque 'com consultoria' se quiser o outro.`,
       );
     }
-    const plan = candidatos[0];
 
     const existingActive = await this.storage.getActiveSubscriptionByUserId(userId);
     if (existingActive) {

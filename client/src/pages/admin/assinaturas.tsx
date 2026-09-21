@@ -19,6 +19,7 @@ type Assinatura = {
   status_assinatura: string | null; ciclo_assinatura: string | null;
   data_expiracao_assinatura: string | null;
   situacao: string; dias_para_vencer: number | null;
+  com_consultoria?: boolean; plano_forcado_id?: number | null;
 };
 
 const CICLOS = [
@@ -68,6 +69,11 @@ export default function AdminAssinaturas() {
     mutationFn: ({ id, ciclo }: { id: number; ciclo: string }) => apiRequest(`/api/admin/assinaturas/${id}/gerar-link`, { method: "POST", data: { ciclo } }),
     onSuccess: (r: any) => { setLinkCobranca(r?.url || ""); toast({ title: "Link gerado", description: "Copie e envie ao cliente." }); },
     onError: (err: any) => toast({ title: "Erro", description: err?.error || err?.message || "Falha ao gerar link", variant: "destructive" }),
+  });
+  const consultoriaMut = useMutation({
+    mutationFn: ({ id, ativar }: { id: number; ativar: boolean }) => apiRequest(`/api/admin/assinaturas/${id}/consultoria`, { method: "POST", data: { ativar } }),
+    onSuccess: (r: any) => { invalidate(); toast({ title: r?.com_consultoria ? "Marcado: cobra R$ 200,00 (com consultoria)" : "Voltou ao padrão: R$ 79,90" }); },
+    onError: (err: any) => toast({ title: "Erro", description: err?.error || err?.message || "Falha", variant: "destructive" }),
   });
 
   const resumo = useMemo(() => {
@@ -146,6 +152,17 @@ export default function AdminAssinaturas() {
                     )}
                   </div>
                   <Badge className={s.cls}>{s.label}</Badge>
+                  {a.tipo_pessoa === "juridica" && (
+                    <button
+                      type="button"
+                      onClick={() => consultoriaMut.mutate({ id: a.id, ativar: !a.com_consultoria })}
+                      disabled={consultoriaMut.isPending}
+                      title="Alternar cobrança: Base (R$ 79,90) ↔ Com consultoria (R$ 200,00)"
+                      className={`text-[11px] rounded-full px-2.5 py-1 border transition-colors ${a.com_consultoria ? "bg-violet-500/15 text-violet-600 border-violet-500/30" : "bg-muted text-muted-foreground border-transparent hover:bg-muted/70"}`}
+                    >
+                      {a.com_consultoria ? "Consultoria R$ 200,00" : "Base R$ 79,90"}
+                    </button>
+                  )}
                   <div className="flex items-center gap-1">
                     <Button size="sm" variant="outline" onClick={() => renovarMut.mutate(a.id)} disabled={!a.ciclo_assinatura || renovarMut.isPending}>
                       <RefreshCw className="h-3.5 w-3.5 mr-1" /> Renovar

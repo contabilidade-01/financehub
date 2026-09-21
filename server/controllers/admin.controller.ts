@@ -1438,6 +1438,8 @@ export async function getAssinaturas(req: Request, res: Response) {
   try {
     const todos = await storage.getAllUsers();
     const hoje = new Date();
+    const planos = await storage.getActiveSubscriptionPlans();
+    const consultoriaId = planos.find((p) => p.planCode === "mensal_pj_consultoria")?.id ?? null;
     const lista = todos
       .filter((u) => u.tipo_usuario === "normal" || u.tipo_usuario === "usuario")
       .map((u) => {
@@ -1456,6 +1458,8 @@ export async function getAssinaturas(req: Request, res: Response) {
           ciclo_assinatura: (u as any).ciclo_assinatura || null,
           data_expiracao_assinatura: u.data_expiracao_assinatura,
           situacao, dias_para_vencer: dias,
+          plano_forcado_id: (u as any).plano_forcado_id ?? null,
+          com_consultoria: consultoriaId != null && (u as any).plano_forcado_id === consultoriaId,
         };
       });
     return res.json(lista);
@@ -1485,6 +1489,35 @@ export async function definirAssinatura(req: Request, res: Response) {
   } catch (err) {
     console.error("definirAssinatura:", err);
     return res.status(500).json({ error: "Erro ao definir assinatura" });
+  }
+}
+
+// POST /api/admin/assinaturas/:id/consultoria  { ativar: boolean }
+// Marca/desmarca o usuário PJ como "com consultoria" (cobra R$ 200 no lugar do
+// padrão 79,90). Grava plano_forcado_id; o checkout/renovação passa a respeitar.
+export async function definirConsultoria(req: Request, res: Response) {
+  try {
+    const userId = parseInt(req.params.id);
+    const ativar = req.body?.ativar === true || req.body?.ativar === "true";
+    const user = await storage.getUserById(userId);
+    if (!user) return res.status(404).json({ error: "Usuário não encontrado" });
+    if (ativar && (user as any).tipo_pessoa !== "juridica") {
+      return res.status(400).json({ error: "Consultoria (R$ 200) é só para Pessoa Jurídica." });
+    }
+    let plano_forcado_id: number | null = null;
+    if (ativar) {
+      const planos = await storage.getActiveSubscriptionPlans();
+      const consultoria = planos.find((p) => p.planCode === "mensal_pj_consultoria");
+      if (!consultoria) {
+        return res.status(500).json({ error: "Plano 'PJ com Consultoria' não encontrado. Rode a migração/deploy." });
+      }
+      plano_forcado_id = consultoria.id;
+    }
+    await storage.updateUser(userId, { plano_forcado_id } as any);
+    return res.json({ success: true, com_consultoria: ativar, plano_forcado_id });
+  } catch (err) {
+    console.error("definirConsultoria:", err);
+    return res.status(500).json({ error: "Erro ao definir cobrança de consultoria" });
   }
 }
 

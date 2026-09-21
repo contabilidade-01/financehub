@@ -28,6 +28,9 @@ export const users = pgTable("usuarios", {
   data_expiracao_assinatura: timestamp("data_expiracao_assinatura", { withTimezone: true }),
   status_assinatura: varchar("status_assinatura", { length: 50 }).default("sem_assinatura"),
   ciclo_assinatura: varchar("ciclo_assinatura", { length: 12 }), // mensal | trimestral | anual | null (definido pelo admin)
+  // Plano forçado (override manual pelo admin). Quando preenchido, o checkout/renovação
+  // usa este plano em vez do padrão do tipo — ex.: PJ "com consultoria" (R$ 200).
+  plano_forcado_id: integer("plano_forcado_id"),
   // Novo campo para otimização de queries (denormalização estratégica)
   subscriptionActive: boolean("subscription_active").notNull().default(false)
 });
