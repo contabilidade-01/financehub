@@ -57,16 +57,29 @@ export function pareceLancamentoSemMeio(texto: string): LancamentoSemMeio | null
   const valor = parseValorBR(raw);
   if (valor == null) return null;
 
+  // "entrada", "recebi", "venda"… = RECEITA (antes só entrava como despesa).
+  const tipo: "Receita" | "Despesa" =
+    /\b(recebi|receita|entrada|entrei|entrou|recebimento|venda|vendi|vendeu|faturei|faturamento|deposito|caiu)\b/.test(n)
+      ? "Receita"
+      : "Despesa";
+
+  // Limpa a descrição: tira valores e verbos/comandos, para o nome do lançamento
+  // não virar "Registra a entrada de", "Adiciona", "Anota…".
   let desc = raw
     .replace(/(?:r\$\s*)?\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|(?:r\$\s*)?\d+(?:[.,]\d{1,2})?/gi, " ")
-    .replace(/\b(novo|nova|gastei|paguei|recebi|lancar|lanca|registre)\b/gi, " ")
+    .replace(/\b(registr\w*|anot\w*|lanc\w*|lan[çc]a\w*|adicion\w*|coloc\w*|p[oõ]e|p[oõ]em|novo|nova|gastei|paguei|recebi|comprei|registre)\b/gi, " ")
+    .replace(/\b(entrada|sa[íi]da|despesa|receita)\s+(de|com|do|da|no|na)\b/gi, " ")
+    .replace(/\b(entrada|sa[íi]da|despesa|receita)\b/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
-  if (desc.length < 3) return null;
+  desc = desc.replace(/^(a|o|de|da|do|com|para|no|na|em|uns|umas|um|uma)\s+/i, "").trim();
 
-  const tipo: "Receita" | "Despesa" = /\b(recebi|receita|entrou|faturei)\b/.test(n)
-    ? "Receita"
-    : "Despesa";
+  if (desc.length < 3) {
+    // Sem descrição útil: para receita, usa um rótulo genérico e segue;
+    // para despesa, devolve null (deixa o fluxo pedir a descrição).
+    if (tipo === "Receita") return { descricao: "Recebimento", valor, tipo };
+    return null;
+  }
   return { descricao: desc, valor, tipo };
 }
 
