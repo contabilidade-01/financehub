@@ -318,14 +318,19 @@ async function tratarOnboarding(user: any, text: string, chatid: string, BaseUrl
     return true;
   }
 
-  // Pós-degustação (expirada) ou conta inativa → aguarda validação do admin
-  // Exceto quem ainda está no funil de cadastro (já tratado acima)
-  if (status === "degustacao_expirada" || !user.ativo) {
+  // Pós-degustação (expirada) ou conta inativa → aguarda validação do admin.
+  // MAS: se o admin já validou (conta ativa + vencimento no futuro, ex.: pagou
+  // por fora e o admin lançou a vigência), o cliente é assinante vigente e passa
+  // — mesmo que o status antigo ainda esteja "degustacao_expirada".
+  const vencMs = user.data_expiracao_assinatura ? new Date(user.data_expiracao_assinatura).getTime() : 0;
+  const assinaturaVigente = !!user.ativo && vencMs > Date.now();
+
+  if (!assinaturaVigente && (status === "degustacao_expirada" || !user.ativo)) {
     await uazapiService.sendText(BaseUrl, token, chatid, msgEmAnalise(user.nome));
     return true;
   }
 
-  return false; // usuário ativo por outra via (assinante) → segue normal
+  return false; // assinante vigente / ativo por outra via → segue normal
 }
 
 interface UazapiWebhookBody {
