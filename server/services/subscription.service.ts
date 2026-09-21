@@ -309,6 +309,10 @@ export class SubscriptionService {
       );
     }
 
+    // Valor que a cobrança DEVE ter para o plano atual (respeita o override).
+    const valorEsperado = parseFloat(plan.priceMonthly.toString()) * cfgCiclo.meses;
+    const bate = (v: any) => Number.isFinite(Number(v)) && Math.abs(Number(v) - valorEsperado) < 0.005;
+
     const existingActive = await this.storage.getActiveSubscriptionByUserId(userId);
     if (existingActive) {
       throw new Error('Usuário já possui uma assinatura ativa');
@@ -316,25 +320,42 @@ export class SubscriptionService {
 
     const asaas = await this.getAsaas();
 
-    // Reaproveita cobrança pendente já gerada (evita assinatura duplicada no Asaas)
+    // Reaproveita cobrança pendente já gerada (evita duplicar no Asaas) — MAS só se
+    // o valor bater com o plano atual. Se o valor mudou (ex.: virou Consultoria
+    // R$ 200), a cobrança antiga é cancelada e uma nova, no valor certo, é criada.
     const existentes = await this.storage.getAllSubscriptionsByUserId(userId);
     const pendente = existentes.find((s) => s.status === 'pending' && s.asaasSubscriptionId);
     if (pendente?.asaasSubscriptionId) {
       const locais = await this.storage.getPaymentTransactionsBySubscriptionId(pendente.id);
-      const localUrl = locais.find((p) => p.asaasInvoiceUrl && p.status === 'pending')?.asaasInvoiceUrl;
-      if (localUrl) {
+      const localPend = locais.find((p) => p.asaasInvoiceUrl && p.status === 'pending');
+      if (localPend?.asaasInvoiceUrl && bate(localPend.amount)) {
         await this.storage.updateUser(userId, { ciclo_assinatura: ciclo } as any);
-        return { url: localUrl, ciclo };
+        return { url: localPend.asaasInvoiceUrl, ciclo };
       }
       try {
         const asaasPays = await asaas.getSubscriptionPayments(pendente.asaasSubscriptionId, { limit: 5 });
-        const aberta = asaasPays.data.find((p) => p.invoiceUrl && (p.status === 'PENDING' || p.status === 'OVERDUE'));
+        const aberta = asaasPays.data.find(
+          (p) => p.invoiceUrl && (p.status === 'PENDING' || p.status === 'OVERDUE') && bate(p.value),
+        );
         if (aberta?.invoiceUrl) {
           await this.storage.updateUser(userId, { ciclo_assinatura: ciclo } as any);
           return { url: aberta.invoiceUrl, ciclo };
         }
       } catch (err) {
         console.warn('[SubscriptionService] Não reaproveitou cobrança pendente:', err);
+      }
+      // Chegou aqui = existe pendência, mas com VALOR diferente do plano atual.
+      // Cancela a antiga (Asaas + local) para gerar a nova no valor correto.
+      try {
+        await asaas.cancelSubscription(pendente.asaasSubscriptionId);
+        console.log(`[Assinatura] Cobrança pendente antiga cancelada (valor != ${valorEsperado}) user=${userId}.`);
+      } catch (err) {
+        console.warn('[SubscriptionService] Falha ao cancelar cobrança pendente antiga:', err);
+      }
+      try {
+        await this.storage.updateUserSubscription(pendente.id, { status: 'canceled' } as any);
+      } catch (err) {
+        console.warn('[SubscriptionService] Falha ao marcar assinatura antiga como cancelada:', err);
       }
     }
 

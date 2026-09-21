@@ -205,7 +205,28 @@ export default function AdminAssinaturas() {
               <div className="text-xs text-muted-foreground">
                 <strong>Cobrança no Asaas:</strong> envia nome, e-mail e telefone que já temos e abre a página do Asaas. O cliente só completa o que faltar (CPF/cartão/Pix). O acesso libera sozinho quando o pagamento confirmar. Ciclo: <strong>{form.ciclo}</strong>.
               </div>
-              <Button size="sm" variant="secondary" className="w-full" onClick={() => definindo && linkMut.mutate({ id: definindo.id, ciclo: form.ciclo })} disabled={linkMut.isPending}>
+              {definindo?.tipo_pessoa === "juridica" && (() => {
+                const comConsult = lista.find((a) => a.id === definindo.id)?.com_consultoria ?? false;
+                return (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded border bg-background px-2 py-1.5">
+                    <span className="text-xs">
+                      Valor que será cobrado:{" "}
+                      <strong className={comConsult ? "text-violet-600" : ""}>
+                        {comConsult ? "Consultoria — R$ 200,00" : "Base — R$ 79,90"}
+                      </strong>
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={consultoriaMut.isPending}
+                      onClick={() => consultoriaMut.mutate({ id: definindo.id, ativar: !comConsult })}
+                    >
+                      {comConsult ? "Mudar para Base (79,90)" : "Cobrar Consultoria (200,00)"}
+                    </Button>
+                  </div>
+                );
+              })()}
+              <Button size="sm" variant="secondary" className="w-full" onClick={() => definindo && linkMut.mutate({ id: definindo.id, ciclo: form.ciclo })} disabled={linkMut.isPending || consultoriaMut.isPending}>
                 {linkMut.isPending ? "Gerando…" : "Gerar link de cobrança"}
               </Button>
               {linkCobranca && (
