@@ -104,6 +104,24 @@ export interface ActivateSubscriptionResult {
 // SUBSCRIPTION SERVICE CLASS
 // ============================================
 
+/**
+ * Cobrança pendente pode ser reenviada ao cliente? Só se o valor for o do plano
+ * atual, ainda não tiver vencido (vencimento >= hoje, calendário de SP) e não
+ * estiver marcada como vencida pelo Asaas.
+ */
+export function podeReaproveitarCobranca(
+  c: { valor: unknown; vencimento: unknown; status?: string },
+  valorEsperado: number,
+  hoje: string,
+): boolean {
+  const v = Number(c.valor);
+  if (!Number.isFinite(v) || Math.abs(v - valorEsperado) >= 0.005) return false;
+  if (c.status && c.status !== 'PENDING' && c.status !== 'pending') return false;
+  const venc = c.vencimento instanceof Date ? c.vencimento.toISOString().slice(0, 10) : String(c.vencimento || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(venc)) return false; // sem data conhecida: gera uma nova
+  return venc >= hoje;
+}
+
 export class SubscriptionService {
   private asaasService: AsaasService | null = null;
   private notificationService: NotificationService;
@@ -296,7 +314,12 @@ export class SubscriptionService {
 
     // Valor que a cobrança DEVE ter para o plano atual (respeita o override).
     const valorEsperado = parseFloat(plan.priceMonthly.toString()) * cfgCiclo.meses;
-    const bate = (v: any) => Number.isFinite(Number(v)) && Math.abs(Number(v) - valorEsperado) < 0.005;
+    const hoje = AsaasService.getTodayForAsaas();
+    // Só reaproveita cobrança com o valor do plano atual E ainda não vencida:
+    // entregar um link vencido (ex.: de 21/09 num link gerado em 25/09) confunde
+    // o cliente e o ciclo passaria a contar da data antiga.
+    const reaproveitavel = (valor: any, vencimento: any, status?: string) =>
+      podeReaproveitarCobranca({ valor, vencimento, status }, valorEsperado, hoje);
 
     const existingActive = await this.storage.getActiveSubscriptionByUserId(userId);
     if (existingActive) {
@@ -313,14 +336,14 @@ export class SubscriptionService {
     if (pendente?.asaasSubscriptionId) {
       const locais = await this.storage.getPaymentTransactionsBySubscriptionId(pendente.id);
       const localPend = locais.find((p) => p.asaasInvoiceUrl && p.status === 'pending');
-      if (localPend?.asaasInvoiceUrl && bate(localPend.amount)) {
+      if (localPend?.asaasInvoiceUrl && reaproveitavel(localPend.amount, (localPend as any).dueDate)) {
         await this.storage.updateUser(userId, { ciclo_assinatura: ciclo } as any);
         return { url: localPend.asaasInvoiceUrl, ciclo };
       }
       try {
         const asaasPays = await asaas.getSubscriptionPayments(pendente.asaasSubscriptionId, { limit: 5 });
         const aberta = asaasPays.data.find(
-          (p) => p.invoiceUrl && (p.status === 'PENDING' || p.status === 'OVERDUE') && bate(p.value),
+          (p) => p.invoiceUrl && reaproveitavel(p.value, p.dueDate, p.status),
         );
         if (aberta?.invoiceUrl) {
           await this.storage.updateUser(userId, { ciclo_assinatura: ciclo } as any);
@@ -329,11 +352,11 @@ export class SubscriptionService {
       } catch (err) {
         console.warn('[SubscriptionService] Não reaproveitou cobrança pendente:', err);
       }
-      // Chegou aqui = existe pendência, mas com VALOR diferente do plano atual.
-      // Cancela a antiga (Asaas + local) para gerar a nova no valor correto.
+      // Chegou aqui = existe pendência vencida ou com VALOR diferente do plano atual.
+      // Cancela a antiga (Asaas + local) e gera uma nova, com vencimento hoje.
       try {
         await asaas.cancelSubscription(pendente.asaasSubscriptionId);
-        console.log(`[Assinatura] Cobrança pendente antiga cancelada (valor != ${valorEsperado}) user=${userId}.`);
+        console.log(`[Assinatura] Cobrança pendente antiga cancelada (vencida ou valor != ${valorEsperado}) user=${userId}.`);
       } catch (err) {
         console.warn('[SubscriptionService] Falha ao cancelar cobrança pendente antiga:', err);
       }

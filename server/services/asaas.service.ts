@@ -8,6 +8,7 @@
  * Este serviço apenas comunica com o Asaas, não contém lógica de negócio.
  */
 
+import { diaSP } from "../../shared/datas-sp";
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import { timingSafeEqual } from 'crypto';
 
@@ -517,8 +518,9 @@ export class AsaasService {
    * Obter data atual formatada para o Asaas (YYYY-MM-DD)
    * Usado para cobrar imediatamente na criação da assinatura
    */
+  /** Hoje no calendário de São Paulo (em UTC, depois das 21h já seria amanhã). */
   static getTodayForAsaas(): string {
-    return this.formatDateForAsaas(new Date());
+    return diaSP(new Date()) as string;
   }
 
   /**

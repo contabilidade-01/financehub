@@ -3,6 +3,7 @@
 // da cobrança — se ela errar, o cliente vê um preço e é cobrado outro.
 import { filtrarPlanosPorTipo } from "../server/storage";
 import { resolverPlanoDoUsuario } from "../server/services/resolver-plano";
+import { podeReaproveitarCobranca } from "../server/services/subscription.service";
 
 type Plano = { planCode: string; priceMonthly: string; tipoPessoa?: string | null; portePj?: string | null };
 
@@ -109,6 +110,15 @@ eq2("resolver: PJ MEI → pj (mais barato)", resolverPlanoDoUsuario({ tipo_pesso
 eq2("resolver: consultoria forçada vale para MEI", resolverPlanoDoUsuario({ tipo_pessoa: "juridica", porte_pj: "mei", plano_forcado_id: idDe("mensal_pj_consultoria") }, comId)?.planCode, "mensal_pj_consultoria");
 eq2("resolver: consultoria forçada vale para ME", resolverPlanoDoUsuario({ tipo_pessoa: "juridica", porte_pj: "me", plano_forcado_id: idDe("mensal_pj_consultoria") }, comId)?.planCode, "mensal_pj_consultoria");
 eq2("resolver: forçado de outro tipo é ignorado", resolverPlanoDoUsuario({ tipo_pessoa: "fisica", plano_forcado_id: idDe("mensal_pj_me") }, comId)?.planCode, "pf");
+
+// Link de cobrança: reaproveitar pendência só se valor certo e ainda não vencida.
+const hojeT = "2026-09-25";
+eq2("link: reaproveita pendente no valor e no prazo", podeReaproveitarCobranca({ valor: 200, vencimento: "2026-09-25", status: "PENDING" }, 200, hojeT), true);
+eq2("link: vencida (21/09 gerando em 25/09) gera nova", podeReaproveitarCobranca({ valor: 200, vencimento: "2026-09-21", status: "PENDING" }, 200, hojeT), false);
+eq2("link: marcada OVERDUE no Asaas gera nova", podeReaproveitarCobranca({ valor: 200, vencimento: "2026-09-30", status: "OVERDUE" }, 200, hojeT), false);
+eq2("link: valor diferente gera nova", podeReaproveitarCobranca({ valor: 79.9, vencimento: "2026-09-30" }, 200, hojeT), false);
+eq2("link: local sem vencimento conhecido gera nova", podeReaproveitarCobranca({ valor: 200, vencimento: null, status: "pending" }, 200, hojeT), false);
+eq2("link: Date do banco no futuro reaproveita", podeReaproveitarCobranca({ valor: "200.00", vencimento: new Date("2026-09-28T00:00:00Z"), status: "pending" }, 200, hojeT), true);
 
 function eq2(nome: string, obtido: unknown, esperado: unknown) {
   extras++;
