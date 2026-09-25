@@ -85,7 +85,16 @@ function validarContato(b: any) {
   if (documento && !documentoValido(documento)) throw new ErroErp("CPF/CNPJ inválido.");
   const email = texto(b.email, 200);
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new ErroErp("E-mail inválido.");
-  return { nome, tipo, documento, email, telefone: texto(soDigitos(b.telefone) || b.telefone, 30), observacao: texto(b.observacao, 2000) };
+  const cep = soDigitos(b.cep) || null;
+  if (cep && cep.length !== 8) throw new ErroErp("CEP inválido.");
+  const uf = texto(b.uf, 2)?.toUpperCase() ?? null;
+  if (uf && !/^[A-Z]{2}$/.test(uf)) throw new ErroErp("UF inválida.");
+  return {
+    nome, tipo, documento, email, telefone: texto(soDigitos(b.telefone) || b.telefone, 30), observacao: texto(b.observacao, 2000),
+    // Endereço: exigido pelo banco para registrar boleto (Cora).
+    cep, logradouro: texto(b.logradouro, 200), numero: texto(b.numero, 20), complemento: texto(b.complemento, 100),
+    bairro: texto(b.bairro, 100), cidade: texto(b.cidade, 100), uf,
+  };
 }
 
 export async function criarContato(empresaId: number, b: any) {
@@ -95,8 +104,9 @@ export async function criarContato(empresaId: number, b: any) {
     if (dup[0]) throw new ErroErp("Já existe um cadastro com esse CPF/CNPJ.", 409);
   }
   const r = (await db.execute(sql`
-    INSERT INTO empresas_contatos (empresa_id, tipo, nome, documento, email, telefone, observacao)
-    VALUES (${empresaId}, ${c.tipo}, ${c.nome}, ${c.documento}, ${c.email}, ${c.telefone}, ${c.observacao})
+    INSERT INTO empresas_contatos (empresa_id, tipo, nome, documento, email, telefone, observacao, cep, logradouro, numero, complemento, bairro, cidade, uf)
+    VALUES (${empresaId}, ${c.tipo}, ${c.nome}, ${c.documento}, ${c.email}, ${c.telefone}, ${c.observacao},
+            ${c.cep}, ${c.logradouro}, ${c.numero}, ${c.complemento}, ${c.bairro}, ${c.cidade}, ${c.uf})
     RETURNING *
   `)) as any[];
   return r[0];
@@ -106,12 +116,51 @@ export async function atualizarContato(empresaId: number, id: number, b: any) {
   const c = validarContato(b);
   const r = (await db.execute(sql`
     UPDATE empresas_contatos SET tipo = ${c.tipo}, nome = ${c.nome}, documento = ${c.documento}, email = ${c.email},
-      telefone = ${c.telefone}, observacao = ${c.observacao}, ativo = ${b.ativo === false ? false : true}
+      telefone = ${c.telefone}, observacao = ${c.observacao}, ativo = ${b.ativo === false ? false : true},
+      cep = ${c.cep}, logradouro = ${c.logradouro}, numero = ${c.numero}, complemento = ${c.complemento},
+      bairro = ${c.bairro}, cidade = ${c.cidade}, uf = ${c.uf}
     WHERE id = ${id} AND empresa_id = ${empresaId}
     RETURNING *
   `)) as any[];
   if (!r[0]) throw new ErroErp("Cadastro não encontrado", 404);
   return r[0];
+}
+
+/** Ficha do cliente/fornecedor: totais, atraso médio e os últimos lançamentos e cobranças. */
+export async function fichaContato(empresaId: number, id: number) {
+  const c = ((await db.execute(sql`SELECT * FROM empresas_contatos WHERE id = ${id} AND empresa_id = ${empresaId}`)) as any[])[0];
+  if (!c) throw new ErroErp("Cadastro não encontrado", 404);
+  const tot = ((await db.execute(sql`
+    SELECT
+      COALESCE(SUM(CASE WHEN tipo = 'Receita' AND status = 'Efetivada' THEN valor::numeric END), 0) AS recebido,
+      COALESCE(SUM(CASE WHEN tipo = 'Receita' AND status = 'Pendente' THEN valor::numeric END), 0) AS a_receber,
+      COALESCE(SUM(CASE WHEN tipo = 'Receita' AND status = 'Pendente' AND COALESCE(data_vencimento, data_transacao) < CURRENT_DATE THEN valor::numeric END), 0) AS vencido,
+      COALESCE(SUM(CASE WHEN tipo = 'Despesa' AND status = 'Efetivada' THEN valor::numeric END), 0) AS pago,
+      COALESCE(SUM(CASE WHEN tipo = 'Despesa' AND status = 'Pendente' THEN valor::numeric END), 0) AS a_pagar,
+      -- Atraso médio (dias) dos recebimentos já baixados, só quando pagou depois do vencimento.
+      AVG(CASE WHEN tipo = 'Receita' AND status = 'Efetivada' AND data_vencimento IS NOT NULL AND data_pagamento IS NOT NULL
+               THEN GREATEST(0, data_pagamento - data_vencimento) END) AS atraso_medio
+    FROM empresas_transacoes WHERE empresa_id = ${empresaId} AND contato_id = ${id}
+  `)) as any[])[0];
+  const lancamentos = (await db.execute(sql`
+    SELECT id, descricao, valor, tipo, status, data_transacao, data_vencimento, data_pagamento
+    FROM empresas_transacoes WHERE empresa_id = ${empresaId} AND contato_id = ${id}
+    ORDER BY COALESCE(data_vencimento, data_transacao) DESC, id DESC LIMIT 50
+  `)) as any[];
+  const cobrancas = (await db.execute(sql`
+    SELECT id, status, valor, valor_pago, vencimento, pago_em, url_pdf FROM cobrancas
+    WHERE empresa_id = ${empresaId} AND contato_id = ${id} ORDER BY vencimento DESC LIMIT 20
+  `).catch(() => [])) as any[];
+  const n = (v: unknown) => Math.round(Number(v || 0) * 100) / 100;
+  return {
+    contato: c,
+    totais: {
+      recebido: n(tot.recebido), a_receber: n(tot.a_receber), vencido: n(tot.vencido), pago: n(tot.pago), a_pagar: n(tot.a_pagar),
+      atraso_medio_dias: tot.atraso_medio === null ? null : Math.round(Number(tot.atraso_medio) * 10) / 10,
+    },
+    lancamentos,
+    cobrancas,
+  };
 }
 
 /** Com lançamentos vinculados vira inativo (histórico preservado); sem, é excluído. */

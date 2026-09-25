@@ -30,6 +30,9 @@ export async function criarContato(req: Request, res: Response) {
 export async function atualizarContato(req: Request, res: Response) {
   try { const e = await empresa(req); res.json(await erp.atualizarContato(e.id, Number(req.params.cid), req.body || {})); } catch (err) { falha(res, err); }
 }
+export async function fichaContato(req: Request, res: Response) {
+  try { const e = await empresa(req); res.json(await erp.fichaContato(e.id, Number(req.params.cid))); } catch (err) { falha(res, err); }
+}
 export async function removerContato(req: Request, res: Response) {
   try { const e = await empresa(req); res.json(await erp.removerContato(e.id, Number(req.params.cid))); } catch (err) { falha(res, err); }
 }

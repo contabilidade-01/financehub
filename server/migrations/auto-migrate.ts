@@ -1301,6 +1301,74 @@ const STEPS: Step[] = [
       });
     },
   },
+  {
+    name: "Cora: integrações por empresa, cobranças, eventos de webhook e endereço de clientes",
+    run: async () => {
+      // Endereço do cliente: o banco exige para registrar boleto.
+      for (const col of ["cep VARCHAR(9)", "logradouro VARCHAR(200)", "numero VARCHAR(20)", "complemento VARCHAR(100)", "bairro VARCHAR(100)", "cidade VARCHAR(100)", "uf VARCHAR(2)"]) {
+        await db.execute(sql.raw(`ALTER TABLE empresas_contatos ADD COLUMN IF NOT EXISTS ${col}`));
+      }
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS empresas_integracoes (
+          id                 SERIAL PRIMARY KEY,
+          empresa_id         INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+          provedor           VARCHAR(20) NOT NULL,                -- 'cora'
+          ambiente           VARCHAR(10) NOT NULL DEFAULT 'stage', -- stage | producao
+          client_id          VARCHAR(200),
+          certificado_enc    TEXT,                                -- AES-256-GCM (utils/cripto-segredos)
+          chave_enc          TEXT,
+          conta_bancaria_id  INTEGER REFERENCES contas_bancarias(id) ON DELETE SET NULL,
+          webhook_token_hash VARCHAR(64),                         -- sha256 do token da URL
+          webhook_registrado BOOLEAN NOT NULL DEFAULT false,
+          status             VARCHAR(20) NOT NULL DEFAULT 'pendente', -- pendente | conectada | erro
+          ultimo_erro        TEXT,
+          multa_pct          NUMERIC(5,2) DEFAULT 2,
+          juros_mes_pct      NUMERIC(5,2) DEFAULT 1,
+          ultimo_sync_em     TIMESTAMPTZ,
+          atualizado_em      TIMESTAMPTZ NOT NULL DEFAULT now(),
+          criado_em          TIMESTAMPTZ NOT NULL DEFAULT now(),
+          UNIQUE (empresa_id, provedor)
+        )
+      `);
+      await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_integ_webhook ON empresas_integracoes(webhook_token_hash) WHERE webhook_token_hash IS NOT NULL`);
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS cobrancas (
+          id               SERIAL PRIMARY KEY,
+          empresa_id       INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+          provedor         VARCHAR(20) NOT NULL DEFAULT 'cora',
+          provedor_id      VARCHAR(80),
+          transacao_id     INTEGER REFERENCES empresas_transacoes(id) ON DELETE SET NULL,
+          contato_id       INTEGER REFERENCES empresas_contatos(id) ON DELETE SET NULL,
+          status           VARCHAR(20) NOT NULL DEFAULT 'aberta',  -- aberta | processando | paga | vencida | cancelada | erro
+          valor            NUMERIC(14,2) NOT NULL,
+          valor_pago       NUMERIC(14,2),
+          vencimento       DATE NOT NULL,
+          pago_em          DATE,
+          linha_digitavel  VARCHAR(80),
+          codigo_barras    VARCHAR(60),
+          pix_copia_cola   TEXT,
+          url_pdf          TEXT,
+          idempotency_key  VARCHAR(120) NOT NULL,
+          erro             TEXT,
+          payload          JSONB,
+          criado_em        TIMESTAMPTZ NOT NULL DEFAULT now(),
+          atualizado_em    TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `);
+      await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_cobr_provedor ON cobrancas(provedor, provedor_id) WHERE provedor_id IS NOT NULL`);
+      // Uma cobrança viva por título (evita cobrar o cliente duas vezes).
+      await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_cobr_titulo_viva ON cobrancas(transacao_id) WHERE transacao_id IS NOT NULL AND status IN ('aberta', 'processando', 'vencida')`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_cobr_empresa ON cobrancas(empresa_id, status, vencimento)`);
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS integracoes_eventos (
+          provedor     VARCHAR(20) NOT NULL,
+          evento_id    VARCHAR(120) NOT NULL,
+          recebido_em  TIMESTAMPTZ NOT NULL DEFAULT now(),
+          PRIMARY KEY (provedor, evento_id)
+        )
+      `);
+    },
+  },
 ];
 
 export async function runAutoMigrations(): Promise<void> {

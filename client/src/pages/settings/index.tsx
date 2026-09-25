@@ -34,6 +34,9 @@ import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { UnsavedChangesModal } from "@/components/ui/UnsavedChangesModal";
 import { useLocalization, useTranslation } from "@/contexts/LocalizationContext";
 import { MeusDados } from "@/components/settings/MeusDados";
+import { IntegracoesEmpresa } from "@/components/cora/IntegracoesEmpresa";
+import { useFlag, FLAG_INTEGRACAO_CORA } from "@/hooks/use-flag";
+import { temErpPj } from "@shared/modalidade";
 
 const createProfileSchema = (t: (key: string, fallback: string) => string) =>
   z.object({
@@ -216,7 +219,11 @@ export default function SettingsPage() {
     [dateFormatter]
   );
   const [erroModal, setErroModal] = useState({ open: false, mensagem: "" });
-  const [activeTab, setActiveTab] = useState("perfil");
+  // ?aba=integracoes abre direto na aba (link vindo de Recebimentos Cora).
+  const [activeTab, setActiveTab] = useState(() => {
+    try { return new URLSearchParams(window.location.search).get("aba") || "perfil"; } catch { return "perfil"; }
+  });
+  const { ativa: coraLiberado } = useFlag(FLAG_INTEGRACAO_CORA);
 
   // Formulário de perfil
   const profileForm = useForm<ProfileFormValues>({
@@ -389,6 +396,7 @@ export default function SettingsPage() {
           <TabsTrigger value="api">{t('settings.api', 'API')}</TabsTrigger>
           <TabsTrigger value="assinatura">{t('settings.subscription', 'Assinatura')}</TabsTrigger>
           <TabsTrigger value="privacidade">{t('settings.privacy', 'Meus dados')}</TabsTrigger>
+          {coraLiberado && temErpPj(user as any) && <TabsTrigger value="integracoes">Integrações</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="perfil">
@@ -632,6 +640,12 @@ export default function SettingsPage() {
         <TabsContent value="privacidade">
           <MeusDados />
         </TabsContent>
+
+        {coraLiberado && temErpPj(user as any) && (
+          <TabsContent value="integracoes">
+            <IntegracoesEmpresa />
+          </TabsContent>
+        )}
       </Tabs>
 
       {/* Modal de alertas para dados não salvos */}

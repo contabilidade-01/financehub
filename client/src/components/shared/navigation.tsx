@@ -44,7 +44,7 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { useTranslation } from "@/contexts/LocalizationContext";
 import { rotuloModalidade, temErpPj } from "@shared/modalidade";
-import { FLAG_IMPORTACAO_EXTRATO_V2 } from "@/hooks/use-flag";
+import { FLAG_IMPORTACAO_EXTRATO_V2, FLAG_INTEGRACAO_CORA } from "@/hooks/use-flag";
 
 export interface NavItem {
   icon: LucideIcon;
@@ -96,6 +96,9 @@ export function useNavigation() {
   // Importação de extrato v2 (atrás de flag; super admin sempre vê).
   const temImportacaoV2 =
     isDirectAdmin || !!(flagsData?.flags as Record<string, boolean> | undefined)?.[FLAG_IMPORTACAO_EXTRATO_V2];
+  // Recebimentos Cora (atrás de flag; super admin sempre vê).
+  const temCora =
+    isDirectAdmin || !!(flagsData?.flags as Record<string, boolean> | undefined)?.[FLAG_INTEGRACAO_CORA];
   const itemImportarExtrato = (path: string): NavItem[] =>
     temImportacaoV2 ? [{ icon: FileUp, text: "Importar extrato", path }] : [];
 
@@ -144,6 +147,7 @@ export function useNavigation() {
           items: [
             { icon: HandCoins, text: "Contas a receber", path: "/p/contas-receber" },
             { icon: Receipt, text: "Contas a pagar", path: "/p/contas-pagar" },
+            ...(temCora ? [{ icon: Landmark, text: "Recebimentos Cora", path: "/p/recebimentos-cora" }] : []),
             { icon: PieChart, text: "DRE gerencial", path: "/p/dre-gerencial" },
             { icon: Waypoints, text: "Razão e mapa do dinheiro", path: "/p/razao" },
             { icon: TrendingUp, text: "Projeção de caixa", path: "/p/projecoes" },

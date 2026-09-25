@@ -5,7 +5,7 @@ import { storage, listIngestionEvents, jaConsentiuLgpd, registrarConsentimentoLg
 import { auth } from "./middleware/auth.middleware";
 import { apiKeyAuth } from "./middleware/apiKey.middleware";
 import { combinedAuth } from "./middleware/combinedAuth.middleware";
-import { authLimiter, forgotPasswordLimiter, resetPasswordLimiter, sensitiveLimiter } from "./middleware/security.middleware";
+import { authLimiter, forgotPasswordLimiter, resetPasswordLimiter, sensitiveLimiter, webhookLimiter } from "./middleware/security.middleware";
 import * as passwordResetController from "./controllers/password-reset.controller";
 import {
   checkImpersonation,
@@ -1593,6 +1593,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/empresas/:id/erp/contatos", ...erpAuth, erpCtrl.listarContatos);
   app.post("/api/empresas/:id/erp/contatos", ...erpAuth, erpCtrl.criarContato);
   app.put("/api/empresas/:id/erp/contatos/:cid", ...erpAuth, erpCtrl.atualizarContato);
+  app.get("/api/empresas/:id/erp/contatos/:cid/ficha", ...erpAuth, erpCtrl.fichaContato);
   app.delete("/api/empresas/:id/erp/contatos/:cid", ...erpAuth, erpCtrl.removerContato);
   app.get("/api/empresas/:id/erp/centros-custo", ...erpAuth, erpCtrl.listarCentros);
   app.post("/api/empresas/:id/erp/centros-custo", ...erpAuth, erpCtrl.criarCentro);
@@ -1611,6 +1612,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/empresas/:id/erp/projecao", ...erpAuth, erpCtrl.projecaoCaixa);
   app.get("/api/empresas/:id/erp/razao/:cid", ...erpAuth, erpCtrl.razaoConta);
   app.post("/api/empresas/:id/erp/contas-plano", ...erpAuth, erpCtrl.criarContaPlano);
+  // Recebimentos via Cora (PJ ME + flag integracao_cora). Credenciais são da
+  // própria empresa, cadastradas pelo usuário no painel dele.
+  const coraCtrl = await import("./controllers/cora.controller");
+  const { flagAtiva: flagCora, FLAG_INTEGRACAO_CORA } = await import("./services/feature-flags.service");
+  const exigeCora = async (req: Request, res: Response, next: NextFunction) => {
+    const u = req.user as any;
+    if (u?.tipo_usuario === "super_admin" || (req as any).originalUser?.tipo_usuario === "super_admin") return next();
+    if (await flagCora(FLAG_INTEGRACAO_CORA, u?.id)) return next();
+    return res.status(404).json({ error: "Recurso não disponível." });
+  };
+  const coraAuth = [...erpAuth, exigeCora];
+  app.get("/api/empresas/:id/integracoes/cora", ...coraAuth, coraCtrl.obterConexao);
+  app.put("/api/empresas/:id/integracoes/cora", sensitiveLimiter, ...coraAuth, coraCtrl.salvarConexao);
+  app.delete("/api/empresas/:id/integracoes/cora", ...coraAuth, coraCtrl.removerConexao);
+  app.post("/api/empresas/:id/integracoes/cora/testar", sensitiveLimiter, ...coraAuth, coraCtrl.testarConexao);
+  app.post("/api/empresas/:id/integracoes/cora/webhook", sensitiveLimiter, ...coraAuth, coraCtrl.ativarWebhook);
+  app.get("/api/empresas/:id/erp/cobrancas", ...coraAuth, coraCtrl.listarCobrancas);
+  app.post("/api/empresas/:id/erp/cobrancas", ...coraAuth, coraCtrl.emitir);
+  app.post("/api/empresas/:id/erp/cobrancas/:cid/sincronizar", ...coraAuth, coraCtrl.sincronizar);
+  app.post("/api/empresas/:id/erp/cobrancas/:cid/cancelar", ...coraAuth, coraCtrl.cancelar);
+  app.post("/api/empresas/:id/erp/cobrancas/:cid/email", sensitiveLimiter, ...coraAuth, coraCtrl.enviarEmail);
+  // Webhook público do Cora: o token da URL identifica a empresa (guardado como hash).
+  app.post("/api/webhooks/cora/:token", webhookLimiter, coraCtrl.webhook);
+
   app.get("/api/empresas/:id/erp/transferencias", ...erpAuth, erpCtrl.listarTransferencias);
   app.post("/api/empresas/:id/erp/transferencias", ...erpAuth, erpCtrl.criarTransferencia);
   app.delete("/api/empresas/:id/erp/transferencias/:tid", ...erpAuth, erpCtrl.removerTransferencia);

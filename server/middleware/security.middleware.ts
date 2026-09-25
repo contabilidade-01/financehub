@@ -76,3 +76,12 @@ export const sensitiveLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Muitas tentativas. Aguarde alguns minutos e tente novamente." },
 });
+
+/** Webhooks de provedores (ex.: Cora): volume legítimo alto, mas com teto contra abuso. */
+export const webhookLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: Number(process.env.RATE_LIMIT_WEBHOOK_MAX || 300),
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { error: "Muitas requisições." },
+});

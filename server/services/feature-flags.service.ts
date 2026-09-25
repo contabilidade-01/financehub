@@ -12,6 +12,7 @@ import {
   FLAG_AGENTE_MEIO_PAGAMENTO,
   FLAG_ORQUESTRADOR_DEEPSEEK,
   FLAG_IMPORTACAO_EXTRATO_V2,
+  FLAG_INTEGRACAO_CORA,
   FLAGS_NO_CODIGO,
   DIAS_PARA_APOSENTAR,
   avaliarFlag,
@@ -24,6 +25,7 @@ export {
   FLAG_AGENTE_MEIO_PAGAMENTO,
   FLAG_ORQUESTRADOR_DEEPSEEK,
   FLAG_IMPORTACAO_EXTRATO_V2,
+  FLAG_INTEGRACAO_CORA,
   FLAGS_NO_CODIGO,
   DIAS_PARA_APOSENTAR,
   avaliarFlag,
@@ -85,6 +87,16 @@ async function garantirTabelas(): Promise<void> {
     VALUES (
       ${FLAG_IMPORTACAO_EXTRATO_V2},
       ${"Importação de extrato (OFX/CSV/Excel) com sessão salva, conta bancária, classificação e conciliação. Super admin sempre acessa."},
+      false
+    )
+    ON CONFLICT (chave) DO NOTHING
+  `);
+  // Recebimentos via Cora: nasce off — liberar para os pilotos no admin.
+  await db.execute(sql`
+    INSERT INTO feature_flags (chave, descricao, ativo_todos)
+    VALUES (
+      ${FLAG_INTEGRACAO_CORA},
+      ${"Recebimentos via Cora (PJ ME): cobrança boleto/Pix emitida pelo sistema e baixa automática quando o cliente paga. Super admin sempre acessa."},
       false
     )
     ON CONFLICT (chave) DO NOTHING

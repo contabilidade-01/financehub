@@ -17,6 +17,8 @@ import { useConfirm } from "@/components/shared/ConfirmDialog";
 import { FiltroBar, useFiltrosUrl } from "@/components/shared/FiltroBar";
 import { ContaPlanoCombobox, usePlanoContasPj } from "@/components/shared/ContaPlanoCombobox";
 import { useToast } from "@/hooks/use-toast";
+import { useFlag, FLAG_INTEGRACAO_CORA } from "@/hooks/use-flag";
+import { useConexaoCora } from "@/components/cora/ConexaoCora";
 import { cn } from "@/lib/utils";
 import { apiErp, brl, CabecalhoPagina, dataBr, SomenteErp } from "./comum";
 import type { Contato } from "./contatos";
@@ -134,6 +136,31 @@ function Titulos({ empresaId, tipo }: { empresaId: number; tipo: TipoTitulo }) {
   const totalSel = selecionadas.reduce((s, l) => s + Number(l.valor), 0);
   const alternar = (id: number) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const todasMarcadas = linhas.length > 0 && linhas.every((l) => sel.has(l.id));
+
+  // Cobrança via Cora só para receber, com a flag e a conexão ativas.
+  const { ativa: coraLiberado } = useFlag(FLAG_INTEGRACAO_CORA);
+  const cora = useConexaoCora(tipo === "Receita" && coraLiberado ? empresaId : null);
+  const [emitindo, setEmitindo] = useState(false);
+  const cobrarViaCora = async (itens: Titulo[]) => {
+    setEmitindo(true);
+    try {
+      const r = await apiErp<{ emitidas: number; resultados: { transacao_id: number; ok: boolean; erro?: string }[] }>(`/api/empresas/${empresaId}/erp/cobrancas`, {
+        method: "POST",
+        body: { transacao_ids: itens.map((l) => l.id) },
+      });
+      const erros = r.resultados.filter((x) => !x.ok);
+      toast({
+        title: r.emitidas ? `${r.emitidas} cobrança(s) emitida(s) no Cora` : "Nenhuma cobrança emitida",
+        description: erros.length ? erros.slice(0, 3).map((x) => x.erro).join(" ") : "Veja em Recebimentos Cora para copiar o Pix ou enviar ao cliente.",
+        variant: r.emitidas ? undefined : "destructive",
+      });
+      invalidar();
+    } catch (e: any) {
+      toast({ title: "Não foi possível emitir", description: e?.message, variant: "destructive" });
+    } finally {
+      setEmitindo(false);
+    }
+  };
 
   const [novo, setNovo] = useState<Novo | null>(null);
   const [baixa, setBaixa] = useState<null | { itens: Titulo[]; conta_bancaria_id: string; data_pagamento: string; valor_pago: string }>(null);
@@ -405,6 +432,11 @@ function Titulos({ empresaId, tipo }: { empresaId: number; tipo: TipoTitulo }) {
               <span className="ml-2 tabular-nums text-muted-foreground">{brl(totalSel)}</span>
             </div>
             {abertasSel.length > 0 && <Button size="sm" onClick={() => abrirBaixa(abertasSel)}>{tx.acao} {abertasSel.length > 1 ? `(${abertasSel.length})` : ""}</Button>}
+            {cora.conectada && abertasSel.length > 0 && (
+              <Button size="sm" variant="outline" disabled={emitindo} onClick={() => cobrarViaCora(abertasSel)}>
+                {emitindo && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Cobrar via Cora
+              </Button>
+            )}
             {baixadasSel.length > 0 && <Button size="sm" variant="outline" onClick={() => estornar(baixadasSel)}>Estornar ({baixadasSel.length})</Button>}
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setSel(new Set())} aria-label="Limpar seleção"><X className="h-4 w-4" /></Button>
           </div>
@@ -575,7 +607,7 @@ function DiferencaBaixa({ tipo, previsto, pago }: { tipo: TipoTitulo; previsto: 
 }
 
 /** Cliente/fornecedor com busca e cadastro rápido (só o nome; o resto em Clientes e fornecedores). */
-function ContatoCombobox({ empresaId, tipo, contatos, valor, onChange }: { empresaId: number; tipo: string; contatos: Contato[]; valor: number | null; onChange: (id: number | null) => void }) {
+export function ContatoCombobox({ empresaId, tipo, contatos, valor, onChange }: { empresaId: number; tipo: string; contatos: Contato[]; valor: number | null; onChange: (id: number | null) => void }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [aberto, setAberto] = useState(false);

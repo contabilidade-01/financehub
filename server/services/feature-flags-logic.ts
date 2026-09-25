@@ -8,10 +8,13 @@ export const FLAG_AGENTE_MEIO_PAGAMENTO = "agente_meio_pagamento";
 export const FLAG_ORQUESTRADOR_DEEPSEEK = "orquestrador_deepseek";
 /** Importação de extrato unificada (sessão com autosave, conta bancária, conciliação). */
 export const FLAG_IMPORTACAO_EXTRATO_V2 = "importacao_extrato_v2";
+/** Recebimentos via Cora (cobrança boleto/Pix com baixa automática), PJ ME. */
+export const FLAG_INTEGRACAO_CORA = "integracao_cora";
 export const FLAGS_NO_CODIGO: readonly string[] = [
   FLAG_AGENTE_MEIO_PAGAMENTO,
   FLAG_ORQUESTRADOR_DEEPSEEK,
   FLAG_IMPORTACAO_EXTRATO_V2,
+  FLAG_INTEGRACAO_CORA,
 ];
 
 export const DIAS_PARA_APOSENTAR = 30;

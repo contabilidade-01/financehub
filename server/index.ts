@@ -270,4 +270,11 @@ app.use((req, res, next) => {
   }).catch(err => {
     console.error("[Mensalidades] Falha ao carregar job de mensalidades:", err.message);
   });
+
+  // Recebimentos Cora: confere cobranças em aberto a cada 30min (cobre webhook perdido)
+  import("./jobs/cora-sync.job").then(({ initializeCoraSync }) => {
+    initializeCoraSync();
+  }).catch(err => {
+    console.error("[Cora] Falha ao carregar job de sincronização:", err.message);
+  });
 })();

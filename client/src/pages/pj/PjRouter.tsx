@@ -21,6 +21,7 @@ import ContasPagarPage from "@/pages/pj/erp/contas-pagar";
 import RazaoPage from "@/pages/pj/erp/razao";
 import ProjecoesPage from "@/pages/pj/erp/projecoes";
 import AnalisePage from "@/pages/pj/erp/analise";
+import RecebimentosCoraPage from "@/pages/pj/erp/recebimentos-cora";
 import { useAuth } from "@/hooks/use-auth";
 import { temErpPj } from "@shared/modalidade";
 import DreGerencialPage from "@/pages/pj/erp/dre";
@@ -90,6 +91,8 @@ export default function PjRouter() {
         return temErpPj(user as any) ? <AnalisePage empresaId={empresaAtiva} /> : <PjDashboard empresaId={empresaAtiva} />;
       case "projecoes":
         return <ProjecoesPage empresaId={empresaAtiva} />;
+      case "recebimentos-cora":
+        return <RecebimentosCoraPage empresaId={empresaAtiva} />;
       case "transacoes":
         return <PjTransactions empresaId={empresaAtiva} />;
       case "categorias":

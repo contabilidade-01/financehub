@@ -3,6 +3,7 @@ import { useAuth } from "@/hooks/use-auth";
 
 /** Espelho das constantes de server/services/feature-flags-logic.ts (nunca use literal solto). */
 export const FLAG_IMPORTACAO_EXTRATO_V2 = "importacao_extrato_v2";
+export const FLAG_INTEGRACAO_CORA = "integracao_cora";
 
 /** Flag ativa para o usuário logado. Super admin sempre vê (como no servidor). */
 export function useFlag(chave: string): { ativa: boolean; carregando: boolean } {

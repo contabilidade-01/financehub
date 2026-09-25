@@ -14,6 +14,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
 import { apiErp, brl, CabecalhoPagina, formatarDocumento, SomenteErp } from "./comum";
 
@@ -28,10 +29,30 @@ export interface Contato {
   ativo: boolean;
   a_receber: string;
   a_pagar: string;
+  cep: string | null;
+  logradouro: string | null;
+  numero: string | null;
+  complemento: string | null;
+  bairro: string | null;
+  cidade: string | null;
+  uf: string | null;
 }
 
 const ROTULO_TIPO = { cliente: "Cliente", fornecedor: "Fornecedor", ambos: "Cliente e fornecedor" } as const;
-const VAZIO = { nome: "", tipo: "cliente" as Contato["tipo"], documento: "", email: "", telefone: "", observacao: "" };
+const VAZIO = {
+  nome: "", tipo: "cliente" as Contato["tipo"], documento: "", email: "", telefone: "", observacao: "",
+  cep: "", logradouro: "", numero: "", complemento: "", bairro: "", cidade: "", uf: "",
+};
+
+const paraEdicao = (c: Contato) => ({
+  id: c.id, nome: c.nome, tipo: c.tipo, documento: formatarDocumento(c.documento), email: c.email || "", telefone: c.telefone || "",
+  observacao: c.observacao || "", cep: c.cep ? c.cep.replace(/(\d{5})(\d{3})/, "$1-$2") : "", logradouro: c.logradouro || "",
+  numero: c.numero || "", complemento: c.complemento || "", bairro: c.bairro || "", cidade: c.cidade || "", uf: c.uf || "",
+});
+
+/** Endereço completo: o banco exige para registrar boleto. */
+const enderecoCompleto = (c: Pick<Contato, "cep" | "logradouro" | "numero" | "bairro" | "cidade" | "uf" | "documento">) =>
+  !!(c.documento && c.cep && c.logradouro && c.numero && c.bairro && c.cidade && c.uf);
 
 export default function ContatosPage({ empresaId }: { empresaId: number }) {
   return (
@@ -53,6 +74,7 @@ function Contatos({ empresaId }: { empresaId: number }) {
   });
   const [editando, setEditando] = useState<(typeof VAZIO & { id?: number }) | null>(null);
   const [removendo, setRemovendo] = useState<Contato | null>(null);
+  const [fichaId, setFichaId] = useState<number | null>(null);
   const [salvando, setSalvando] = useState(false);
 
   const salvar = async () => {
@@ -125,14 +147,17 @@ function Contatos({ empresaId }: { empresaId: number }) {
                 <tbody>
                   {contatos.map((c) => (
                     <tr key={c.id} className="border-b last:border-0">
-                      <td className="px-4 py-2 font-medium">{c.nome}</td>
+                      <td className="px-4 py-2 font-medium">
+                        <button type="button" className="text-left hover:underline" onClick={() => setFichaId(c.id)}>{c.nome}</button>
+                        {c.tipo !== "fornecedor" && !enderecoCompleto(c) && <div className="text-xs font-normal text-muted-foreground">Sem endereço completo para boleto</div>}
+                      </td>
                       <td className="px-2 py-2"><Badge variant="outline" className="font-normal">{ROTULO_TIPO[c.tipo]}</Badge></td>
                       <td className="px-2 py-2 tabular-nums text-muted-foreground">{formatarDocumento(c.documento)}</td>
                       <td className="px-2 py-2 text-muted-foreground">{[c.email, c.telefone].filter(Boolean).join(" · ")}</td>
                       <td className="px-2 py-2 text-right tabular-nums">{Number(c.a_receber) ? brl(c.a_receber) : "—"}</td>
                       <td className="px-2 py-2 text-right tabular-nums">{Number(c.a_pagar) ? brl(c.a_pagar) : "—"}</td>
                       <td className="px-4 py-2 text-right">
-                        <Button variant="ghost" size="icon" aria-label="Editar" onClick={() => setEditando({ id: c.id, nome: c.nome, tipo: c.tipo, documento: formatarDocumento(c.documento), email: c.email || "", telefone: c.telefone || "", observacao: c.observacao || "" })}><Pencil className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="icon" aria-label="Editar" onClick={() => setEditando(paraEdicao(c))}><Pencil className="h-4 w-4" /></Button>
                         <Button variant="ghost" size="icon" aria-label="Excluir" onClick={() => setRemovendo(c)}><Trash2 className="h-4 w-4" /></Button>
                       </td>
                     </tr>
@@ -141,7 +166,7 @@ function Contatos({ empresaId }: { empresaId: number }) {
               </table>
               <div className="divide-y md:hidden">
                 {contatos.map((c) => (
-                  <button key={c.id} type="button" className="w-full px-4 py-3 text-left" onClick={() => setEditando({ id: c.id, nome: c.nome, tipo: c.tipo, documento: formatarDocumento(c.documento), email: c.email || "", telefone: c.telefone || "", observacao: c.observacao || "" })}>
+                  <button key={c.id} type="button" className="w-full px-4 py-3 text-left" onClick={() => setFichaId(c.id)}>
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-medium">{c.nome}</span>
                       <Badge variant="outline" className="font-normal">{ROTULO_TIPO[c.tipo]}</Badge>
@@ -159,7 +184,7 @@ function Contatos({ empresaId }: { empresaId: number }) {
       </Card>
 
       <Dialog open={!!editando} onOpenChange={(o) => !o && setEditando(null)}>
-        <DialogContent>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editando?.id ? "Editar cadastro" : "Novo cadastro"}</DialogTitle>
             <DialogDescription>Cliente, fornecedor ou os dois.</DialogDescription>
@@ -193,6 +218,38 @@ function Contatos({ empresaId }: { empresaId: number }) {
                 <Label htmlFor="ct-tel">Telefone</Label>
                 <Input id="ct-tel" inputMode="tel" value={editando.telefone} onChange={(e) => setEditando({ ...editando, telefone: e.target.value })} />
               </div>
+              <div className="pt-1 text-sm font-medium sm:col-span-2">
+                Endereço <span className="font-normal text-muted-foreground">(necessário para emitir boleto)</span>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="ct-cep">CEP</Label>
+                <Input id="ct-cep" inputMode="numeric" value={editando.cep} placeholder="00000-000"
+                  onChange={(e) => setEditando({ ...editando, cep: e.target.value.replace(/\D/g, "").slice(0, 8).replace(/(\d{5})(\d)/, "$1-$2") })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="ct-uf">UF</Label>
+                <Input id="ct-uf" maxLength={2} value={editando.uf} onChange={(e) => setEditando({ ...editando, uf: e.target.value.replace(/[^a-z]/gi, "").toUpperCase() })} />
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label htmlFor="ct-log">Logradouro</Label>
+                <Input id="ct-log" value={editando.logradouro} onChange={(e) => setEditando({ ...editando, logradouro: e.target.value })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="ct-num">Número</Label>
+                <Input id="ct-num" value={editando.numero} onChange={(e) => setEditando({ ...editando, numero: e.target.value })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="ct-comp">Complemento</Label>
+                <Input id="ct-comp" value={editando.complemento} onChange={(e) => setEditando({ ...editando, complemento: e.target.value })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="ct-bairro">Bairro</Label>
+                <Input id="ct-bairro" value={editando.bairro} onChange={(e) => setEditando({ ...editando, bairro: e.target.value })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="ct-cid">Cidade</Label>
+                <Input id="ct-cid" value={editando.cidade} onChange={(e) => setEditando({ ...editando, cidade: e.target.value })} />
+              </div>
               <div className="space-y-1.5 sm:col-span-2">
                 <Label htmlFor="ct-obs">Observação</Label>
                 <Textarea id="ct-obs" rows={2} value={editando.observacao} onChange={(e) => setEditando({ ...editando, observacao: e.target.value })} />
@@ -208,6 +265,13 @@ function Contatos({ empresaId }: { empresaId: number }) {
         </DialogContent>
       </Dialog>
 
+      <FichaContato
+        empresaId={empresaId}
+        id={fichaId}
+        onFechar={() => setFichaId(null)}
+        onEditar={(c) => { setFichaId(null); setEditando(paraEdicao(c)); }}
+      />
+
       <AlertDialog open={!!removendo} onOpenChange={(o) => !o && setRemovendo(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -221,5 +285,84 @@ function Contatos({ empresaId }: { empresaId: number }) {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+interface Ficha {
+  contato: Contato;
+  totais: { recebido: number; a_receber: number; vencido: number; pago: number; a_pagar: number; atraso_medio_dias: number | null };
+  lancamentos: { id: number; descricao: string; valor: string; tipo: string; status: string; data_transacao: string; data_vencimento: string | null; data_pagamento: string | null }[];
+  cobrancas: { id: number; status: string; valor: string; valor_pago: string | null; vencimento: string; pago_em: string | null; url_pdf: string | null }[];
+}
+
+const ROTULO_COBRANCA: Record<string, string> = { aberta: "Em aberto", processando: "Processando", paga: "Paga", vencida: "Vencida", cancelada: "Cancelada" };
+
+/** Ficha do cliente/fornecedor: quanto já pagou, quanto deve, atraso médio e histórico. */
+function FichaContato({ empresaId, id, onFechar, onEditar }: { empresaId: number; id: number | null; onFechar: () => void; onEditar: (c: Contato) => void }) {
+  const url = `/api/empresas/${empresaId}/erp/contatos/${id}/ficha`;
+  const { data, isLoading } = useQuery<Ficha>({ queryKey: [url], queryFn: () => apiErp(url), enabled: !!id });
+  const c = data?.contato;
+  const endereco = c && [c.logradouro && `${c.logradouro}${c.numero ? `, ${c.numero}` : ""}`, c.complemento, c.bairro, c.cidade && `${c.cidade}${c.uf ? `/${c.uf}` : ""}`, c.cep && c.cep.replace(/(\d{5})(\d{3})/, "$1-$2")].filter(Boolean).join(" · ");
+  return (
+    <Sheet open={!!id} onOpenChange={(o) => !o && onFechar()}>
+      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-xl">
+        <SheetHeader>
+          <SheetTitle>{c?.nome || "Cadastro"}</SheetTitle>
+          <SheetDescription>{c ? [ROTULO_TIPO[c.tipo], formatarDocumento(c.documento), c.email, c.telefone].filter(Boolean).join(" · ") : ""}</SheetDescription>
+        </SheetHeader>
+        {isLoading || !data ? (
+          <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Carregando…</div>
+        ) : (
+          <div className="mt-4 space-y-5">
+            <div className="text-sm text-muted-foreground">{endereco || "Sem endereço cadastrado."}</div>
+            <Button variant="outline" size="sm" onClick={() => onEditar(data.contato)}><Pencil className="mr-2 h-4 w-4" />Editar cadastro</Button>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { r: "Já recebido", v: brl(data.totais.recebido) },
+                { r: "A receber", v: brl(data.totais.a_receber), d: data.totais.vencido ? `${brl(data.totais.vencido)} vencido` : undefined },
+                { r: "Atraso médio", v: data.totais.atraso_medio_dias === null ? "—" : `${data.totais.atraso_medio_dias.toLocaleString("pt-BR")} dia(s)` },
+                { r: "A pagar", v: brl(data.totais.a_pagar), d: data.totais.pago ? `${brl(data.totais.pago)} já pago` : undefined },
+              ].map((k) => (
+                <div key={k.r} className="rounded-md border p-3">
+                  <div className="text-xs text-muted-foreground">{k.r}</div>
+                  <div className="font-semibold">{k.v}</div>
+                  {k.d && <div className="text-xs text-red-700 dark:text-red-400">{k.d}</div>}
+                </div>
+              ))}
+            </div>
+            {data.cobrancas.length > 0 && (
+              <div className="space-y-2">
+                <div className="text-sm font-medium">Cobranças Cora</div>
+                <div className="divide-y rounded-md border">
+                  {data.cobrancas.map((cb) => (
+                    <div key={cb.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
+                      <span className="tabular-nums text-muted-foreground">{String(cb.vencimento).slice(0, 10).split("-").reverse().join("/")}</span>
+                      <Badge variant={cb.status === "paga" ? "secondary" : cb.status === "vencida" ? "destructive" : "outline"} className="font-normal">{ROTULO_COBRANCA[cb.status] || cb.status}</Badge>
+                      <span className="tabular-nums">{brl(cb.valor_pago ?? cb.valor)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="space-y-2">
+              <div className="text-sm font-medium">Lançamentos</div>
+              <div className="divide-y rounded-md border">
+                {!data.lancamentos.length && <p className="p-3 text-sm text-muted-foreground">Nenhum lançamento.</p>}
+                {data.lancamentos.map((l) => (
+                  <div key={l.id} className="flex items-center gap-3 px-3 py-2 text-sm">
+                    <span className="w-20 shrink-0 tabular-nums text-muted-foreground">{String(l.data_vencimento || l.data_transacao).slice(0, 10).split("-").reverse().join("/")}</span>
+                    <span className="min-w-0 flex-1 truncate">{l.descricao}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">{l.status === "Pendente" ? "em aberto" : "baixado"}</span>
+                    <span className={l.tipo === "Receita" ? "shrink-0 tabular-nums text-emerald-700 dark:text-emerald-400" : "shrink-0 tabular-nums text-red-700 dark:text-red-400"}>
+                      {l.tipo === "Receita" ? "+" : "−"}{brl(l.valor)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </SheetContent>
+    </Sheet>
   );
 }

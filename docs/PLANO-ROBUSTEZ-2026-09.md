@@ -214,3 +214,34 @@ Todas as fases foram entregues no branch `claude/system-vulnerabilities-analysis
 - Transferências entre contas PF sem tela própria. Hoje só pela importação.
 - Plano de contas sem hierarquia por FK (usa código `1.01`).
 - PWA com manifest e service worker estáticos (sem `vite-plugin-pwa`); telas administrativas não revisadas visualmente; modais legados sem focus trap; varredura de i18n incompleta.
+
+---
+
+## Etapa 2 do ERP PJ ME — entregue
+
+### O que entrou
+- **Plano de contas** em árvore, com os modelos **Base Serviços** e **Base Comércio**. A empresa nova recebe o modelo pelo segmento; as existentes ganharam grupos sem renumerar nenhuma conta; "Completar com modelo" adiciona o que falta. Nenhum lançamento pode ir para um grupo: a API bloqueia e há também um trigger no banco. Conta com lançamentos é inativada, não excluída.
+- **Criar conta sem sair do lançamento**: no lançamento PJ, na edição rápida, em Vencimentos, em a pagar e a receber e na importação. A conta nova já nasce no grupo escolhido.
+- **Contas a pagar e a receber** com parcelamento, recorrência mensal e a opção "já pago". Baixa individual ou em lote (tudo ou nada); na baixa, juros, multa ou desconto vão para o resultado financeiro. O estorno desfaz a baixa. Os filtros ficam guardados na URL.
+- **Indicadores num cálculo só** (`shared/indicadores-financeiros.ts`): receita bruta e líquida, CMV/CSP, markup, margem de contribuição, ponto de equilíbrio (com % atingido e margem de segurança), lucro líquido e geração de caixa.
+- **DRE gerencial** por margem de contribuição. **Razão** por conta com saldo acumulado e CSV. **Mapa do dinheiro** (Sankey) mostrando de onde o dinheiro veio e para onde foi.
+- **Projeção de caixa**: parte do saldo atual e soma o que falta receber, o que falta pagar, as faturas e as mensalidades. Tem cenários, taxa de inadimplência e aviso de quando o saldo fica negativo.
+- **Dashboard de análise** (é a tela inicial do PJ ME).
+- **Clientes** com endereço (exigido para emitir boleto) e uma ficha com o total recebido, o que está em aberto, o atraso médio e o histórico.
+- **Recebimentos Cora** (flag `integracao_cora`):
+  - a própria empresa conecta a conta em Configurações → Integrações ou em Recebimentos Cora → Conexão;
+  - emite boleto + Pix;
+  - quando o cliente paga, o Cora avisa, o sistema confirma na API do Cora e dá a baixa sozinho;
+  - a cada 30 minutos um job confere as cobranças, como rede de segurança;
+  - dá para cancelar, enviar por e-mail, copiar o Pix e a linha digitável.
+
+### Para ativar
+1. Defina `INTEGRACOES_SECRET` no EasyPanel (`openssl rand -base64 48`).
+2. Confira se `PUBLIC_APP_URL` (ou `BASE_URL`) está com https: é o endereço para onde o Cora manda os avisos.
+3. Ligue a flag `integracao_cora` para os pilotos em `/admin/feature-flags`.
+4. Teste no **ambiente stage do Cora** com as credenciais de sandbox de um piloto: conectar → ativar aviso → emitir → pagar no sandbox → conferir a baixa.
+
+### Pendências e riscos
+- **Os endpoints do Cora não foram conferidos na documentação oficial**: o acesso a developers.cora.com.br estava bloqueado no ambiente de desenvolvimento. A implementação segue o contrato conhecido da Integração Direta: token mTLS em `matls-clients.api[.stage].cora.com.br/token`, `/v2/invoices` e `/endpoints`. Foi validada contra um servidor simulado que exige mTLS. Os endereços ficam em `server/services/cora/cora.client.ts` (`URLS`), e a leitura das respostas aceita variações de nome de campo. **O primeiro teste no stage é obrigatório antes de liberar em produção.**
+- Pix recebido sem cobrança emitida (Pix direto na chave) não é baixado automaticamente; ele entra pela importação do extrato.
+- Baixa parcial (receber só parte do título) ainda não existe.
