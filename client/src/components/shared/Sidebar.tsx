@@ -196,6 +196,7 @@ function Sidebar() {
         { icon: <Wrench className="mr-3 h-4 w-4" />, text: t('navigation.maintenance', 'Manutenção'), path: "/admin/maintenance" },
         { icon: <Flag className="mr-3 h-4 w-4" />, text: 'Feature flags', path: "/admin/feature-flags" },
         { icon: <MessageSquare className="mr-3 h-4 w-4" />, text: 'Simulador WhatsApp', path: "/admin/simular-whatsapp" },
+        { icon: <MessageSquare className="mr-3 h-4 w-4" />, text: 'Auditoria da IA', path: "/admin/ia-auditoria" },
         ...(temOrquestrador
           ? [{ icon: <Bot className="mr-3 h-4 w-4" />, text: 'Orquestrador (DeepSeek)', path: "/admin/orquestrador" }]
           : []),

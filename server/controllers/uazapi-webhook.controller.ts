@@ -4,7 +4,7 @@ import { seedPlanoContasPessoal, createIngestionEvent, getConversaRecente, appen
 import { uazapiService } from "../services/uazapi.service";
 import { WhatsAppOnboardingService } from "../services/whatsapp-onboarding.service";
 import { gerarLinkDefinirSenha } from "./password-reset.controller";
-import { transcribeAudio, analyzeWithGemini, runAgent } from "../services/ai-agent.service";
+import { transcribeAudio, analyzeWithGemini, runAgent, type ToolContext } from "../services/ai-agent.service";
 import { classifyAiError } from "../utils/ai-errors";
 import { limparTextoWhatsapp } from "../services/limpar-texto-whatsapp";
 import { notificarAdmin } from "../services/admin-notify";
@@ -16,6 +16,8 @@ import {
 } from "../services/mailer";
 import bcrypt from "bcryptjs";
 import { autenticarWebhookUazapi } from "../utils/uazapi-webhook-auth";
+import { db } from "../db";
+import { sql } from "drizzle-orm";
 import { camposDaModalidade, detectarModalidadeTexto, ROTULO_MODALIDADE, type Modalidade } from "../../shared/modalidade";
 
 /**
@@ -33,9 +35,13 @@ import { camposDaModalidade, detectarModalidadeTexto, ROTULO_MODALIDADE, type Mo
 const processedMessages = new Map<string, number>();
 const DEBOUNCE_TTL = 30000; // 30 segundos
 
-function isDuplicate(messageId: string): boolean {
+/**
+ * Duplicata = mesma messageid já processada. Cache em memória (rápido) + tabela
+ * whatsapp_mensagens_processadas (sobrevive a restart e vale entre réplicas).
+ */
+async function isDuplicate(messageId: string): Promise<boolean> {
+  if (!messageId) return false;
   const now = Date.now();
-  // Limpar entradas antigas a cada 100 mensagens
   if (processedMessages.size > 100) {
     for (const [key, ts] of processedMessages) {
       if (now - ts > DEBOUNCE_TTL) processedMessages.delete(key);
@@ -43,7 +49,32 @@ function isDuplicate(messageId: string): boolean {
   }
   if (processedMessages.has(messageId)) return true;
   processedMessages.set(messageId, now);
-  return false;
+  try {
+    const ins = (await db.execute(sql`
+      INSERT INTO whatsapp_mensagens_processadas (message_id) VALUES (${messageId})
+      ON CONFLICT (message_id) DO NOTHING
+      RETURNING message_id
+    `)) as any[];
+    // Limpeza ocasional (mantém ~3 dias).
+    if (Math.random() < 0.01) {
+      db.execute(sql`DELETE FROM whatsapp_mensagens_processadas WHERE criado_em < now() - interval '3 days'`).catch(() => {});
+    }
+    return ins.length === 0;
+  } catch (err: any) {
+    console.warn("[UazAPI Webhook] dedup no banco indisponível:", err?.message);
+    return false;
+  }
+}
+
+// Mensagens do MESMO contato em sequência (evita corrida no histórico e nas
+// pendências quando o cliente manda duas mensagens seguidas).
+const filas = new Map<string, Promise<void>>();
+function enfileirarPorChat(chave: string, tarefa: () => Promise<void>): Promise<void> {
+  const anterior = filas.get(chave) || Promise.resolve();
+  const atual = anterior.catch(() => {}).then(tarefa);
+  filas.set(chave, atual);
+  atual.finally(() => { if (filas.get(chave) === atual) filas.delete(chave); }).catch(() => {});
+  return atual;
 }
 
 // ============================================
@@ -358,7 +389,10 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
 
   // Retornar 200 imediatamente para não travar o UazAPI
   res.status(200).json({ received: true });
+  await enfileirarPorChat(String(req.body?.message?.chatid || ""), () => processarMensagemUazapi(req, tokenValidado));
+};
 
+async function processarMensagemUazapi(req: Request, tokenValidado: string): Promise<void> {
   try {
     const body = req.body as UazapiWebhookBody;
 
@@ -387,7 +421,7 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
     const text = limparTextoWhatsapp(message.text || "");
 
     // Debounce: ignorar mensagem duplicada
-    if (isDuplicate(messageid)) {
+    if (await isDuplicate(messageid)) {
       console.log(`[UazAPI Webhook] Mensagem duplicada ignorada: ${messageid}`);
       return;
     }
@@ -635,7 +669,7 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
     // deve confirmar antes de gravar lançamentos.
     const origemMidia = ["AudioMessage", "ImageMessage", "DocumentMessage"].includes(messageType);
 
-    const agentContext = {
+    const agentContext: ToolContext = {
       userId: user.id,
       walletId: wallet.id,
       categories: categories.map((c) => ({ id: c.id, nome: c.nome, tipo: c.tipo, descricao: (c as any).descricao ?? null })),
@@ -698,6 +732,8 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
       await createIngestionEvent({
         usuario_id: user.id, remote_jid: chatid, tipo_mensagem: messageType,
         mensagem_raw: resolvedText, resultado: "sucesso", etapa: "envio",
+        decisoes: agentContext.decisoes, message_id: messageid,
+        modelo: process.env.AI_MODEL || "gpt-4o-mini",
       });
     } catch (sendErr: any) {
       console.error(`[UazAPI Webhook] ❌ Erro ao enviar resposta:`, sendErr.message);
@@ -716,11 +752,13 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
       });
     } catch (_) { /* nunca falhar por causa do log */ }
     try {
-      const { BaseUrl, token, message } = req.body;
-      if (BaseUrl && token && message?.chatid) {
+      // Nunca responder para a URL do payload: base do ambiente + token validado.
+      const message = req.body?.message;
+      const BaseUrl = process.env.UAZAPI_BASE_URL || "https://nescon.uazapi.com";
+      if (message?.chatid) {
         await uazapiService.sendText(
           BaseUrl,
-          token,
+          tokenValidado,
           message.chatid,
           "😓 Desculpe, aconteceu um erro inesperado. Tente novamente em alguns segundos.\n\nSe persistir, envie sua mensagem como texto simples."
         );

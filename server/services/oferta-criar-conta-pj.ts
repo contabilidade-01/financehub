@@ -6,6 +6,7 @@
 import { storage } from "../storage";
 import { atualizarTransacaoEmpresa } from "./empresa-transacao.service";
 import { interpretarConfirmacao, type Confirmacao } from "./confirmacao-usuario";
+import { criarPendencias } from "./ia-pendencias";
 
 export type OfertaCriarConta = {
   userId: number;
@@ -19,7 +20,8 @@ export type OfertaCriarConta = {
 };
 
 const TTL_MS = 30 * 60 * 1000;
-const pendentes = new Map<number, OfertaCriarConta>();
+// Persistido no banco (sobrevive a restart/deploy e funciona com várias réplicas).
+const pendentes = criarPendencias<OfertaCriarConta>("criar_conta_pj");
 
 export function registrarOfertaCriarConta(o: Omit<OfertaCriarConta, "expiresAt">): void {
   pendentes.set(o.userId, { ...o, expiresAt: Date.now() + TTL_MS });

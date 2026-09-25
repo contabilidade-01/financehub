@@ -1064,6 +1064,31 @@ const STEPS: Step[] = [
       `);
     },
   },
+  {
+    name: "IA: pendências da conversa e dedup de mensagens no banco",
+    run: async () => {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS ia_pendencias (
+          usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+          tipo       VARCHAR(40) NOT NULL,
+          dados      JSONB NOT NULL,
+          expira_em  TIMESTAMPTZ NOT NULL,
+          PRIMARY KEY (usuario_id, tipo)
+        )
+      `);
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS whatsapp_mensagens_processadas (
+          message_id VARCHAR(128) PRIMARY KEY,
+          criado_em  TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_wa_msg_criado ON whatsapp_mensagens_processadas(criado_em)`);
+      // Auditoria das decisões da IA (ferramentas, categoria escolhida e motivo).
+      await db.execute(sql`ALTER TABLE ingestion_events ADD COLUMN IF NOT EXISTS decisoes JSONB`);
+      await db.execute(sql`ALTER TABLE ingestion_events ADD COLUMN IF NOT EXISTS modelo VARCHAR(80)`);
+      await db.execute(sql`ALTER TABLE ingestion_events ADD COLUMN IF NOT EXISTS message_id VARCHAR(128)`);
+    },
+  },
 ];
 
 export async function runAutoMigrations(): Promise<void> {

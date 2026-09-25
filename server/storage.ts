@@ -2909,15 +2909,21 @@ export async function createIngestionEvent(ev: {
   etapa?: string | null; // transcricao | visao | agente | envio | pipeline
   detalhe?: string | null;
   provider?: string | null;
+  /** Ferramentas chamadas pela IA (args + resultado resumido) — auditoria. */
+  decisoes?: unknown[] | null;
+  modelo?: string | null;
+  message_id?: string | null;
 }): Promise<void> {
   try {
     await db.execute(sql`
       INSERT INTO ingestion_events
-        (usuario_id, remote_jid, canal, tipo_mensagem, mensagem_raw, resultado, etapa, detalhe, provider)
+        (usuario_id, remote_jid, canal, tipo_mensagem, mensagem_raw, resultado, etapa, detalhe, provider, decisoes, modelo, message_id)
       VALUES
         (${ev.usuario_id ?? null}, ${ev.remote_jid ?? null}, ${ev.canal ?? 'whatsapp'},
          ${ev.tipo_mensagem ?? null}, ${ev.mensagem_raw ?? null}, ${ev.resultado},
-         ${ev.etapa ?? null}, ${ev.detalhe ?? null}, ${ev.provider ?? null})
+         ${ev.etapa ?? null}, ${ev.detalhe ?? null}, ${ev.provider ?? null},
+         ${ev.decisoes && ev.decisoes.length ? JSON.stringify(ev.decisoes) : null}::jsonb,
+         ${ev.modelo ?? null}, ${ev.message_id ?? null})
     `);
   } catch (err: any) {
     // Nunca deixar o log de ingestão derrubar o fluxo principal.

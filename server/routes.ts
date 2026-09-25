@@ -1584,6 +1584,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const simularWaCtrl = await import("./controllers/simular-whatsapp.controller");
   app.post("/api/admin/simular-whatsapp", combinedAuth, checkImpersonation, requireSuperAdmin, simularWaCtrl.simularWhatsapp);
+  const iaAuditoriaCtrl = await import("./controllers/ia-auditoria.controller");
+  app.get("/api/admin/ia/eventos", combinedAuth, checkImpersonation, requireSuperAdmin, iaAuditoriaCtrl.listarEventosIa);
 
   // Orquestrador admin — DeepSeek (super_admin gerencia liberação; chat exige acesso)
   const orqCtrl = await import("./controllers/orquestrador.controller");

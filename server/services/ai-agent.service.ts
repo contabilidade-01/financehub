@@ -5,6 +5,7 @@ import { FINANCIAL_AGENT_SYSTEM_PROMPT, buildDynamicContext } from "../prompts/f
 import { insertTransactionSchema } from "../../shared/schema";
 import { withRetry } from "../utils/ai-errors";
 import { casarCategoriaPorNome, sugerirCategoriaPorDescricao, chaveMemoria, type CategoriaPf } from "./categorizar-pf";
+import { hidratarPendencias } from "./ia-pendencias";
 import { reconciliarLancamento, trechoDoLancamento, segmentarLancamentos, hojeSP, contextoDataParaPrompt } from "./nlp-br";
 import { resolverContaPj } from "./classificar-conta-pj";
 import { atualizarTransacaoEmpresa, baixarTransacaoEmpresa } from "./empresa-transacao.service";
@@ -170,7 +171,7 @@ Os números de valor devem usar notação decimal americana (ponto como separado
 // TOOLS — definição p/ function calling
 // ============================================
 
-interface ToolContext {
+export interface ToolContext {
   userId: number;
   walletId: number;
   categories: { id: number; nome: string; tipo: string; descricao?: string | null }[];
@@ -184,6 +185,8 @@ interface ToolContext {
   userMessage?: string;
   /** Preenchido pelo simulador de WhatsApp (homologação). */
   toolTrace?: { name: string; args: Record<string, unknown>; resultPreview: string }[];
+  /** Auditoria: ferramentas chamadas nesta mensagem, com args e resultado resumido. */
+  decisoes?: { tool: string; args: Record<string, unknown>; ok: boolean; resumo: string }[];
 }
 
 // Ferramentas que o login PJ (empresa ativa) enxerga. Tudo que ficou de fora
@@ -1449,7 +1452,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           const orcamento = tipo === "Despesa"
             ? await getStatusOrcamentoCategoria(ctx.userId, ctx.walletId, categoriaId!)
             : null;
-          return JSON.stringify({ success: true, id: result.id, ...txData, categoria: categoriaNome || "Outros", forma_pagamento: formaPagNome, orcamento, cartao_incompleto: cartaoIncompleto });
+          return JSON.stringify({ success: true, id: result.id, ...txData, categoria: categoriaNome || "Outros", origem_categoria: origemCategoria || undefined, ajustes_texto: rec.ajustes.length ? rec.ajustes : undefined, forma_pagamento: formaPagNome, orcamento, cartao_incompleto: cartaoIncompleto });
         } catch (dbErr: any) {
           // Loga a causa REAL (constraint, coluna, etc.) para diagnóstico.
           console.error(`[AI Agent] insere_transacao FALHOU no banco:`, dbErr?.message, "| payload:", JSON.stringify(txData));
@@ -3374,6 +3377,10 @@ export async function runAgent(
 
   // Disponibiliza o texto atual para os handlers (ex.: casar meta pelo contexto).
   ctx.userMessage = userMessage;
+  ctx.decisoes = [];
+  // Pendências ("em qual meio?", "criar a conta X?") vêm do banco: sobrevivem a
+  // restart e funcionam com mais de uma réplica.
+  await hidratarPendencias(ctx.userId);
 
   // Atalho "adiciona/adicionar/mais/outro/outra <valor>" = repetir a ÚLTIMA despesa
   // (mesma descrição/conta/meio, só o valor muda). SEMPRE confirma antes. PF e PJ.
@@ -3794,6 +3801,12 @@ ${contextoDataParaPrompt()}
       ultimaToolExecutada = fnName;
       ultimoResultadoTool = result;
       registrarEscrita(fnName, result);
+      ctx.decisoes?.push({
+        tool: fnName,
+        args: fnArgs && typeof fnArgs === "object" ? fnArgs : {},
+        ok: !/"error"\s*:|"precisa_/.test(String(result || "")),
+        resumo: String(result || "").slice(0, 400),
+      });
       if (ctx.toolTrace) {
         ctx.toolTrace.push({
           name: fnName,

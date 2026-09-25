@@ -12,6 +12,7 @@ import { storage } from "../storage";
 import { interpretarConfirmacao } from "./confirmacao-usuario";
 import { montarReciboDeEscrita } from "./recibo-agente";
 import { extrairValorBR, hojeSP } from "./nlp-br";
+import { criarPendencias } from "./ia-pendencias";
 
 /** Valor em reais a partir de texto BR (ex.: "1.234,56", "128,3", "50"). */
 function parseValorBR(texto: string): number | null {
@@ -63,7 +64,8 @@ type PendenteRepetir = {
 };
 
 const TTL_MS = 30 * 60 * 1000;
-const pendentes = new Map<number, PendenteRepetir>();
+// Persistido no banco (sobrevive a restart/deploy e funciona com várias réplicas).
+const pendentes = criarPendencias<PendenteRepetir>("repetir_despesa");
 
 function obterPendente(userId: number): PendenteRepetir | null {
   const p = pendentes.get(userId);

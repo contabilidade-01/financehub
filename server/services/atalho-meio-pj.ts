@@ -4,6 +4,7 @@
  */
 import { detectarMeio, textoMeioDeDetect } from "./parse-meio";
 import { detectarDirecao, extrairValorBR } from "./nlp-br";
+import { criarPendencias } from "./ia-pendencias";
 
 export type LancamentoSemMeio = {
   descricao: string;
@@ -18,7 +19,8 @@ type Pendente = LancamentoSemMeio & {
 };
 
 const TTL_MS = 30 * 60 * 1000;
-const pendentes = new Map<number, Pendente>();
+// Persistido no banco (sobrevive a restart/deploy e funciona com várias réplicas).
+const pendentes = criarPendencias<Pendente>("meio_pj");
 
 function norm(s: string): string {
   return String(s || "")
