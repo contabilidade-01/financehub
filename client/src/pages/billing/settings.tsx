@@ -139,7 +139,7 @@ export default function BillingSettingsPage() {
 
   return (
     <div className="container max-w-4xl mx-auto py-8 space-y-6">
-      <h1 className="text-3xl font-bold">Configurações de Pagamento</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Configurações de Pagamento</h1>
 
       <Card>
         <CardHeader>
@@ -208,7 +208,7 @@ export default function BillingSettingsPage() {
 
       <Card className="border-red-200">
         <CardHeader>
-          <CardTitle className="text-red-600">Cancelar Assinatura</CardTitle>
+          <CardTitle className="text-expense">Cancelar Assinatura</CardTitle>
           <CardDescription>
             A cobrança para de renovar. Você continua com acesso até{" "}
             {expirationDate

@@ -42,7 +42,7 @@ Todas as fases seguem o CLAUDE.md: feature flag para funcionalidade nova, `npm r
 
 ---
 
-## FASE 1 — IA operacional (WhatsApp), mantendo gpt-4o-mini — ✅ itens 1–7 feitos; pendentes: estado em tabela (`ia_pendencias`), dedup por messageid em banco, auditoria estendida, golden set com LLM
+## FASE 1 — IA operacional (WhatsApp), mantendo gpt-4o-mini — ✅ feita (pendente: golden set com LLM real)
 Princípio: **o LLM só interpreta; código determinístico valida, normaliza e decide**. Arquivos centrais: `server/services/ai-agent.service.ts`, `server/prompts/financial-agent.ts`, `server/services/atalho-meio-pj.ts`, `classificar-conta-pj.ts`, `storage.ts` (memória).
 
 1. **Parsers determinísticos** em um novo `server/services/nlp-br/`:
@@ -79,7 +79,7 @@ Tudo atrás da flag `IA_PIPELINE_V2`, com rollout por usuário.
 
 ---
 
-## FASE 2 — Importação bancária + ERP PJ (padrão Conta Azul)
+## FASE 2 — Importação bancária + ERP PJ (padrão Conta Azul) — ✅ feita
 
 ### 2.1 Correções imediatas (bugs)
 - `ON CONFLICT (conta_bancaria_id, fitid)` contra um índice parcial falha em toda linha (`storage.ts:4102` × `auto-migrate.ts:321`). Adicionar `WHERE fitid IS NOT NULL` ao ON CONFLICT. Reproduzir antes com um OFX de teste.
@@ -128,7 +128,7 @@ Flags: `IMPORTACAO_V2`, `ERP_CONTAS_RECEBER`, `ERP_CENTRO_CUSTO`.
 
 ---
 
-## FASE 3 — Layout e tipografia (visual sóbrio de ERP)
+## FASE 3 — Layout e tipografia (visual sóbrio de ERP) — ✅ feita
 1. **Tokens** (`client/src/index.css`, `tailwind.config.ts`):
    - Tema claro padrão (tirar `class="dark"` fixo de `client/index.html`), com dark opcional.
    - Uma cor de marca (azul-petróleo), neutros slate, e semânticos (sucesso/alerta/erro/receita/despesa).
@@ -153,7 +153,7 @@ Flags: `IMPORTACAO_V2`, `ERP_CONTAS_RECEBER`, `ERP_CENTRO_CUSTO`.
    - Apagar `Sidebar_backup.tsx`.
 7. Trocar `theme === 'light' ? ... : ...` por tokens, começando pelas páginas mais usadas: dashboard, transações, `WalletSummary`, Sidebar, PJ. Depois `admin/dashboard.tsx` e `customize.tsx`.
 
-## FASE 4 — Fluidez mobile
+## FASE 4 — Fluidez mobile — ✅ feita
 - Viewport: remover `maximum-scale=1`. Adicionar `theme-color`, `viewport-fit=cover` + safe-area insets, e inputs ≥16px (evita zoom no iOS).
 - **PWA**: `vite-plugin-pwa` (manifest, ícones, service worker com cache só de assets) para instalar na tela inicial.
 - Navegação:
@@ -190,3 +190,27 @@ Cada fase termina com `npm run check`, `npm run build`, todas as baterias `test:
   - forçar erro no confirmar → nenhum lançamento gravado;
   - conferir que todo lançamento tem `conta_bancaria_id` e que o saldo bate com o `LEDGERBAL`.
 - **UI/Mobile**: rodar o app e tirar screenshots com Playwright (Chromium pré-instalado) em 390×844 e 1440×900 das telas principais, antes e depois. Lighthouse mobile (PWA instalável, acessibilidade sem bloqueio de zoom).
+
+---
+
+## Situação em 2026-09-25
+
+Todas as fases foram entregues no branch `claude/system-vulnerabilities-analysis-ecu7zd`.
+
+### Como ligar
+- **Importação v2**: a flag `importacao_extrato_v2` começa desligada. Ligue em `/admin/feature-flags`, por usuário (piloto) ou para todos. Com ela desligada, a conciliação PJ continua usando o importador antigo.
+- **ERP** (contas a receber, DRE gerencial, transferências, clientes/fornecedores, centros de custo): aparece só para usuários na modalidade **PJ ME**.
+
+### Ações de operação obrigatórias
+- Rotacionar a senha do banco de produção, que estava em arquivo versionado (já removido do repositório, mas continua no histórico do git).
+- Rotacionar o `SESSION_SECRET`.
+- Com mais de uma instância UazAPI, preencher `UAZAPI_WEBHOOK_TOKENS`. Opcional: `UAZAPI_WEBHOOK_SECRET`, que também precisa ir na URL do webhook.
+- A CSP já vem ativa em produção. Se algum recurso externo quebrar, use `CSP_MODE=report` temporariamente.
+- Os links de checkout antigos continuam válidos até `CHECKOUT_LEGACY_ATE` (padrão 2026-10-25).
+
+### Lacunas conhecidas
+- Golden set de avaliação da IA com LLM real (hoje só as baterias determinísticas `test:nlp-br` e `test:classificacao-pf`).
+- Contato e centro de custo ainda não aparecem no formulário comum de lançamento PJ, só na importação e em contas a receber.
+- Transferências entre contas PF sem tela própria. Hoje só pela importação.
+- Plano de contas sem hierarquia por FK (usa código `1.01`).
+- PWA com manifest e service worker estáticos (sem `vite-plugin-pwa`); telas administrativas não revisadas visualmente; modais legados sem focus trap; varredura de i18n incompleta.

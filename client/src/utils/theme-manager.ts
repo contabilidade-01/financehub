@@ -43,42 +43,57 @@ export const defaultThemes: Record<string, CustomTheme> = {
   default: {
     name: 'Padrão Khesef',
     isDefault: true,
+    // Mantém em sincronia com os tokens de client/src/index.css.
     lightConfig: {
-      background: '0 0% 98%',
-      foreground: '240 10% 3.9%',
-      primary: '255 100% 70%',
-      primaryForeground: '0 0% 98%',
-      secondary: '157 100% 50%',
-      secondaryForeground: '0 0% 9%',
-      muted: '240 4.8% 95.9%',
-      mutedForeground: '240 3.8% 46.1%',
-      accent: '240 4.8% 95.9%',
-      accentForeground: '240 5.9% 10%',
-      border: '240 5.9% 90%',
+      background: '210 20% 98%',
+      foreground: '222 47% 11%',
+      primary: '200 60% 32%',
+      primaryForeground: '0 0% 100%',
+      secondary: '210 40% 96%',
+      secondaryForeground: '222 47% 11%',
+      muted: '210 40% 96%',
+      mutedForeground: '215 16% 40%',
+      accent: '210 40% 95%',
+      accentForeground: '222 47% 11%',
+      border: '214 32% 90%',
       card: '0 0% 100%',
-      cardForeground: '240 10% 3.9%',
-      destructive: '0 84.2% 60.2%',
-      destructiveForeground: '0 0% 98%',
+      cardForeground: '222 47% 11%',
+      destructive: '0 70% 45%',
+      destructiveForeground: '0 0% 100%',
     },
     darkConfig: {
-      background: '240 10% 3.9%',
-      foreground: '0 0% 98%',
-      primary: '255 100% 70%',
-      primaryForeground: '0 0% 98%',
-      secondary: '157 100% 50%',
-      secondaryForeground: '0 0% 9%',
-      muted: '240 3.7% 15.9%',
-      mutedForeground: '240 5% 64.9%',
-      accent: '240 3.7% 15.9%',
-      accentForeground: '0 0% 98%',
-      border: '240 3.7% 15.9%',
-      card: '240 10% 3.9%',
-      cardForeground: '0 0% 98%',
-      destructive: '0 62.8% 30.6%',
-      destructiveForeground: '0 0% 98%',
+      background: '222 40% 7%',
+      foreground: '210 40% 96%',
+      primary: '199 60% 58%',
+      primaryForeground: '222 47% 8%',
+      secondary: '217 30% 16%',
+      secondaryForeground: '210 40% 96%',
+      muted: '217 30% 15%',
+      mutedForeground: '215 20% 68%',
+      accent: '217 30% 16%',
+      accentForeground: '210 40% 96%',
+      border: '217 28% 18%',
+      card: '222 36% 10%',
+      cardForeground: '210 40% 96%',
+      destructive: '0 65% 55%',
+      destructiveForeground: '0 0% 100%',
     }
   }
 };
+
+/**
+ * Tema "Padrão Khesef" antigo (roxo neon) gravado no banco pela migração inicial.
+ * Se ele estiver ativo, usamos os padrões novos em vez dele — temas criados pelo
+ * admin continuam sendo aplicados normalmente.
+ */
+export function isLegacyDefaultTheme(theme: any): boolean {
+  if (!theme) return false;
+  let light = theme.lightConfig || theme.lightconfig;
+  if (typeof light === 'string') {
+    try { light = JSON.parse(light); } catch { return false; }
+  }
+  return theme.name === 'Padrão Khesef' && light?.primary === '255 100% 70%';
+}
 
 // Classe para gerenciar temas
 export class ThemeManager {
@@ -301,7 +316,6 @@ export class ThemeManager {
 
   // Resetar para tema padrão
   resetToDefault(mode: 'light' | 'dark'): void {
-    console.log(`🎨 Aplicando tema padrão para ${mode} mode...`);
     this.applyTheme(defaultThemes.default, mode);
     
     // Notificar script crítico sobre a mudança
@@ -342,18 +356,12 @@ export class ThemeManager {
       body {
         background-color: hsl(var(--background));
         color: hsl(var(--foreground));
-        transition: none !important;
-      }
-      
-      * {
-        transition: none !important;
       }
     `;
     
     // Adicionar no HEAD IMEDIATAMENTE
     document.head.insertBefore(criticalStyle, document.head.firstChild);
     
-    console.log(`⚡ Tema crítico aplicado INSTANTANEAMENTE para ${mode} mode`);
   }
 
   // Cancelar preview

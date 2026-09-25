@@ -21,21 +21,21 @@ export default function SubscriptionExpired() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-pattern">
+    <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <Card className="glass-card neon-border border-red-500/20">
+        <Card className="border bg-card border-red-500/20">
           <CardHeader className="text-center space-y-4">
             <div className="mx-auto w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center">
-              <AlertTriangle className="h-8 w-8 text-red-500" />
+              <AlertTriangle className="h-8 w-8 text-expense" />
             </div>
-            <CardTitle className="text-red-400">{t('subscription.expired.title', 'Assinatura Expirada')}</CardTitle>
-            <CardDescription className="text-gray-300">
+            <CardTitle className="text-expense">{t('subscription.expired.title', 'Assinatura Expirada')}</CardTitle>
+            <CardDescription className="text-muted-foreground">
               {t('subscription.expired.description', `Sua assinatura do ${systemConfig.system_name} expirou. Pague no Asaas para voltar a usar.`)}
             </CardDescription>
           </CardHeader>
           
           <CardContent className="space-y-6">
-            <p className="text-sm text-gray-400 text-center">
+            <p className="text-sm text-muted-foreground text-center">
               {t(
                 'subscription.expired.how_to_renew_desc',
                 isAuthenticated

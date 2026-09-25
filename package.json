@@ -53,6 +53,7 @@
     "test:erp": "tsx scripts/testar-erp.ts"
   },
   "dependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
     "@hookform/resolvers": "^3.10.0",
     "@jridgewell/trace-mapping": "^0.3.25",
     "@neondatabase/serverless": "^0.10.4",

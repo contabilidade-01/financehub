@@ -1,542 +1,286 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
-import { motion } from "framer-motion";
+import { LayoutDashboard, LogOut, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import {
-  LayoutDashboard,
-  Wallet,
-  PlusCircle,
-  CreditCard,
-  Tag,
-  Menu,
-  LogOut,
-  User as UserIcon,
-  Shield,
-  Users,
-  Settings,
-  CalendarDays,
-  Key,
-  BarChart3,
-  DollarSign,
-  Search,
-  Wrench,
-  Building2,
-  TrendingUp,
-  FileUp,
-  Target,
-  HandCoins,
-  LineChart,
-  Flag,
-  MessageSquare,
-  Bot,
-} from "lucide-react";
-import { useAuth } from "@/hooks/use-auth";
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { VersionDisplay } from "@/components/shared/VersionDisplay";
 import { ThemeToggleSimple } from "@/components/theme-toggle-simple";
 import { useTheme } from "next-themes";
 import { useTranslation } from "@/contexts/LocalizationContext";
 import { useSystemConfig } from "@/contexts/SystemConfigContext";
-import { rotuloModalidade, temErpPj } from "@shared/modalidade";
-import { FLAG_IMPORTACAO_EXTRATO_V2 } from "@/hooks/use-flag";
+import { cn, getInitials } from "@/lib/utils";
+import { isPathActive, useNavigation, type NavGroup } from "@/components/shared/navigation";
 
-interface MenuItem {
-  icon: React.ReactNode;
-  text: string;
-  path: string;
-}
-
-interface MenuGroup {
-  label: string;
-  items: MenuItem[];
-}
-
-function Sidebar() {
-  const [location, navigate] = useLocation();
-  const { user: userData } = useAuth();
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const { theme } = useTheme();
-  const { t } = useTranslation();
+/** Logo do sistema (upload do admin em /api/logo) com ícone de reserva. */
+function BrandLogo({ size = "md" }: { size?: "sm" | "md" }) {
+  const { resolvedTheme } = useTheme();
   const { config: systemConfig } = useSystemConfig();
   const nomeSistema = systemConfig.system_name || "Khesef";
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const [prevLogoUrl, setPrevLogoUrl] = useState<string | null>(null);
-  const [hasCustomLogo, setHasCustomLogo] = useState<boolean | null>(null);
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [checked, setChecked] = useState(false);
 
   useEffect(() => {
-    if (!theme) return;
-    const updateLogo = () => {
-      const newUrl = `/api/logo?theme=${theme}`;
-      
-      // Precarregar nova imagem antes de trocar
+    const theme = resolvedTheme === "dark" ? "dark" : "light";
+    let cancelled = false;
+    const load = () => {
+      const url = `/api/logo?theme=${theme}`;
       const img = new window.Image();
       img.onload = () => {
-        // Só salvar URL anterior se já tivermos um logo customizado
-        if (logoUrl && hasCustomLogo) {
-          setPrevLogoUrl(logoUrl);
-        }
-        setLogoUrl(newUrl);
-        setHasCustomLogo(true);
-        setIsInitialLoad(false);
-        // Limpar URL anterior após transição
-        if (logoUrl && hasCustomLogo) {
-          setTimeout(() => setPrevLogoUrl(null), 200);
+        if (!cancelled) {
+          setLogoUrl(url);
+          setChecked(true);
         }
       };
       img.onerror = () => {
-        // Logo customizado não existe
-        setLogoUrl(null);
-        setHasCustomLogo(false);
-        setIsInitialLoad(false);
-        setPrevLogoUrl(null);
+        if (!cancelled) {
+          setLogoUrl(null);
+          setChecked(true);
+        }
       };
-      img.src = newUrl;
+      img.src = url;
     };
-    updateLogo();
-    window.addEventListener('logo-updated', updateLogo);
-    return () => window.removeEventListener('logo-updated', updateLogo);
-  }, [theme]);
+    load();
+    window.addEventListener("logo-updated", load);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("logo-updated", load);
+    };
+  }, [resolvedTheme]);
 
-  const shouldShowAdminItems = userData?.tipo_usuario === 'super_admin' || userData?.tipo_usuario === 'admin';
+  const box = size === "sm" ? "h-8 w-8" : "h-9 w-9";
+  return (
+    <div className="flex min-w-0 items-center gap-2.5">
+      <div className={cn("relative shrink-0 overflow-hidden rounded-md", box)}>
+        {logoUrl ? (
+          <img src={logoUrl} alt="" className={cn("object-contain", box)} />
+        ) : checked ? (
+          <span className={cn("flex items-center justify-center rounded-md bg-primary text-primary-foreground", box)}>
+            <LayoutDashboard className="h-4 w-4" />
+          </span>
+        ) : null}
+      </div>
+      <span className="truncate text-base font-semibold tracking-tight">{nomeSistema}</span>
+    </div>
+  );
+}
 
-  // Verificar se deve aplicar offset do header admin (super admin direto OU impersonação ativa)
-  const isDirectAdmin = userData?.tipo_usuario === 'super_admin';
-  const isImpersonating = userData && 'isImpersonating' in userData && userData.isImpersonating;
-  const shouldApplyAdminOffset = isDirectAdmin || isImpersonating;
+function NavList({
+  groups,
+  activePath,
+  onNavigate,
+}: {
+  groups: NavGroup[];
+  activePath: string | null;
+  onNavigate: (path: string) => void;
+}) {
+  return (
+    <nav aria-label="Menu principal" className="space-y-5">
+      {groups.map((group) => (
+        <div key={group.label}>
+          <p className="mb-1.5 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            {group.label}
+          </p>
+          <ul className="space-y-0.5">
+            {group.items.map((item) => {
+              const active = item.path === activePath;
+              const Icon = item.icon;
+              return (
+                <li key={item.path}>
+                  <a
+                    href={item.path}
+                    onClick={(e) => {
+                      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+                      e.preventDefault();
+                      onNavigate(item.path);
+                    }}
+                    aria-current={active ? "page" : undefined}
+                    className={cn(
+                      "flex h-9 items-center gap-3 rounded-md px-3 text-sm transition-colors",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      active
+                        ? "bg-primary/10 font-medium text-primary"
+                        : "text-foreground/80 hover:bg-muted hover:text-foreground",
+                    )}
+                  >
+                    <Icon className={cn("h-4 w-4 shrink-0", active ? "text-primary" : "text-muted-foreground")} />
+                    <span className="truncate">{item.text}</span>
+                  </a>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ))}
+    </nav>
+  );
+}
 
-  const { data: flagsData } = useQuery({
-    queryKey: ["minhas-flags"],
-    enabled: !!userData && !isDirectAdmin,
-    queryFn: async () => {
-      const res = await fetch("/api/flags", { credentials: "include" });
-      if (!res.ok) return { flags: {} as Record<string, boolean> };
-      return res.json();
-    },
-  });
-  const temImportacaoV2 =
-    isDirectAdmin || !!(flagsData?.flags as Record<string, boolean> | undefined)?.[FLAG_IMPORTACAO_EXTRATO_V2];
-  const temOrquestrador =
-    isDirectAdmin || !!(flagsData?.flags as Record<string, boolean> | undefined)?.orquestrador_deepseek;
+function UserBlock({ onLogoutClick }: { onLogoutClick: () => void }) {
+  const { user } = useNavigation();
+  const { t } = useTranslation();
+  const nome = user?.nome || "Usuário";
+  return (
+    <div className="border-t p-3">
+      <div className="flex items-center gap-3 rounded-md px-1 py-1">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground">
+          {getInitials(nome) || "U"}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium">{nome}</p>
+          <p className="truncate text-xs text-muted-foreground">{user?.email || ""}</p>
+        </div>
+        <ThemeToggleSimple />
+      </div>
+      <Button variant="ghost" size="sm" className="mt-1 w-full justify-start text-muted-foreground" onClick={onLogoutClick}>
+        <LogOut className="h-4 w-4" />
+        {t("navigation.logout", "Sair")}
+      </Button>
+      <div className="pt-1 text-center">
+        <VersionDisplay />
+      </div>
+    </div>
+  );
+}
 
-  // Verificar se usuário tem empresa PJ
-  const isPJ = userData?.tipo_pessoa === 'juridica';
+interface SidebarProps {
+  /** Drawer do mobile — controlado pelo layout (também aberto pela barra inferior). */
+  mobileOpen?: boolean;
+  onMobileOpenChange?: (open: boolean) => void;
+}
 
-  // Seção principal PF (pessoa física)
-  const secaoPF: MenuGroup = {
-    label: t('navigation.sections.main', 'PRINCIPAL'),
-    items: [
-      { icon: <LayoutDashboard className="mr-3 h-4 w-4" />, text: t('navigation.dashboard', 'Dashboard'), path: "/" },
-      { icon: <PlusCircle className="mr-3 h-4 w-4" />, text: t('navigation.transactions', 'Transações'), path: "/transactions" },
-      { icon: <Wallet className="mr-3 h-4 w-4" />, text: 'Contas', path: "/contas-cartoes" },
-      { icon: <CreditCard className="mr-3 h-4 w-4" />, text: 'Cartões de Crédito', path: "/cartoes" },
-      { icon: <CalendarDays className="mr-3 h-4 w-4" />, text: 'Mensalidades', path: "/mensalidades" },
-      { icon: <TrendingUp className="mr-3 h-4 w-4" />, text: 'Vencimentos', path: "/contas-pagar" },
-      { icon: <HandCoins className="mr-3 h-4 w-4" />, text: 'A Receber', path: "/reembolsos" },
-      ...(temImportacaoV2 ? [{ icon: <FileUp className="mr-3 h-4 w-4" />, text: 'Importar extrato', path: "/importar-extrato" }] : []),
-      { icon: <FileUp className="mr-3 h-4 w-4" />, text: 'Importar Lançamentos', path: "/importar" },
-      { icon: <Building2 className="mr-3 h-4 w-4" />, text: 'Metas e Sonhos', path: "/metas" },
-      { icon: <BarChart3 className="mr-3 h-4 w-4" />, text: t('navigation.reports', 'Relatórios'), path: "/reports" },
-      { icon: <LineChart className="mr-3 h-4 w-4" />, text: 'Fluxo Projetado', path: "/fluxo-projetado" },
-      { icon: <CreditCard className="mr-3 h-4 w-4" />, text: 'Formas de pagamento', path: "/payment-methods" },
-      { icon: <CalendarDays className="mr-3 h-4 w-4" />, text: t('navigation.reminders', 'Lembretes'), path: "/reminders" },
-    ]
-  };
+function Sidebar({ mobileOpen, onMobileOpenChange }: SidebarProps) {
+  const [location, navigate] = useLocation();
+  const { t } = useTranslation();
+  const { groups, showAdminHeader } = useNavigation();
+  const [internalOpen, setInternalOpen] = useState(false);
+  const [confirmLogout, setConfirmLogout] = useState(false);
 
-  // Seção principal PJ (pessoa jurídica) — vira o menu principal do usuário PJ,
-  // sem duplicar Dashboard/Transações/Relatórios do PF.
-  const secaoPJ: MenuGroup = {
-    // Mostra a modalidade (PJ MEI / PJ ME) no topo do menu empresarial.
-    label: rotuloModalidade(userData as any).toUpperCase(),
-    items: [
-      { icon: <LayoutDashboard className="mr-3 h-4 w-4" />, text: 'Dashboard', path: "/p/dashboard" },
-      { icon: <PlusCircle className="mr-3 h-4 w-4" />, text: 'Transações', path: "/p/transacoes" },
-      { icon: <BarChart3 className="mr-3 h-4 w-4" />, text: 'Relatórios', path: "/p/relatorios" },
-      { icon: <Tag className="mr-3 h-4 w-4" />, text: 'Plano de Contas', path: "/p/categorias" },
-      { icon: <Wallet className="mr-3 h-4 w-4" />, text: 'Contas bancárias', path: "/p/contas-bancarias" },
-      { icon: <CreditCard className="mr-3 h-4 w-4" />, text: 'Cartões e Faturas', path: "/p/faturas" },
-      { icon: <CalendarDays className="mr-3 h-4 w-4" />, text: 'Mensalidades', path: "/p/mensalidades" },
-      { icon: <TrendingUp className="mr-3 h-4 w-4" />, text: 'Vencimentos', path: "/p/vencimentos" },
-      { icon: <FileUp className="mr-3 h-4 w-4" />, text: 'Conciliação', path: "/p/conciliacao" },
-      { icon: <FileUp className="mr-3 h-4 w-4" />, text: 'Importar Lançamentos', path: "/p/importar" },
-      { icon: <HandCoins className="mr-3 h-4 w-4" />, text: 'Reembolsos a Receber', path: "/p/reembolsos" },
-      { icon: <Target className="mr-3 h-4 w-4" />, text: 'Metas', path: "/p/metas" },
-      { icon: <Building2 className="mr-3 h-4 w-4" />, text: 'Minhas Empresas', path: "/p/empresas" },
-    ]
-  };
+  const isOpen = mobileOpen ?? internalOpen;
+  const setOpen = onMobileOpenChange ?? setInternalOpen;
 
-  // PJ vê só o ambiente PJ; PF vê só o PF. Sem itens repetidos.
-  const userMenuItems: MenuGroup[] = [
-    isPJ ? secaoPJ : secaoPF,
-    // Gestão (ERP) — só modalidade PJ ME.
-    ...(temErpPj(userData as any) ? [{
-      label: 'GESTÃO',
-      items: [
-        { icon: <HandCoins className="mr-3 h-4 w-4" />, text: 'Contas a receber', path: "/p/contas-receber" },
-        { icon: <BarChart3 className="mr-3 h-4 w-4" />, text: 'DRE gerencial', path: "/p/dre-gerencial" },
-        { icon: <Users className="mr-3 h-4 w-4" />, text: 'Clientes e fornecedores', path: "/p/clientes-fornecedores" },
-        { icon: <Wallet className="mr-3 h-4 w-4" />, text: 'Transferências', path: "/p/transferencias" },
-        { icon: <Target className="mr-3 h-4 w-4" />, text: 'Centros de custo', path: "/p/centros-custo" },
-        ...(temImportacaoV2 ? [{ icon: <FileUp className="mr-3 h-4 w-4" />, text: 'Importar extrato', path: "/p/importar-extrato" }] : []),
-      ],
-    }] : []),
-    {
-      label: t('navigation.sections.settings', 'CONFIGURAÇÕES'),
-      items: [
-        // "Categorias" é do PF; no PJ o equivalente é "Plano de Contas".
-        ...(!isPJ ? [{ icon: <Tag className="mr-3 h-4 w-4" />, text: t('navigation.categories', 'Categorias'), path: "/categories" }] : []),
-        { icon: <Settings className="mr-3 h-4 w-4" />, text: t('navigation.settings', 'Configurações'), path: "/settings" },
-      ]
-    },
-    {
-      label: t('navigation.sections.billing', 'ASSINATURA'),
-      items: [
-        { icon: <DollarSign className="mr-3 h-4 w-4" />, text: t('navigation.billing_settings', 'Minha Assinatura'), path: "/billing/settings" },
-        { icon: <CreditCard className="mr-3 h-4 w-4" />, text: t('navigation.invoices', 'Faturas'), path: "/billing/invoices" },
-      ]
+  // Item ativo = rota mais específica que casa com a URL (evita dois itens marcados).
+  const activePath = useMemo(() => {
+    let best: string | null = null;
+    for (const g of groups) {
+      for (const it of g.items) {
+        if (isPathActive(location, it.path) && (!best || it.path.length > best.length)) best = it.path;
+      }
     }
-  ];
+    return best;
+  }, [groups, location]);
 
-  // Menu items do admin
-  const adminMenuItems: MenuGroup[] = [
-    {
-      label: t('navigation.sections.admin', 'ADMINISTRAÇÃO'),
-      items: [
-        { icon: <Shield className="mr-3 h-4 w-4" />, text: t('navigation.admin_dashboard', 'Dashboard Admin'), path: "/admin" },
-        { icon: <Users className="mr-3 h-4 w-4" />, text: t('navigation.users', 'Usuários'), path: "/admin/users" },
-        { icon: <CalendarDays className="mr-3 h-4 w-4" />, text: t('navigation.subscriptions', 'Assinaturas'), path: "/admin/assinaturas" },
-        { icon: <DollarSign className="mr-3 h-4 w-4" />, text: t('navigation.billing', 'Pagamentos'), path: "/admin/billing" },
-        { icon: <Search className="mr-3 h-4 w-4" />, text: t('navigation.manage_payments', 'Gerenciar Pagamentos'), path: "/admin/payments" },
-        { icon: <CreditCard className="mr-3 h-4 w-4" />, text: t('navigation.payment_settings', 'Config. Pagamento'), path: "/admin/payment-settings" },
-        { icon: <Settings className="mr-3 h-4 w-4" />, text: t('navigation.customize', 'Personalizar'), path: "/admin/customize" },
-        { icon: <Wrench className="mr-3 h-4 w-4" />, text: t('navigation.maintenance', 'Manutenção'), path: "/admin/maintenance" },
-        { icon: <Flag className="mr-3 h-4 w-4" />, text: 'Feature flags', path: "/admin/feature-flags" },
-        { icon: <MessageSquare className="mr-3 h-4 w-4" />, text: 'Simulador WhatsApp', path: "/admin/simular-whatsapp" },
-        { icon: <MessageSquare className="mr-3 h-4 w-4" />, text: 'Auditoria da IA', path: "/admin/ia-auditoria" },
-        ...(temOrquestrador
-          ? [{ icon: <Bot className="mr-3 h-4 w-4" />, text: 'Orquestrador (DeepSeek)', path: "/admin/orquestrador" }]
-          : []),
-        { icon: <Shield className="mr-3 h-4 w-4" />, text: 'Consentimentos LGPD', path: "/admin/lgpd" }
-
-      ]
-    }
-  ];
-
-  // Combinar menus baseado no tipo de usuário
-  const orquestradorItem: MenuItem = {
-    icon: <Bot className="mr-3 h-4 w-4" />,
-    text: "Orquestrador (DeepSeek)",
-    path: "/admin/orquestrador",
+  const go = (path: string) => {
+    navigate(path);
+    setOpen(false);
   };
 
-  const allMenuItems = (() => {
-    let groups = shouldShowAdminItems
-      ? [...userMenuItems, ...adminMenuItems]
-      : [...userMenuItems];
-    if (temOrquestrador && !shouldShowAdminItems) {
-      groups = [
-        ...groups,
-        { label: "IA", items: [orquestradorItem] },
-      ];
+  const logout = async () => {
+    try {
+      const response = await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (response.ok) {
+        window.location.href = "/";
+      }
+    } catch (error) {
+      console.error("Erro ao fazer logout:", error);
     }
-    return groups;
-  })();
-
-  const isActive = (path: string) => {
-    if (path === "/" && location === "/") return true;
-    if (path !== "/" && location.startsWith(path)) return true;
-    return false;
   };
-  
-  const sidebarBg = theme === 'light' ? 'bg-white/90 text-gray-900' : 'glass';
 
-  const getMenuItemClass = (active: boolean) => {
-    if (!active) return theme === 'light' ? 'text-gray-700 hover:bg-primary/10 hover:text-primary' : 'text-gray-400 hover:text-white';
-    return theme === 'light'
-      ? 'bg-primary/20 text-gray-900 font-semibold border-l-4 border-primary'
-      : 'text-white bg-primary/10 menu-item-active';
+  const askLogout = () => {
+    setOpen(false);
+    setConfirmLogout(true);
   };
 
   return (
     <>
-      {/* Mobile: Header compacto quando menu fechado */}
-      <aside className={`${sidebarBg} ${isSidebarOpen ? 'hidden' : 'block'} lg:hidden w-full z-10 ${shouldApplyAdminOffset ? 'sidebar-admin-offset' : ''}`}>
-        <div className="p-5 pb-0 flex-shrink-0">
-          <div className="flex items-center justify-between mb-8">
-            <div className="flex items-center gap-3">
-              <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full">
-                {prevLogoUrl && (
-                  <img
-                    src={prevLogoUrl}
-                    alt=""
-                    className="absolute inset-0 h-12 w-12 object-contain transition-opacity duration-200"
-                    style={{ opacity: logoUrl ? 0 : 1 }}
-                  />
-                )}
-                {logoUrl ? (
-                  <img src={logoUrl} alt="" className="h-12 w-12 object-contain" />
-                ) : (
-                  !isInitialLoad && hasCustomLogo === false && (
-                    <LayoutDashboard className="h-5 w-5 text-white" />
-                  )
-                )}
-              </div>
-              <h1 className={`text-2xl font-space font-bold tracking-wide ${theme === "light" ? "text-gray-900" : "text-white"}`}>
-                {nomeSistema}
-              </h1>
-            </div>
-            <Button 
-              variant="ghost"
-              size="icon"
-              className={theme === 'light' ? 'text-gray-700' : 'text-white'}
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            >
-              <Menu className="h-6 w-6" />
-            </Button>
+      {/* Mobile: cabeçalho fixo e compacto */}
+      <header
+        className={cn(
+          "sticky z-40 flex h-14 items-center justify-between border-b bg-background px-4 lg:hidden",
+          showAdminHeader ? "top-[var(--admin-header-h)]" : "top-0",
+        )}
+      >
+        <a
+          href="/"
+          onClick={(e) => {
+            e.preventDefault();
+            go(groups[0]?.items[0]?.path || "/");
+          }}
+          className="min-w-0"
+        >
+          <BrandLogo size="sm" />
+        </a>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Abrir menu"
+          data-testid="mobile-menu-button"
+          onClick={() => setOpen(true)}
+        >
+          <Menu className="h-5 w-5" />
+        </Button>
+      </header>
+
+      {/* Mobile: menu lateral (Radix Sheet: foco preso, Esc e rolagem travada) */}
+      <Sheet open={isOpen} onOpenChange={setOpen}>
+        <SheetContent side="left" className="flex w-[85vw] max-w-xs flex-col gap-0 p-0 pl-safe">
+          <SheetTitle className="sr-only">Menu</SheetTitle>
+          <SheetDescription className="sr-only">Navegação principal</SheetDescription>
+          <div className="flex h-14 items-center border-b px-4 pt-safe">
+            <BrandLogo size="sm" />
           </div>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-4">
+            <NavList groups={groups} activePath={activePath} onNavigate={go} />
+          </div>
+          <div className="pb-safe">
+            <UserBlock onLogoutClick={askLogout} />
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Desktop: barra lateral fixa */}
+      <aside
+        className={cn(
+          "fixed bottom-0 left-0 z-30 hidden w-64 flex-col border-r bg-sidebar text-sidebar-foreground lg:flex",
+          showAdminHeader ? "top-[var(--admin-header-h)]" : "top-0",
+        )}
+      >
+        <div className="flex h-16 shrink-0 items-center px-5">
+          <BrandLogo />
         </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
+          <NavList groups={groups} activePath={activePath} onNavigate={go} />
+        </div>
+        <UserBlock onLogoutClick={askLogout} />
       </aside>
 
-      {/* Mobile: Overlay lateral quando menu aberto */}
-      {isSidebarOpen && (
-        <div className="lg:hidden fixed inset-0 z-50 flex">
-          {/* Backdrop */}
-          <div 
-            className="fixed inset-0 bg-black/50" 
-            onClick={() => setIsSidebarOpen(false)}
-          />
-          
-          {/* Sidebar overlay */}
-          <motion.aside 
-            className={`${sidebarBg} w-80 z-10 relative flex flex-col h-full`}
-            initial={{ x: -320, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: -320, opacity: 0 }}
-            transition={{
-              type: "spring",
-              stiffness: 300,
-              damping: 30,
-              duration: 0.3
-            }}
-          >
-            {/* Header com botão fechar */}
-            <div className="p-5 pb-0 flex-shrink-0">
-              <div className="flex items-center justify-between mb-8">
-                <div className="flex items-center gap-3">
-                  <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full">
-                    {prevLogoUrl && (
-                      <img
-                        src={prevLogoUrl}
-                        alt=""
-                        className="absolute inset-0 h-12 w-12 object-contain transition-opacity duration-200"
-                        style={{ opacity: logoUrl ? 0 : 1 }}
-                      />
-                    )}
-                    {logoUrl ? (
-                      <img src={logoUrl} alt="" className="h-12 w-12 object-contain" />
-                    ) : (
-                      !isInitialLoad && hasCustomLogo === false && (
-                        <LayoutDashboard className="h-5 w-5 text-white" />
-                      )
-                    )}
-                  </div>
-                  <h1 className={`text-2xl font-space font-bold tracking-wide ${theme === "light" ? "text-gray-900" : "text-white"}`}>
-                    {nomeSistema}
-                  </h1>
-                </div>
-                <Button 
-                  variant="ghost"
-                  size="icon"
-                  className={theme === 'light' ? 'text-gray-700' : 'text-white'}
-                  onClick={() => setIsSidebarOpen(false)}
-                >
-                  <Menu className="h-6 w-6" />
-                </Button>
-              </div>
-            </div>
-            
-            {/* Conteúdo do menu overlay */}
-            <div className="flex-1 overflow-y-auto hide-scrollbar p-5 pt-0">
-              {allMenuItems.map((group, groupIndex) => (
-                <div key={groupIndex} className="mb-8">
-                  <div className="mb-5">
-                    <span className="text-xs font-label text-gray-400">{group.label}</span>
-                  </div>
-                  <nav>
-                    <ul className="space-y-3">
-                      {group.items.map((item, itemIndex) => (
-                        <motion.li key={itemIndex} whileHover={{ x: 5 }} whileTap={{ scale: 0.98 }}>
-                          <Button
-                            variant="ghost"
-                            className={`w-full justify-start ${getMenuItemClass(isActive(item.path))}`}
-                            onClick={() => {
-                              navigate(item.path);
-                              if (isSidebarOpen) setIsSidebarOpen(false);
-                            }}
-                          >
-                            {item.icon}
-                            <span>{item.text}</span>
-                          </Button>
-                        </motion.li>
-                      ))}
-                    </ul>
-                  </nav>
-                </div>
-              ))}
-              {/* Bloco usuário, logout e versão no mobile */}
-              <div className="mt-8">
-                <div className={`glass-card neon-border p-4 rounded-xl ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
-                  <div className="flex items-center space-x-3 mb-2">
-                    <div className="w-8 h-8 rounded-full bg-primary/30 flex items-center justify-center">
-                      <UserIcon className="h-4 w-4 text-primary" />
-                    </div>
-                    <div className="flex-1">
-                      <p className={`text-sm font-medium ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>{userData?.nome || "Usuário"}</p>
-                      <p className={`text-xs truncate ${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>{userData?.email || "usuario@exemplo.com"}</p>
-                    </div>
-                    <ThemeToggleSimple />
-                  </div>
-                  <Button 
-                    variant="outline" 
-                    className={`w-full mt-3 ${theme === 'light' ? 'bg-gray-100 text-gray-900 border-gray-300 hover:bg-gray-200 hover:text-primary' : 'bg-dark hover:bg-primary/20 text-gray-300 hover:text-white'}`}
-                    onClick={async () => {
-                      if (confirm('Deseja realmente sair do sistema?')) {
-                        try {
-                          const response = await fetch('/api/auth/logout', {
-                            method: 'POST',
-                            credentials: 'include',
-                            headers: {
-                              'Content-Type': 'application/json'
-                            }
-                          });
-                          if (response.ok) {
-                            window.location.href = '/';
-                          }
-                        } catch (error) {
-                          console.error('Erro ao fazer logout:', error);
-                        }
-                      }
-                    }}
-                  >
-                    <LogOut className={`mr-2 h-4 w-4 ${theme === 'light' ? 'text-gray-500' : 'text-gray-300'}`} /> 
-                    {t('navigation.logout', 'Sair')}
-                  </Button>
-                </div>
-                <div className="pt-1 w-full text-center pb-2">
-                  <VersionDisplay />
-                </div>
-              </div>
-            </div>
-          </motion.aside>
-        </div>
-      )}
-
-      {/* Desktop: Sidebar normal */}
-      <aside className={`${sidebarBg} hidden lg:flex lg:flex-col w-64 z-10 lg:fixed h-screen min-h-screen ${shouldApplyAdminOffset ? 'lg:top-24' : ''}`}
-             style={shouldApplyAdminOffset ? { 
-               top: '75px', 
-               height: 'calc(100vh - 75px)'
-             } : { minHeight: '100vh' }}>
-        {/* Header fixo do Khesef */}
-        <div className="p-5 pb-0 flex-shrink-0">
-          <div className="flex items-center justify-start mb-8">
-            <div className="flex items-center gap-3">
-              <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full">
-                {prevLogoUrl && (
-                  <img
-                    src={prevLogoUrl}
-                    alt=""
-                    className="absolute inset-0 h-12 w-12 object-contain transition-opacity duration-200"
-                    style={{ opacity: logoUrl ? 0 : 1 }}
-                  />
-                )}
-                {logoUrl ? (
-                  <img src={logoUrl} alt="" className="h-12 w-12 object-contain" />
-                ) : (
-                  !isInitialLoad && hasCustomLogo === false && (
-                    <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-secondary shadow-neon">
-                      <LayoutDashboard className="h-5 w-5 text-white" />
-                    </span>
-                  )
-                )}
-              </div>
-              <h1 className={`text-2xl font-space font-bold tracking-wide ${theme === "light" ? "text-gray-900" : "text-white"}`}>
-                {nomeSistema}
-              </h1>
-            </div>
-          </div>
-        </div>
-        {/* Conteúdo do menu com scroll */}
-        <div className="ml-2 flex-1 overflow-y-auto hide-scrollbar p-4 pt-0">
-          {allMenuItems.map((group, groupIndex) => (
-            <div key={groupIndex} className="mb-2">
-              <div className="mb-2">
-                <span className="text-xs font-label text-gray-400">{group.label}</span>
-              </div>
-              <nav>
-                <ul className="space-y-3">
-                  {group.items.map((item, itemIndex) => (
-                    <motion.li key={itemIndex} whileHover={{ x: 5 }} whileTap={{ scale: 0.98 }}>
-                      <Button
-                        variant="ghost"
-                        className={`w-full justify-start ${getMenuItemClass(isActive(item.path))}`}
-                        onClick={() => navigate(item.path)}
-                      >
-                        {item.icon}
-                        <span>{item.text}</span>
-                      </Button>
-                    </motion.li>
-                  ))}
-                </ul>
-              </nav>
-            </div>
-          ))}
-        </div>
-        {/* Rodapé fixo com usuário, logout e versão */}
-        <div className="p-2 border-border">
-          <div className={`glass-card neon-border p-4 rounded-xl ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
-            <div className="flex items-center space-x-3 mb-2">
-              <div className="w-8 h-8 rounded-full bg-primary/30 flex items-center justify-center">
-                <UserIcon className="h-4 w-4 text-primary" />
-              </div>
-              <div className="flex-1">
-                <p className={`text-sm font-medium ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>{userData?.nome || "Usuário"}</p>
-                <p className={`text-xs truncate ${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>{userData?.email || "usuario@exemplo.com"}</p>
-              </div>
-              <ThemeToggleSimple />
-            </div>
-            <Button 
-              variant="outline" 
-              className={`w-full mt-3 ${theme === 'light' ? 'bg-gray-100 text-gray-900 border-gray-300 hover:bg-gray-200 hover:text-primary' : 'bg-dark hover:bg-primary/20 text-gray-300 hover:text-white'}`}
-              onClick={async () => {
-                if (confirm('Deseja realmente sair do sistema?')) {
-                  try {
-                    const response = await fetch('/api/auth/logout', {
-                      method: 'POST',
-                      credentials: 'include',
-                      headers: {
-                        'Content-Type': 'application/json'
-                      }
-                    });
-                    if (response.ok) {
-                      window.location.href = '/';
-                    }
-                  } catch (error) {
-                    console.error('Erro ao fazer logout:', error);
-                  }
-                }
-              }}
-            >
-              <LogOut className={`mr-2 h-4 w-4 ${theme === 'light' ? 'text-gray-500' : 'text-gray-300'}`} /> 
-              {t('navigation.logout', 'Sair')}
-            </Button>
-          </div>
-          <div className={`pt-0 w-full text-center ${shouldApplyAdminOffset ? 'pb-16' : 'pb-2'}`}>
-            <VersionDisplay />
-          </div>
-
-        </div>
-      </aside>
+      <AlertDialog open={confirmLogout} onOpenChange={setConfirmLogout}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sair do sistema?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Você precisará entrar novamente para acessar sua conta.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={logout}>{t("navigation.logout", "Sair")}</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

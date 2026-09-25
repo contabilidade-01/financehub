@@ -6,9 +6,9 @@ export const translatePaymentMethodName = (name: string, t: any): string => {
 
 export const translateCategoryType = (type: string, t: any): string => {
   if (type === 'Receita') {
-    return t('common.income', 'Income');
+    return t('common.income', 'Receita');
   } else if (type === 'Despesa') {
-    return t('common.expenses', 'Expenses');
+    return t('common.expenses', 'Despesa');
   }
   return type;
 };
@@ -19,30 +19,30 @@ export const translateCategoryName = (name: string, t: any): string => {
 
 export const getMonthNames = (t: any): string[] => {
   return [
-    t('calendar.months.january', 'January'),
-    t('calendar.months.february', 'February'),
-    t('calendar.months.march', 'March'),
-    t('calendar.months.april', 'April'),
-    t('calendar.months.may', 'May'),
-    t('calendar.months.june', 'June'),
-    t('calendar.months.july', 'July'),
-    t('calendar.months.august', 'August'),
-    t('calendar.months.september', 'September'),
-    t('calendar.months.october', 'October'),
-    t('calendar.months.november', 'November'),
-    t('calendar.months.december', 'December')
+    t('calendar.months.january', 'Janeiro'),
+    t('calendar.months.february', 'Fevereiro'),
+    t('calendar.months.march', 'Março'),
+    t('calendar.months.april', 'Abril'),
+    t('calendar.months.may', 'Maio'),
+    t('calendar.months.june', 'Junho'),
+    t('calendar.months.july', 'Julho'),
+    t('calendar.months.august', 'Agosto'),
+    t('calendar.months.september', 'Setembro'),
+    t('calendar.months.october', 'Outubro'),
+    t('calendar.months.november', 'Novembro'),
+    t('calendar.months.december', 'Dezembro')
   ];
 };
 
 export const getDayNames = (t: any): string[] => {
   return [
-    t('calendar.days.sun', 'Sun'),
-    t('calendar.days.mon', 'Mon'),
-    t('calendar.days.tue', 'Tue'),
-    t('calendar.days.wed', 'Wed'),
-    t('calendar.days.thu', 'Thu'),
-    t('calendar.days.fri', 'Fri'),
-    t('calendar.days.sat', 'Sat')
+    t('calendar.days.sun', 'Dom'),
+    t('calendar.days.mon', 'Seg'),
+    t('calendar.days.tue', 'Ter'),
+    t('calendar.days.wed', 'Qua'),
+    t('calendar.days.thu', 'Qui'),
+    t('calendar.days.fri', 'Sex'),
+    t('calendar.days.sat', 'Sáb')
   ];
 };
 

@@ -1,3 +1,4 @@
+import { useToast } from "@/hooks/use-toast";
 import { useState, useMemo, useCallback } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { motion } from "framer-motion";
@@ -79,6 +80,7 @@ const MONTH_ALIAS_MAP: Record<string, string> = {
 
 export default function ReportsPage() {
   const { t } = useTranslation();
+  const { toast } = useToast();
   const { locale } = useLocalization();
   const [period, setPeriod] = useState("month");
   const normalizedLocale = useMemo(
@@ -306,7 +308,7 @@ export default function ReportsPage() {
     const filteredTransactions = getFilteredTransactions();
     
     if (!filteredTransactions || filteredTransactions.length === 0) {
-      alert(t('reports.no_transactions_to_export', 'Não há transações para exportar neste período.'));
+      toast({ title: t('reports.no_transactions_to_export', 'Não há transações para exportar neste período.') });
       return;
     }
     
@@ -457,7 +459,7 @@ export default function ReportsPage() {
           });
           
           // Garantir que os estilos dos cards sejam preservados
-          const cards = clonedDoc.querySelectorAll('.glass-card');
+          const cards = clonedDoc.querySelectorAll('.border bg-card');
           cards.forEach((card: HTMLElement) => {
             card.style.backgroundColor = 'rgba(31, 41, 55, 0.5)';
             card.style.border = '1px solid rgba(108, 99, 255, 0.2)';
@@ -521,8 +523,8 @@ export default function ReportsPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
         >
-          <h1 className="text-2xl md:text-3xl font-bold mb-1">{t('reports.title', 'Relatórios')}</h1>
-          <p className="text-gray-400">{t('reports.subtitle', 'Análise detalhada das suas finanças')}</p>
+          <h1 className="text-2xl font-semibold tracking-tight mb-1">{t('reports.title', 'Relatórios')}</h1>
+          <p className="text-muted-foreground">{t('reports.subtitle', 'Análise detalhada das suas finanças')}</p>
         </motion.div>
         <div className="flex gap-2 mt-4 md:mt-0">
           <Select value={period} onValueChange={setPeriod}>
@@ -552,9 +554,9 @@ export default function ReportsPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.1 }}
         >
-          <Card className="glass-card neon-border">
+          <Card className="border bg-card">
             <CardHeader className="pb-2">
-              <CardTitle className="text-xl font-bold">{t('reports.income_vs_expenses', 'Income vs Expenses')}</CardTitle>
+              <CardTitle className="text-base font-semibold">{t('reports.income_vs_expenses', 'Receitas x Despesas')}</CardTitle>
             </CardHeader>
             <CardContent>
               {isLoadingSummary ? (
@@ -563,9 +565,9 @@ export default function ReportsPage() {
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={getMonthlyData()}>
                     <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.15} />
-                    <XAxis dataKey="month" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+                    <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
                     <YAxis
-                      stroke="#888888"
+                      stroke="hsl(var(--muted-foreground))"
                       fontSize={12}
                       tickLine={false}
                       axisLine={false}
@@ -597,8 +599,8 @@ export default function ReportsPage() {
                         return null;
                       }}
                     />
-                    <Bar dataKey="income" name={t('reports.chart.income', 'Income')} radius={[4, 4, 0, 0]} fill="#4ade80" fillOpacity={0.8} />
-                    <Bar dataKey="expense" name={t('reports.chart.expenses', 'Expenses')} radius={[4, 4, 0, 0]} fill="#f87171" fillOpacity={0.8} />
+                    <Bar dataKey="income" name={t('reports.chart.income', 'Receitas')} radius={[4, 4, 0, 0]} fill="hsl(var(--income))" fillOpacity={0.85} />
+                    <Bar dataKey="expense" name={t('reports.chart.expenses', 'Despesas')} radius={[4, 4, 0, 0]} fill="hsl(var(--expense))" fillOpacity={0.85} />
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -611,9 +613,9 @@ export default function ReportsPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.2 }}
         >
-          <Card className="glass-card neon-border">
+          <Card className="border bg-card">
             <CardHeader className="pb-2">
-              <CardTitle className="text-xl font-bold">{t('reports.cash_flow', 'Cash Flow')}</CardTitle>
+              <CardTitle className="text-base font-semibold">{t('reports.cash_flow', 'Fluxo de caixa')}</CardTitle>
             </CardHeader>
             <CardContent>
               {isLoadingSummary ? (
@@ -622,9 +624,9 @@ export default function ReportsPage() {
                 <ResponsiveContainer width="100%" height={300}>
                   <LineChart data={getMonthlyBalance()}>
                     <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.15} />
-                    <XAxis dataKey="month" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+                    <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
                     <YAxis
-                      stroke="#888888"
+                      stroke="hsl(var(--muted-foreground))"
                       fontSize={12}
                       tickLine={false}
                       axisLine={false}
@@ -655,7 +657,7 @@ export default function ReportsPage() {
                       type="monotone"
                       dataKey="balance"
                       name={t('reports.chart.balance', 'Saldo')}
-                      stroke="#8884d8"
+                      stroke="hsl(var(--primary))"
                       strokeWidth={2}
                       dot={{ r: 4 }}
                       activeDot={{ r: 6 }}
@@ -673,18 +675,18 @@ export default function ReportsPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3, delay: 0.3 }}
       >
-        <Card className="glass-card neon-border mb-6">
+        <Card className="border bg-card mb-6">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xl font-bold">{t('reports.expenses_by_category', 'Expenses by Category')}</CardTitle>
+            <CardTitle className="text-base font-semibold">{t('reports.expenses_by_category', 'Despesas por categoria')}</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoadingSummary ? (
               <Skeleton className="w-full h-[400px]" />
             ) : categoryData.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-[400px] text-center">
-                <PieChartIcon className="w-16 h-16 text-gray-400 mb-4" />
-                <h3 className="text-xl font-bold text-gray-300 mb-2">{t('reports.no_data', 'No data found for the selected period')}</h3>
-                <p className="text-gray-400 max-w-md">
+                <PieChartIcon className="w-16 h-16 text-muted-foreground mb-4" />
+                <h3 className="text-xl font-bold text-muted-foreground mb-2">{t('reports.no_data', 'Nenhum dado no período selecionado')}</h3>
+                <p className="text-muted-foreground max-w-md">
                   {t('reports.no_data_description', 'You don\'t have any expenses recorded for this period yet. Start recording your transactions to view this report.')}
                 </p>
               </div>
@@ -750,7 +752,7 @@ export default function ReportsPage() {
                           </div>
                           <span className="font-numeric">{formatCurrency(Number(category.total))}</span>
                         </div>
-                        <div className="w-full bg-gray-700/30 rounded-full h-1.5 overflow-hidden">
+                        <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
                           <div
                             className="h-1.5 rounded-full transition-all duration-300"
                             style={{
@@ -775,15 +777,15 @@ export default function ReportsPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3, delay: 0.4 }}
       >
-        <Card className="glass-card neon-border">
+        <Card className="border bg-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xl font-bold">{t('reports.financial_summary', 'Financial Summary')}</CardTitle>
+            <CardTitle className="text-base font-semibold">{t('reports.financial_summary', 'Resumo financeiro')}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="space-y-2">
-                <h3 className="text-sm text-gray-400">{t('reports.total_income', 'Total Income')}</h3>
-                <p className="text-2xl font-numeric text-green-400">
+                <h3 className="text-sm text-muted-foreground">{t('reports.total_income', 'Total de receitas')}</h3>
+                <p className="text-2xl font-numeric text-income">
                   {isLoadingSummary ? (
                     <Skeleton className="h-8 w-32" />
                   ) : (
@@ -792,8 +794,8 @@ export default function ReportsPage() {
                 </p>
               </div>
               <div className="space-y-2">
-                <h3 className="text-sm text-gray-400">{t('reports.total_expenses', 'Total Expenses')}</h3>
-                <p className="text-2xl font-numeric text-red-400">
+                <h3 className="text-sm text-muted-foreground">{t('reports.total_expenses', 'Total de despesas')}</h3>
+                <p className="text-2xl font-numeric text-expense">
                   {isLoadingSummary ? (
                     <Skeleton className="h-8 w-32" />
                   ) : (
@@ -802,10 +804,10 @@ export default function ReportsPage() {
                 </p>
               </div>
               <div className="space-y-2">
-                <h3 className="text-sm text-gray-400">{t('reports.current_balance', 'Current Balance')}</h3>
+                <h3 className="text-sm text-muted-foreground">{t('reports.current_balance', 'Saldo atual')}</h3>
                 <p 
                   className={`text-2xl font-numeric ${
-                    Number(walletData?.saldo_atual || 0) >= 0 ? "text-primary" : "text-red-400"
+                    Number(walletData?.saldo_atual || 0) >= 0 ? "text-primary" : "text-expense"
                   }`}
                 >
                   {isLoadingWallet ? (

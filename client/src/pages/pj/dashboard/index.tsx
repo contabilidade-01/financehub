@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { StatCard } from "@/components/shared/StatCard";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -57,8 +58,8 @@ export default function PjDashboard({ empresaId }: { empresaId: number }) {
 
   if (isLoading || !periodoPronto) {
     return (
-      <div className="space-y-6 p-4">
-        <h1 className="text-2xl font-bold">Dashboard Empresarial</h1>
+      <div className="space-y-6">
+        <h1 className="text-2xl font-semibold tracking-tight">Dashboard Empresarial</h1>
         {filtros}
         {periodoPronto ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -73,43 +74,30 @@ export default function PjDashboard({ empresaId }: { empresaId: number }) {
     );
   }
 
+  const lucro = resumo?.lucro_prejuizo ?? 0;
   const cards = [
-    {
-      title: "Entradas",
-      value: resumo?.entradas ?? 0,
-      icon: TrendingUp,
-      color: "text-emerald-500",
-      bg: "bg-emerald-50 dark:bg-emerald-950/20",
-    },
-    {
-      title: "Saídas",
-      value: resumo?.total_saidas ?? 0,
-      icon: TrendingDown,
-      color: "text-rose-500",
-      bg: "bg-rose-50 dark:bg-rose-950/20",
-    },
+    { title: "Entradas", value: resumo?.entradas ?? 0, icon: TrendingUp, tone: "income" as const },
+    { title: "Saídas", value: resumo?.total_saidas ?? 0, icon: TrendingDown, tone: "expense" as const },
     {
       title: "Margem de Contribuição",
       value: resumo?.margem_contribuicao ?? 0,
       pct: resumo?.margem_contribuicao_pct,
       icon: Target,
-      color: "text-blue-500",
-      bg: "bg-blue-50 dark:bg-blue-950/20",
+      tone: "primary" as const,
     },
     {
       title: "Lucro / Prejuízo",
-      value: resumo?.lucro_prejuizo ?? 0,
+      value: lucro,
       pct: resumo?.lucro_prejuizo_pct,
       icon: DollarSign,
-      color: (resumo?.lucro_prejuizo ?? 0) >= 0 ? "text-emerald-600" : "text-rose-600",
-      bg: (resumo?.lucro_prejuizo ?? 0) >= 0 ? "bg-emerald-50 dark:bg-emerald-950/20" : "bg-rose-50 dark:bg-rose-950/20",
+      tone: lucro >= 0 ? ("income" as const) : ("expense" as const),
+      valueClassName: lucro >= 0 ? "text-income" : "text-expense",
     },
     {
       title: "Reembolsos à pessoa",
       value: resumo?.reembolsos_pessoais_pendentes ?? 0,
       icon: DollarSign,
-      color: "text-amber-600",
-      bg: "bg-amber-50 dark:bg-amber-950/20",
+      tone: "warning" as const,
     },
   ];
 
@@ -117,34 +105,25 @@ export default function PjDashboard({ empresaId }: { empresaId: number }) {
     n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
   return (
-    <div className="space-y-6 p-4">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Dashboard Empresarial</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Dashboard Empresarial</h1>
         <p className="text-sm text-muted-foreground capitalize">{periodoLabel}</p>
       </div>
 
       {filtros}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
         {cards.map((card) => (
-          <Card key={card.title} className={card.bg}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                {card.title}
-              </CardTitle>
-              <card.icon className={`h-5 w-5 ${card.color}`} />
-            </CardHeader>
-            <CardContent>
-              <div className={`text-2xl font-bold ${card.color}`}>
-                {fmt(card.value)}
-              </div>
-              {card.pct !== undefined && card.pct !== null && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  {card.pct.toFixed(1)}% das entradas
-                </p>
-              )}
-            </CardContent>
-          </Card>
+          <StatCard
+            key={card.title}
+            label={card.title}
+            icon={card.icon}
+            tone={card.tone}
+            value={fmt(card.value)}
+            valueClassName={"valueClassName" in card ? card.valueClassName : undefined}
+            hint={card.pct !== undefined && card.pct !== null ? `${card.pct.toFixed(1)}% das entradas` : undefined}
+          />
         ))}
       </div>
 
@@ -152,36 +131,36 @@ export default function PjDashboard({ empresaId }: { empresaId: number }) {
       {resumo && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Detalhamento do período</CardTitle>
+            <CardTitle className="text-base">Detalhamento do período</CardTitle>
             <p className="text-sm text-muted-foreground">
               {dataBR(resumo.periodo.de)} a {dataBR(resumo.periodo.ate)} — {resumo.total_transacoes} transações
             </p>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2 text-sm">
+            <div className="space-y-2 text-sm tabular-nums">
               <div className="flex justify-between">
                 <span>(+) Receita Bruta</span>
-                <span className="font-medium text-emerald-600">{fmt(resumo.entradas)}</span>
+                <span className="font-medium text-income">{fmt(resumo.entradas)}</span>
               </div>
               <div className="flex justify-between">
                 <span>(−) Despesas Variáveis</span>
-                <span className="font-medium text-amber-600">{fmt(resumo.saidas_variaveis)}</span>
+                <span className="font-medium text-expense">{fmt(resumo.saidas_variaveis)}</span>
               </div>
-              <div className="flex justify-between border-t pt-1 font-bold">
+              <div className="flex justify-between border-t pt-2 font-semibold">
                 <span>(=) Margem de Contribuição</span>
-                <span className="text-blue-600">{fmt(resumo.margem_contribuicao)}</span>
+                <span>{fmt(resumo.margem_contribuicao)}</span>
               </div>
               <div className="flex justify-between">
                 <span>(−) Despesas Fixas</span>
-                <span className="font-medium text-rose-500">{fmt(resumo.saidas_fixas)}</span>
+                <span className="font-medium text-expense">{fmt(resumo.saidas_fixas)}</span>
               </div>
               <div className="flex justify-between">
                 <span>(−) Outras Despesas</span>
-                <span className="font-medium text-rose-400">{fmt(resumo.saidas_outras)}</span>
+                <span className="font-medium text-expense">{fmt(resumo.saidas_outras)}</span>
               </div>
-              <div className="flex justify-between border-t pt-1 font-bold text-lg">
+              <div className="flex justify-between border-t pt-2 text-base font-semibold">
                 <span>(=) Lucro / Prejuízo</span>
-                <span className={resumo.lucro_prejuizo >= 0 ? "text-emerald-600" : "text-rose-600"}>
+                <span className={resumo.lucro_prejuizo >= 0 ? "text-income" : "text-expense"}>
                   {fmt(resumo.lucro_prejuizo)}
                 </span>
               </div>

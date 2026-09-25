@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNovoLancamento } from "@/lib/novo-lancamento";
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -61,7 +62,7 @@ const fmt = (n: number | string) =>
 
 const stBadgePj = (s: string) =>
   s === "Efetivada"
-    ? { t: "Efetivada", c: "bg-emerald-500/15 text-emerald-600" }
+    ? { t: "Efetivada", c: "bg-emerald-500/15 text-income" }
     : { t: "Pendente", c: "bg-amber-500/15 text-amber-700" };
 
 /**
@@ -202,7 +203,7 @@ function TransacaoForm({
           onChange={(e) => setValorDigitado(e.target.value)}
         />
         {podeParcelar && nParc > 1 && valorNum > 0 && (
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             {valorModo === "parcela"
               ? `${nParc}× de ${fmt(valorNum)} = ${fmt(valorTotalPreview)}`
               : `${fmt(valorNum)} em ${nParc}× de ~${fmt(valorParcelaPreview)}`}
@@ -352,11 +353,25 @@ function TransacaoForm({
   );
 }
 
+/** "2026-09-20" → "20/09/2026" (mantém o valor original se vier em outro formato). */
+function dataCurta(d: string | Date | null | undefined): string {
+  if (!d) return "";
+  const str = typeof d === "string" ? d : d.toISOString().slice(0, 10);
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(str);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : str;
+}
+
 export default function PjTransactions({ empresaId }: { empresaId: number }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [showForm, setShowForm] = useState(false);
   const [editando, setEditando] = useState<EmpresaTransacaoWithDetails | null>(null);
+  // Atalho "+ Novo" da barra inferior (mobile).
+  useNovoLancamento(() => {
+    setEditando(null);
+    setShowForm(true);
+    window.scrollTo({ top: 0 });
+  });
   const [trocandoConta, setTrocandoConta] = useState<number | null>(null);
 
   // Filtros (client-side, sobre a lista completa já carregada)
@@ -583,11 +598,55 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
     setFAte("");
   };
 
+  // Ações de cada lançamento (usadas na tabela e nos cards do mobile).
+  const renderAcoes = (t: EmpresaTransacaoWithDetails) => (
+    <>
+      {t.status === "Pendente" && (
+        <Button
+          variant="ghost"
+          size="icon"
+          title="Dar baixa (efetivar)"
+          onClick={() => pagarMut.mutate(t.id)}
+          disabled={pagarMut.isPending}
+        >
+          <CheckCircle2 className="h-4 w-4 text-income" />
+        </Button>
+      )}
+      {t.status === "Efetivada" && (
+        <Button
+          variant="ghost"
+          size="icon"
+          title="Reabrir (voltar a pendente)"
+          onClick={() => reabrirMut.mutate(t.id)}
+          disabled={reabrirMut.isPending}
+        >
+          <RotateCcw className="h-4 w-4 text-muted-foreground" />
+        </Button>
+      )}
+      <Button
+        variant="ghost"
+        size="icon"
+        title="Editar lançamento"
+        onClick={() => setEditando(t)}
+      >
+        <Edit2 className="h-4 w-4 text-muted-foreground" />
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
+        title="Excluir"
+        onClick={() => deleteMut.mutate(t.id)}
+      >
+        <Trash2 className="h-4 w-4 text-muted-foreground" />
+      </Button>
+    </>
+  );
+
   return (
-    <div className="space-y-4 p-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Transações PJ</h1>
-        <div className="flex gap-2">
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-2xl font-semibold tracking-tight">Transações PJ</h1>
+        <div className="flex flex-wrap gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -703,9 +762,9 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
             <span className="text-muted-foreground">
               {filtradas.length} de {transacoes.length} lançamento(s)
             </span>
-            <span className="text-emerald-600">Receitas: {fmt(totais.receitas)}</span>
-            <span className="text-rose-500">Despesas: {fmt(totais.despesas)}</span>
-            <span className={totais.saldo >= 0 ? "font-medium" : "font-medium text-rose-500"}>
+            <span className="text-income">Receitas: {fmt(totais.receitas)}</span>
+            <span className="text-expense">Despesas: {fmt(totais.despesas)}</span>
+            <span className={totais.saldo >= 0 ? "font-medium" : "font-medium text-expense"}>
               Saldo: {fmt(totais.saldo)}
             </span>
           </div>
@@ -714,7 +773,55 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
 
       <Card>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
+          {/* Mobile: lista em cards */}
+          <div className="divide-y md:hidden">
+            {isLoading ? (
+              <p className="p-4 text-center text-sm text-muted-foreground">Carregando...</p>
+            ) : filtradas.length === 0 ? (
+              <p className="p-4 text-center text-sm text-muted-foreground">
+                {transacoes.length === 0 ? "Nenhuma transação ainda." : "Nenhum lançamento com esses filtros."}
+              </p>
+            ) : (
+              filtradas.map((t) => {
+                const sb = stBadgePj(t.status || "Efetivada");
+                return (
+                  <div key={t.id} className="space-y-2 p-4" data-testid={`pj-transacao-card-${t.id}`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-medium leading-snug">{t.descricao}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {dataCurta(t.data_transacao)} · {rotuloFormaPj(t, bancos, cartoes)}
+                        </p>
+                      </div>
+                      <span className={`shrink-0 font-semibold tabular-nums ${t.tipo === 'Receita' ? 'text-income' : 'text-expense'}`}>
+                        {t.tipo === 'Receita' ? '+' : '−'} {fmt(t.valor)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {t.categoria_codigo} — {t.categoria_nome}
+                    </p>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className={`px-2 py-0.5 rounded-md text-xs ${sb.c}`}>{sb.t}</span>
+                        {(t as any).reembolso_pessoal && (
+                          <Badge variant="secondary" className="text-xs">Reembolso recebido</Badge>
+                        )}
+                        {(t as any).parcela_num && (t as any).parcela_total && (t as any).parcela_total > 1 && (
+                          <Badge variant="secondary" className="text-xs">
+                            {(t as any).parcela_num}/{(t as any).parcela_total}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="-mr-2 flex items-center">{renderAcoes(t)}</div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* md+: tabela */}
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-sm">
               <thead className="border-b bg-muted/50">
                 <tr>
@@ -742,14 +849,14 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
                     const sb = stBadgePj(t.status || "Efetivada");
                     return (
                     <tr key={t.id} className="border-b hover:bg-muted/30">
-                      <td className="p-3 whitespace-nowrap">{t.data_transacao}</td>
+                      <td className="p-3 whitespace-nowrap tabular-nums">{dataCurta(t.data_transacao)}</td>
                       <td className="p-3">
                         {t.descricao}
                         {(t as any).reembolso_pessoal && (
-                          <Badge variant="secondary" className="ml-2 text-[10px]">Reembolso recebido</Badge>
+                          <Badge variant="secondary" className="ml-2 text-xs">Reembolso recebido</Badge>
                         )}
                         {(t as any).parcela_num && (t as any).parcela_total && (t as any).parcela_total > 1 && (
-                          <Badge variant="secondary" className="ml-2 text-[10px]">
+                          <Badge variant="secondary" className="ml-2 text-xs">
                             {(t as any).parcela_num}/{(t as any).parcela_total}
                           </Badge>
                         )}
@@ -785,7 +892,7 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
                           </button>
                         )}
                       </td>
-                      <td className={`p-3 text-right font-medium ${t.tipo === 'Receita' ? 'text-emerald-600' : 'text-rose-500'}`}>
+                      <td className={`p-3 text-right font-medium tabular-nums whitespace-nowrap ${t.tipo === 'Receita' ? 'text-income' : 'text-expense'}`}>
                         {fmt(t.valor)}
                       </td>
                       <td className="p-3 text-center">
@@ -797,44 +904,7 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
                         <span className={`px-2 py-1 rounded-lg text-xs ${sb.c}`}>{sb.t}</span>
                       </td>
                       <td className="p-3 text-center whitespace-nowrap">
-                        {t.status === "Pendente" && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            title="Dar baixa (efetivar)"
-                            onClick={() => pagarMut.mutate(t.id)}
-                            disabled={pagarMut.isPending}
-                          >
-                            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                          </Button>
-                        )}
-                        {t.status === "Efetivada" && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            title="Reabrir (voltar a pendente)"
-                            onClick={() => reabrirMut.mutate(t.id)}
-                            disabled={reabrirMut.isPending}
-                          >
-                            <RotateCcw className="h-4 w-4 text-muted-foreground" />
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="Editar lançamento"
-                          onClick={() => setEditando(t)}
-                        >
-                          <Edit2 className="h-4 w-4 text-muted-foreground" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="Excluir"
-                          onClick={() => deleteMut.mutate(t.id)}
-                        >
-                          <Trash2 className="h-4 w-4 text-muted-foreground" />
-                        </Button>
+                        {renderAcoes(t)}
                       </td>
                     </tr>
                     );

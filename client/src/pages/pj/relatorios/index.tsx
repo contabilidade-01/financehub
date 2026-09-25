@@ -11,7 +11,7 @@ import FluxoProjetadoView from "@/components/shared/FluxoProjetadoView";
  */
 export default function PjRelatorios({ empresaId }: { empresaId: number }) {
   return (
-    <div className="p-4">
+    <div>
       <Tabs defaultValue="dre">
         <TabsList>
           <TabsTrigger value="dre">DRE (resumo)</TabsTrigger>

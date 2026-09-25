@@ -21,7 +21,7 @@ import { useTheme } from "next-themes";
 import { useEffect } from "react";
 import { useTranslation } from "@/contexts/LocalizationContext";
 import { useSystemConfig } from "@/contexts/SystemConfigContext";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, LineChart } from "lucide-react";
 
 const createForgotSchema = (t: (key: string, fallback: string) => string) =>
   z.object({
@@ -87,7 +87,7 @@ export default function ForgotPassword() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-pattern">
+    <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-6">
           <div className="flex items-center justify-center mb-4">
@@ -95,18 +95,18 @@ export default function ForgotPassword() {
               {logoUrl ? (
                 <img src={logoUrl} alt="" className="h-16 w-16 object-contain" />
               ) : (
-                <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-neon">
-                  <i className="ri-line-chart-fill text-2xl text-white"></i>
+                <div className="w-12 h-12 rounded-lg bg-primary flex items-center justify-center">
+                  <LineChart className="h-6 w-6 text-primary-foreground" aria-hidden="true" />
                 </div>
               )}
-              <h1 className="text-3xl font-bold font-space">
+              <h1 className="text-3xl font-bold">
                 {systemConfig?.system_name || "Khesef"}
               </h1>
             </div>
           </div>
         </div>
 
-        <Card className="glass-card neon-border">
+        <Card className="border bg-card">
           <CardHeader>
             <CardTitle>{t("forgot.title", "Recuperar senha")}</CardTitle>
             <CardDescription>

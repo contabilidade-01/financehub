@@ -26,10 +26,10 @@ const getChangeIcon = (type: string) => {
   switch (type) {
     case 'feat':
     case 'features':
-      return <Plus className="h-3 w-3 text-green-500" />;
+      return <Plus className="h-3 w-3 text-income" />;
     case 'fix':
     case 'fixes':
-      return <Bug className="h-3 w-3 text-red-500" />;
+      return <Bug className="h-3 w-3 text-expense" />;
     case 'core':
       return <Settings className="h-3 w-3 text-blue-500" />;
     case 'patch':
@@ -45,16 +45,16 @@ const getChangeBadge = (type: string) => {
   switch (type) {
     case 'feat':
     case 'features':
-      return <Badge variant="outline" className="text-[9px] px-2 py-0.5 bg-green-50 text-green-700 border-green-200 rounded-[4px] h-5 font-medium">FEATURES</Badge>;
+      return <Badge variant="outline" className="text-xs px-2 py-0.5 bg-green-50 text-income border-green-200 rounded-[4px] h-5 font-medium">FEATURES</Badge>;
     case 'fix':
     case 'fixes':
-      return <Badge variant="outline" className="text-[9px] px-2 py-0.5 bg-red-50 text-red-700 border-red-200 rounded-[4px] h-5 font-medium">FIXES</Badge>;
+      return <Badge variant="outline" className="text-xs px-2 py-0.5 bg-red-50 text-expense border-red-200 rounded-[4px] h-5 font-medium">FIXES</Badge>;
     case 'core':
-      return <Badge variant="outline" className="text-[9px] px-2 py-0.5 bg-blue-50 text-blue-700 border-blue-200 rounded-[4px] h-5 font-medium">CORE</Badge>;
+      return <Badge variant="outline" className="text-xs px-2 py-0.5 bg-blue-50 text-blue-700 border-blue-200 rounded-[4px] h-5 font-medium">CORE</Badge>;
     case 'patch':
-      return <Badge variant="outline" className="text-[9px] px-2 py-0.5 bg-orange-50 text-orange-700 border-orange-200 rounded-[4px] h-5 font-medium">PATCH</Badge>;
+      return <Badge variant="outline" className="text-xs px-2 py-0.5 bg-orange-50 text-orange-700 border-orange-200 rounded-[4px] h-5 font-medium">PATCH</Badge>;
     case 'improvements':
-      return <Badge variant="outline" className="text-[9px] px-2 py-0.5 bg-purple-50 text-purple-700 border-purple-200 rounded-[4px] h-5 font-medium">IMPROVEMENTS</Badge>;
+      return <Badge variant="outline" className="text-xs px-2 py-0.5 bg-purple-50 text-purple-700 border-purple-200 rounded-[4px] h-5 font-medium">IMPROVEMENTS</Badge>;
     default:
       return null;
   }
@@ -135,7 +135,7 @@ export function VersionDisplay() {
                       <ul className="space-y-2 ml-6">
                         {version.features.map((feature, featureIndex) => (
                           <li key={featureIndex} className="text-sm text-muted-foreground flex items-start gap-2">
-                            <span className="text-green-500 mt-1.5 block w-1.5 h-1.5 rounded-full bg-current flex-shrink-0" />
+                            <span className="text-income mt-1.5 block w-1.5 h-1.5 rounded-full bg-current flex-shrink-0" />
                             <span className="flex-1">{feature}</span>
                           </li>
                         ))}
@@ -171,7 +171,7 @@ export function VersionDisplay() {
                       <ul className="space-y-2 ml-6">
                         {version.fixes.map((fix, fixIndex) => (
                           <li key={fixIndex} className="text-sm text-muted-foreground flex items-start gap-2">
-                            <span className="text-red-500 mt-1.5 block w-1.5 h-1.5 rounded-full bg-current flex-shrink-0" />
+                            <span className="text-expense mt-1.5 block w-1.5 h-1.5 rounded-full bg-current flex-shrink-0" />
                             <span className="flex-1">{fix}</span>
                           </li>
                         ))}

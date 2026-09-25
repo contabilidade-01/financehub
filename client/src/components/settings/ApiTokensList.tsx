@@ -260,7 +260,7 @@ export function ApiTokensList() {
         </CardHeader>
         <CardContent>
           <div className="flex flex-col items-center justify-center p-4">
-            <p className="text-gray-500 mb-2">{t('api_tokens.error_loading', 'Erro ao carregar tokens')}</p>
+            <p className="text-muted-foreground mb-2">{t('api_tokens.error_loading', 'Erro ao carregar tokens')}</p>
             <Button onClick={() => refetch()}>{t('common.try_again', 'Tentar novamente')}</Button>
           </div>
         </CardContent>
@@ -281,9 +281,9 @@ export function ApiTokensList() {
           </div>
         ) : tokens.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-8">
-            <Key size={48} className="text-gray-400 mb-4" />
-            <p className="text-gray-500 mb-4">{t('api_tokens.empty_state', 'Você ainda não possui tokens de API')}</p>
-            <p className="text-gray-500 text-sm text-center mb-6">
+            <Key size={48} className="text-muted-foreground mb-4" />
+            <p className="text-muted-foreground mb-4">{t('api_tokens.empty_state', 'Você ainda não possui tokens de API')}</p>
+            <p className="text-muted-foreground text-sm text-center mb-6">
               {t('api_tokens.empty_description', 'Tokens de API permitem que aplicativos externos acessem seus dados de forma segura.')}
             </p>
           </div>
@@ -292,7 +292,7 @@ export function ApiTokensList() {
             {/* MOBILE CARDS */}
             <div className="flex flex-col gap-4 md:hidden">
               {tokens.map((token: ApiToken) => (
-                <div key={token.id} className="glass-card rounded-xl p-4 flex flex-col gap-2 shadow-md">
+                <div key={token.id} className="border bg-card rounded-lg p-4 flex flex-col gap-2 shadow-md">
                   <div className="flex items-center justify-between gap-2">
                     <div className="font-medium text-base flex-1">{token.nome}</div>
                     {token.ativo ? (
@@ -302,11 +302,11 @@ export function ApiTokensList() {
                     )}
                   </div>
                   {token.descricao && (
-                    <div className="text-xs text-gray-400 mb-1">{token.descricao}</div>
+                    <div className="text-xs text-muted-foreground mb-1">{token.descricao}</div>
                   )}
                   <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs text-gray-400">Token:</span>
-                    <code className="bg-gray-800 text-gray-100 p-1 rounded text-xs break-all flex-1">{token.token}</code>
+                    <span className="text-xs text-muted-foreground">Token:</span>
+                    <code className="bg-muted text-muted-foreground p-1 rounded text-xs break-all flex-1">{token.token}</code>
                     <Button 
                       variant="ghost" 
                       size="icon" 
@@ -316,7 +316,7 @@ export function ApiTokensList() {
                       <Copy size={14} />
                     </Button>
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-gray-400 mt-1">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
                     <span>{t('api_tokens.actions.created', 'Criado')}:</span>
                     {token.data_criacao && (
                       <span>
@@ -343,7 +343,7 @@ export function ApiTokensList() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="text-gray-500"
+                          className="text-muted-foreground"
                           onClick={() => setMasterTokenModalOpen(true)}
                           aria-label={t('api_tokens.master_token_protected_aria', 'MasterToken não pode ser removido')}
                         >
@@ -362,7 +362,7 @@ export function ApiTokensList() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="text-red-500"
+                          className="text-expense"
                           onClick={() => { setTokenToDelete(token); setDeleteModalOpen(true); setDeleteConfirm(""); setDeleteError(null); }}
                         >
                           <Trash2 size={16} />
@@ -393,12 +393,12 @@ export function ApiTokensList() {
                     <TableCell>
                       <div className="font-medium">{token.nome}</div>
                       {token.descricao && (
-                        <div className="text-xs text-gray-500">{token.descricao}</div>
+                        <div className="text-xs text-muted-foreground">{token.descricao}</div>
                       )}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <code className="bg-gray-800 text-gray-100 p-1 rounded text-xs">{token.token}</code>
+                        <code className="bg-muted text-muted-foreground p-1 rounded text-xs">{token.token}</code>
                         <Button 
                           variant="ghost" 
                           size="icon" 
@@ -443,7 +443,7 @@ export function ApiTokensList() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="text-gray-500"
+                                className="text-muted-foreground"
                                 onClick={() => setMasterTokenModalOpen(true)}
                                 aria-label={t('api_tokens.master_token_protected_aria', 'MasterToken não pode ser removido')}
                               >
@@ -462,7 +462,7 @@ export function ApiTokensList() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="text-red-500"
+                              className="text-expense"
                                 onClick={() => { setTokenToDelete(token); setDeleteModalOpen(true); setDeleteConfirm(""); setDeleteError(null); }}
                             >
                               <Trash2 size={16} />
@@ -497,7 +497,7 @@ export function ApiTokensList() {
                 <div className="my-4">
                   <p className="mb-2 text-sm font-medium">{t('api_tokens.modal.complete_token', 'Token completo:')}</p>
                   <div className="flex gap-2 items-center">
-                    <code className="bg-gray-800 text-gray-100 p-2 rounded text-sm break-all">
+                    <code className="bg-muted text-muted-foreground p-2 rounded text-sm break-all">
                       {newTokenData.token}
                     </code>
                     <Button 

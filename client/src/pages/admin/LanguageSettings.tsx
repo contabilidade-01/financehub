@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useConfirm } from "@/components/shared/ConfirmDialog";
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation, useLocalization } from '../../contexts/LocalizationContext';
 import { Button } from '../../components/ui/button';
@@ -34,6 +35,7 @@ const LanguageSettings: React.FC = () => {
   const queryClient = useQueryClient();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const confirmar = useConfirm();
   const [selectedLocale, setSelectedLocale] = useState<Locale | null>(null);
   const [formData, setFormData] = useState<LocaleFormData>({
     localeCode: '',
@@ -233,8 +235,8 @@ const LanguageSettings: React.FC = () => {
     }
   };
 
-  const handleDelete = (locale: Locale) => {
-    if (window.confirm(t('language.delete.confirm', 'Tem certeza que deseja remover este idioma?'))) {
+  const handleDelete = async (locale: Locale) => {
+    if (await confirmar({ title: t('language.delete.confirm', 'Tem certeza que deseja remover este idioma?'), confirmText: "Remover", destructive: true })) {
       deleteLocaleMutation.mutate(locale.id);
     }
   };
@@ -300,10 +302,10 @@ const LanguageSettings: React.FC = () => {
   }
 
   return (
-    <div className="container mx-auto p-6">
+    <div>
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
+          <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
             <Globe className="h-8 w-8" />
             {t('language.settings.title', 'Configurações de Idioma')}
           </h1>

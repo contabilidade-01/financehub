@@ -272,7 +272,7 @@ export default function CheckoutPage({
                 </AlertDescription>
               </Alert>
               <div className="text-sm text-muted-foreground">
-                ⏱️ Aguardando até 30 segundos pela confirmação...
+                Aguardando até 30 segundos pela confirmação...
               </div>
             </div>
           </CardContent>
@@ -284,7 +284,7 @@ export default function CheckoutPage({
   return (
     <div className="container max-w-6xl mx-auto py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold">Assinar {systemConfig.system_name}</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Assinar {systemConfig.system_name}</h1>
         <p className="text-muted-foreground">Complete seu cadastro e comece a usar</p>
       </div>
 

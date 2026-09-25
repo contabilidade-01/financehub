@@ -23,7 +23,7 @@ export default function PjDRE({ empresaId }: { empresaId: number }) {
 
   if (isLoading) {
     return (
-      <div className="p-4 space-y-4">
+      <div className="space-y-4">
         <Skeleton className="h-8 w-64" />
         <Skeleton className="h-64 w-full rounded-lg" />
       </div>
@@ -33,17 +33,17 @@ export default function PjDRE({ empresaId }: { empresaId: number }) {
   if (!dre) return null;
 
   const rows = [
-    { label: "(+) Receita Bruta", value: dre.receita_bruta, color: "text-emerald-600", bold: false },
+    { label: "(+) Receita Bruta", value: dre.receita_bruta, color: "text-income", bold: false },
     { label: "(−) CMV / Despesas Variáveis", value: dre.despesas_variaveis, color: "text-amber-600", bold: false },
     { label: "(=) Margem de Contribuição", value: dre.margem_contribuicao, color: "text-blue-600", bold: true, pct: dre.margem_contribuicao_pct },
-    { label: "(−) Despesas Fixas", value: dre.despesas_fixas, color: "text-rose-500", bold: false },
-    { label: "(−) Outras Despesas", value: dre.outras_despesas, color: "text-rose-400", bold: false },
-    { label: "(=) Lucro / Prejuízo", value: dre.lucro_prejuizo, color: dre.lucro_prejuizo >= 0 ? "text-emerald-700" : "text-rose-700", bold: true, pct: dre.lucro_prejuizo_pct },
+    { label: "(−) Despesas Fixas", value: dre.despesas_fixas, color: "text-expense", bold: false },
+    { label: "(−) Outras Despesas", value: dre.outras_despesas, color: "text-expense", bold: false },
+    { label: "(=) Lucro / Prejuízo", value: dre.lucro_prejuizo, color: dre.lucro_prejuizo >= 0 ? "text-income" : "text-expense", bold: true, pct: dre.lucro_prejuizo_pct },
   ];
 
   return (
-    <div className="space-y-4 p-4">
-      <h1 className="text-2xl font-bold">DRE Simplificada</h1>
+    <div className="space-y-4">
+      <h1 className="text-2xl font-semibold tracking-tight">DRE Simplificada</h1>
       <p className="text-sm text-muted-foreground">
         Período: {dre.periodo.de} a {dre.periodo.ate}
       </p>

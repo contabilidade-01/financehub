@@ -107,13 +107,13 @@ export default function Dashboard() {
       <header className="mb-8">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between">
           <div className="mb-4 md:mb-0">
-            <h1 className="text-2xl md:text-3xl font-bold mb-1">{t('dashboard.title', 'Dashboard Financeiro')}</h1>
-            <p className="text-gray-400">{t('dashboard.subtitle', 'Acompanhe e gerencie suas finanças')}</p>
+            <h1 className="text-2xl font-semibold tracking-tight mb-1">{t('dashboard.title', 'Dashboard Financeiro')}</h1>
+            <p className="text-muted-foreground">{t('dashboard.subtitle', 'Acompanhe e gerencie suas finanças')}</p>
           </div>
           <div className="flex space-x-3">
             <Button 
               onClick={() => setIsTransactionFormOpen(true)}
-              className="neon-border"
+              className=""
             >
               <PlusIcon className="mr-2 h-4 w-4" />
               {t('dashboard.new_transaction', 'Nova Transação')}
@@ -135,9 +135,9 @@ export default function Dashboard() {
               <Button
                 key={p.id}
                 size="sm"
-                variant={periodFilter === p.id ? "default" : "outline"}
+                variant="outline"
                 onClick={() => setPeriodFilter(p.id)}
-                className={periodFilter === p.id ? "bg-primary/20" : ""}
+                className={periodFilter === p.id ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary" : "text-muted-foreground"}
               >
                 {p.label}
               </Button>
@@ -192,7 +192,7 @@ export default function Dashboard() {
       </div>
       
       <Dialog open={isTransactionFormOpen} onOpenChange={setIsTransactionFormOpen}>
-        <DialogContent className="glass-card sm:max-w-[600px]">
+        <DialogContent className="border bg-card sm:max-w-[600px]">
           <TransactionForm 
             onSuccess={() => {
               setIsTransactionFormOpen(false);

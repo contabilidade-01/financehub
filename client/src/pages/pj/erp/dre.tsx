@@ -144,7 +144,7 @@ function DreGerencial({ empresaId }: { empresaId: number }) {
               <CardHeader className="pb-1"><CardTitle className="text-xs font-medium text-muted-foreground">{k.r}</CardTitle></CardHeader>
               <CardContent>
                 <div className={cn("text-xl font-semibold tabular-nums", k.sinal && (k.v >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-400"))}>{brl(k.v)}</div>
-                {k.p != null && <div className="text-xs text-muted-foreground tabular-nums">{k.p.toFixed(1)}% da receita</div>}
+                {k.p != null && <div className="text-xs text-muted-foreground tabular-nums">{k.p.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}% da receita</div>}
               </CardContent>
             </Card>
           ))}

@@ -866,14 +866,14 @@ export function WhatsAppChatModal({
           }
         `}</style>
         
-        <div className="flex h-full bg-gray-100 dark:bg-gray-900 whatsapp-modal">
+        <div className="flex h-full bg-muted dark:bg-gray-900 whatsapp-modal">
           {/* Lista de Conversas */}
           <div className={cn(
-            "w-[380px] bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col h-full",
+            "w-[380px] bg-white dark:bg-gray-800 border-r border-border dark:border-gray-700 flex flex-col h-full",
             selectedContact && "hidden md:flex"
           )}>
             {/* Header da lista - FIXO */}
-            <div className="bg-gray-50 dark:bg-gray-900 p-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+            <div className="bg-muted/50 dark:bg-gray-900 p-4 border-b border-border dark:border-gray-700 flex-shrink-0">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-semibold">Conversas</h2>
                 <button
@@ -885,13 +885,13 @@ export function WhatsAppChatModal({
               </div>
               {/* Barra de pesquisa */}
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-5 h-5" />
                 <input
                   type="text"
                   placeholder="Pesquisar ou começar uma nova conversa"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-800 border border-border dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                 />
               </div>
             </div>
@@ -907,7 +907,7 @@ export function WhatsAppChatModal({
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
                 </div>
               ) : filteredContacts.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-gray-500 p-4">
+                <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-4">
                   <p className="mb-4">Nenhuma conversa encontrada</p>
                   
                   {/* Botão de debug para testar API diretamente */}
@@ -960,9 +960,9 @@ export function WhatsAppChatModal({
                     }}
                     className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
                   >
-                    🔍 Testar API com Configurações do Banco
+                    Testar API com configurações do banco
                   </button>
-                  <p className="text-xs mt-2 text-gray-400">Clique e veja o console (F12)</p>
+                  <p className="text-xs mt-2 text-muted-foreground">Clique e veja o console (F12)</p>
                 </div>
               ) : (
                 filteredContacts.map((contact) => (
@@ -975,8 +975,8 @@ export function WhatsAppChatModal({
                       fetchMessages(contact.id)
                     }}
                     className={cn(
-                      "flex items-center p-3 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer border-b border-gray-100 dark:border-gray-800",
-                      selectedContact?.id === contact.id && "bg-gray-100 dark:bg-gray-700"
+                      "flex items-center p-3 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer border-b border-border dark:border-gray-800",
+                      selectedContact?.id === contact.id && "bg-muted dark:bg-gray-700"
                     )}
                   >
                     {/* Avatar */}
@@ -985,9 +985,9 @@ export function WhatsAppChatModal({
                         {contact.avatar ? (
                           <img src={contact.avatar} className="w-full h-full rounded-full object-cover" />
                         ) : contact.isGroup ? (
-                          <Users className="w-6 h-6 text-gray-600 dark:text-gray-300" />
+                          <Users className="w-6 h-6 text-muted-foreground dark:text-gray-300" />
                         ) : (
-                          <span className="text-lg font-semibold text-gray-600 dark:text-gray-300">
+                          <span className="text-lg font-semibold text-muted-foreground dark:text-gray-300">
                             {contact.name[0]?.toUpperCase() || '+'}
                           </span>
                         )}
@@ -1000,15 +1000,15 @@ export function WhatsAppChatModal({
                     {/* Info do contato */}
                     <div className="flex-1 min-w-0 overflow-hidden">
                       <div className="flex items-start justify-between gap-2">
-                        <h3 className="font-semibold text-gray-900 dark:text-gray-100 truncate flex-1">
+                        <h3 className="font-semibold text-foreground dark:text-gray-100 truncate flex-1">
                           {contact.name}
                         </h3>
-                        <span className="text-xs text-gray-500 flex-shrink-0">
+                        <span className="text-xs text-muted-foreground flex-shrink-0">
                           {formatContactTime(contact.lastMessageTime)}
                         </span>
                       </div>
                       <div className="flex items-center justify-between mt-1 gap-2">
-                        <p className="text-sm text-gray-600 dark:text-gray-400 truncate flex-1">
+                        <p className="text-sm text-muted-foreground dark:text-gray-400 truncate flex-1">
                           {contact.lastMessage || contact.phone}
                         </p>
                         {contact.unreadCount && contact.unreadCount > 0 && (
@@ -1028,7 +1028,7 @@ export function WhatsAppChatModal({
           {selectedContact ? (
             <div className="flex-1 flex flex-col h-full">
               {/* Header do chat - FIXO */}
-              <div className="bg-gray-50 dark:bg-gray-900 p-4 border-b border-gray-200 dark:border-gray-700 border-t-4 border-t-red-500 flex items-center flex-shrink-0">
+              <div className="bg-muted/50 dark:bg-gray-900 p-4 border-b border-border dark:border-gray-700 border-t-4 border-t-red-500 flex items-center flex-shrink-0">
                 <button
                   onClick={() => setSelectedContact(null)}
                   className="md:hidden mr-3 p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"
@@ -1040,20 +1040,20 @@ export function WhatsAppChatModal({
                   {selectedContact.avatar ? (
                     <img src={selectedContact.avatar} className="w-full h-full rounded-full object-cover" />
                   ) : selectedContact.isGroup ? (
-                    <Users className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+                    <Users className="w-5 h-5 text-muted-foreground dark:text-gray-300" />
                   ) : (
-                    <span className="font-semibold text-gray-600 dark:text-gray-300">
+                    <span className="font-semibold text-muted-foreground dark:text-gray-300">
                       {selectedContact.name[0]?.toUpperCase()}
                     </span>
                   )}
                 </div>
 
                 <div className="flex-1">
-                  <h3 className="font-semibold text-gray-900 dark:text-gray-100">
+                  <h3 className="font-semibold text-foreground dark:text-gray-100">
                     {selectedContact.name}
                   </h3>
                   <div className="flex items-center gap-2">
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-muted-foreground">
                       {selectedContact.status || selectedContact.phone}
                     </p>
                     {/* Indicador de status do WebSocket */}
@@ -1061,7 +1061,7 @@ export function WhatsAppChatModal({
                       {wahaWebSocketStatus === 'connected' && (
                         <>
                           <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                          <span className="text-xs text-green-600">Tempo real</span>
+                          <span className="text-xs text-income">Tempo real</span>
                         </>
                       )}
                       {wahaWebSocketStatus === 'connecting' && (
@@ -1073,7 +1073,7 @@ export function WhatsAppChatModal({
                       {wahaWebSocketStatus === 'disconnected' && (
                         <>
                           <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-                          <span className="text-xs text-red-600">Sem tempo real</span>
+                          <span className="text-xs text-expense">Sem tempo real</span>
                         </>
                       )}
                     </div>
@@ -1081,10 +1081,10 @@ export function WhatsAppChatModal({
                 </div>
 
                 <button className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full">
-                  <Search className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                  <Search className="w-5 h-5 text-muted-foreground dark:text-gray-400" />
                 </button>
                 <button className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full ml-2">
-                  <MoreVertical className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                  <MoreVertical className="w-5 h-5 text-muted-foreground dark:text-gray-400" />
                 </button>
               </div>
 
@@ -1105,7 +1105,7 @@ export function WhatsAppChatModal({
                   </div>
                 ) : messages.length === 0 ? (
                   <div className="flex items-center justify-center h-full">
-                    <p className="text-gray-500 bg-white dark:bg-gray-800 px-4 py-2 rounded-lg">
+                    <p className="text-muted-foreground bg-white dark:bg-gray-800 px-4 py-2 rounded-lg">
                       Nenhuma mensagem ainda. Comece uma conversa!
                     </p>
                   </div>
@@ -1129,7 +1129,7 @@ export function WhatsAppChatModal({
                         >
                           {/* Conteúdo da mensagem baseado no tipo */}
                           {message.type === 'text' && (
-                            <div className="text-gray-900 dark:text-gray-100 break-words">
+                            <div className="text-foreground dark:text-gray-100 break-words">
                               {formatWhatsAppText(message.text || '')}
                             </div>
                           )}
@@ -1146,14 +1146,14 @@ export function WhatsAppChatModal({
                                   const target = e.target as HTMLImageElement;
                                   target.style.display = 'none';
                                   const fallback = document.createElement('div');
-                                  fallback.className = 'p-2 bg-gray-100 dark:bg-gray-700 rounded text-sm text-gray-500';
+                                  fallback.className = 'p-2 bg-muted dark:bg-gray-700 rounded text-sm text-muted-foreground';
                                   fallback.textContent = 'Imagem não carregada';
                                   target.parentNode?.appendChild(fallback);
                                 }}
                                 style={{ maxWidth: '100%', height: 'auto' }}
                               />
                               {message.text && (
-                                <div className="text-gray-900 dark:text-gray-100 mt-2 break-words">
+                                <div className="text-foreground dark:text-gray-100 mt-2 break-words">
                                   {formatWhatsAppText(message.text)}
                                 </div>
                               )}
@@ -1161,14 +1161,14 @@ export function WhatsAppChatModal({
                           )}
 
                           {message.type === 'document' && (
-                            <div className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-700 rounded">
-                              <FileText className="w-8 h-8 text-gray-500" />
+                            <div className="flex items-center gap-2 p-2 bg-muted/50 dark:bg-gray-700 rounded">
+                              <FileText className="w-8 h-8 text-muted-foreground" />
                               <div className="flex-1">
-                                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                <p className="text-sm font-medium text-foreground dark:text-gray-100">
                                   {message.fileName || 'Documento'}
                                 </p>
                                 {message.fileSize && (
-                                  <p className="text-xs text-gray-500">
+                                  <p className="text-xs text-muted-foreground">
                                     {(message.fileSize / 1024).toFixed(2)} KB
                                   </p>
                                 )}
@@ -1178,11 +1178,11 @@ export function WhatsAppChatModal({
 
                           {/* Horário e status */}
                           <div className="flex items-center justify-end gap-1 mt-1">
-                            <span className="text-xs text-gray-500">
+                            <span className="text-xs text-muted-foreground">
                               {formatMessageTime(message.timestamp)}
                             </span>
                             {message.isOutgoing && (
-                              <span className="text-gray-500">
+                              <span className="text-muted-foreground">
                                 {message.status === 'read' && <CheckCheck className="w-4 h-4 text-blue-500" />}
                                 {message.status === 'delivered' && <CheckCheck className="w-4 h-4" />}
                                 {message.status === 'sent' && <Check className="w-4 h-4" />}
@@ -1199,14 +1199,14 @@ export function WhatsAppChatModal({
               </div>
 
               {/* Input de mensagem - RODAPÉ FIXO */}
-              <div className="bg-gray-50 dark:bg-gray-900 p-2 border-t border-gray-200 dark:border-gray-700 flex-shrink-0">
+              <div className="bg-muted/50 dark:bg-gray-900 p-2 border-t border-border dark:border-gray-700 flex-shrink-0">
                 <div className="flex items-center gap-2">
                   {/* Botão de emoji */}
                   <button
                     onClick={() => setShowEmojiPicker(!showEmojiPicker)}
                     className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"
                   >
-                    <Smile className="w-6 h-6 text-gray-600 dark:text-gray-400" />
+                    <Smile className="w-6 h-6 text-muted-foreground dark:text-gray-400" />
                   </button>
 
                   {/* Botão de anexo */}
@@ -1215,7 +1215,7 @@ export function WhatsAppChatModal({
                       onClick={() => setShowAttachMenu(!showAttachMenu)}
                       className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"
                     >
-                      <Paperclip className="w-6 h-6 text-gray-600 dark:text-gray-400" />
+                      <Paperclip className="w-6 h-6 text-muted-foreground dark:text-gray-400" />
                     </button>
 
                     {/* Menu de anexos */}
@@ -1236,7 +1236,7 @@ export function WhatsAppChatModal({
                           <span className="text-sm">Fotos e vídeos</span>
                         </button>
                         <button className="flex items-center gap-3 w-full px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
-                          <Camera className="w-5 h-5 text-red-500" />
+                          <Camera className="w-5 h-5 text-expense" />
                           <span className="text-sm">Câmera</span>
                         </button>
                       </div>
@@ -1250,7 +1250,7 @@ export function WhatsAppChatModal({
                     onChange={(e) => setMessageText(e.target.value)}
                     onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
                     placeholder="Digite uma mensagem"
-                    className="flex-1 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full focus:outline-none focus:ring-2 focus:ring-green-500"
+                    className="flex-1 px-4 py-2 bg-white dark:bg-gray-800 border border-border dark:border-gray-700 rounded-full focus:outline-none focus:ring-2 focus:ring-green-500"
                   />
 
                   {/* Botão de enviar ou gravar */}
@@ -1273,7 +1273,7 @@ export function WhatsAppChatModal({
                     >
                       <Mic className={cn(
                         "w-6 h-6",
-                        isRecording ? "text-white" : "text-gray-600 dark:text-gray-400"
+                        isRecording ? "text-white" : "text-muted-foreground dark:text-gray-400"
                       )} />
                     </button>
                   )}
@@ -1281,7 +1281,7 @@ export function WhatsAppChatModal({
               </div>
             </div>
           ) : (
-            <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+            <div className="flex-1 flex items-center justify-center bg-muted/50 dark:bg-gray-900">
               <div className="text-center">
                 <div className="w-64 h-64 mx-auto mb-4 opacity-50">
                   <img 
@@ -1289,8 +1289,8 @@ export function WhatsAppChatModal({
                     alt="WhatsApp" 
                   />
                 </div>
-                <h3 className="text-2xl font-light text-gray-500 mb-2">WhatsApp Web</h3>
-                <p className="text-gray-400">
+                <h3 className="text-2xl font-light text-muted-foreground mb-2">WhatsApp Web</h3>
+                <p className="text-muted-foreground">
                   Selecione uma conversa para começar
                 </p>
               </div>

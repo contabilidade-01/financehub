@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useConfirm } from "@/components/shared/ConfirmDialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -62,10 +63,10 @@ function diasAte(data: string | null | undefined): number | null {
 
 function badgeDias(dias: number | null) {
   if (dias == null) return { label: "—", className: "bg-muted text-muted-foreground" };
-  if (dias < 0) return { label: `${Math.abs(dias)}d vencido`, className: "bg-red-500/15 text-red-600" };
-  if (dias === 0) return { label: "Hoje", className: "bg-red-500/15 text-red-600" };
+  if (dias < 0) return { label: `${Math.abs(dias)}d vencido`, className: "bg-red-500/15 text-expense" };
+  if (dias === 0) return { label: "Hoje", className: "bg-red-500/15 text-expense" };
   if (dias <= 3) return { label: `${dias}d`, className: "bg-amber-500/15 text-amber-600" };
-  return { label: `${dias}d`, className: "bg-emerald-500/15 text-emerald-600" };
+  return { label: `${dias}d`, className: "bg-emerald-500/15 text-income" };
 }
 
 function fmtData(d: string | null | undefined) {
@@ -98,6 +99,7 @@ export default function ContasPagarPage() {
     queryKey: ["/api/contas"],
   });
   const contasAtivas = useMemo(() => contas.filter((c) => c.ativo !== false), [contas]);
+  const confirmar = useConfirm();
 
   const faturas = data?.faturas ?? [];
   const boletos = data?.boletos ?? [];
@@ -178,10 +180,10 @@ export default function ContasPagarPage() {
   });
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Vencimentos</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Vencimentos</h1>
           <p className="text-muted-foreground">Faturas de cartão e boletos/PIX do período</p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
@@ -278,8 +280,8 @@ export default function ContasPagarPage() {
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="font-medium">{f.cartao_nome}</span>
-                              <Badge variant="outline" className="text-[10px]">{f.competencia}</Badge>
-                              <Badge className={`${bd.className} text-[10px]`}>{bd.label}</Badge>
+                              <Badge variant="outline" className="text-xs">{f.competencia}</Badge>
+                              <Badge className={`${bd.className} text-xs`}>{bd.label}</Badge>
                             </div>
                             <p className="text-xs text-muted-foreground mt-0.5">
                               Vence {fmtData(f.data_vencimento)}
@@ -321,13 +323,13 @@ export default function ContasPagarPage() {
                               </>
                             ) : (
                               <>
-                                <Badge className="bg-emerald-500/15 text-emerald-600">Paga</Badge>
+                                <Badge className="bg-emerald-500/15 text-income">Paga</Badge>
                                 <Button
                                   size="sm"
                                   variant="outline"
                                   disabled={reabrirFatura.isPending}
-                                  onClick={() => {
-                                    if (confirm(`Reabrir a fatura de ${f.cartao_nome} (${f.competencia})? Ela volta para 'Em aberto' e o pagamento é desfeito.`))
+                                  onClick={async () => {
+                                    if (await confirmar({ title: `Reabrir a fatura de ${f.cartao_nome} (${f.competencia})?`, description: "Ela volta para 'Em aberto' e o pagamento é desfeito.", confirmText: "Reabrir" }))
                                       reabrirFatura.mutate(f.id);
                                   }}
                                 >

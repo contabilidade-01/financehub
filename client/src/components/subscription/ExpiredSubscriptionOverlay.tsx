@@ -41,11 +41,11 @@ export function ExpiredSubscriptionOverlay({ expirationDate }: ExpiredSubscripti
         <CardHeader className="text-center">
           <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-red-100 dark:bg-red-900 border-4 border-red-200 dark:border-red-700">
             <div className="relative">
-              <ShieldX className="h-10 w-10 text-red-600 dark:text-red-400" />
-              <Lock className="h-5 w-5 text-red-700 dark:text-red-300 absolute -bottom-1 -right-1" />
+              <ShieldX className="h-10 w-10 text-expense" />
+              <Lock className="h-5 w-5 text-expense absolute -bottom-1 -right-1" />
             </div>
           </div>
-          <CardTitle className="text-2xl text-red-600 dark:text-red-400 mb-2">
+          <CardTitle className="text-2xl text-expense mb-2">
             {t("subscription.overlay.restricted_access", "Acesso Restrito")}
           </CardTitle>
           <CardDescription className="text-center text-base">
@@ -55,8 +55,8 @@ export function ExpiredSubscriptionOverlay({ expirationDate }: ExpiredSubscripti
         <CardContent className="space-y-4">
           {expirationDate && (
             <div className="flex items-center gap-3 p-4 bg-red-50 dark:bg-red-950 rounded-lg border border-red-200 dark:border-red-800">
-              <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0" />
-              <div className="text-sm text-red-600 dark:text-red-400">
+              <AlertTriangle className="h-5 w-5 text-expense flex-shrink-0" />
+              <div className="text-sm text-expense">
                 <div className="font-medium">
                   {t("subscription.overlay.expired_subscription", "Assinatura expirada")}
                 </div>
@@ -80,7 +80,7 @@ export function ExpiredSubscriptionOverlay({ expirationDate }: ExpiredSubscripti
               
               <Button 
                 variant="outline" 
-                className="w-full h-12 text-base border-gray-300 hover:border-gray-400"
+                className="w-full h-12 text-base border-border hover:border-gray-400"
                 onClick={handleLogout}
               >
                 <LogOut className="h-5 w-5 mr-2" />

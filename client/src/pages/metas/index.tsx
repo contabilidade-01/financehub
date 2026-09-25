@@ -54,27 +54,27 @@ type Variant = "pf" | "pj";
 
 const copyByVariant = {
   pf: {
-    titulo: "🎯 Metas e Sonhos",
+    titulo: "Metas e Sonhos",
     subtitulo: "Organize seus objetivos financeiros",
     placeholderNome: "Nome da meta (ex: Viagem Europa)",
     opcoes: [
-      { value: "caixinha", label: "🐷 Caixinha" },
-      { value: "sonho", label: "🎯 Sonho" },
-      { value: "reserva", label: "🛡️ Reserva de Emergência" },
-      { value: "limite_categoria", label: "📊 Limite por Categoria" },
+      { value: "caixinha", label: "Caixinha" },
+      { value: "sonho", label: "Sonho" },
+      { value: "reserva", label: "Reserva de Emergência" },
+      { value: "limite_categoria", label: "Limite por Categoria" },
     ],
     vazioDica: 'Crie pelo app ou mande no WhatsApp: "quero guardar R$500/mês pra viagem"',
     labels: tipoLabelsPF,
   },
   pj: {
-    titulo: "🎯 Metas da Empresa",
+    titulo: "Metas da Empresa",
     subtitulo: "Objetivos financeiros do seu negócio",
     placeholderNome: "Nome da meta (ex: Capital de giro, Reforma da loja)",
     opcoes: [
-      { value: "caixinha", label: "🐷 Reserva de Caixa" },
-      { value: "sonho", label: "🎯 Meta de Investimento" },
-      { value: "reserva", label: "🛡️ Capital de Giro / Emergência" },
-      { value: "limite_categoria", label: "📊 Limite de Despesa" },
+      { value: "caixinha", label: "Reserva de Caixa" },
+      { value: "sonho", label: "Meta de Investimento" },
+      { value: "reserva", label: "Capital de Giro / Emergência" },
+      { value: "limite_categoria", label: "Limite de Despesa" },
     ],
     vazioDica: 'Crie pelo app ou mande no WhatsApp: "quero reservar R$2.000/mês pro 13º"',
     labels: tipoLabelsPJ,
@@ -84,7 +84,7 @@ const copyByVariant = {
 const tipoColors: Record<string, string> = {
   caixinha: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
   sonho: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
-  reserva: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
+  reserva: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30",
   limite_categoria: "bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300",
 };
 
@@ -118,7 +118,7 @@ export default function MetasPage({ variant = "pf", empresaId }: { variant?: Var
     mutationFn: (data: any) => apiRequest("/api/metas", { method: "POST", data }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/metas"] });
-      toast({ title: "Meta criada com sucesso! 🎯" });
+      toast({ title: "Meta criada com sucesso" });
       setShowForm(false);
     },
     onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
@@ -129,7 +129,7 @@ export default function MetasPage({ variant = "pf", empresaId }: { variant?: Var
       apiRequest(`/api/metas/${id}/depositar`, { method: "POST", data: { valor } }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/metas"] });
-      toast({ title: "Depósito realizado! 💰" });
+      toast({ title: "Depósito realizado" });
       setDepositMeta(null);
       setDepositValue("");
     },
@@ -140,7 +140,7 @@ export default function MetasPage({ variant = "pf", empresaId }: { variant?: Var
     mutationFn: ({ id, data }: { id: number; data: any }) => apiRequest(`/api/metas/${id}`, { method: "PUT", data }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/metas"] });
-      toast({ title: "Meta atualizada! ✏️" });
+      toast({ title: "Meta atualizada" });
       setEditMeta(null);
     },
     onError: (err: any) => toast({ title: "Erro", description: err?.error || err.message, variant: "destructive" }),
@@ -192,10 +192,10 @@ export default function MetasPage({ variant = "pf", empresaId }: { variant?: Var
     Number(n).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">{copy.titulo}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{copy.titulo}</h1>
           <p className="text-muted-foreground">{copy.subtitulo}</p>
         </div>
         <Button onClick={() => setShowForm(!showForm)}>
@@ -294,13 +294,13 @@ export default function MetasPage({ variant = "pf", empresaId }: { variant?: Var
                     {meta.meses_restantes && <span>~{meta.meses_restantes} meses</span>}
                   </div>
                   {meta.prazo && (
-                    <p className="text-xs text-muted-foreground">🗓 Prazo: {new Date(meta.prazo).toLocaleDateString("pt-BR")}</p>
+                    <p className="text-xs text-muted-foreground">Prazo: {new Date(meta.prazo).toLocaleDateString("pt-BR")}</p>
                   )}
                   {meta.recorrencia && meta.valor_recorrencia && (
-                    <p className="text-xs text-muted-foreground">💸 Guardando {fmt(meta.valor_recorrencia)}/{meta.recorrencia}</p>
+                    <p className="text-xs text-muted-foreground">Guardando {fmt(meta.valor_recorrencia)}/{meta.recorrencia}</p>
                   )}
                   <Button size="sm" className="w-full" onClick={() => setDepositMeta(meta)}>
-                    💰 Depositar
+                    Depositar
                   </Button>
                 </CardContent>
               </Card>

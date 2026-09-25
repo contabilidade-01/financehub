@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useConfirm } from "@/components/shared/ConfirmDialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -280,6 +281,7 @@ export default function CartoesCreditoPage() {
     queryKey: ["/api/categories"],
   });
   const categoriasDespesa = useMemo(() => categorias.filter((c) => c.tipo === "Despesa"), [categorias]);
+  const confirmar = useConfirm();
 
   const criarLancamento = useMutation({
     mutationFn: (data: any) => apiRequest("/api/transactions", { method: "POST", data }),
@@ -461,10 +463,10 @@ export default function CartoesCreditoPage() {
   const todosFaturaSel = idsFatura.length > 0 && idsFatura.every((id) => sel.has(id));
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="space-y-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
+          <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
             <CreditCard className="h-7 w-7" /> Cartões de Crédito
           </h1>
           <p className="text-muted-foreground">
@@ -485,7 +487,7 @@ export default function CartoesCreditoPage() {
       {loadingCartoes ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-28 w-full rounded-xl" />
+            <Skeleton key={i} className="h-28 w-full rounded-lg" />
           ))}
         </div>
       ) : cartoes.length === 0 ? (
@@ -506,7 +508,7 @@ export default function CartoesCreditoPage() {
                 role="button"
                 tabIndex={0}
                 onClick={() => setCardId(c.id)}
-                className={`relative cursor-pointer text-left rounded-xl border p-4 transition-colors ${
+                className={`relative cursor-pointer text-left rounded-lg border p-4 transition-colors ${
                   ativo ? "border-primary ring-1 ring-primary bg-primary/5" : "border-border hover:bg-muted/40"
                 }`}
               >
@@ -523,7 +525,7 @@ export default function CartoesCreditoPage() {
                     type="button"
                     className="text-muted-foreground hover:text-red-500 p-1"
                     title="Remover cartão"
-                    onClick={(e) => { e.stopPropagation(); if (confirm("Remover este cartão?")) excluirCartao.mutate(c.id); }}
+                    onClick={async (e) => { e.stopPropagation(); if (await confirmar({ title: "Remover este cartão?", confirmText: "Remover", destructive: true })) excluirCartao.mutate(c.id); }}
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -537,11 +539,11 @@ export default function CartoesCreditoPage() {
                   {c.dia_vencimento ?? "—"}
                 </p>
                 {semDias && (
-                  <p className="text-[11px] text-amber-600 mt-1">
-                    ⚠️ defina fechamento/vencimento para as faturas saírem certas
+                  <p className="text-xs text-amber-600 mt-1">
+                    Defina fechamento/vencimento para as faturas saírem certas
                   </p>
                 )}
-                <p className="text-[11px] text-muted-foreground mt-3">Limite</p>
+                <p className="text-xs text-muted-foreground mt-3">Limite</p>
                 <p className="text-xl font-numeric font-semibold">{money(Number(c.limite) || 0)}</p>
               </div>
             );
@@ -561,7 +563,7 @@ export default function CartoesCreditoPage() {
           <Card>
             <CardContent className="py-4">
               <p className="text-xs text-muted-foreground">Total em faturas em aberto</p>
-              <p className="text-2xl font-numeric font-semibold text-red-500 mt-1">{money(totalAberto)}</p>
+              <p className="text-2xl font-numeric font-semibold text-expense mt-1">{money(totalAberto)}</p>
             </CardContent>
           </Card>
           <Card>
@@ -569,7 +571,7 @@ export default function CartoesCreditoPage() {
               <p className="text-xs text-muted-foreground">Limite disponível (estimado)</p>
               <p
                 className={`text-2xl font-numeric font-semibold mt-1 ${
-                  limiteDisponivel < 0 ? "text-red-500" : "text-emerald-600"
+                  limiteDisponivel < 0 ? "text-expense" : "text-income"
                 }`}
               >
                 {money(limiteDisponivel)}
@@ -592,9 +594,9 @@ export default function CartoesCreditoPage() {
                 size="sm"
                 variant="outline"
                 disabled={!cardId || recalcularFaturas.isPending}
-                onClick={() => {
+                onClick={async () => {
                   if (!cardId) return;
-                  if (confirm("Recalcular as faturas deste cartão usando os dias de fechamento/vencimento atuais? Faturas pagas não são alteradas.")) {
+                  if (await confirmar({ title: "Recalcular as faturas deste cartão?", description: "Usa os dias de fechamento/vencimento atuais. Faturas pagas não são alteradas.", confirmText: "Recalcular" })) {
                     recalcularFaturas.mutate(cardId);
                   }
                 }}
@@ -627,7 +629,7 @@ export default function CartoesCreditoPage() {
                     >
                       <p className="text-xs font-semibold">{compLabel(f.competencia)}</p>
                       <p className="text-sm font-numeric">{money(Number(f.total) || 0)}</p>
-                      <p className={`text-[11px] ${paga ? "text-emerald-600" : "text-muted-foreground"}`}>
+                      <p className={`text-xs ${paga ? "text-income" : "text-muted-foreground"}`}>
                         {paga ? "paga" : `vence ${dataBR(f.data_vencimento)}`}
                       </p>
                     </button>
@@ -687,7 +689,7 @@ export default function CartoesCreditoPage() {
                     </Select>
                   </div>
                   {faturaSel.status === "paga" ? (
-                    <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 text-emerald-600 px-3 py-2 text-sm font-medium">
+                    <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 text-income px-3 py-2 text-sm font-medium">
                       <CheckCircle2 className="h-4 w-4" /> Fatura paga
                     </span>
                   ) : (
@@ -740,7 +742,63 @@ export default function CartoesCreditoPage() {
                     </div>
                   )}
                 </div>
-                <div className="mt-2 overflow-x-auto">
+                {/* Mobile: lista em cards */}
+                <ul className="mt-2 divide-y divide-border/50 md:hidden">
+                  {compras.length === 0 ? (
+                    <li className="py-6 text-center text-sm text-muted-foreground">Nenhum lançamento nesta fatura.</li>
+                  ) : (
+                    compras.map((l) => (
+                      <li key={l.id} className={`flex items-start gap-3 py-3 ${sel.has(l.id) ? "bg-primary/5" : ""}`}>
+                        <input
+                          type="checkbox"
+                          className="mt-1 h-4 w-4"
+                          checked={sel.has(l.id)}
+                          onChange={() => toggleSel(l.id)}
+                          aria-label={`Selecionar ${l.descricao}`}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium leading-snug">{l.descricao}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {dataBR(l.data_transacao)}
+                            {rotuloParcela(l) ? ` · ${rotuloParcela(l)}` : ""}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 flex-col items-end gap-1">
+                          <span className="text-sm font-semibold tabular-nums">{money(Number(l.valor) || 0)}</span>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground"
+                              title="Mover para outro cartão/competência"
+                              aria-label="Mover lançamento"
+                              onClick={() => abrirMover([{ id: l.id, descricao: l.descricao }])}
+                            >
+                              <ArrowLeftRight className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                              title="Excluir lançamento"
+                              aria-label="Excluir lançamento"
+                              onClick={async () => {
+                                if (await confirmar({ title: "Excluir este lançamento?", confirmText: "Excluir", destructive: true })) excluirLancamento.mutate(l.id);
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </li>
+                    ))
+                  )}
+                </ul>
+
+                {/* md+: tabela */}
+                <div className="mt-2 hidden overflow-x-auto md:block">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="text-xs text-muted-foreground border-b border-border">
@@ -806,8 +864,8 @@ export default function CartoesCreditoPage() {
                                   type="button"
                                   className="text-muted-foreground hover:text-red-500 transition-colors"
                                   title="Excluir lançamento"
-                                  onClick={() => {
-                                    if (confirm("Excluir este lançamento?")) excluirLancamento.mutate(l.id);
+                                  onClick={async () => {
+                                    if (await confirmar({ title: "Excluir este lançamento?", confirmText: "Excluir", destructive: true })) excluirLancamento.mutate(l.id);
                                   }}
                                 >
                                   <Trash2 className="h-4 w-4" />
@@ -883,8 +941,8 @@ export default function CartoesCreditoPage() {
                       type="button"
                       className="text-muted-foreground hover:text-red-500 transition-colors"
                       title="Excluir lançamento"
-                      onClick={() => {
-                        if (confirm("Excluir este lançamento?")) excluirLancamento.mutate(l.id);
+                      onClick={async () => {
+                        if (await confirmar({ title: "Excluir este lançamento?", confirmText: "Excluir", destructive: true })) excluirLancamento.mutate(l.id);
                       }}
                     >
                       <Trash2 className="h-4 w-4" />

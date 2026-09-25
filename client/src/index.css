@@ -1,165 +1,129 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
-@import url('https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css');
+/*
+ * Khesef — tokens de design.
+ * Tema claro é o padrão; o escuro é opcional (classe .dark no <html>).
+ * Uma cor de marca (azul-petróleo), neutros slate e cores semânticas.
+ * A tela de personalização do admin (admin/customize) sobrescreve estas
+ * variáveis em runtime via utils/theme-manager — os nomes não mudam.
+ */
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: 0 0% 98%;
-  --foreground: 240 10% 3.9%;
-  --muted: 240 4.8% 95.9%;
-  --muted-foreground: 240 3.8% 46.1%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 240 10% 3.9%;
-  --card: 0 0% 100%;
-  --card-foreground: 240 10% 3.9%;
-  --border: 240 5.9% 90%;
-  --input: 240 5.9% 90%;
-  --primary: 255 100% 70%;
-  --primary-foreground: 0 0% 98%;
-  --secondary: 157 100% 50%;
-  --secondary-foreground: 0 0% 9%;
-  --accent: 240 4.8% 95.9%;
-  --accent-foreground: 240 5.9% 10%;
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 0 0% 98%;
-  --ring: 255 100% 70%;
-  --radius: 0.5rem;
-
-  --font-sans: 'Inter', sans-serif;
-  --font-space: 'Space Grotesk', sans-serif;
-  /* Números financeiros: mono com dígitos de largura fixa (colunas alinhadas). */
-  --font-numeric: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
-  --font-orbitron: var(--font-numeric);
-
-  --chart-1: 157 100% 50%;
-  --chart-2: 255 100% 70%;
-  --chart-3: 357 100% 60%;
-  --chart-4: 43 100% 50%;
-  --chart-5: 275 100% 60%;
-
-  --sidebar-background: 230 50% 15%;
-  --sidebar-foreground: 0 0% 98%;
-  --sidebar-primary: 255 100% 70%;
-  --sidebar-primary-foreground: 0 0% 98%;
-  --sidebar-accent: 157 100% 50%;
-  --sidebar-accent-foreground: 0 0% 9%;
-  --sidebar-border: 240 3.7% 15.9%;
-  --sidebar-ring: 255 100% 70%;
-}
-
-/* Animação para modal de erro */
-@keyframes zoomInBounce {
-  0% {
-    opacity: 0;
-    transform: scale(0.3);
-  }
-  50% {
-    transform: scale(1.05);
-  }
-  70% {
-    transform: scale(0.95);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-/* Correções específicas para contraste no tema light */
-
-/* Espaçamento adicional para header do Sidebar quando admin está ativo */
-@media (max-width: 1023px) {
-  .sidebar-admin-offset {
-    margin-top: 78px !important;
-  }
-}
-
-@media (min-width: 1024px) {
-  .sidebar-admin-offset {
-    margin-top: 75px !important;
-  }
-}
-
-/* Correções específicas para contraste no tema light */
-.light .text-gray-500,
-.light .text-muted-foreground {
-  color: hsl(0 0% 25.1%) !important;
-}
-
-.light .text-gray-600 {
-  color: hsl(0 0% 20%) !important;
-}
-
-.light .text-gray-700 {
-  color: hsl(0 0% 15%) !important;
-}
-
-.light .text-gray-400 {
-  color: hsl(0 0% 30%) !important;
-}
-
-.light .text-slate-500 {
-  color: hsl(0 0% 25%) !important;
-}
-
-.light .text-slate-600 {
-  color: hsl(0 0% 20%) !important;
-}
-
-.dark {
-  --background: 240 10% 3.9%;
-  --foreground: 0 0% 98%;
-  --muted: 240 3.7% 15.9%;
-  --muted-foreground: 240 5% 64.9%;
-  --popover: 240 10% 3.9%;
-  --popover-foreground: 0 0% 98%;
-  --card: 240 10% 3.9%;
-  --card-foreground: 0 0% 98%;
-  --border: 240 3.7% 15.9%;
-  --input: 240 3.7% 15.9%;
-  --primary: 255 100% 70%;
-  --primary-foreground: 0 0% 98%;
-  --secondary: 157 100% 50%;
-  --secondary-foreground: 0 0% 9%;
-  --accent: 240 3.7% 15.9%;
-  --accent-foreground: 0 0% 98%;
-  --destructive: 0 62.8% 30.6%;
-  --destructive-foreground: 0 0% 98%;
-  --ring: 255 100% 70%;
-}
-
 @layer base {
+  :root {
+    --background: 210 20% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 40%;
+    --accent: 210 40% 95%;
+    --accent-foreground: 222 47% 11%;
+    --border: 214 32% 90%;
+    --input: 214 28% 84%;
+
+    --primary: 200 60% 32%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+    --destructive: 0 70% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --ring: 200 60% 32%;
+
+    /* Semânticos */
+    --success: 152 60% 30%;
+    --success-foreground: 0 0% 100%;
+    --warning: 35 90% 40%;
+    --warning-foreground: 0 0% 100%;
+    --income: 152 60% 30%;
+    --expense: 0 70% 45%;
+
+    --radius: 0.5rem;
+
+    --font-sans: 'Inter Variable', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    /* Números: mesma fonte, dígitos tabulares (colunas alinhadas). */
+    --font-numeric: var(--font-sans);
+
+    --chart-1: 200 60% 38%;
+    --chart-2: 173 45% 40%;
+    --chart-3: 215 16% 55%;
+    --chart-4: 35 80% 50%;
+    --chart-5: 0 60% 55%;
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 222 47% 11%;
+    --sidebar-primary: 200 60% 32%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 40% 95%;
+    --sidebar-accent-foreground: 222 47% 11%;
+    --sidebar-border: 214 32% 90%;
+    --sidebar-ring: 200 60% 32%;
+
+    /* Alturas de navegação (usadas para reservar espaço no mobile). */
+    --mobile-header-h: 3.5rem;
+    --mobile-nav-h: 4rem;
+  }
+
+  .dark {
+    --background: 222 40% 7%;
+    --foreground: 210 40% 96%;
+    --card: 222 36% 10%;
+    --card-foreground: 210 40% 96%;
+    --popover: 222 36% 10%;
+    --popover-foreground: 210 40% 96%;
+    --muted: 217 30% 15%;
+    --muted-foreground: 215 20% 68%;
+    --accent: 217 30% 16%;
+    --accent-foreground: 210 40% 96%;
+    --border: 217 28% 18%;
+    --input: 217 26% 24%;
+
+    --primary: 199 60% 58%;
+    --primary-foreground: 222 47% 8%;
+    --secondary: 217 30% 16%;
+    --secondary-foreground: 210 40% 96%;
+    --destructive: 0 65% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --ring: 199 60% 58%;
+
+    --success: 152 50% 48%;
+    --success-foreground: 222 47% 8%;
+    --warning: 38 90% 55%;
+    --warning-foreground: 222 47% 8%;
+    --income: 152 50% 52%;
+    --expense: 0 75% 65%;
+
+    --chart-1: 199 60% 58%;
+    --chart-2: 173 45% 50%;
+    --chart-3: 215 16% 60%;
+    --chart-4: 38 85% 58%;
+    --chart-5: 0 65% 62%;
+
+    --sidebar-background: 222 38% 9%;
+    --sidebar-foreground: 210 40% 96%;
+    --sidebar-primary: 199 60% 58%;
+    --sidebar-primary-foreground: 222 47% 8%;
+    --sidebar-accent: 217 30% 15%;
+    --sidebar-accent-foreground: 210 40% 96%;
+    --sidebar-border: 217 28% 16%;
+    --sidebar-ring: 199 60% 58%;
+  }
+
   * {
     @apply border-border;
   }
 
-  /* Permitir apenas animações específicas de loading/spinner */
-  *:not(.animate-spin):not([class*="animate-"]):not([data-radix-dialog-content]):not(.dialog-content),
-  *:not(.animate-spin):not([class*="animate-"]):not([data-radix-dialog-content]):not(.dialog-content)::before,
-  *:not(.animate-spin):not([class*="animate-"]):not([data-radix-dialog-content]):not(.dialog-content)::after {
-    transition: none !important;
-  }
-  
-  /* Preservar animações de loading */
-  .animate-spin {
-    animation: spin 1s linear infinite !important;
-  }
-  
-  @keyframes spin {
-    from {
-      transform: rotate(0deg);
-    }
-    to {
-      transform: rotate(360deg);
-    }
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
-    background-image: radial-gradient(rgba(108, 99, 255, 0.1) 2px, transparent 2px);
-    background-size: 30px 30px;
+    font-feature-settings: "cv11", "ss01";
   }
 
   h1,
@@ -168,1239 +132,298 @@
   h4,
   h5,
   h6 {
-    @apply font-space tracking-tight;
+    @apply font-semibold tracking-tight;
   }
 
-  .glass {
-    @apply bg-opacity-20 bg-gray-900 backdrop-blur-md border border-primary/20 shadow-lg;
+  ::selection {
+    background: hsl(var(--primary) / 0.18);
   }
 
-  .glass-card {
-    @apply bg-opacity-25 bg-gray-900 backdrop-blur-md border border-primary/20 shadow-lg;
-  }
-
-  .glass-card {
-    @apply border-primary/20;
-  }
-
-  .neon-border {
-    position: relative;
-  }
-
-  .neon-border::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    border-radius: inherit;
-    padding: 1px;
-    background: linear-gradient(90deg, hsl(var(--primary)), hsl(var(--secondary)));
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    pointer-events: none;
-  }
-
-  .bg-pattern {
-    background-image: radial-gradient(rgba(108, 99, 255, 0.1) 2px, transparent 2px);
-    background-size: 30px 30px;
+  /* Barra de rolagem discreta e neutra. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
   }
 
   ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 8px;
+    height: 8px;
   }
 
   ::-webkit-scrollbar-track {
-    background: rgba(26, 26, 64, 0.2);
+    background: transparent;
   }
 
   ::-webkit-scrollbar-thumb {
-    background: hsl(var(--primary));
-    border-radius: 3px;
+    background: hsl(var(--border));
+    border-radius: 4px;
   }
 
-  ::-webkit-scrollbar-thumb {
-    background: hsl(var(--primary));
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  /*
+   * iOS Safari dá zoom automático em campos com fonte < 16px.
+   * Só no iOS (touch-callout) e só em telas pequenas: força 16px nos campos.
+   * !important é necessário para vencer utilitários como text-sm.
+   */
+  @supports (-webkit-touch-callout: none) {
+    @media (max-width: 767px) {
+      input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+      select,
+      textarea {
+        font-size: 16px !important;
+      }
+    }
+  }
+}
+
+@layer components {
+  /*
+   * Modais legados (admin/usuários, categorias, lembretes) e o campo de
+   * telefone que reutiliza .admin-user-form-input. Só tokens, sem cores fixas.
+   * No mobile abrem como painel inferior; do sm para cima, centralizados.
+   */
+  .admin-user-modal-overlay,
+  .category-modal-overlay {
+    @apply fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center sm:p-4;
+  }
+
+  .admin-user-modal-container {
+    @apply relative flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-xl border bg-card text-card-foreground shadow-lg sm:max-w-lg sm:rounded-lg;
+  }
+
+  .category-modal-content {
+    @apply relative max-h-[92dvh] w-full overflow-y-auto rounded-t-xl border bg-card p-6 text-card-foreground shadow-lg sm:max-w-lg sm:rounded-lg;
+    padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+  }
+
+  .admin-user-modal-header {
+    @apply flex items-center justify-between px-6 pt-6;
+  }
+
+  .admin-user-modal-title {
+    @apply flex items-center text-lg font-semibold;
+  }
+
+  .admin-user-modal-icon {
+    @apply mr-2 h-5 w-5 text-primary;
+  }
+
+  .admin-user-modal-close,
+  .category-modal-close {
+    @apply inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring;
+  }
+
+  .category-modal-close {
+    @apply absolute right-3 top-3;
+  }
+
+  .admin-user-modal-content {
+    @apply overflow-y-auto p-6;
+    padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+  }
+
+  .category-modal-title {
+    @apply mb-1 pr-10 text-lg font-semibold;
+  }
+
+  .category-modal-description {
+    @apply mb-6 text-sm text-muted-foreground;
+  }
+
+  .admin-user-form-group,
+  .category-form-field {
+    @apply relative mb-4;
+  }
+
+  .admin-user-form-label,
+  .category-label {
+    @apply mb-1.5 block text-sm font-medium text-foreground;
+  }
+
+  .admin-user-form-input,
+  .admin-user-form-select,
+  .category-input,
+  .category-select-trigger {
+    @apply flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-base text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 sm:text-sm;
+  }
+
+  .category-select-trigger {
+    @apply items-center justify-between text-left;
+  }
+
+  .category-dropdown {
+    @apply absolute left-0 right-0 top-[calc(100%+4px)] z-50 max-h-72 overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md;
+  }
+
+  .category-dropdown-item {
+    @apply flex cursor-pointer items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground;
+  }
+
+  .category-dropdown-item.selected {
+    @apply bg-accent font-medium;
+  }
+
+  .color-circle {
+    @apply mr-2 h-4 w-4 rounded-full;
+  }
+
+  .icon-display {
+    @apply mr-2;
+  }
+
+  .admin-user-modal-actions,
+  .category-modal-buttons {
+    @apply mt-6 flex flex-col-reverse gap-2 border-t pt-4 sm:flex-row sm:justify-end;
+  }
+
+  .admin-user-btn-primary,
+  .admin-user-btn-secondary,
+  .category-btn {
+    @apply inline-flex h-10 items-center justify-center rounded-md px-4 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50;
+  }
+
+  .admin-user-btn-primary,
+  .category-btn-primary {
+    @apply bg-primary text-primary-foreground hover:bg-primary/90;
+  }
+
+  .admin-user-btn-secondary,
+  .category-btn-secondary {
+    @apply border border-input bg-background hover:bg-muted;
+  }
+
+  .admin-user-switch-container {
+    @apply flex items-center gap-2;
+  }
+
+  /* Calendário de lembretes (react-big-calendar). */
+  .calendar-container .rbc-calendar {
+    @apply bg-transparent font-sans text-foreground;
+  }
+
+  .calendar-container .rbc-header {
+    @apply border-b bg-muted/60 px-2 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground;
+  }
+
+  .calendar-container .rbc-month-view,
+  .calendar-container .rbc-time-view,
+  .calendar-container .rbc-agenda-view {
+    @apply overflow-hidden rounded-lg border;
+  }
+
+  .calendar-container .rbc-day-bg + .rbc-day-bg,
+  .calendar-container .rbc-month-row + .rbc-month-row,
+  .calendar-container .rbc-header + .rbc-header {
+    @apply border-border;
+  }
+
+  .calendar-container .rbc-off-range-bg {
+    @apply bg-muted/50;
+  }
+
+  .calendar-container .rbc-off-range {
+    @apply text-muted-foreground/60;
+  }
+
+  .calendar-container .rbc-today {
+    @apply bg-primary/5;
+  }
+
+  .calendar-container .rbc-event {
+    @apply rounded border-0 bg-primary px-1.5 py-0.5 text-xs font-medium text-primary-foreground;
+  }
+
+  .calendar-container .rbc-toolbar {
+    @apply mb-4 flex flex-wrap gap-2;
+  }
+
+  .calendar-container .rbc-toolbar button {
+    @apply rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted;
+  }
+
+  .calendar-container .rbc-toolbar button.rbc-active {
+    @apply border-primary bg-primary text-primary-foreground;
+  }
+
+  .calendar-container .rbc-toolbar-label {
+    @apply text-base font-semibold;
+  }
+
+  /* Cabeçalho que acompanha a rolagem dentro de modais longos. */
+  .modal-header-sticky {
+    @apply sticky -top-6 z-10 flex min-h-14 items-center bg-background py-1;
+  }
+
+  .modal-close-btn {
+    @apply absolute right-4 top-3 z-20;
   }
 }
 
 @layer utilities {
-  .shadow-neon {
-    /* sem box-shadow */
-  }
-
-  .shadow-purple {
-    /* sem box-shadow */
-  }
-
-  /* ============================================= */
-  /* CENTRALIZAÇÃO DEFINITIVA DAS MODAIS */
-  /* ============================================= */
-  
-  /* Dialog overlay - cobrir toda a tela */
-  [data-radix-dialog-overlay] {
-    position: fixed !important;
-    inset: 0 !important;
-    background-color: rgba(0, 0, 0, 0.8) !important;
-    z-index: 50 !important;
-  }
-
-  /* Dialog content - CENTRALIZAÇÃO PERFEITA */
-  [data-radix-dialog-content] {
-    position: fixed !important;
-    left: 50% !important;
-    top: 50% !important;
-    transform: translate(-50%, -50%) !important;
-    z-index: 51 !important;
-    max-height: 90vh !important;
-    overflow-y: auto !important;
-    margin: 0 !important;
-  }
-  
-  /* Garantir que a classe dialog-content também centralize */
-  .dialog-content {
-    position: fixed !important;
-    left: 50% !important;
-    top: 50% !important;
-    transform: translate(-50%, -50%) !important;
-  }
-
-  /* Dropdown alinhamento consistente em todas as modais */
-  [data-radix-dialog-content] [data-radix-select-content],
-  [role="dialog"] [data-radix-select-content],
-  .DialogContent [data-radix-select-content] {
-    z-index: 1050 !important;
-    max-height: 200px !important;
-    overflow-y: auto !important;
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
-    background: rgb(28, 80, 202, 0.95) !important;
-    backdrop-filter: blur(10px) !important;
-    position: absolute !important;
-    min-width: 100% !important;
-  }
-
-  /* Posicionamento correto para dropdowns dentro de modais */
-  [data-radix-dialog-content] [data-radix-select-viewport],
-  [role="dialog"] [data-radix-select-viewport],
-  .DialogContent [data-radix-select-viewport] {
-    position: relative !important;
-  }
-
-  /* Container do select com posição relativa */
-  [data-radix-dialog-content] [data-radix-select-root],
-  [role="dialog"] [data-radix-select-root],
-  .DialogContent [data-radix-select-root],
-  [data-radix-dialog-content] .relative,
-  [role="dialog"] .relative,
-  .DialogContent .relative {
-    position: relative !important;
-  }
-
-  /* FormItem também deve ser relativo para conter o dropdown */
-  [data-radix-dialog-content] [class*="FormItem"],
-  [role="dialog"] [class*="FormItem"],
-  .DialogContent [class*="FormItem"] {
-    position: relative !important;
-  }
-
-  /* SelectTrigger consistente em modais */
-  [data-radix-dialog-content] [data-radix-select-trigger],
-  [role="dialog"] [data-radix-select-trigger],
-  .DialogContent [data-radix-select-trigger] {
-    width: 100% !important;
-    background: rgba(15, 23, 42, 0.5) !important;
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
-    color: white !important;
-    padding: 8px 12px !important;
-    border-radius: 6px !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: space-between !important;
-  }
-
-  [data-radix-dialog-content] [data-radix-select-item]:hover,
-  [role="dialog"] [data-radix-select-item]:hover,
-  .DialogContent [data-radix-select-item]:hover {
-    background: rgba(108, 99, 255, 0.2) !important;
-  }
-
-  /* Forçar portal dos dropdowns para ficar dentro da modal */
-  [data-radix-dialog-content] [data-radix-popper-content-wrapper],
-  [role="dialog"] [data-radix-popper-content-wrapper],
-  .DialogContent [data-radix-popper-content-wrapper] {
-    z-index: 1050 !important;
-    position: absolute !important;
-  }
-
-  /* Garantir que select content não escape da modal e fique alinhado */
-  [data-radix-dialog-content] [data-radix-select-content],
-  [role="dialog"] [data-radix-select-content],
-  .DialogContent [data-radix-select-content] {
-    position: absolute !important;
-    top: calc(100% + 4px) !important;
-    left: 0 !important;
-    right: 0 !important;
-    transform: none !important;
-    width: 100% !important;
-    margin: 0 !important;
-  }
-
-  /* Forçar posicionamento correto do dropdown */
-  div[data-radix-portal] [data-radix-select-content] {
-    transform: none !important;
-    position: absolute !important;
-  }
-
-  /* Ajustar viewport do select */
-  [data-radix-dialog-content] [data-radix-select-content] [data-radix-select-viewport],
-  [role="dialog"] [data-radix-select-content] [data-radix-select-viewport],
-  .DialogContent [data-radix-select-content] [data-radix-select-viewport] {
-    width: 100% !important;
-  }
-
-  /* Forçar todos os portals do Radix Select para z-index menor que modal */
-  div[data-radix-portal] {
-    z-index: 1020 !important;
-  }
-
-  /* Quando dentro de uma modal, dropdowns devem ter z-index maior */
-  [data-radix-dialog-content]~div[data-radix-portal],
-  [role="dialog"]~div[data-radix-portal] {
-    z-index: 1050 !important;
-  }
-
-  /* Resetar posicionamento do portal e usar posição absoluta relativa ao trigger */
-  div[data-radix-portal] [data-radix-select-content] {
-    position: fixed !important;
-    transform: none !important;
-    margin: 0 !important;
-  }
-
-  /* Garantir que o select content se posicione corretamente */
-  [data-radix-select-content][data-state="open"] {
-    animation: none !important;
-    border: 3px solid purple;
-    transform: none !important;
-  }
-
-  /* Forçar posicionamento correto para todos os selects em modais */
-  body:has([data-radix-dialog-overlay]) [data-radix-select-content] {
-    min-width: var(--radix-popper-anchor-width) !important;
-    max-width: var(--radix-popper-anchor-width) !important;
-    width: var(--radix-popper-anchor-width) !important;
-  }
-
-  /* Garantir que select content dentro da modal seja visível e alinhado */
-  div[data-radix-portal] [data-radix-select-content] {
-    background: rgba(15, 23, 42, 0.95) !important;
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
-    backdrop-filter: blur(10px) !important;
-    max-height: 200px !important;
-    overflow-y: auto !important;
-  }
-
-  /* Resetar posicionamento dos dropdowns dentro de modais */
-  body:has([data-radix-dialog-overlay]) [data-radix-select-content]:not(.category-modal [data-radix-select-content]) {
-    position: absolute !important;
-    left: var(--radix-popper-anchor-left) !important;
-    top: calc(var(--radix-popper-anchor-top) + var(--radix-popper-anchor-height) + 4px) !important;
-    width: var(--radix-popper-anchor-width) !important;
-    transform: none !important;
-    z-index: 1060 !important;
-  }
-
-  /* Garantir que variáveis CSS do Radix funcionem */
-  [data-radix-select-content] {
-    --radix-popper-anchor-left: var(--radix-popper-anchor-left);
-    --radix-popper-anchor-top: var(--radix-popper-anchor-top);
-    --radix-popper-anchor-width: var(--radix-popper-anchor-width);
-    --radix-popper-anchor-height: var(--radix-popper-anchor-height);
-  }
-
-  /* Fallback caso as variáveis não existam */
-  body:has([data-radix-dialog-overlay]) [data-radix-select-content]:not([style*="--radix-popper-anchor"]) {
-    position: fixed !important;
-    top: auto !important;
-    left: auto !important;
-    bottom: auto !important;
-    right: auto !important;
-    transform: none !important;
-  }
-
-  /* CSS específico para dropdowns customizados na modal de categorias */
-  .category-modal .form-field-container {
-    position: relative;
-    isolation: isolate;
-  }
-
-  /* Garantir que dropdowns customizados tenham z-index máximo */
-  .category-modal .absolute.z-\\[9999\\] {
-    z-index: 99999 !important;
-    position: absolute !important;
-  }
-
-  /* Corrigir posicionamento específico para elementos select dentro de modais */
-  [data-radix-dialog-content] [data-radix-select-trigger]+[data-radix-popper-content-wrapper],
-  [role="dialog"] [data-radix-select-trigger]+[data-radix-popper-content-wrapper],
-  .DialogContent [data-radix-select-trigger]+[data-radix-popper-content-wrapper] {
-    position: absolute !important;
-    top: 100% !important;
-    left: 0 !important;
-    width: 100% !important;
-    z-index: 1050 !important;
-    transform: none !important;
-  }
-
-  /* Forçar container do select para posição relativa */
-  [data-radix-dialog-content] .space-y-4>div:has([data-radix-select-trigger]),
-  [role="dialog"] .space-y-4>div:has([data-radix-select-trigger]),
-  .DialogContent .space-y-4>div:has([data-radix-select-trigger]) {
-    position: relative !important;
-  }
-
-  /* Garantir que modals grandes sejam scrolláveis */
-  [data-radix-dialog-content] * {
-    word-wrap: break-word;
-    overflow-wrap: break-word;
-  }
-
-  /* Ajuste fino para diferentes tamanhos de tela */
-  @media (max-width: 640px) {
-    [data-radix-dialog-content] {
-      max-width: 98vw !important;
-      max-height: 98vh !important;
-    }
-  }
-
-  .dialog-content *:hover,
-  .alert-dialog-content *:hover,
-  .sheet-content *:hover {
-    transform: none !important;
-    transition: none !important;
-    animation: none !important;
-  }
-
+  /* Valores numéricos alinhados em coluna. */
   .font-numeric {
     font-family: var(--font-numeric);
     font-variant-numeric: tabular-nums;
-    font-feature-settings: "tnum" 1, "zero" 1;
-    letter-spacing: -0.01em;
+    font-feature-settings: "tnum" 1;
   }
 
-  /* Rótulos de coluna / eyebrow: caixa alta discreta, sem display futurista. */
+  /* Rótulo de seção / coluna: caixa alta discreta. */
   .font-label {
-    font-family: var(--font-space);
     font-weight: 600;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
   }
 
-  .menu-item-active {
-    position: relative;
+  /* Esconde a barra de rolagem mantendo o scroll. */
+  .hide-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
   }
 
-  .menu-item-active::before {
-    content: '';
-    position: absolute;
-    left: -15px;
-    top: calc(50% - 2.5px);
-    width: 5px;
-    height: 5px;
-    background-color: hsl(var(--secondary));
-    border-radius: 50%;
-    /* sem box-shadow */
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
   }
-}
 
-/* Regras CSS para desativar todas as animações e transições globalmente */
-
-/* Desativa hover, focus, active e outras pseudo-classes com efeitos - exceto modais */
-:hover:not([data-radix-dialog-content]):not(.dialog-content),
-:focus:not([data-radix-dialog-content]):not(.dialog-content),
-:active:not([data-radix-dialog-content]):not(.dialog-content),
-[data-state]:not([data-radix-dialog-content]):not(.dialog-content),
-[data-highlighted]:not([data-radix-dialog-content]):not(.dialog-content),
-[data-selected]:not([data-radix-dialog-content]):not(.dialog-content),
-[data-active]:not([data-radix-dialog-content]):not(.dialog-content),
-[data-checked]:not([data-radix-dialog-content]):not(.dialog-content),
-[data-open]:not([data-radix-dialog-content]):not(.dialog-content),
-[data-closed]:not([data-radix-dialog-content]):not(.dialog-content),
-[data-disabled]:not([data-radix-dialog-content]):not(.dialog-content),
-[data-expanded]:not([data-radix-dialog-content]):not(.dialog-content),
-[data-placeholder]:not([data-radix-dialog-content]):not(.dialog-content) {
-  transition: none !important;
-  animation: none !important;
-  box-shadow: none !important;
-}
-
-/* Desativa animações em framer-motion e outras bibliotecas - exceto modais */
-div[style*="transition:"]:not([data-radix-dialog-content]):not(.dialog-content),
-div[style*="animation:"]:not([data-radix-dialog-content]):not(.dialog-content),
-[style*="transition:"]:not([data-radix-dialog-content]):not(.dialog-content),
-[style*="animation:"]:not([data-radix-dialog-content]):not(.dialog-content) {
-  transition: none !important;
-  animation: none !important;
-}
-
-/* Classes responsivas para modais e componentes */
-.responsive-modal {
-  @apply w-full max-w-lg mx-auto p-4;
-  @apply sm:w-[90vw] sm:max-w-md;
-  @apply md:w-auto md:max-w-lg;
-  @apply lg:max-w-xl;
-  max-height: 90vh !important;
-  overflow-y: auto !important;
-  position: fixed !important;
-  top: 50% !important;
-  left: 50% !important;
-  transform: translate(-50%, -50%) !important;
-  z-index: 9999 !important;
-}
-
-.responsive-select {
-  @apply w-full;
-  position: relative !important;
-}
-
-.responsive-select-content {
-  @apply w-full min-w-[200px] max-w-none;
-  @apply sm:min-w-[250px];
-  @apply md:min-w-[300px];
-  position: absolute !important;
-  top: 100% !important;
-  left: 0 !important;
-  right: 0 !important;
-  z-index: 9999 !important;
-  max-height: 200px !important;
-  overflow-y: auto !important;
-  margin-top: 4px !important;
-}
-
-.responsive-popover {
-  @apply w-screen max-w-sm mx-4;
-  @apply sm:w-auto sm:max-w-md;
-  @apply md:max-w-lg;
-  position: fixed !important;
-  z-index: 9999 !important;
-}
-
-.responsive-combobox {
-  @apply w-full;
-  position: relative !important;
-}
-
-.responsive-combobox-content {
-  @apply w-full;
-  position: absolute !important;
-  top: 100% !important;
-  left: 0 !important;
-  right: 0 !important;
-  z-index: 9999 !important;
-  max-height: 300px !important;
-  overflow-y: auto !important;
-  margin-top: 4px !important;
-}
-
-/* Melhorias responsivas para mobile */
-@media (max-width: 640px) {
-  .responsive-modal {
-    width: 100vw !important;
-    height: 100vh !important;
-    max-width: 100vw !important;
-    max-height: 100vh !important;
-    border-radius: 0 !important;
-    padding: 1.5rem 1rem 2rem 1rem !important;
-    top: 0 !important;
-    left: 0 !important;
-    transform: none !important;
-    overflow-y: auto !important;
-    box-shadow: none !important;
-    margin: 0 !important;
-    display: flex !important;
-    flex-direction: column !important;
-    justify-content: flex-start !important;
+  /* Áreas seguras (notch / barra de gestos) — viewport-fit=cover. */
+  .pt-safe {
+    padding-top: env(safe-area-inset-top);
   }
-  .responsive-modal .DialogHeader,
-  .responsive-modal .dialog-header {
-    position: sticky;
-    top: 0;
-    background: inherit;
-    z-index: 2;
-    padding-bottom: 0.5rem;
+
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
   }
-  .responsive-modal button[data-radix-dialog-close] {
-    top: 1rem !important;
-    right: 1rem !important;
-    width: 44px !important;
-    height: 44px !important;
-    font-size: 2rem !important;
-    z-index: 3;
+
+  .pl-safe {
+    padding-left: env(safe-area-inset-left);
   }
-  .responsive-modal input,
-  .responsive-modal select,
-  .responsive-modal textarea {
-    min-height: 48px !important;
-    font-size: 1rem !important;
-    padding: 0.75rem 1rem !important;
-  }
-  .responsive-modal button {
-    min-height: 48px !important;
-    font-size: 1rem !important;
+
+  .pr-safe {
+    padding-right: env(safe-area-inset-right);
   }
 }
 
-/* Correções específicas para componentes Radix UI */
-[data-radix-portal] {
-  position: fixed !important;
-  top: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  bottom: 0 !important;
-  z-index: 9999 !important;
-  pointer-events: none !important;
-}
-
-[data-radix-portal]>* {
-  pointer-events: auto !important;
-}
-
-/* Previne deslocamentos nos triggers dos componentes */
-[data-radix-popover-trigger],
-[data-radix-dropdown-menu-trigger],
-[data-radix-select-trigger],
-[data-radix-combobox-trigger] {
-  position: relative !important;
-  transform: none !important;
-  transition: none !important;
-  animation: none !important;
-}
-
-
-
-/* Popover específico */
-[data-radix-popover-content] {
-  position: absolute !important;
-  z-index: 9999 !important;
-  transform-origin: var(--radix-popover-content-transform-origin) !important;
-}
-
-/* Date Picker específico */
-[data-radix-popover-content].calendar-popover {
-  position: fixed !important;
-  z-index: 9999 !important;
-  width: auto !important;
-  min-width: 300px !important;
-}
-
-/* Combobox específico */
-[data-cmdk-root] {
-  border: 2px solid purple;
-  position: relative !important;
-}
-
-[data-cmdk-list] {
-  position: absolute !important;
-  top: 100% !important;
-  left: 0 !important;
-  right: 0 !important;
-  z-index: 9999 !important;
-  max-height: 300px !important;
-  overflow-y: auto !important;
-  background: hsl(var(--popover)) !important;
-  border: 1px solid hsl(var(--border)) !important;
-  border-radius: 8px !important;
-  margin-top: 4px !important;
-}
-
-/* Switch e Radio específicos */
-[data-radix-switch-root],
-[data-radix-radiogroup-root],
-[data-radix-checkbox-root] {
-  position: relative !important;
-  transform: none !important;
-  transition: none !important;
-}
-
-/* Tooltip específico */
-[data-radix-tooltip-content] {
-  position: absolute !important;
-  z-index: 9999 !important;
-  max-width: 300px !important;
-}
-
-/* Dropdown Menu específico */
-[data-radix-dropdown-menu-content] {
-  position: absolute !important;
-  z-index: 9999 !important;
-  min-width: 200px !important;
-  max-height: 400px !important;
-  overflow-y: auto !important;
-}
-
-/* Correção específica para botões e containers que se deslocam */
-.fixed-container {
-  position: relative !important;
-  transform: none !important;
-  transition: none !important;
-  animation: none !important;
-  top: auto !important;
-  left: auto !important;
-  right: auto !important;
-  bottom: auto !important;
-  margin: 0 !important;
-}
-
-/* Exceção para dialogs - permitir que funcionem normalmente */
-[data-radix-dialog-overlay] {
-  position: fixed !important;
-  top: 0px !important;
-  left: 0px !important;
-  width: 100% !important;
-  height: 100% !important;
-  z-index: 50 !important;
-  display: flex !important;
-  background: #ffcc00;
-  align-items: center !important;
-  justify-content: center !important;
-  margin: 0 !important;
-  padding: 0 !important;
-}
-
-[data-radix-dialog-content] {
-  position: relative !important;
-  z-index: 51 !important;
-  max-width: 90vw !important;
-  max-height: 90vh !important;
-  overflow-y: auto !important;
-}
-
-/* Triggers de componentes não devem se deslocar, mas dialogs sim */
-[data-radix-popover-trigger]:not([data-radix-dialog-trigger]),
-[data-radix-dropdown-menu-trigger]:not([data-radix-dialog-trigger]),
-[data-radix-select-trigger]:not([data-radix-dialog-trigger]) {
-  position: relative !important;
-  transform: none !important;
-  transition: none !important;
-  animation: none !important;
-}
-
-/* Garante que elementos pai não sejam afetados */
-*:has([data-radix-popover-content]),
-*:has([data-radix-dropdown-menu-content]),
-*:has([data-radix-select-content]) {
-  position: relative !important;
-  transform: none !important;
-  transition: none !important;
-  animation: none !important;
-}
-
-/* Correção para evitar deslocamento do layout principal */
-body:has([data-state="open"]) {
-  overflow: visible !important;
-}
-
-main:has([data-state="open"]) {
-  position: relative !important;
-  transform: none !important;
-}
-
-/* Estilos personalizados para o calendário */
-.calendar-container .rbc-calendar {
-  background: transparent;
-  color: hsl(var(--foreground));
-  font-family: var(--font-sans);
-}
-
-.calendar-container .rbc-header {
-  background: rgba(255, 255, 255, 0.05);
-  border-bottom: 1px solid hsl(var(--border));
-  color: hsl(var(--foreground));
-  font-weight: 600;
-  padding: 12px 8px;
-}
-
-.calendar-container .rbc-month-view {
-  background: transparent;
-  border: 1px solid hsl(var(--border));
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.calendar-container .rbc-date-cell {
-  background: rgba(255, 255, 255, 0.02);
-  border-right: 1px solid hsl(var(--border));
-  color: hsl(var(--muted-foreground));
-  font-weight: 500;
-}
-
-.calendar-container .rbc-date-cell.rbc-off-range {
-  color: hsl(var(--muted-foreground)) !important;
-  opacity: 0.3;
-}
-
-.calendar-container .rbc-today {
-  background: rgba(255, 100, 179, 0.1) !important;
-  border: 1px solid hsl(var(--primary)) !important;
-}
-
-.calendar-container .rbc-day-bg {
-  background: rgba(255, 255, 255, 0.02);
-  border-right: 1px solid hsl(var(--border));
-  border-bottom: 1px solid hsl(var(--border));
-}
-
-.calendar-container .rbc-day-bg.rbc-off-range-bg {
-  background: rgba(255, 255, 255, 0.01);
-}
-
-.calendar-container .rbc-event {
-  background: hsl(var(--primary)) !important;
-  border: none !important;
-  border-radius: 6px !important;
-  font-size: 11px !important;
-  font-weight: 500 !important;
-  color: white !important;
-  padding: 2px 6px !important;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
-}
-
-.calendar-container .rbc-toolbar {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 8px;
-  padding: 16px;
-  margin-bottom: 16px;
-  border: 1px solid hsl(var(--border));
-}
-
-.calendar-container .rbc-toolbar button {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid hsl(var(--border));
-  color: hsl(var(--foreground));
-  border-radius: 6px;
-  padding: 8px 12px;
-  font-weight: 500;
-}
-
-.calendar-container .rbc-toolbar button:hover {
-  background: rgba(255, 100, 179, 0.2);
-  border-color: hsl(var(--primary));
-}
-
-.calendar-container .rbc-toolbar button.rbc-active {
-  background: hsl(var(--primary));
-  color: white;
-  border-color: hsl(var(--primary));
-}
-
-.calendar-container .rbc-toolbar-label {
-  color: hsl(var(--foreground));
-  font-weight: 700;
-  font-size: 18px;
-}
-
-/* ====================================== */
-/* CSS EXCLUSIVO PARA MODAL NOVO USUÁRIO */
-/* ====================================== */
-
-/* Overlay da modal */
-.admin-user-modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.85);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-  backdrop-filter: blur(4px);
-}
-
-/* Container principal da modal */
-.admin-user-modal-container {
-  background: rgba(17, 24, 39, 0.25);
-  border: 1px solid rgba(108, 99, 255, 0.2);
-  border-radius: 12px;
-  padding: 0;
-  max-width: 500px;
-  width: 90%;
-  max-height: 90vh;
-  overflow: hidden;
-  position: relative;
-  backdrop-filter: blur(13px);
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-}
-
-/* Cabeçalho da modal */
-.admin-user-modal-header {
-  background: transparent;
-  border-bottom: none;
-  padding: 24px 24px 0px 24px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-/* Título com ícone */
-.admin-user-modal-title {
-  font-size: 24px;
-  font-weight: 600;
-  margin-bottom: 8px;
-  color: #f1f5f9;
-}
-
-.admin-user-modal-icon {
-  width: 20px;
-  height: 20px;
-  color: #6366f1;
-  margin-right: 8px;
-}
-
-/* Botão de fechar */
-.admin-user-modal-close {
-  background: none;
-  border: none;
-  font-size: 24px;
-  cursor: pointer;
-  color: #94a3b8;
-  padding: 4px;
-  border-radius: 6px;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-}
-
-.admin-user-modal-close:hover {
-  color: #f1f5f9;
-  background: rgba(100, 116, 139, 0.2);
-}
-
-/* Conteúdo da modal */
-.admin-user-modal-content {
-  padding: 24px;
-  overflow-y: auto;
-  max-height: calc(90vh - 140px);
-}
-
-/* Grupos de formulário */
-.admin-user-form-group {
-  margin-bottom: 20px;
-}
-
-/* Labels */
-.admin-user-form-label {
-  display: block;
-  margin-bottom: 8px;
-  font-weight: 500;
-  color: #e2e8f0;
-  font-size: 14px;
-}
-
-/* Inputs de texto */
-.admin-user-form-input {
-  width: 100%;
-  padding: 8px 12px;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 8px;
-  font-size: 14px;
-  background: rgba(15, 23, 42, 0.5);
-  color: #e2e8f0;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.admin-user-form-input:focus {
-  outline: none;
-  border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
-}
-
-.admin-user-form-input::placeholder {
-  color: #94a3b8;
-}
-
-/* Select customizado */
-.admin-user-form-select {
-  width: 100%;
-  padding: 8px 12px;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 8px;
-  font-size: 14px;
-  background: rgba(15, 23, 42, 0.5);
-  color: #e2e8f0;
-  cursor: pointer;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.admin-user-form-select:focus {
-  outline: none;
-  border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
-}
-
-.admin-user-form-select option {
-  background: rgba(15, 23, 42, 0.95);
-  color: #f1f5f9;
-  padding: 8px;
-}
-
-/* Área de ações */
-.admin-user-modal-actions {
-  display: flex;
-  gap: 12px;
-  justify-content: flex-end;
-  margin-top: 32px;
-  padding-top: 20px;
-  border-top: 1px solid rgba(148, 163, 184, 0.1);
-}
-
-/* Botões */
-.admin-user-btn-primary {
-  padding: 8px 16px;
-  border-radius: 8px;
-  border: none;
-  cursor: pointer;
-  font-weight: 500;
-  font-size: 14px;
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-  color: white;
-  transition: background-color 0.2s ease;
-}
-
-.admin-user-btn-primary:hover {
-  background: linear-gradient(135deg, #5b21b6 0%, #7c3aed 100%);
-}
-
-.admin-user-btn-primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  background: rgba(100, 116, 139, 0.3);
-}
-
-.admin-user-btn-secondary {
-  padding: 8px 16px;
-  border-radius: 8px;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  cursor: pointer;
-  font-weight: 500;
-  font-size: 14px;
-  background: rgba(100, 116, 139, 0.2);
-  color: #e2e8f0;
-  transition: background-color 0.2s ease;
-}
-
-.admin-user-btn-secondary:hover {
-  background: rgba(100, 116, 139, 0.3);
-  color: #f1f5f9;
-}
-
-/* Responsividade */
-@media (max-width: 640px) {
-  .admin-user-modal-container {
-    max-width: 95%;
-    margin: 20px;
-  }
-  
-  .admin-user-modal-content {
-    padding: 20px;
-  }
-  
-  .admin-user-modal-actions {
-    flex-direction: column;
-  }
-  
-  .admin-user-btn-primary,
-  .admin-user-btn-secondary {
-    width: 100%;
-  }
-}
-
-/* ====================================== */
-/* CSS EXCLUSIVO PARA MODAL EDITAR USUÁRIO */
-/* ====================================== */
-
-/* Overlay da modal */
-.admin-edit-modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.85);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-  backdrop-filter: blur(4px);
-}
-
-/* Container principal da modal */
-.admin-edit-modal-container {
-  background: rgba(17, 24, 39, 0.25);
-  border: 1px solid rgba(108, 99, 255, 0.2);
-  border-radius: 12px;
-  padding: 0;
-  max-width: 500px;
-  width: 90%;
-  max-height: 90vh;
-  overflow: hidden;
-  position: relative;
-  backdrop-filter: blur(13px);
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-}
-
-/* Cabeçalho da modal */
-.admin-edit-modal-header {
-  background: transparent;
-  border-bottom: none;
-  padding: 24px 24px 0 24px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-/* Título com ícone */
-.admin-edit-modal-title {
-  font-size: 24px;
-  font-weight: 600;
-  margin-bottom: 8px;
-  color: #f1f5f9;
-}
-
-.admin-edit-modal-icon {
-  width: 20px;
-  height: 20px;
-  color: #6366f1;
-  margin-right: 8px;
-}
-
-/* Botão de fechar */
-.admin-edit-modal-close {
-  background: none;
-  border: none;
-  font-size: 24px;
-  cursor: pointer;
-  color: #94a3b8;
-  padding: 4px;
-  border-radius: 6px;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-}
-
-.admin-edit-modal-close:hover {
-  color: #f1f5f9;
-  background: rgba(100, 116, 139, 0.2);
-}
-
-/* Conteúdo da modal */
-.admin-edit-modal-content {
-  padding: 24px;
-  overflow-y: auto;
-  max-height: calc(90vh - 140px);
-}
-
-/* Grupos de formulário */
-.admin-edit-form-group {
-  margin-bottom: 20px;
-}
-
-/* Labels */
-.admin-edit-form-label {
-  display: block;
-  margin-bottom: 8px;
-  font-weight: 500;
-  color: #e2e8f0;
-  font-size: 14px;
-}
-
-/* Inputs de texto */
-.admin-edit-form-input {
-  width: 100%;
-  padding: 12px 16px;
-  border: 1px solid rgba(168, 85, 247, 0.3);
-  border-radius: 10px;
-  font-size: 14px;
-  background: rgba(15, 23, 42, 0.6);
-  color: #f1f5f9;
-  backdrop-filter: blur(10px);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.admin-edit-form-input:focus {
-  outline: none;
-  border-color: #8b5cf6;
-  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2);
-}
-
-.admin-edit-form-input::placeholder {
-  color: #94a3b8;
-}
-
-/* Select customizado */
-.admin-edit-form-select {
-  width: 100%;
-  padding: 12px 16px;
-  border: 1px solid rgba(168, 85, 247, 0.3);
-  border-radius: 10px;
-  font-size: 14px;
-  background: rgba(15, 23, 42, 0.6);
-  color: #f1f5f9;
-  backdrop-filter: blur(10px);
-  cursor: pointer;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.admin-edit-form-select:focus {
-  outline: none;
-  border-color: #8b5cf6;
-  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2);
-}
-
-.admin-edit-form-select option {
-  background: rgba(15, 23, 42, 0.95);
-  color: #f1f5f9;
-  padding: 8px;
-}
-
-/* Container do switch */
-.admin-edit-switch-container {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.admin-edit-switch {
-  background: rgba(168, 85, 247, 0.2);
-}
-
-/* Área de ações */
-.admin-edit-modal-actions {
-  display: flex;
-  gap: 12px;
-  justify-content: flex-end;
-  margin-top: 32px;
-  padding-top: 20px;
-  border-top: 1px solid rgba(148, 163, 184, 0.1);
-}
-
-/* Botões */
-.admin-edit-btn-primary {
-  padding: 12px 20px;
-  border-radius: 10px;
-  border: none;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 14px;
-  background: linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%);
-  color: white;
-  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
-  transition: background 0.2s ease, box-shadow 0.2s ease;
-}
-
-.admin-edit-btn-primary:hover {
-  background: linear-gradient(135deg, #7c3aed 0%, #9333ea 100%);
-  box-shadow: 0 6px 16px rgba(139, 92, 246, 0.4);
-}
-
-.admin-edit-btn-primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  background: rgba(100, 116, 139, 0.3);
-  box-shadow: none;
-}
-
-.admin-edit-btn-secondary {
-  padding: 12px 20px;
-  border-radius: 10px;
-  border: 1px solid rgba(168, 85, 247, 0.3);
-  cursor: pointer;
-  font-weight: 500;
-  font-size: 14px;
-  background: rgba(139, 92, 246, 0.2);
-  color: #e2e8f0;
-  transition: background 0.2s ease, border-color 0.2s ease;
-}
-
-.admin-edit-btn-secondary:hover {
-  background: rgba(139, 92, 246, 0.3);
-  border-color: rgba(168, 85, 247, 0.5);
-  color: #f1f5f9;
-}
-
-/* Responsividade */
-@media (max-width: 640px) {
-  .admin-edit-modal-container {
-    max-width: 95%;
-    margin: 20px;
-  }
-  
-  .admin-edit-modal-content {
-    padding: 20px;
-  }
-  
-  .admin-edit-modal-actions {
-    flex-direction: column;
-  }
-  
-  .admin-edit-btn-primary,
-  .admin-edit-btn-secondary {
-    width: 100%;
-  }
-}
-
-/* Keyframe animation for zoom-in bounce effect */
+/* Usada por modais de erro do admin (animação inline). */
 @keyframes zoomInBounce {
   0% {
     opacity: 0;
-    transform: scale(0.3);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.05);
-  }
-  70% {
-    transform: scale(0.95);
+    transform: scale(0.96);
   }
   100% {
     opacity: 1;
     transform: scale(1);
   }
-}
-
-/* Classe utilitária para esconder a barra de rolagem, mas permitir scroll */
-.hide-scrollbar {
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none;  /* IE 10+ */
-}
-.hide-scrollbar::-webkit-scrollbar {
-  display: none; /* Chrome, Safari, Opera */
-}
-
-.modal-header-sticky {
-  position: sticky;
-  top: -25px;
-  z-index: 2;
-  background-color: hsl(var(--background)) !important;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding:5px;
-  min-height: 56px;
-}
-
-.modal-close-btn {
-  position: absolute;
-  top: 1rem;
-  right: 1.5rem;
-  z-index: 3;
 }

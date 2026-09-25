@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useConfirm } from "@/components/shared/ConfirmDialog";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -86,6 +87,7 @@ export default function ContasBancarias({ empresaId }: { empresaId: number }) {
   });
   const [detalhe, setDetalhe] = useState<{ id: number; nome: string } | null>(null);
   const [lancando, setLancando] = useState(false);
+  const confirmar = useConfirm();
   const [lancForm, setLancForm] = useState({
     tipo: "Despesa",
     categoria_id: "",
@@ -222,10 +224,10 @@ export default function ContasBancarias({ empresaId }: { empresaId: number }) {
   const planoDoTipo = plano.filter((c) => c.tipo === lancForm.tipo);
 
   return (
-    <div className="space-y-4 p-4 md:p-6 max-w-6xl mx-auto">
+    <div className="space-y-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Contas bancárias</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Contas bancárias</h1>
           <p className="text-sm text-muted-foreground">
             Saldo e extrato de cada conta e da Caixinha
           </p>
@@ -323,7 +325,7 @@ export default function ContasBancarias({ empresaId }: { empresaId: number }) {
       {!periodoPronto || isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-40 w-full rounded-xl" />
+            <Skeleton key={i} className="h-40 w-full rounded-lg" />
           ))}
         </div>
       ) : contas.length === 0 ? (
@@ -354,7 +356,7 @@ export default function ContasBancarias({ empresaId }: { empresaId: number }) {
                     <p className="text-xs text-muted-foreground">Saldo do período</p>
                     <p
                       className={`text-xl font-bold ${
-                        saldoPeriodo < 0 ? "text-red-500" : "text-foreground"
+                        saldoPeriodo < 0 ? "text-expense" : "text-foreground"
                       }`}
                     >
                       {money(saldoPeriodo)}
@@ -385,8 +387,8 @@ export default function ContasBancarias({ empresaId }: { empresaId: number }) {
                     variant="outline"
                     size="sm"
                     className="text-destructive hover:bg-destructive/10"
-                    onClick={() => {
-                      if (confirm("Remover esta conta?")) deleteMutation.mutate(conta.id);
+                    onClick={async () => {
+                      if (await confirmar({ title: "Remover esta conta?", confirmText: "Remover", destructive: true })) deleteMutation.mutate(conta.id);
                     }}
                   >
                     <Trash2 className="h-4 w-4" />

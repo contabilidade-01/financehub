@@ -71,7 +71,7 @@ const calculateContrast = (color1: string, color2: string): number => {
 
 // Cores preset padrão
 const defaultPresets = [
-  '#FF64B3', // Primary atual (rosa)
+  '#216283', // Primary padrão (azul-petróleo)
   '#00D9A7', // Secondary atual (verde)
   '#6366F1', // Índigo
   '#8B5CF6', // Violeta
@@ -97,7 +97,7 @@ export function ColorPicker({
   const [inputValue, setInputValue] = useState(value);
 
   // Usar o valor diretamente se for HEX válido, senão usar o padrão
-  const hexValue = isValidHex(value) ? value : '#FF64B3';
+  const hexValue = isValidHex(value) ? value : '#216283';
 
   useEffect(() => {
     setInputValue(value);
@@ -188,7 +188,7 @@ export function ColorPicker({
                       handleColorChange(e.target.value);
                     }
                   }}
-                  placeholder="#FF64B3"
+                  placeholder="#216283"
                   className="text-xs"
                 />
               </div>
@@ -227,7 +227,7 @@ export function ColorPicker({
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onBlur={handleInputBlur}
-            placeholder="#FF64B3"
+            placeholder="#216283"
             disabled={disabled}
             className={cn(
               "font-mono text-sm",
@@ -236,7 +236,7 @@ export function ColorPicker({
           />
           {!isValidHex(inputValue) && inputValue !== value && (
             <p className="text-xs text-red-500 mt-1">
-              Formato HEX inválido. Use: "#FF64B3"
+              Formato HEX inválido. Use: "#216283"
             </p>
           )}
         </div>
@@ -244,7 +244,7 @@ export function ColorPicker({
 
       {/* Color Description */}
       <div className="text-xs text-muted-foreground">
-        Formato HEX: #RRGGBB (ex: #FF64B3)
+        Formato HEX: #RRGGBB (ex: #216283)
       </div>
     </div>
   );

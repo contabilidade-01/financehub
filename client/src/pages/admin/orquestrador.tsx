@@ -159,7 +159,7 @@ export default function OrquestradorPage() {
     <div className="space-y-6 p-4 md:p-6 max-w-4xl mx-auto">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold flex items-center gap-2">
+          <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
             <Bot className="h-6 w-6" /> Orquestrador (DeepSeek)
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
@@ -170,7 +170,7 @@ export default function OrquestradorPage() {
         </div>
         <div className="text-right text-sm space-y-1">
           {status?.configured ? (
-            <Badge className="bg-emerald-500/15 text-emerald-600">DeepSeek ok · {status.model}</Badge>
+            <Badge className="bg-emerald-500/15 text-income">DeepSeek ok · {status.model}</Badge>
           ) : (
             <Badge variant="destructive">DeepSeek não configurada</Badge>
           )}
@@ -304,7 +304,7 @@ export default function OrquestradorPage() {
           <CardTitle className="text-base flex items-center gap-2">
             <MessageSquare className="h-4 w-4" /> Conversa
             {conversaLiberada ? (
-              <Badge className="bg-emerald-500/15 text-emerald-600 font-normal">Liberada</Badge>
+              <Badge className="bg-emerald-500/15 text-income font-normal">Liberada</Badge>
             ) : (
               <Badge variant="secondary" className="font-normal">
                 Selecione o usuário alvo
@@ -328,13 +328,13 @@ export default function OrquestradorPage() {
                   m.role === "user" ? "bg-primary/15 ml-8" : "bg-background border mr-8"
                 }`}
               >
-                <p className="text-[10px] uppercase text-muted-foreground mb-1">
+                <p className="text-xs uppercase text-muted-foreground mb-1">
                   {m.role === "user" ? "Você" : "Orquestrador"}
                   {m.ms != null ? ` · ${m.ms} ms` : ""}
                 </p>
                 {m.content}
                 {m.tools && m.tools.length > 0 && (
-                  <p className="mt-2 text-[11px] text-muted-foreground">
+                  <p className="mt-2 text-xs text-muted-foreground">
                     Tools: {m.tools.map((t: any) => t.name).join(", ")}
                   </p>
                 )}

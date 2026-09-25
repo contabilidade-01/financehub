@@ -209,9 +209,9 @@ function ResetFormCard({ token, info }: { token: string; info: TokenInfo }) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-pattern">
+    <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <Card className="glass-card neon-border">
+        <Card className="border bg-card">
           <CardHeader>
             <CardTitle>
               {cadastroPendente
@@ -496,7 +496,7 @@ export default function ResetPassword() {
 
   if (checking) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-pattern">
+      <div className="min-h-screen flex items-center justify-center p-4">
         <p className="text-sm text-muted-foreground">
           {t("reset.checking", "Verificando link...")}
         </p>
@@ -506,9 +506,9 @@ export default function ResetPassword() {
 
   if (!info.valid) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-pattern">
+      <div className="min-h-screen flex items-center justify-center p-4">
         <div className="w-full max-w-md">
-          <Card className="glass-card neon-border">
+          <Card className="border bg-card">
             <CardHeader>
               <CardTitle>{t("reset.invalid_title", "Link inválido ou expirado")}</CardTitle>
               <CardDescription>

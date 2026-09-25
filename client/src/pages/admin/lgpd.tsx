@@ -44,7 +44,7 @@ export default function AdminLgpd() {
         </div>
 
         {isLoading && <div className="p-6 text-center text-muted-foreground">Carregando…</div>}
-        {error && <div className="p-6 text-center text-red-500">Erro ao carregar os consentimentos.</div>}
+        {error && <div className="p-6 text-center text-expense">Erro ao carregar os consentimentos.</div>}
 
         {!isLoading && !error && (
           <div className="overflow-x-auto">

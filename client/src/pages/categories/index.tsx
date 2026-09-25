@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { CategoryIcon } from "@/components/shared/CategoryIcon";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Category, InsertCategory, TransactionType } from "@shared/schema";
@@ -18,7 +19,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { ChevronDown, Check, X } from "lucide-react";
-import "./category-modal.css";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,10 +35,10 @@ import { useTranslation } from "@/contexts/LocalizationContext";
 import { translateCategoryType, translateCategoryName } from "@/utils/localization";
 
 const createCategorySchema = (t: (key: string, fallback: string) => string) => z.object({
-  nome: z.string().min(1, t('categories.form.name_required', 'Name is required')),
-  tipo: z.string().min(1, t('categories.form.type_required', 'Type is required')),
-  cor: z.string().min(1, t('categories.form.color_required', 'Color is required')),
-  icone: z.string().min(1, t('categories.form.icon_required', 'Icon is required')),
+  nome: z.string().min(1, t('categories.form.name_required', 'Informe o nome')),
+  tipo: z.string().min(1, t('categories.form.type_required', 'Selecione o tipo')),
+  cor: z.string().min(1, t('categories.form.color_required', 'Selecione a cor')),
+  icone: z.string().min(1, t('categories.form.icon_required', 'Selecione o ícone')),
 });
 
 type CategoryFormValues = z.infer<ReturnType<typeof createCategorySchema>>;
@@ -230,7 +230,7 @@ function CustomIconSelect({ label, value, onChange, icons }: CustomIconSelectPro
       >
         {selectedIcon ? (
           <div style={{ display: 'flex', alignItems: 'center' }}>
-            <i className={`ri-${selectedIcon.value}-line icon-display`}></i>
+            <CategoryIcon icon={selectedIcon.value} className="icon-display" />
             {selectedIcon.label}
           </div>
         ) : (
@@ -252,7 +252,7 @@ function CustomIconSelect({ label, value, onChange, icons }: CustomIconSelectPro
             >
               {value === icon.value && <Check size={16} className="mr-2" />}
               <div style={{ display: 'flex', alignItems: 'center', marginLeft: value === icon.value ? '0' : '24px' }}>
-                <i className={`ri-${icon.value}-line icon-display`}></i>
+                <CategoryIcon icon={icon.value} className="icon-display" />
                 {icon.label}
               </div>
             </div>
@@ -297,7 +297,7 @@ export default function Categories() {
     defaultValues: {
       nome: "",
       tipo: TransactionType.EXPENSE,
-      cor: "#6C63FF",
+      cor: "#216283",
       icone: "tag",
     },
   });
@@ -369,7 +369,7 @@ export default function Categories() {
     form.reset({
       nome: category.nome,
       tipo: category.tipo,
-      cor: category.cor || "#6C63FF",
+      cor: category.cor || "#64748B",
       icone: category.icone || "tag",
     });
     setIsDialogOpen(true);
@@ -380,7 +380,7 @@ export default function Categories() {
     form.reset({
       nome: "",
       tipo: TransactionType.EXPENSE,
-      cor: "#6C63FF",
+      cor: "#216283",
       icone: "tag",
     });
     setIsDialogOpen(true);
@@ -390,19 +390,19 @@ export default function Categories() {
   const icons = [
     { value: "home", label: t('categories.icons.home', 'Casa') },
     { value: "car", label: t('categories.icons.car', 'Carro') },
-    { value: "food", label: t('categories.icons.food', 'Food') },
-    { value: "health", label: t('categories.icons.health', 'Health') },
-    { value: "school", label: t('categories.icons.school', 'Education') },
-    { value: "entertainment", label: t('categories.icons.entertainment', 'Entertainment') },
+    { value: "food", label: t('categories.icons.food', 'Alimentação') },
+    { value: "health", label: t('categories.icons.health', 'Saúde') },
+    { value: "school", label: t('categories.icons.school', 'Educação') },
+    { value: "entertainment", label: t('categories.icons.entertainment', 'Lazer') },
     { value: "clothing", label: t('categories.icons.clothing', 'Roupas') },
     { value: "services", label: t('categories.icons.services', 'Serviços') },
-    { value: "salary", label: t('categories.icons.salary', 'Salary') },
+    { value: "salary", label: t('categories.icons.salary', 'Salário') },
     { value: "freelance", label: t('categories.icons.freelance', 'Freelance') },
-    { value: "investments", label: t('categories.icons.investments', 'Investments') },
+    { value: "investments", label: t('categories.icons.investments', 'Investimentos') },
     { value: "gift", label: t('categories.icons.gift', 'Presente') },
     { value: "refund", label: t('categories.icons.refund', 'Reembolso') },
-    { value: "misc-income", label: t('categories.icons.misc_income', 'Other Income') },
-    { value: "misc-expense", label: t('categories.icons.misc_expense', 'Other Expenses') },
+    { value: "misc-income", label: t('categories.icons.misc_income', 'Outras receitas') },
+    { value: "misc-expense", label: t('categories.icons.misc_expense', 'Outras despesas') },
     { value: "tag", label: t('categories.icons.tag', 'Tag') }
   ];
 
@@ -417,12 +417,14 @@ export default function Categories() {
     { value: "#1ABC9C", label: t('categories.colors.turquoise', 'Turquesa') },
     { value: "#34495E", label: t('categories.colors.dark_blue', 'Azul Escuro') },
     { value: "#95A5A6", label: t('categories.colors.gray', 'Cinza') },
-    { value: "#6C63FF", label: t('categories.colors.purple', 'Roxo') + " (Primário)" },
-    { value: "#00FF9D", label: t('categories.colors.green', 'Verde') + " Neon (Secundário)" }
+    { value: "#216283", label: t('categories.colors.dark_blue', 'Azul Escuro') + " (Primário)" },
+    // Cores usadas por categorias antigas — mantidas para a edição exibir o valor salvo.
+    { value: "#6C63FF", label: t('categories.colors.purple', 'Roxo') + " (antigo)" },
+    { value: "#00FF9D", label: t('categories.colors.green', 'Verde') + " (antigo)" },
   ];
 
   const getIconComponent = (iconName: string) => {
-    return <i className={`ri-${iconName}-line`}></i>;
+    return <CategoryIcon icon={iconName} />;
   };
 
   return (
@@ -435,15 +437,15 @@ export default function Categories() {
             transition={{ duration: 0.3 }}
             className="mb-4 md:mb-0"
           >
-            <h1 className="text-2xl md:text-3xl font-bold mb-1">{t('categories.title', 'Categorias')}</h1>
-            <p className="text-gray-400">{t('categories.subtitle', 'Organize suas receitas e despesas')}</p>
+            <h1 className="text-2xl font-semibold tracking-tight mb-1">{t('categories.title', 'Categorias')}</h1>
+            <p className="text-muted-foreground">{t('categories.subtitle', 'Organize suas receitas e despesas')}</p>
           </motion.div>
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: 0.1 }}
           >
-            <Button onClick={openNewCategoryDialog} className="neon-border">
+            <Button onClick={openNewCategoryDialog} className="">
               <PlusIcon className="mr-2 h-4 w-4" />
               {t('categories.new_category', 'Nova Categoria')}
             </Button>
@@ -455,27 +457,27 @@ export default function Categories() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3, delay: 0.2 }}
-        className={`glass-card neon-border rounded-2xl ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}
+        className={`border bg-card rounded-lg bg-card border border-border`}
       >
         <div className="p-5">
           <div className="flex flex-col md:flex-row gap-4 mb-6">
             <div className="flex-1">
               <Input
-                placeholder={t('placeholders.search_categories', 'Search categories...')}
+                placeholder={t('placeholders.search_categories', 'Buscar categorias...')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-dark-purple/10"
+
               />
             </div>
             <div>
               <select 
                 value={typeFilter} 
                 onChange={(e) => setTypeFilter(e.target.value)}
-                className="w-[140px] bg-dark-purple/10 h-10 rounded-md border border-input px-3 py-2 text-sm"
+                className="w-[140px] h-10 rounded-md border border-input px-3 py-2 text-sm"
               >
-                <option value="all">{t('common.all', 'All')}</option>
-                <option value={TransactionType.INCOME}>{t('common.income', 'Income')}</option>
-                <option value={TransactionType.EXPENSE}>{t('common.expenses', 'Expenses')}</option>
+                <option value="all">{t('common.all', 'Todas')}</option>
+                <option value={TransactionType.INCOME}>{t('common.income', 'Receita')}</option>
+                <option value={TransactionType.EXPENSE}>{t('common.expenses', 'Despesa')}</option>
               </select>
             </div>
           </div>
@@ -492,22 +494,22 @@ export default function Categories() {
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ duration: 0.3 }}
-                  className={`rounded-xl p-4 flex items-center justify-between category-card-container transition-colors duration-200 ${theme === 'light' ? 'bg-white border border-gray-200 hover:bg-primary/10' : 'glass-card'}`}
+                  className={`rounded-lg p-4 flex items-center justify-between category-card-container transition-colors duration-200 bg-card border border-border hover:bg-primary/10`}
                 >
                   <div className="flex items-center">
                     <div
-                      className="w-10 h-10 rounded-xl flex items-center justify-center mr-4"
-                      style={{ backgroundColor: category.cor || "#6C63FF" }}
+                      className="w-10 h-10 rounded-lg flex items-center justify-center mr-4"
+                      style={{ backgroundColor: category.cor || "#64748B" }}
                     >
                       {category.icone ? (
                         getIconComponent(category.icone)
                       ) : (
-                        <i className="ri-price-tag-3-line"></i>
+                        <CategoryIcon />
                       )}
                     </div>
                     <div>
-                      <h3 className={`font-medium ${theme === 'light' ? 'text-gray-900' : ''}`}>{translateCategoryName(category.nome, t)}</h3>
-                      <span className={`text-xs ${theme === 'light' ? (category.tipo === TransactionType.INCOME ? 'text-green-600' : 'text-red-600') : (category.tipo === TransactionType.INCOME ? 'text-green-400' : 'text-red-400')}`}>
+                      <h3 className={`font-medium text-foreground`}>{translateCategoryName(category.nome, t)}</h3>
+                      <span className={`text-xs ${category.tipo === TransactionType.INCOME ? 'text-income' : 'text-expense'}`}>
                         {translateCategoryType(category.tipo, t)}
                       </span>
                     </div>
@@ -518,7 +520,7 @@ export default function Categories() {
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          className={`h-8 w-8 ${theme === 'light' ? 'text-gray-500 hover:text-gray-900' : ''}`}
+                          className={`h-8 w-8 text-muted-foreground hover:text-foreground`}
                           onClick={(e) => {
                             e.stopPropagation();
                             setOpenMenuId(openMenuId === category.id ? null : category.id);
@@ -533,7 +535,7 @@ export default function Categories() {
                               onClick={() => setOpenMenuId(null)}
                             />
                             <div 
-                              className={`absolute right-0 top-full mt-1 w-40 rounded-md shadow-lg z-50 ${theme === 'light' ? 'bg-white border border-gray-200' : 'bg-slate-800 border border-slate-600'}`}
+                              className={`absolute right-0 top-full mt-1 w-40 rounded-md shadow-lg z-50 bg-card border border-border`}
                               onClick={(e) => e.stopPropagation()}
                             >
                               <button
@@ -541,7 +543,7 @@ export default function Categories() {
                                   openEditDialog(category);
                                   setOpenMenuId(null);
                                 }}
-                                className={`flex items-center w-full px-3 py-2 text-sm rounded-t-md ${theme === 'light' ? 'text-gray-700 hover:bg-gray-100' : 'text-white hover:bg-slate-700'}`}
+                                className={`flex items-center w-full px-3 py-2 text-sm rounded-t-md text-foreground hover:bg-muted`}
                               >
                                 <PencilIcon className="mr-2 h-4 w-4" />
                                 <span>{t('common.edit', 'Edit')}</span>
@@ -551,7 +553,7 @@ export default function Categories() {
                                   setDeletingCategory(category);
                                   setOpenMenuId(null);
                                 }}
-                                className={`flex items-center w-full px-3 py-2 text-sm rounded-b-md ${theme === 'light' ? 'text-red-600 hover:bg-gray-100' : 'text-red-400 hover:bg-slate-700'}`}
+                                className={`flex items-center w-full px-3 py-2 text-sm rounded-b-md text-expense hover:bg-muted`}
                               >
                                 <Trash2Icon className="mr-2 h-4 w-4" />
                                 <span>{t('common.delete', 'Delete')}</span>
@@ -562,7 +564,7 @@ export default function Categories() {
                       </div>
                     )}
                     {category.global && (
-                      <span className={`text-xs px-2 py-1 rounded-full ${theme === 'light' ? 'bg-gray-100 text-gray-700' : 'bg-primary/20'}`}>{t('categories.scope.global', 'Global')}</span>
+                      <span className={`text-xs px-2 py-1 rounded-full bg-muted text-foreground`}>{t('categories.scope.global', 'Global')}</span>
                     )}
                   </div>
                 </motion.div>
@@ -645,7 +647,7 @@ export default function Categories() {
       )}
 
       <AlertDialog open={!!deletingCategory} onOpenChange={(open) => !open && setDeletingCategory(null)}>
-        <AlertDialogContent className="glass-card">
+        <AlertDialogContent className="border bg-card">
           <AlertDialogHeader>
             <AlertDialogTitle>{t('categories.delete_category', 'Delete Category')}</AlertDialogTitle>
             <AlertDialogDescription>

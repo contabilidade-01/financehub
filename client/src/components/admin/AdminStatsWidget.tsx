@@ -34,7 +34,7 @@ export default function AdminStatsWidget() {
 
   if (isLoading) {
     return (
-      <Card className="glass-card neon-border">
+      <Card className="border bg-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Shield className="h-5 w-5" />
@@ -51,7 +51,7 @@ export default function AdminStatsWidget() {
   }
 
   return (
-    <Card className="glass-card neon-border">
+    <Card className="border bg-card">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Shield className="h-5 w-5" />
@@ -65,17 +65,17 @@ export default function AdminStatsWidget() {
               <Users className="h-8 w-8 text-primary" />
             </div>
             <div className="text-2xl font-bold">{stats?.totalUsers || 0}</div>
-            <div className="text-sm text-gray-400">
+            <div className="text-sm text-muted-foreground">
               {t('admin.dashboard.stats.total_users', 'Total de Usuários')}
             </div>
           </div>
           
           <div className="text-center">
             <div className="flex items-center justify-center mb-2">
-              <Activity className="h-8 w-8 text-green-500" />
+              <Activity className="h-8 w-8 text-income" />
             </div>
             <div className="text-2xl font-bold">{stats?.activeUsers || 0}</div>
-            <div className="text-sm text-gray-400">
+            <div className="text-sm text-muted-foreground">
               {t('admin.dashboard.stats.active_users', 'Usuários Ativos')}
             </div>
           </div>
@@ -85,7 +85,7 @@ export default function AdminStatsWidget() {
               <Database className="h-8 w-8 text-blue-500" />
             </div>
             <div className="text-2xl font-bold">{stats?.totalTransactions || 0}</div>
-            <div className="text-sm text-gray-400">
+            <div className="text-sm text-muted-foreground">
               {t('admin.dashboard.stats.total_transactions', 'Total de Transações')}
             </div>
           </div>
@@ -94,10 +94,10 @@ export default function AdminStatsWidget() {
             <div className="flex items-center justify-center mb-2">
               <Shield className="h-8 w-8 text-purple-500" />
             </div>
-            <div className="text-2xl font-bold text-green-500">
+            <div className="text-2xl font-bold text-income">
               {stats?.systemHealth || 'OK'}
             </div>
-            <div className="text-sm text-gray-400">
+            <div className="text-sm text-muted-foreground">
               {t('admin.dashboard.stats.system_status', 'Status do Sistema')}
             </div>
             <div className="text-xs text-muted-foreground mt-1">{getSystemHealthLabel()}</div>

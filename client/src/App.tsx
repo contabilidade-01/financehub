@@ -14,6 +14,7 @@ import { LocalizationProvider } from "@/contexts/LocalizationContext";
 import { SystemConfigProvider, useSystemConfig } from "@/contexts/SystemConfigContext";
 import { updateAllMetadata } from "@/utils/update-metadata";
 import { useEffect, lazy, Suspense } from "react";
+import { ConfirmProvider } from "@/components/shared/ConfirmDialog";
 
 interface SetupStatus {
   setupMode: boolean;
@@ -107,15 +108,6 @@ function Router() {
   });
 
   const isSetupMode = setupStatus?.setupMode === true;
-
-  // Debug logs
-  console.log('🔍 Setup Debug:', {
-    setupStatus,
-    setupError,
-    setupLoading,
-    isSetupMode,
-    location
-  });
 
   // Se houver erro na API, assumir que não está em modo setup
   if (setupError) {
@@ -400,9 +392,11 @@ function App() {
           <SystemConfigProvider>
             <NotificationsProvider>
               <AutoThemeProvider showLoadingIndicator={true}>
-                <ImpersonationBanner />
-                <Toaster />
-                <Router />
+                <ConfirmProvider>
+                  <ImpersonationBanner />
+                  <Toaster />
+                  <Router />
+                </ConfirmProvider>
               </AutoThemeProvider>
             </NotificationsProvider>
           </SystemConfigProvider>
