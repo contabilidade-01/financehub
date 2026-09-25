@@ -1134,8 +1134,8 @@ export default function Transactions() {
 
       <div className={`border bg-card rounded-lg bg-card`}>
         <div className="p-4 text-foreground md:p-5">
-          <div className="flex flex-col md:flex-row gap-4 mb-6 md:items-end">
-            <div className="flex-1">
+          <div className="mb-6 flex flex-col gap-4">
+            <div className="w-full md:max-w-md">
               <label className="text-sm font-medium text-muted-foreground block mb-1">
                 {t('transactions.filters.search_label', 'Busca')}
               </label>
