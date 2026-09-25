@@ -1,40 +1,29 @@
 import { Fragment, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Download, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { ESTRUTURA_DRE, type GrupoDre, type Indicadores, type SomasDre } from "@shared/indicadores-financeiros";
+import { useFiltrosUrl, periodoPreset, PRESETS_PERIODO } from "@/components/shared/FiltroBar";
 import { apiErp, brl, CabecalhoPagina, SomenteErp } from "./comum";
+import { PainelIndicadores, pctBr } from "./indicadores-ui";
 import type { CentroCusto } from "./centros-custo";
 
-type Totais = { receita: number; variavel: number; margem: number; fixa: number; outras: number; resultado: number; margem_pct: number | null; resultado_pct: number | null };
 interface Dre {
   periodo: { de: string; ate: string };
   regime: "caixa" | "competencia";
   meses: string[];
-  linhas: { conta_id: number; codigo: string; nome: string; grupo: "receita" | "variavel" | "fixa" | "outras"; valores: Record<string, number>; total: number }[];
-  totais: Totais;
-  por_mes: Record<string, Totais>;
+  linhas: { conta_id: number; codigo: string; nome: string; grupo: GrupoDre; valores: Record<string, number>; total: number }[];
+  somas: SomasDre;
+  totais: Indicadores;
+  por_mes: Record<string, { somas: SomasDre; indicadores: Indicadores }>;
 }
 
-const hojeLocal = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-};
-function preset(p: string): { de: string; ate: string } {
-  const h = hojeLocal();
-  const [a, m] = h.split("-").map(Number);
-  const ultimo = (ano: number, mes: number) => new Date(ano, mes, 0).getDate();
-  const iso = (ano: number, mes: number, dia: number) => `${ano}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
-  if (p === "mes") return { de: iso(a, m, 1), ate: iso(a, m, ultimo(a, m)) };
-  if (p === "mes_anterior") { const mm = m === 1 ? 12 : m - 1; const aa = m === 1 ? a - 1 : a; return { de: iso(aa, mm, 1), ate: iso(aa, mm, ultimo(aa, mm)) }; }
-  if (p === "12m") { const d = new Date(a, m - 12, 1); return { de: iso(d.getFullYear(), d.getMonth() + 1, 1), ate: iso(a, m, ultimo(a, m)) }; }
-  return { de: iso(a, 1, 1), ate: iso(a, 12, 31) };
-}
 const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 const nomeMes = (ym: string) => {
   const [a, m] = ym.split("-").map(Number);
@@ -49,37 +38,41 @@ export default function DreGerencialPage({ empresaId }: { empresaId: number }) {
   );
 }
 
+const ano = periodoPreset("ano");
+const PADRAO = { periodo: "ano", de: ano.de, ate: ano.ate, regime: "caixa", centro_custo_id: "" };
+
 function DreGerencial({ empresaId }: { empresaId: number }) {
-  const [periodoTipo, setPeriodoTipo] = useState("ano");
-  const [periodo, setPeriodo] = useState(preset("ano"));
-  const [regime, setRegime] = useState<"caixa" | "competencia">("caixa");
-  const [centro, setCentro] = useState("");
-  const qs = `de=${periodo.de}&ate=${periodo.ate}&regime=${regime}${centro ? `&centro_custo_id=${centro}` : ""}`;
+  const { valores: f, definir } = useFiltrosUrl(PADRAO);
+  const qs = new URLSearchParams(Object.entries({ de: f.de, ate: f.ate, regime: f.regime, centro_custo_id: f.centro_custo_id }).filter(([, v]) => v)).toString();
   const url = `/api/empresas/${empresaId}/erp/dre?${qs}`;
   const { data, isLoading, error } = useQuery<Dre>({ queryKey: [url], queryFn: () => apiErp(url) });
   const { data: centros = [] } = useQuery<CentroCusto[]>({
     queryKey: [`/api/empresas/${empresaId}/erp/centros-custo`],
     queryFn: () => apiErp(`/api/empresas/${empresaId}/erp/centros-custo`),
   });
+  const [abertos, setAbertos] = useState<Set<string>>(new Set());
+  const alternar = (t: string) => setAbertos((s) => { const n = new Set(s); n.has(t) ? n.delete(t) : n.add(t); return n; });
 
-  const blocos = useMemo(() => {
+  // Só mostra grupos com movimento (e sempre a receita e os totais).
+  const estrutura = useMemo(() => {
     if (!data) return [];
-    const por = (g: string) => data.linhas.filter((l) => l.grupo === g);
-    return [
-      { titulo: "(+) Receitas", chave: "receita" as const, linhas: por("receita") },
-      { titulo: "(−) Custos e despesas variáveis", chave: "variavel" as const, linhas: por("variavel") },
-      { titulo: "(=) Margem de contribuição", chave: "margem" as const, linhas: [], total: true },
-      { titulo: "(−) Despesas fixas", chave: "fixa" as const, linhas: por("fixa") },
-      { titulo: "(−) Outras despesas", chave: "outras" as const, linhas: por("outras") },
-      { titulo: "(=) Resultado", chave: "resultado" as const, linhas: [], total: true },
-    ];
+    return ESTRUTURA_DRE.filter((e) =>
+      e.tipo === "total"
+        ? e.chave !== "lucro_bruto" || data.somas.cmv > 0 // sem CMV/CSP, lucro bruto = receita líquida
+        : e.grupos[0] === "receita" || e.grupos.some((g) => data.somas[g]));
   }, [data]);
+
+  const trocarPeriodo = (p: string) => {
+    if (p === "personalizado") return definir({ periodo: p });
+    const r = periodoPreset(p);
+    definir({ periodo: p, de: r.de, ate: r.ate });
+  };
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6">
       <CabecalhoPagina
         titulo="DRE gerencial"
-        descricao="Resultado por conta do plano, mês a mês. Caixa: o que entrou e saiu. Competência: o que foi vendido e contratado no período, pago ou não."
+        descricao="Resultado por margem de contribuição, mês a mês. Caixa: o que entrou e saiu. Competência: o que foi vendido e contratado no período, pago ou não."
         acoes={
           <Button variant="outline" asChild>
             <a href={`${url}&formato=csv`}><Download className="mr-2 h-4 w-4" />Exportar CSV</a>
@@ -91,26 +84,24 @@ function DreGerencial({ empresaId }: { empresaId: number }) {
         <CardContent className="flex flex-col gap-3 p-4 lg:flex-row lg:items-end">
           <div className="space-y-1">
             <Label className="text-xs">Período</Label>
-            <Select value={periodoTipo} onValueChange={(v) => { setPeriodoTipo(v); if (v !== "personalizado") setPeriodo(preset(v)); }}>
-              <SelectTrigger className="lg:w-44"><SelectValue /></SelectTrigger>
+            <Select value={f.periodo || "ano"} onValueChange={trocarPeriodo}>
+              <SelectTrigger className="lg:w-48"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="mes">Este mês</SelectItem>
-                <SelectItem value="mes_anterior">Mês anterior</SelectItem>
-                <SelectItem value="ano">Este ano</SelectItem>
-                <SelectItem value="12m">Últimos 12 meses</SelectItem>
-                <SelectItem value="personalizado">Personalizado</SelectItem>
+                {PRESETS_PERIODO.filter((p) => p.valor && !["proximos_30", "proximo_mes"].includes(p.valor)).map((p) => (
+                  <SelectItem key={p.valor} value={p.valor}>{p.rotulo}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
-          {periodoTipo === "personalizado" && (
+          {f.periodo === "personalizado" && (
             <div className="flex gap-2">
-              <div className="space-y-1"><Label className="text-xs">De</Label><Input type="date" value={periodo.de} onChange={(e) => setPeriodo({ ...periodo, de: e.target.value })} /></div>
-              <div className="space-y-1"><Label className="text-xs">Até</Label><Input type="date" value={periodo.ate} onChange={(e) => setPeriodo({ ...periodo, ate: e.target.value })} /></div>
+              <div className="space-y-1"><Label className="text-xs">De</Label><Input type="date" value={f.de} onChange={(e) => definir({ de: e.target.value })} /></div>
+              <div className="space-y-1"><Label className="text-xs">Até</Label><Input type="date" value={f.ate} onChange={(e) => definir({ ate: e.target.value })} /></div>
             </div>
           )}
           <div className="space-y-1">
             <Label className="text-xs">Regime</Label>
-            <Tabs value={regime} onValueChange={(v) => setRegime(v as any)}>
+            <Tabs value={f.regime} onValueChange={(v) => definir({ regime: v })}>
               <TabsList>
                 <TabsTrigger value="caixa">Caixa</TabsTrigger>
                 <TabsTrigger value="competencia">Competência</TabsTrigger>
@@ -120,7 +111,7 @@ function DreGerencial({ empresaId }: { empresaId: number }) {
           {centros.length > 0 && (
             <div className="space-y-1">
               <Label className="text-xs">Centro de custo</Label>
-              <Select value={centro || "todos"} onValueChange={(v) => setCentro(v === "todos" ? "" : v)}>
+              <Select value={f.centro_custo_id || "todos"} onValueChange={(v) => definir({ centro_custo_id: v === "todos" ? "" : v })}>
                 <SelectTrigger className="lg:w-52"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="todos">Todos</SelectItem>
@@ -132,24 +123,7 @@ function DreGerencial({ empresaId }: { empresaId: number }) {
         </CardContent>
       </Card>
 
-      {data && (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {[
-            { r: "Receitas", v: data.totais.receita },
-            { r: "Margem de contribuição", v: data.totais.margem, p: data.totais.margem_pct },
-            { r: "Despesas fixas", v: data.totais.fixa },
-            { r: "Resultado", v: data.totais.resultado, p: data.totais.resultado_pct, sinal: true },
-          ].map((k) => (
-            <Card key={k.r}>
-              <CardHeader className="pb-1"><CardTitle className="text-xs font-medium text-muted-foreground">{k.r}</CardTitle></CardHeader>
-              <CardContent>
-                <div className={cn("text-xl font-semibold tabular-nums", k.sinal && (k.v >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-400"))}>{brl(k.v)}</div>
-                {k.p != null && <div className="text-xs text-muted-foreground tabular-nums">{k.p.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}% da receita</div>}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+      {data && <PainelIndicadores ind={data.totais} />}
 
       <Card>
         <CardContent className="p-0">
@@ -162,32 +136,55 @@ function DreGerencial({ empresaId }: { empresaId: number }) {
               <table className="w-full min-w-[640px] text-sm">
                 <thead className="border-b bg-muted/40 text-xs text-muted-foreground">
                   <tr>
-                    <th className="sticky left-0 z-10 min-w-[240px] bg-muted px-4 py-2 text-left font-medium">Conta</th>
+                    <th className="sticky left-0 z-10 min-w-[260px] bg-muted px-4 py-2 text-left font-medium">Conta</th>
                     {data.meses.map((m) => <th key={m} className="whitespace-nowrap px-3 py-2 text-right font-medium">{nomeMes(m)}</th>)}
                     <th className="px-4 py-2 text-right font-medium">Total</th>
+                    <th className="px-4 py-2 text-right font-medium">% receita</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {blocos.map((b) => (
-                    <Fragment key={b.chave}>
-                      <tr className={cn("border-b", b.total ? "bg-muted/30 font-semibold" : "font-medium")}>
-                        <td className="sticky left-0 z-10 bg-background px-4 py-2">{b.titulo}</td>
-                        {data.meses.map((m) => (
-                          <td key={m} className={cn("px-3 py-2 text-right tabular-nums", b.chave === "resultado" && (data.por_mes[m].resultado < 0 ? "text-red-700 dark:text-red-400" : ""))}>
-                            {brl(data.por_mes[m][b.chave])}
-                          </td>
-                        ))}
-                        <td className="px-4 py-2 text-right tabular-nums">{brl(data.totais[b.chave])}</td>
-                      </tr>
-                      {b.linhas.map((l) => (
-                        <tr key={l.conta_id} className="border-b text-muted-foreground">
-                          <td className="sticky left-0 z-10 bg-background px-4 py-1.5 pl-8"><span className="mr-2 tabular-nums">{l.codigo}</span>{l.nome}</td>
-                          {data.meses.map((m) => <td key={m} className="px-3 py-1.5 text-right tabular-nums">{l.valores[m] ? brl(l.valores[m]) : "—"}</td>)}
-                          <td className="px-4 py-1.5 text-right tabular-nums">{brl(l.total)}</td>
+                  {estrutura.map((e) => {
+                    if (e.tipo === "total") {
+                      const tot = Number(data.totais[e.chave] ?? 0);
+                      return (
+                        <tr key={e.titulo} className={cn("border-b font-semibold", e.destaque ? "bg-primary/5" : "bg-muted/30")}>
+                          <td className={cn("sticky left-0 z-10 px-4 py-2", e.destaque ? "bg-[hsl(var(--background))]" : "bg-muted/60")}>{e.titulo}</td>
+                          {data.meses.map((m) => {
+                            const v = Number(data.por_mes[m].indicadores[e.chave] ?? 0);
+                            return <td key={m} className={cn("px-3 py-2 text-right tabular-nums", v < 0 && "text-red-700 dark:text-red-400")}>{brl(v)}</td>;
+                          })}
+                          <td className={cn("px-4 py-2 text-right tabular-nums", tot < 0 && "text-red-700 dark:text-red-400")}>{brl(tot)}</td>
+                          <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">{data.totais.receita_bruta ? pctBr((tot / data.totais.receita_bruta) * 100) : "—"}</td>
                         </tr>
-                      ))}
-                    </Fragment>
-                  ))}
+                      );
+                    }
+                    const contas = data.linhas.filter((l) => e.grupos.includes(l.grupo));
+                    const soma = (m?: string) => e.grupos.reduce((s, g) => s + (m ? data.por_mes[m].somas[g] : data.somas[g]), 0);
+                    const aberto = abertos.has(e.titulo);
+                    return (
+                      <Fragment key={e.titulo}>
+                        <tr className="border-b font-medium">
+                          <td className="sticky left-0 z-10 bg-background px-2 py-2">
+                            <button type="button" className="flex w-full items-center gap-1 text-left disabled:cursor-default" onClick={() => alternar(e.titulo)} disabled={!contas.length} aria-expanded={aberto}>
+                              {contas.length ? (aberto ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />) : <span className="w-4" />}
+                              {e.titulo}
+                            </button>
+                          </td>
+                          {data.meses.map((m) => <td key={m} className="px-3 py-2 text-right tabular-nums">{brl(soma(m))}</td>)}
+                          <td className="px-4 py-2 text-right tabular-nums">{brl(soma())}</td>
+                          <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">{data.totais.receita_bruta ? pctBr((soma() / data.totais.receita_bruta) * 100) : "—"}</td>
+                        </tr>
+                        {aberto && contas.map((l) => (
+                          <tr key={l.conta_id} className="border-b text-muted-foreground">
+                            <td className="sticky left-0 z-10 bg-background px-4 py-1.5 pl-9"><span className="mr-2 tabular-nums">{l.codigo}</span>{l.nome}</td>
+                            {data.meses.map((m) => <td key={m} className="px-3 py-1.5 text-right tabular-nums">{l.valores[m] ? brl(l.valores[m]) : "—"}</td>)}
+                            <td className="px-4 py-1.5 text-right tabular-nums">{brl(l.total)}</td>
+                            <td className="px-4 py-1.5 text-right tabular-nums">{data.totais.receita_bruta ? pctBr((l.total / data.totais.receita_bruta) * 100) : "—"}</td>
+                          </tr>
+                        ))}
+                      </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

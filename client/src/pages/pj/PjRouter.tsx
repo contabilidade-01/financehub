@@ -18,6 +18,7 @@ import ContatosPage from "@/pages/pj/erp/contatos";
 import CentrosCustoPage from "@/pages/pj/erp/centros-custo";
 import ContasReceberPage from "@/pages/pj/erp/contas-receber";
 import ContasPagarPage from "@/pages/pj/erp/contas-pagar";
+import RazaoPage from "@/pages/pj/erp/razao";
 import DreGerencialPage from "@/pages/pj/erp/dre";
 import TransferenciasPage from "@/pages/pj/erp/transferencias";
 import PjReembolsos from "@/pages/pj/reembolsos";
@@ -112,6 +113,8 @@ export default function PjRouter() {
         return <ContasReceberPage empresaId={empresaAtiva} />;
       case "contas-pagar":
         return <ContasPagarPage empresaId={empresaAtiva} />;
+      case "razao":
+        return <RazaoPage empresaId={empresaAtiva} />;
       case "dre-gerencial":
         return <DreGerencialPage empresaId={empresaAtiva} />;
       case "transferencias":

@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import * as erp from "../services/erp/erp.service";
 import * as titulos from "../services/erp/titulos.service";
+import * as analise from "../services/erp/analise.service";
 
 /** Rotas do ERP (PJ ME). requireErpPj já garantiu a modalidade; aqui, a empresa do usuário. */
 function falha(res: Response, err: any) {
@@ -102,21 +103,44 @@ export async function estornar(req: Request, res: Response) {
   try { const e = await empresa(req); res.json(await titulos.estornarTitulos(e.id, (req.body || {}).ids)); } catch (err) { falha(res, err); }
 }
 
+function filtrosAnalise(q: Request["query"]): analise.FiltrosAnalise {
+  return {
+    de: q.de as string | undefined,
+    ate: q.ate as string | undefined,
+    regime: String(q.regime || "caixa"),
+    centro_custo_id: num(q.centro_custo_id),
+    contato_id: num(q.contato_id),
+    conta_bancaria_id: num(q.conta_bancaria_id),
+  };
+}
+
 export async function dre(req: Request, res: Response) {
   try {
     const e = await empresa(req);
-    const d = await erp.dreGerencial(e.id, {
-      de: req.query.de as string | undefined,
-      ate: req.query.ate as string | undefined,
-      regime: String(req.query.regime || "caixa"),
-      centro_custo_id: num(req.query.centro_custo_id),
-    });
+    const d = await analise.dreGerencial(e.id, filtrosAnalise(req.query));
     if (req.query.formato === "csv") {
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
       res.setHeader("Content-Disposition", `attachment; filename="dre-${d.periodo.de}-a-${d.periodo.ate}-${d.regime}.csv"`);
-      return res.send(erp.dreParaCsv(d));
+      return res.send(analise.dreParaCsv(d));
     }
     res.json(d);
+  } catch (err) { falha(res, err); }
+}
+
+export async function razao(req: Request, res: Response) {
+  try { const e = await empresa(req); res.json(await analise.razao(e.id, filtrosAnalise(req.query))); } catch (err) { falha(res, err); }
+}
+
+export async function razaoConta(req: Request, res: Response) {
+  try {
+    const e = await empresa(req);
+    const r = await analise.lancamentosDaConta(e.id, Number(req.params.cid), filtrosAnalise(req.query));
+    if (req.query.formato === "csv") {
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="razao-${r.conta.codigo}-${r.periodo.de}-a-${r.periodo.ate}.csv"`);
+      return res.send(analise.razaoParaCsv(r));
+    }
+    res.json(r);
   } catch (err) { falha(res, err); }
 }
 
