@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { CategoryIcon } from "@/components/shared/CategoryIcon";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -23,7 +24,7 @@ export default function CategorySummary({ isLoading, categories }: CategorySumma
   const { t } = useTranslation();
   
   const getIconComponent = (iconName: string) => {
-    return <i className={`ri-${iconName}-line text-white`}></i>;
+    return <CategoryIcon icon={iconName} className="text-white" />;
   };
   
   return (
@@ -36,7 +37,7 @@ export default function CategorySummary({ isLoading, categories }: CategorySumma
       <Card className="glass-card neon-border rounded-2xl h-full">
         <CardContent className="p-5">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="font-space text-xl">{t('dashboard.categories.title', 'Categorias')}</h2>
+            <h2 className="text-xl">{t('dashboard.categories.title', 'Categorias')}</h2>
             <div>
               <Button 
                 variant="link" 
@@ -75,7 +76,7 @@ export default function CategorySummary({ isLoading, categories }: CategorySumma
                     className="w-10 h-10 rounded-xl flex items-center justify-center mr-4"
                     style={{ backgroundColor: category.color || "#6C63FF" }}
                   >
-                    {category.icon ? getIconComponent(category.icon) : <i className="ri-price-tag-3-line text-white"></i>}
+                    {category.icon ? getIconComponent(category.icon) : <CategoryIcon className="text-white" />}
                   </div>
                   <div className="flex-1">
                     <div className="flex justify-between items-center mb-1">

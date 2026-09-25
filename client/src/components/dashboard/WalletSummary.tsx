@@ -93,7 +93,7 @@ export default function WalletSummary({ isWalletLoading, isSummaryLoading, walle
           <div className="relative z-10">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4">
               <div>
-                <h2 className={`font-space text-xl ${theme === 'light' ? 'text-gray-900' : ''}`}>{t('wallet.title', 'Sua Carteira')}</h2>
+                <h2 className={`text-xl ${theme === 'light' ? 'text-gray-900' : ''}`}>{t('wallet.title', 'Sua Carteira')}</h2>
                 <p className={`${theme === 'light' ? 'text-gray-500' : 'text-gray-400'} text-sm`}>
                   {t('wallet.updated_on', 'Atualizado em')} {new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })}
                 </p>

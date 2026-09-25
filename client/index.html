@@ -1,20 +1,36 @@
 <!DOCTYPE html>
-<html lang="pt-BR" class="dark">
+<html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
-    <title>Khesef - Dashboard Financeiro</title>
-    <meta name="description" content="Khesef - Gerencie suas finanças pessoais com uma interface moderna e futurista. Acompanhe receitas, despesas e tenha controle total do seu dinheiro." />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Khesef - Gestão Financeira</title>
+    <meta name="description" content="Khesef - Gestão financeira pessoal e empresarial. Acompanhe receitas, despesas, contas e relatórios em um só lugar." />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0b1220" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Khesef" />
     <!-- Open Graph Tags -->
-    <meta property="og:title" content="Khesef - Dashboard Financeiro" />
-    <meta property="og:description" content="Gerencie suas finanças pessoais com uma interface moderna e futurista." />
+    <meta property="og:title" content="Khesef - Gestão Financeira" />
+    <meta property="og:description" content="Gestão financeira pessoal e empresarial: receitas, despesas, contas e relatórios." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://app.controledinheiro.com.br" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-    <!-- Preload fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <script>
+      // Aplica o tema salvo antes do primeiro paint (evita flash). Padrão: claro.
+      (function () {
+        try {
+          var t = localStorage.getItem('theme');
+          if (t === 'dark') document.documentElement.classList.add('dark');
+          else document.documentElement.classList.add('light');
+        } catch (e) {
+          document.documentElement.classList.add('light');
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

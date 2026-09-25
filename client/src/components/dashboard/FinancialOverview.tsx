@@ -182,7 +182,7 @@ export default function FinancialOverview({ isLoading, chartData, from, to }: Fi
         <div className={`${theme === 'light' ? 'bg-white shadow-md' : 'glass-card neon-border'} rounded-2xl h-full relative z-10`}>
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="font-space text-xl" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{t('dashboard.overview.title', 'Visão Geral')}</h2>
+              <h2 className="text-xl">{t('dashboard.overview.title', 'Visão Geral')}</h2>
               <div className="flex space-x-2">
                 <Button
                   size="sm"
@@ -225,11 +225,11 @@ export default function FinancialOverview({ isLoading, chartData, from, to }: Fi
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke={theme === 'light' ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.1)'} vertical={false} />
-                    <XAxis dataKey="month" stroke={theme === 'light' ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)'} tick={{ fill: theme === 'light' ? '#222' : '#ccc', fontFamily: 'Space Grotesk, sans-serif', fontSize: 14 }} />
+                    <XAxis dataKey="month" stroke={theme === 'light' ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)'} tick={{ fill: theme === 'light' ? '#222' : '#ccc', fontSize: 14 }} />
                     <YAxis 
                       stroke={theme === 'light' ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)'}
                       tickFormatter={(value) => `R$${value}`}
-                      tick={{ fill: theme === 'light' ? '#222' : '#ccc', fontFamily: 'Space Grotesk, sans-serif', fontSize: 14 }}
+                      tick={{ fill: theme === 'light' ? '#222' : '#ccc', fontSize: 14 }}
                     />
                     <Tooltip content={<CustomTooltip />} />
                     <Area 

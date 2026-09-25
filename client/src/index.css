@@ -1,165 +1,129 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
-@import url('https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css');
+/*
+ * Khesef — tokens de design.
+ * Tema claro é o padrão; o escuro é opcional (classe .dark no <html>).
+ * Uma cor de marca (azul-petróleo), neutros slate e cores semânticas.
+ * A tela de personalização do admin (admin/customize) sobrescreve estas
+ * variáveis em runtime via utils/theme-manager — os nomes não mudam.
+ */
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: 0 0% 98%;
-  --foreground: 240 10% 3.9%;
-  --muted: 240 4.8% 95.9%;
-  --muted-foreground: 240 3.8% 46.1%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 240 10% 3.9%;
-  --card: 0 0% 100%;
-  --card-foreground: 240 10% 3.9%;
-  --border: 240 5.9% 90%;
-  --input: 240 5.9% 90%;
-  --primary: 255 100% 70%;
-  --primary-foreground: 0 0% 98%;
-  --secondary: 157 100% 50%;
-  --secondary-foreground: 0 0% 9%;
-  --accent: 240 4.8% 95.9%;
-  --accent-foreground: 240 5.9% 10%;
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 0 0% 98%;
-  --ring: 255 100% 70%;
-  --radius: 0.5rem;
-
-  --font-sans: 'Inter', sans-serif;
-  --font-space: 'Space Grotesk', sans-serif;
-  /* Números financeiros: mono com dígitos de largura fixa (colunas alinhadas). */
-  --font-numeric: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
-  --font-orbitron: var(--font-numeric);
-
-  --chart-1: 157 100% 50%;
-  --chart-2: 255 100% 70%;
-  --chart-3: 357 100% 60%;
-  --chart-4: 43 100% 50%;
-  --chart-5: 275 100% 60%;
-
-  --sidebar-background: 230 50% 15%;
-  --sidebar-foreground: 0 0% 98%;
-  --sidebar-primary: 255 100% 70%;
-  --sidebar-primary-foreground: 0 0% 98%;
-  --sidebar-accent: 157 100% 50%;
-  --sidebar-accent-foreground: 0 0% 9%;
-  --sidebar-border: 240 3.7% 15.9%;
-  --sidebar-ring: 255 100% 70%;
-}
-
-/* Animação para modal de erro */
-@keyframes zoomInBounce {
-  0% {
-    opacity: 0;
-    transform: scale(0.3);
-  }
-  50% {
-    transform: scale(1.05);
-  }
-  70% {
-    transform: scale(0.95);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-/* Correções específicas para contraste no tema light */
-
-/* Espaçamento adicional para header do Sidebar quando admin está ativo */
-@media (max-width: 1023px) {
-  .sidebar-admin-offset {
-    margin-top: 78px !important;
-  }
-}
-
-@media (min-width: 1024px) {
-  .sidebar-admin-offset {
-    margin-top: 75px !important;
-  }
-}
-
-/* Correções específicas para contraste no tema light */
-.light .text-gray-500,
-.light .text-muted-foreground {
-  color: hsl(0 0% 25.1%) !important;
-}
-
-.light .text-gray-600 {
-  color: hsl(0 0% 20%) !important;
-}
-
-.light .text-gray-700 {
-  color: hsl(0 0% 15%) !important;
-}
-
-.light .text-gray-400 {
-  color: hsl(0 0% 30%) !important;
-}
-
-.light .text-slate-500 {
-  color: hsl(0 0% 25%) !important;
-}
-
-.light .text-slate-600 {
-  color: hsl(0 0% 20%) !important;
-}
-
-.dark {
-  --background: 240 10% 3.9%;
-  --foreground: 0 0% 98%;
-  --muted: 240 3.7% 15.9%;
-  --muted-foreground: 240 5% 64.9%;
-  --popover: 240 10% 3.9%;
-  --popover-foreground: 0 0% 98%;
-  --card: 240 10% 3.9%;
-  --card-foreground: 0 0% 98%;
-  --border: 240 3.7% 15.9%;
-  --input: 240 3.7% 15.9%;
-  --primary: 255 100% 70%;
-  --primary-foreground: 0 0% 98%;
-  --secondary: 157 100% 50%;
-  --secondary-foreground: 0 0% 9%;
-  --accent: 240 3.7% 15.9%;
-  --accent-foreground: 0 0% 98%;
-  --destructive: 0 62.8% 30.6%;
-  --destructive-foreground: 0 0% 98%;
-  --ring: 255 100% 70%;
-}
-
 @layer base {
+  :root {
+    --background: 210 20% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 40%;
+    --accent: 210 40% 95%;
+    --accent-foreground: 222 47% 11%;
+    --border: 214 32% 90%;
+    --input: 214 28% 84%;
+
+    --primary: 200 60% 32%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+    --destructive: 0 70% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --ring: 200 60% 32%;
+
+    /* Semânticos */
+    --success: 152 60% 30%;
+    --success-foreground: 0 0% 100%;
+    --warning: 35 90% 40%;
+    --warning-foreground: 0 0% 100%;
+    --income: 152 60% 30%;
+    --expense: 0 70% 45%;
+
+    --radius: 0.5rem;
+
+    --font-sans: 'Inter Variable', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    /* Números: mesma fonte, dígitos tabulares (colunas alinhadas). */
+    --font-numeric: var(--font-sans);
+
+    --chart-1: 200 60% 38%;
+    --chart-2: 173 45% 40%;
+    --chart-3: 215 16% 55%;
+    --chart-4: 35 80% 50%;
+    --chart-5: 0 60% 55%;
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 222 47% 11%;
+    --sidebar-primary: 200 60% 32%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 40% 95%;
+    --sidebar-accent-foreground: 222 47% 11%;
+    --sidebar-border: 214 32% 90%;
+    --sidebar-ring: 200 60% 32%;
+
+    /* Alturas de navegação (usadas para reservar espaço no mobile). */
+    --mobile-header-h: 3.5rem;
+    --mobile-nav-h: 4rem;
+  }
+
+  .dark {
+    --background: 222 40% 7%;
+    --foreground: 210 40% 96%;
+    --card: 222 36% 10%;
+    --card-foreground: 210 40% 96%;
+    --popover: 222 36% 10%;
+    --popover-foreground: 210 40% 96%;
+    --muted: 217 30% 15%;
+    --muted-foreground: 215 20% 68%;
+    --accent: 217 30% 16%;
+    --accent-foreground: 210 40% 96%;
+    --border: 217 28% 18%;
+    --input: 217 26% 24%;
+
+    --primary: 199 60% 58%;
+    --primary-foreground: 222 47% 8%;
+    --secondary: 217 30% 16%;
+    --secondary-foreground: 210 40% 96%;
+    --destructive: 0 65% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --ring: 199 60% 58%;
+
+    --success: 152 50% 48%;
+    --success-foreground: 222 47% 8%;
+    --warning: 38 90% 55%;
+    --warning-foreground: 222 47% 8%;
+    --income: 152 50% 52%;
+    --expense: 0 75% 65%;
+
+    --chart-1: 199 60% 58%;
+    --chart-2: 173 45% 50%;
+    --chart-3: 215 16% 60%;
+    --chart-4: 38 85% 58%;
+    --chart-5: 0 65% 62%;
+
+    --sidebar-background: 222 38% 9%;
+    --sidebar-foreground: 210 40% 96%;
+    --sidebar-primary: 199 60% 58%;
+    --sidebar-primary-foreground: 222 47% 8%;
+    --sidebar-accent: 217 30% 15%;
+    --sidebar-accent-foreground: 210 40% 96%;
+    --sidebar-border: 217 28% 16%;
+    --sidebar-ring: 199 60% 58%;
+  }
+
   * {
     @apply border-border;
   }
 
-  /* Permitir apenas animações específicas de loading/spinner */
-  *:not(.animate-spin):not([class*="animate-"]):not([data-radix-dialog-content]):not(.dialog-content),
-  *:not(.animate-spin):not([class*="animate-"]):not([data-radix-dialog-content]):not(.dialog-content)::before,
-  *:not(.animate-spin):not([class*="animate-"]):not([data-radix-dialog-content]):not(.dialog-content)::after {
-    transition: none !important;
-  }
-  
-  /* Preservar animações de loading */
-  .animate-spin {
-    animation: spin 1s linear infinite !important;
-  }
-  
-  @keyframes spin {
-    from {
-      transform: rotate(0deg);
-    }
-    to {
-      transform: rotate(360deg);
-    }
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
-    background-image: radial-gradient(rgba(108, 99, 255, 0.1) 2px, transparent 2px);
-    background-size: 30px 30px;
+    font-feature-settings: "cv11", "ss01";
   }
 
   h1,
@@ -168,62 +132,61 @@
   h4,
   h5,
   h6 {
-    @apply font-space tracking-tight;
+    @apply font-semibold tracking-tight;
   }
 
-  .glass {
-    @apply bg-opacity-20 bg-gray-900 backdrop-blur-md border border-primary/20 shadow-lg;
+  ::selection {
+    background: hsl(var(--primary) / 0.18);
   }
 
-  .glass-card {
-    @apply bg-opacity-25 bg-gray-900 backdrop-blur-md border border-primary/20 shadow-lg;
-  }
-
-  .glass-card {
-    @apply border-primary/20;
-  }
-
-  .neon-border {
-    position: relative;
-  }
-
-  .neon-border::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    border-radius: inherit;
-    padding: 1px;
-    background: linear-gradient(90deg, hsl(var(--primary)), hsl(var(--secondary)));
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    pointer-events: none;
-  }
-
-  .bg-pattern {
-    background-image: radial-gradient(rgba(108, 99, 255, 0.1) 2px, transparent 2px);
-    background-size: 30px 30px;
+  /* Barra de rolagem discreta e neutra. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
   }
 
   ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 8px;
+    height: 8px;
   }
 
   ::-webkit-scrollbar-track {
-    background: rgba(26, 26, 64, 0.2);
+    background: transparent;
   }
 
   ::-webkit-scrollbar-thumb {
-    background: hsl(var(--primary));
-    border-radius: 3px;
+    background: hsl(var(--border));
+    border-radius: 4px;
   }
 
-  ::-webkit-scrollbar-thumb {
-    background: hsl(var(--primary));
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  /*
+   * iOS Safari dá zoom automático em campos com fonte < 16px.
+   * Só no iOS (touch-callout) e só em telas pequenas: força 16px nos campos.
+   * !important é necessário para vencer utilitários como text-sm.
+   */
+  @supports (-webkit-touch-callout: none) {
+    @media (max-width: 767px) {
+      input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+      select,
+      textarea {
+        font-size: 16px !important;
+      }
+    }
   }
 }
 
@@ -486,15 +449,13 @@
   .font-numeric {
     font-family: var(--font-numeric);
     font-variant-numeric: tabular-nums;
-    font-feature-settings: "tnum" 1, "zero" 1;
-    letter-spacing: -0.01em;
+    font-feature-settings: "tnum" 1;
   }
 
   /* Rótulos de coluna / eyebrow: caixa alta discreta, sem display futurista. */
   .font-label {
-    font-family: var(--font-space);
     font-weight: 600;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
   }
 

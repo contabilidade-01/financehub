@@ -264,7 +264,7 @@ function Sidebar() {
                   )
                 )}
               </div>
-              <h1 className={`text-2xl font-space font-bold tracking-wide ${theme === "light" ? "text-gray-900" : "text-white"}`}>
+              <h1 className={`text-2xl font-bold tracking-wide ${theme === "light" ? "text-gray-900" : "text-white"}`}>
                 {nomeSistema}
               </h1>
             </div>
@@ -323,7 +323,7 @@ function Sidebar() {
                       )
                     )}
                   </div>
-                  <h1 className={`text-2xl font-space font-bold tracking-wide ${theme === "light" ? "text-gray-900" : "text-white"}`}>
+                  <h1 className={`text-2xl font-bold tracking-wide ${theme === "light" ? "text-gray-900" : "text-white"}`}>
                     {nomeSistema}
                   </h1>
                 </div>
@@ -443,7 +443,7 @@ function Sidebar() {
                   )
                 )}
               </div>
-              <h1 className={`text-2xl font-space font-bold tracking-wide ${theme === "light" ? "text-gray-900" : "text-white"}`}>
+              <h1 className={`text-2xl font-bold tracking-wide ${theme === "light" ? "text-gray-900" : "text-white"}`}>
                 {nomeSistema}
               </h1>
             </div>

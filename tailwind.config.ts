@@ -6,11 +6,19 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["Inter", "sans-serif"],
-        space: ["Space Grotesk", "sans-serif"],
-        numeric: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "monospace"],
-        // alias legado — mesma stack numérica
-        orbitron: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "monospace"],
+        sans: ["Inter Variable", "Inter", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "sans-serif"],
+        // Números usam a mesma fonte com dígitos tabulares (ver .font-numeric / .tabular-nums).
+        numeric: ["Inter Variable", "Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+      },
+      boxShadow: {
+        // Sombras sutis (sem brilho).
+        xs: "0 1px 2px 0 rgb(15 23 42 / 0.04)",
+        sm: "0 1px 2px 0 rgb(15 23 42 / 0.06), 0 1px 1px -1px rgb(15 23 42 / 0.04)",
+        DEFAULT: "0 1px 3px 0 rgb(15 23 42 / 0.08), 0 1px 2px -1px rgb(15 23 42 / 0.06)",
+        md: "0 4px 8px -2px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.05)",
+        lg: "0 10px 20px -6px rgb(15 23 42 / 0.12), 0 4px 8px -4px rgb(15 23 42 / 0.06)",
+        xl: "0 16px 32px -8px rgb(15 23 42 / 0.16)",
+        "2xl": "0 24px 48px -12px rgb(15 23 42 / 0.2)",
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -48,6 +56,17 @@ export default {
           DEFAULT: "hsl(var(--destructive))",
           foreground: "hsl(var(--destructive-foreground))",
         },
+        success: {
+          DEFAULT: "hsl(var(--success))",
+          foreground: "hsl(var(--success-foreground))",
+        },
+        warning: {
+          DEFAULT: "hsl(var(--warning))",
+          foreground: "hsl(var(--warning-foreground))",
+        },
+        // Receita / despesa (valores monetários).
+        income: "hsl(var(--income))",
+        expense: "hsl(var(--expense))",
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",

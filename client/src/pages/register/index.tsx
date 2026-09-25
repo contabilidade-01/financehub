@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { LineChart } from "lucide-react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -189,11 +190,11 @@ export default function Register() {
               {isLogoChecking ? null : logoUrl ? (
                 <img src={logoUrl} alt="" className="h-16 w-16 object-contain" />
               ) : (
-                <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-neon">
-                  <i className="ri-line-chart-fill text-2xl text-white"></i>
+                <div className="w-12 h-12 rounded-lg bg-primary flex items-center justify-center">
+                  <LineChart className="h-6 w-6 text-primary-foreground" aria-hidden="true" />
                 </div>
               )}
-              <h1 className="text-3xl font-bold font-space">{systemConfig.system_name}</h1>
+              <h1 className="text-3xl font-bold">{systemConfig.system_name}</h1>
             </div>
           </div>
           {!logoUrl && logoChecked && (

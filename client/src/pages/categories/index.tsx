@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { CategoryIcon } from "@/components/shared/CategoryIcon";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Category, InsertCategory, TransactionType } from "@shared/schema";
@@ -230,7 +231,7 @@ function CustomIconSelect({ label, value, onChange, icons }: CustomIconSelectPro
       >
         {selectedIcon ? (
           <div style={{ display: 'flex', alignItems: 'center' }}>
-            <i className={`ri-${selectedIcon.value}-line icon-display`}></i>
+            <CategoryIcon icon={selectedIcon.value} className="icon-display" />
             {selectedIcon.label}
           </div>
         ) : (
@@ -252,7 +253,7 @@ function CustomIconSelect({ label, value, onChange, icons }: CustomIconSelectPro
             >
               {value === icon.value && <Check size={16} className="mr-2" />}
               <div style={{ display: 'flex', alignItems: 'center', marginLeft: value === icon.value ? '0' : '24px' }}>
-                <i className={`ri-${icon.value}-line icon-display`}></i>
+                <CategoryIcon icon={icon.value} className="icon-display" />
                 {icon.label}
               </div>
             </div>
@@ -422,7 +423,7 @@ export default function Categories() {
   ];
 
   const getIconComponent = (iconName: string) => {
-    return <i className={`ri-${iconName}-line`}></i>;
+    return <CategoryIcon icon={iconName} />;
   };
 
   return (
@@ -502,7 +503,7 @@ export default function Categories() {
                       {category.icone ? (
                         getIconComponent(category.icone)
                       ) : (
-                        <i className="ri-price-tag-3-line"></i>
+                        <CategoryIcon />
                       )}
                     </div>
                     <div>

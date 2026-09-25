@@ -138,7 +138,7 @@ export default function RecentTransactions({ isLoading, transactions, onRefetch 
       <Card className={`neon-border rounded-2xl ${theme === 'light' ? 'bg-white' : 'glass-card'}`}>
         <CardContent className={`p-5 ${theme === 'light' ? 'text-gray-900' : ''}`}>
           <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
-            <h2 className="font-space text-xl mb-3 md:mb-0">{t('dashboard.recent_transactions.title', 'Transações Recentes')}</h2>
+            <h2 className="text-xl mb-3 md:mb-0">{t('dashboard.recent_transactions.title', 'Transações Recentes')}</h2>
             <div className="flex flex-wrap gap-2">
               <Button 
                 size="sm"

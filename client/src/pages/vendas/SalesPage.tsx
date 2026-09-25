@@ -1,4 +1,5 @@
 import { useLocation } from "wouter";
+import { LineChart, Building2, User as UserIcon, Check } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -72,10 +73,10 @@ export default function SalesPage({ tipo }: { tipo: Tipo }) {
     <div className="min-h-screen flex items-center justify-center p-4 bg-pattern">
       <div className="w-full max-w-lg">
         <div className="text-center mb-6">
-          <div className="w-12 h-12 mx-auto rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-neon mb-3">
-            <i className="ri-line-chart-fill text-2xl text-white"></i>
+          <div className="w-12 h-12 mx-auto rounded-lg bg-primary flex items-center justify-center mb-3">
+            <LineChart className="h-6 w-6 text-primary-foreground" aria-hidden="true" />
           </div>
-          <h1 className="text-3xl font-bold font-space">{nomeSistema}</h1>
+          <h1 className="text-3xl font-bold">{nomeSistema}</h1>
           <p className="text-gray-400 mt-1">
             {isPJ ? "O controle financeiro da sua empresa" : "Seu controle financeiro pessoal"}
           </p>
@@ -84,7 +85,7 @@ export default function SalesPage({ tipo }: { tipo: Tipo }) {
         <Card className="glass-card neon-border">
           <CardHeader className="text-center">
             <div className="inline-flex items-center gap-1 self-center rounded-md bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
-              <i className={isPJ ? "ri-building-2-line" : "ri-user-line"}></i>
+              {isPJ ? <Building2 className="h-4 w-4" aria-hidden="true" /> : <UserIcon className="h-4 w-4" aria-hidden="true" />}
               {isPJ ? "Plano Pessoa Jurídica (PJ)" : "Plano Pessoa Física (PF)"}
             </div>
             <div className="mt-4 flex items-end justify-center gap-1">
@@ -103,7 +104,7 @@ export default function SalesPage({ tipo }: { tipo: Tipo }) {
             <ul className="space-y-3 mb-6">
               {features.map((f, i) => (
                 <li key={i} className="flex items-start gap-2 text-sm">
-                  <i className="ri-check-line text-primary text-base mt-0.5"></i>
+                  <Check className="h-4 w-4 text-primary mt-0.5 shrink-0" aria-hidden="true" />
                   <span>{f}</span>
                 </li>
               ))}

@@ -227,7 +227,7 @@ export default function NotFound() {
           className="mb-6"
         >
           <h1
-            className="text-8xl md:text-9xl font-bold font-space tracking-tighter"
+            className="text-8xl md:text-9xl font-bold tracking-tighter"
             style={{
               background: 'linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--secondary)) 100%)',
               WebkitBackgroundClip: 'text',
@@ -247,7 +247,7 @@ export default function NotFound() {
           transition={{ delay: 0.6, duration: 0.6 }}
           className="mb-4"
         >
-          <h2 className="text-2xl md:text-3xl font-semibold font-space text-foreground mb-2">
+          <h2 className="text-2xl md:text-3xl font-semibold text-foreground mb-2">
             {t('common.not_found_title', 'Página Não Encontrada')}
           </h2>
           <p className="text-muted-foreground text-sm md:text-base max-w-md mx-auto">
