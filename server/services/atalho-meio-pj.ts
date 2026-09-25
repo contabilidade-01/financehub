@@ -3,13 +3,18 @@
  * Não deixa o modelo inventar cartão nem "nenhum cartão cadastrado".
  */
 import { detectarMeio, textoMeioDeDetect } from "./parse-meio";
-import { detectarDirecao, extrairValorBR } from "./nlp-br";
+import { detectarDirecao, extrairValorBR, extrairDataBR, hojeSP } from "./nlp-br";
 import { criarPendencias } from "./ia-pendencias";
 
 export type LancamentoSemMeio = {
   descricao: string;
-  valor: number;
+  /** null = o cliente ainda não disse o valor (a próxima pergunta é "qual o valor?"). */
+  valor: number | null;
   tipo: "Receita" | "Despesa";
+  /** Data informada na mensagem (AAAA-MM-DD). Ausente = hoje. */
+  data?: string;
+  /** Meio já informado enquanto faltava o valor. */
+  meio?: string;
 };
 
 type Pendente = LancamentoSemMeio & {
@@ -41,7 +46,74 @@ function pareceConsultaOuComando(n: string): boolean {
   );
 }
 
-export function pareceLancamentoSemMeio(texto: string): LancamentoSemMeio | null {
+const RE_RECEITA =
+  /\b(recebi|receita|entrada|entrei|entrou|recebimento|venda|vendas|vendi|vendeu|faturei|faturamento|deposito|caiu)\b/;
+
+function tipoDoTexto(raw: string, n: string): "Receita" | "Despesa" {
+  // "entrada", "recebi", "venda"… = RECEITA. Sem sinal claro ("abastecimento
+  // 124,50") segue como despesa, o caso comum.
+  return detectarDirecao(raw) ?? (RE_RECEITA.test(n) ? "Receita" : "Despesa");
+}
+
+/** Remove a data da frase ("no dia 22/09/2026", "ontem", "5 de setembro"). */
+function tirarData(raw: string, trecho: string | null): string {
+  let t = raw;
+  if (trecho) {
+    // O trecho vem sem acento/minúsculo; a posição é a mesma no texto original
+    // (acentos pré-compostos têm um caractere nos dois).
+    const alvo = norm(t);
+    const i = alvo.indexOf(trecho);
+    if (i >= 0 && alvo.length === t.length) t = `${t.slice(0, i)} ${t.slice(i + trecho.length)}`;
+  }
+  // Datas que sobraram (duas datas na frase, ou texto com acento decomposto).
+  return t
+    .replace(/\b20\d{2}-\d{1,2}-\d{1,2}\b/g, " ")
+    .replace(/\b\d{1,2}[\/.-]\d{1,2}(?:[\/.-]\d{2,4})?\b/g, " ")
+    .replace(/\b(?:(?:n?o|d?o|em)\s+)?dia\s*(?=\s|$|[,.;])/gi, " ")
+    .replace(/\b(?:n?o|d?o|em|de|na)\s+(?=[,.;]|$)/gi, " ");
+}
+
+/** Remove valor, moeda e as palavras que só acompanham o valor. */
+function tirarValor(t: string): string {
+  return t
+    .replace(/(?:r\$\s*)?\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|(?:r\$\s*)?\d+(?:[.,]\d{1,2})?\s*(?:mil\b|k\b)?/gi, " ")
+    .replace(/r\$/gi, " ")
+    .replace(/\b(?:reais|real|conto|contos|pila)\b/gi, " ")
+    .replace(/\b(?:(?:n?o|d?o|pelo|por|com|de)\s+)?(?:valor|total|preco|preço)\b(?:\s+(?:de|total|foi|e|é|era))*/gi, " ");
+}
+
+function limparDescricao(t: string): string {
+  let desc = t
+    .replace(/\b(registr\w*|anot\w*|lanc\w*|lan[çc]a\w*|adicion\w*|coloc\w*|p[oõ]e|p[oõ]em|novo|nova|gastei|paguei|recebi|comprei|registre)\b/gi, " ")
+    .replace(/\b(entrada|sa[íi]da|despesa|receita)\s+(de|com|do|da|no|na)\b/gi, " ")
+    .replace(/\b(entrada|sa[íi]da|despesa|receita)\b/gi, " ")
+    .replace(/[,;:]+|\s[-–—]+\s/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  // Preposições soltas no começo e no fim ("de", "no", "em"…).
+  const solta = "(?:a|o|e|de|da|do|com|para|pra|no|na|em|uns|umas|um|uma|dia)";
+  for (let i = 0; i < 3; i++) {
+    desc = desc
+      .replace(new RegExp(`^${solta}\\s+`, "i"), "")
+      .replace(new RegExp(`\\s+${solta}$`, "i"), "")
+      .replace(/[.!]+$/, "")
+      .trim();
+  }
+  return desc ? desc.charAt(0).toUpperCase() + desc.slice(1) : desc;
+}
+
+/** Descrição, data e valor de uma frase de lançamento (sem decidir se é atalho). */
+function destrinchar(raw: string, hoje: string) {
+  const dataExt = extrairDataBR(raw, hoje);
+  const semData = tirarData(raw, dataExt?.trecho ?? null);
+  // O valor sai do texto SEM a data: "dia 22/09/2026 no valor de 672" nunca vira 22.
+  const valor = parseValorBR(semData);
+  const descricao = limparDescricao(tirarValor(semData));
+  const data = dataExt && dataExt.data !== hoje ? dataExt.data : undefined;
+  return { valor, descricao, data };
+}
+
+export function pareceLancamentoSemMeio(texto: string, hoje: string = hojeSP()): LancamentoSemMeio | null {
   const raw = String(texto || "").trim();
   if (!raw || raw.length < 4) return null;
   const n = norm(raw);
@@ -49,35 +121,56 @@ export function pareceLancamentoSemMeio(texto: string): LancamentoSemMeio | null
   if (detectarMeio(raw).tipo !== "nenhum") return null;
   if (/\b(parcelad|em\s+\d+\s*x|\d+\s*x\s*(de)?)\b/.test(n)) return null;
 
-  const valor = parseValorBR(raw);
+  const { valor, descricao, data } = destrinchar(raw, hoje);
   if (valor == null) return null;
+  const tipo = tipoDoTexto(raw, n);
 
-  // "entrada", "recebi", "venda"… = RECEITA (antes só entrava como despesa).
-  // Sem sinal claro ("abastecimento 124,50") segue como despesa, o caso comum.
-  const tipo: "Receita" | "Despesa" =
-    detectarDirecao(raw) ??
-    (/\b(recebi|receita|entrada|entrei|entrou|recebimento|venda|vendi|vendeu|faturei|faturamento|deposito|caiu)\b/.test(n)
-      ? "Receita"
-      : "Despesa");
-
-  // Limpa a descrição: tira valores e verbos/comandos, para o nome do lançamento
-  // não virar "Registra a entrada de", "Adiciona", "Anota…".
-  let desc = raw
-    .replace(/(?:r\$\s*)?\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|(?:r\$\s*)?\d+(?:[.,]\d{1,2})?/gi, " ")
-    .replace(/\b(registr\w*|anot\w*|lanc\w*|lan[çc]a\w*|adicion\w*|coloc\w*|p[oõ]e|p[oõ]em|novo|nova|gastei|paguei|recebi|comprei|registre)\b/gi, " ")
-    .replace(/\b(entrada|sa[íi]da|despesa|receita)\s+(de|com|do|da|no|na)\b/gi, " ")
-    .replace(/\b(entrada|sa[íi]da|despesa|receita)\b/gi, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  desc = desc.replace(/^(a|o|de|da|do|com|para|no|na|em|uns|umas|um|uma)\s+/i, "").trim();
-
-  if (desc.length < 3) {
+  if (descricao.length < 3) {
     // Sem descrição útil: para receita, usa um rótulo genérico e segue;
     // para despesa, devolve null (deixa o fluxo pedir a descrição).
-    if (tipo === "Receita") return { descricao: "Recebimento", valor, tipo };
+    if (tipo === "Receita") return { descricao: "Recebimento", valor, tipo, ...(data ? { data } : {}) };
     return null;
   }
-  return { descricao: desc, valor, tipo };
+  return { descricao, valor, tipo, ...(data ? { data } : {}) };
+}
+
+// Palavras que deixam claro que é um lançamento (e não conversa) quando falta o valor.
+const RE_FATO =
+  /\b(venda|vendi|vendeu|compra|comprei|paguei|pagamento|recebi|recebimento|gastei|gasto|despesa|receita|faturei|faturamento)\b/;
+const RE_PERGUNTA =
+  /\?|\b(qual|quais|quanto|quantos|quantas|ver|veja|mostra\w*|lista\w*|relatorio|como|onde|quando|porque|por que|cade|consulta\w*)\b/;
+
+/**
+ * "Venda de mercadorias no dia 23/09/2026" (sem valor) → lançamento a completar.
+ * Conservador: exige verbo/substantivo de lançamento, frase curta e nada de pergunta.
+ */
+export function pareceLancamentoSemValor(texto: string, hoje: string = hojeSP()): LancamentoSemMeio | null {
+  const raw = String(texto || "").trim();
+  if (!raw || raw.length < 6 || raw.length > 120) return null;
+  const n = norm(raw);
+  if (!RE_FATO.test(n) || RE_PERGUNTA.test(n) || pareceConsultaOuComando(n)) return null;
+  if (detectarMeio(raw).tipo !== "nenhum") return null;
+  if (/\b(parcelad|em\s+\d+\s*x)\b/.test(n)) return null;
+  const { valor, descricao, data } = destrinchar(raw, hoje);
+  if (valor != null || descricao.length < 3) return null;
+  return { descricao, valor: null, tipo: tipoDoTexto(raw, n), ...(data ? { data } : {}) };
+}
+
+/**
+ * Resposta que só traz o valor ("Valor de 870,00 Reais", "870", "o valor é 1.200")
+ * — completa ou corrige o lançamento pendente, nunca vira um lançamento novo.
+ */
+export function respostaEhSoValor(texto: string): number | null {
+  const raw = String(texto || "").trim();
+  if (!raw || raw.length > 60) return null;
+  if (detectarMeio(raw).tipo !== "nenhum") return null;
+  const valor = parseValorBR(raw);
+  if (valor == null) return null;
+  const resto = norm(tirarValor(raw))
+    .replace(/\b(o|a|e|é|eh|era|foi|sao|na|verdade|corrig\w*|correto|certo|desculp\w*|ops|opa|errei|errado|nao|sim|ficou|fica|pode|ser|por|favor|pfv|pf)\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  return resto === "" ? valor : null;
 }
 
 export function registrarPendenteMeio(
@@ -111,10 +204,20 @@ function money(v: number): string {
   return v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-export function mensagemPedirMeio(item: LancamentoSemMeio): string {
+function resumoItem(item: LancamentoSemMeio): string {
+  const data = item.data ? ` em ${item.data.split("-").reverse().join("/")}` : "";
+  const valor = item.valor != null ? ` — R$ ${money(item.valor)}` : "";
+  return `*${item.descricao}*${data}${valor}`;
+}
+
+export function mensagemPedirValor(item: LancamentoSemMeio): string {
+  return `Anotei ${resumoItem(item)}.\n\nQual o valor? (ex.: 870,00)`;
+}
+
+export function mensagemPedirMeio(item: LancamentoSemMeio, corrigido = false): string {
   const verbo = item.tipo === "Receita" ? "entrou" : "foi pago";
   return (
-    `Anotei *${item.descricao}* — R$ ${money(item.valor)}.\n\n` +
+    `${corrigido ? "Corrigi:" : "Anotei"} ${resumoItem(item)}.\n\n` +
     `Como ${verbo}?\n` +
     `• *Caixinha* (dinheiro)\n` +
     `• conta bancária (ex.: pix + o banco)\n` +

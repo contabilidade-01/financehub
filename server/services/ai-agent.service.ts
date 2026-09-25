@@ -17,7 +17,11 @@ import {
   obterPendenteMeio,
   limparPendenteMeio,
   mensagemPedirMeio,
+  mensagemPedirValor,
+  pareceLancamentoSemValor,
   respostaEhSoMeio,
+  respostaEhSoValor,
+  type LancamentoSemMeio,
 } from "./atalho-meio-pj";
 import {
   registrarOfertaCriarConta,
@@ -3413,16 +3417,20 @@ export async function runAgent(
   if (emModoPj(ctx) && ctx.empresaAtiva) {
     const empNome = ctx.empresaAtiva.nome;
     const soMeio = respostaEhSoMeio(userMessage);
+    const soValor = ctx.origemMidia ? null : respostaEhSoValor(userMessage);
     const pend = obterPendenteMeio(ctx.userId);
-    if (pend && soMeio) {
+
+    const lancarPendente = async (item: LancamentoSemMeio & { empresaNome?: string }, meio: string) => {
       const raw = await executeTool(
         "lancar_empresa",
         {
-          empresa: pend.empresaNome || empNome,
-          descricao: pend.descricao,
-          valor: pend.valor,
-          tipo: pend.tipo,
-          forma_pagamento: soMeio,
+          empresa: item.empresaNome || empNome,
+          descricao: item.descricao,
+          valor: item.valor,
+          tipo: item.tipo,
+          forma_pagamento: meio,
+          // A data dita na 1ª mensagem ("no dia 22/09/2026"); sem ela, hoje.
+          ...(item.data ? { data_transacao: item.data } : {}),
         },
         ctx,
       );
@@ -3437,6 +3445,22 @@ export async function runAgent(
         return String(parsed.mensagem || parsed.error);
       }
       return "Não consegui lançar com esse meio. Diga dinheiro, pix + banco, ou o nome do cartão.";
+    };
+
+    if (pend && soValor != null) {
+      // "Valor de 870,00 Reais" depois do "Anotei…": completa/corrige o pendente
+      // (antes virava um lançamento novo chamado "Valor de Reais").
+      const atualizado = { ...pend, valor: soValor };
+      if (pend.meio) return await lancarPendente(atualizado, pend.meio);
+      registrarPendenteMeio(ctx.userId, pend.empresaNome || empNome, atualizado);
+      return mensagemPedirMeio(atualizado, pend.valor != null);
+    }
+    if (pend && soMeio) {
+      if (pend.valor == null) {
+        registrarPendenteMeio(ctx.userId, pend.empresaNome || empNome, { ...pend, meio: soMeio });
+        return mensagemPedirValor(pend);
+      }
+      return await lancarPendente(pend, soMeio);
     }
 
     // Mídia (foto/áudio) exige confirmação antes de gravar; vários itens na
@@ -3448,6 +3472,16 @@ export async function runAgent(
     if (semMeio) {
       registrarPendenteMeio(ctx.userId, empNome, semMeio);
       return mensagemPedirMeio(semMeio);
+    }
+    // "Venda de mercadorias no dia 23/09/2026" sem valor → pergunta o valor
+    // (em vez de o modelo inventar ou ignorar a data).
+    const semValor =
+      !ctx.origemMidia && segmentarLancamentos(userMessage).length <= 1
+        ? pareceLancamentoSemValor(userMessage)
+        : null;
+    if (semValor) {
+      registrarPendenteMeio(ctx.userId, empNome, semValor);
+      return mensagemPedirValor(semValor);
     }
   }
 

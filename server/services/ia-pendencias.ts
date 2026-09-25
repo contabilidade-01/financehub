@@ -70,6 +70,10 @@ export async function hidratarPendencias(userId: number): Promise<void> {
       const mapa = lojas.get(String(r.tipo));
       if (!mapa) continue;
       vistos.add(String(r.tipo));
+      // Gravação local recente ainda pode não ter chegado ao banco: a versão do
+      // banco é a anterior (ex.: valor corrigido voltaria ao valor antigo).
+      const recente = Date.now() - (gravadoEm.get(`${r.tipo}:${userId}`) || 0) < JANELA_GRAVACAO_MS;
+      if (recente && mapa.has(userId)) continue;
       const dados = typeof r.dados === "string" ? JSON.parse(r.dados) : r.dados;
       mapa.set(userId, dados);
     }
