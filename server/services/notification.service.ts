@@ -593,7 +593,7 @@ ${systemConfig.system_name} Team
     const token = generateCheckoutToken(userId, email);
     const frontendUrl = process.env.FRONTEND_URL || process.env.BASE_URL || 'http://localhost:5000';
     const link = `${frontendUrl}/checkout/plans?tokenaccess=${token}`;
-    console.log(`[NotificationService] Payment link generated - userId: ${userId}, email: ${email}, token: ${token}`);
+    console.log(`[NotificationService] Payment link generated - userId: ${userId}`);
     return link;
   }
 

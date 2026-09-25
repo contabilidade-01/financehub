@@ -926,7 +926,7 @@ export async function getAuditLog(req: Request, res: Response) {
 export async function createUser(req: Request, res: Response) {
   try {
     console.log("=== ADMIN CREATE USER - REQUEST ===");
-    console.log("Request body:", req.body);
+    console.log("Request body:", { ...req.body, senha: req.body?.senha ? "[omitida]" : undefined });
     console.log("Super Admin:", req.user?.email);
     console.log("===============================");
 

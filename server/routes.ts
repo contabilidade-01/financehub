@@ -148,9 +148,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/auth/verify", auth, (req: Request, res: Response) => {
     try {
       if (req.user) {
+        const { senha: _senha, ...userSemSenha } = req.user as any;
         res.json({ 
           success: true, 
-          user: req.user,
+          user: userSemSenha,
           message: 'Sessão válida' 
         });
       } else {
@@ -889,7 +890,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/admin/welcome-messages", combinedAuth, requireSuperAdmin, welcomeMessagesController.createWelcomeMessage);
 
   // Endpoint para buscar mensagem processada para um usuário específico (com tags substituídas)
-  app.get("/api/welcome-messages/:type/user/:userId", welcomeMessagesController.getProcessedWelcomeMessage);
+  app.get("/api/welcome-messages/:type/user/:userId", combinedAuth, requireSuperAdmin, welcomeMessagesController.getProcessedWelcomeMessage);
 
   // Maintenance Routes (Super Admin only)
   app.get("/api/maintenance/categories", combinedAuth, requireSuperAdmin, MaintenanceController.getAllCategories);
@@ -1413,8 +1414,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Marcar como recorrente
   app.put("/api/transactions/:id/recorrente", combinedAuth, async (req: Request, res: Response) => {
     try {
-      const { marcarRecorrente } = await import("./storage");
-      const result = await marcarRecorrente(parseInt(req.params.id), req.body.recorrente ?? true);
+      const { marcarRecorrente, transacaoPertenceAoWallet } = await import("./storage");
+      const wallet = await storage.getWalletByUserId(req.user!.id);
+      if (!wallet) return res.status(404).json({ error: "Carteira não encontrada" });
+      const id = parseInt(req.params.id);
+      if (!(await transacaoPertenceAoWallet(id, wallet.id))) {
+        return res.status(404).json({ error: "Transação não encontrada" });
+      }
+      const result = await marcarRecorrente(id, req.body.recorrente ?? true);
       if (!result) return res.status(404).json({ error: "Transação não encontrada" });
       res.json(result);
     } catch (err: any) { res.status(400).json({ error: err.message }); }

@@ -29,6 +29,11 @@ export async function lancamentosConta(req: Request, res: Response) {
     const contaId = Number(req.params.id);
     const de = (req.query.de as string) || undefined;
     const ate = (req.query.ate as string) || undefined;
+    // Segurança: só contas PF do próprio usuário (evita ler saldo de terceiros).
+    const minhas = await contas.listarContasPf(req.user!.id);
+    if (!minhas.some((c: any) => Number(c.id) === contaId)) {
+      return res.status(404).json({ error: "Conta não encontrada" });
+    }
     const lista = await contas.listarLancamentosContaPf(req.user!.id, contaId, de, ate);
     const mov = await contas.movimentoContaPeriodo(contaId, de, ate);
     return res.json({

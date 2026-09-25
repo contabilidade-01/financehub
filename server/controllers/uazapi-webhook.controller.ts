@@ -15,6 +15,7 @@ import {
   sendWelcomeWithPasswordEmail,
 } from "../services/mailer";
 import bcrypt from "bcryptjs";
+import { autenticarWebhookUazapi } from "../utils/uazapi-webhook-auth";
 
 /**
  * UazAPI Webhook Controller — substitui o N8N.
@@ -352,6 +353,12 @@ interface UazapiWebhookBody {
 }
 
 export const handleUazapiWebhook = async (req: Request, res: Response) => {
+  const tokenValidado = autenticarWebhookUazapi(req);
+  if (!tokenValidado) {
+    console.warn(`[UazAPI Webhook] Requisição rejeitada (token/segredo inválido) de ${req.ip}`);
+    return res.status(401).json({ received: false });
+  }
+
   // Retornar 200 imediatamente para não travar o UazAPI
   res.status(200).json({ received: true });
 
@@ -374,7 +381,11 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
       return; // ReactionMessage, StickerMessage, etc — ignorar silenciosamente
     }
 
-    const { BaseUrl, token, message } = body;
+    const { message } = body;
+    // Segurança: nunca responder para a URL informada no body (SSRF / desvio de
+    // respostas). A URL vem do ambiente; o token é o que acabou de ser validado.
+    const BaseUrl = process.env.UAZAPI_BASE_URL || "https://nescon.uazapi.com";
+    const token = tokenValidado;
     const { chatid, messageType, messageid, senderName } = message;
     const text = limparTextoWhatsapp(message.text || "");
 

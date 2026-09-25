@@ -35,6 +35,7 @@ import { setupRedirect } from "./middleware/setup.middleware";
 import { securityHeaders } from "./middleware/security.middleware";
 import { runAutoMigrations } from "./migrations/auto-migrate";
 import { randomBytes } from "crypto";
+import { setWebSocketSessionParser } from "./websocket";
 
 // Configurar timezone global da aplicação para São Paulo
 process.env.TZ = 'America/Sao_Paulo';
@@ -125,7 +126,7 @@ if (process.env.DATABASE_URL) {
   console.warn('⚠️ Store de sessão: MemoryStore (sem DATABASE_URL).');
 }
 
-app.use(session({
+const sessionMiddleware = session({
   secret: resolvedSessionSecret,
   resave: false,
   saveUninitialized: false,
@@ -136,7 +137,10 @@ app.use(session({
     httpOnly: true,
     sameSite: 'lax',
   }
-}));
+});
+app.use(sessionMiddleware);
+// O WebSocket autentica pelo mesmo cookie de sessão (nunca por id na URL).
+setWebSocketSessionParser(sessionMiddleware);
 
 // Middleware para desabilitar cache em endpoints da API
 app.use('/api', (req, res, next) => {
@@ -213,10 +217,12 @@ app.use((req, res, next) => {
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+    // Em produção, erros 5xx não expõem detalhes internos ao cliente.
+    const message =
+      status >= 500 && isProduction ? "Erro interno do servidor" : err.message || "Internal Server Error";
 
-    res.status(status).json({ message });
-    throw err;
+    console.error(`[Erro ${status}]`, err);
+    if (!res.headersSent) res.status(status).json({ message });
   });
 
   // importantly only setup vite in development and after

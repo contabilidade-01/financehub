@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
+import { randomUUID } from "crypto";
 import { storage } from "../storage";
 import { insertUserSchema, loginUserSchema } from "../../shared/schema";
 import { z } from "zod";
@@ -27,13 +28,17 @@ export async function register(req: Request, res: Response) {
         const digits = typeof val === "number" ? val.toString() : val;
         return /^55\d{10,11}$/.test(digits);
       }, "Telefone deve ser numérico, começar com 55 e ter 12 ou 13 dígitos"),
+      // Aceito só por compatibilidade com o front antigo; o valor é IGNORADO
+      // (gerado no servidor) para ninguém reivindicar o JID de outro número.
       remoteJid: z.string().optional(),
-      tipo_usuario: z.string().optional(),
       // PF/PJ: vem da página de vendas (?tipo). Default PF. Define qual plano
       // (39,90 PF / 79,90 PJ) o checkout vai oferecer e cobrar no Asaas.
       tipo_pessoa: z.enum(["fisica", "juridica"]).optional(),
     });
     const userData = registerSchema.parse(req.body);
+    // Segurança: o JID de WhatsApp nunca vem do cliente. Placeholder único;
+    // o vínculo real acontece pelo fluxo do WhatsApp.
+    userData.remoteJid = randomUUID();
     
     // Check if user with email already exists
     const existingUser = await storage.getUserByEmail(userData.email);
@@ -71,6 +76,7 @@ export async function register(req: Request, res: Response) {
       ...userData,
       telefone: telefoneNum ? telefoneNum.toString() : undefined,
       tipo_pessoa: userData.tipo_pessoa || "fisica", // garante tipo p/ escolher o plano certo
+      tipo_usuario: "normal", // segurança: papel nunca vem do body
     };
     const newUser = await storage.createUser(userDataToSave);
 
