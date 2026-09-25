@@ -1636,6 +1636,36 @@ export async function sincronizarAssinaturaAsaas(req: Request, res: Response) {
   }
 }
 
+// GET/PUT /api/admin/cobranca/encargos — multa e juros das mensalidades
+export async function getEncargosCobranca(_req: Request, res: Response) {
+  try {
+    const { obterEncargos, MULTA_MAXIMA, JUROS_MES_MAXIMO } = await import("../services/cobranca-encargos");
+    return res.json({ ...(await obterEncargos()), multaMaxima: MULTA_MAXIMA, jurosMesMaximo: JUROS_MES_MAXIMO });
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || "Erro ao ler encargos" });
+  }
+}
+
+export async function salvarEncargosCobranca(req: Request, res: Response) {
+  try {
+    const { salvarEncargos } = await import("../services/cobranca-encargos");
+    return res.json(await salvarEncargos({ multa: req.body?.multa, jurosMes: req.body?.jurosMes }));
+  } catch (err: any) {
+    return res.status(400).json({ error: err?.message || "Valores inválidos" });
+  }
+}
+
+// POST /api/admin/cobranca/encargos/aplicar — leva multa/juros às assinaturas já existentes no Asaas
+export async function aplicarEncargosCobranca(_req: Request, res: Response) {
+  try {
+    const { aplicarEncargosAsaas } = await import("../services/cobranca-encargos");
+    return res.json(await aplicarEncargosAsaas());
+  } catch (err: any) {
+    console.error("aplicarEncargosCobranca:", err);
+    return res.status(500).json({ error: err?.message || "Falha ao atualizar o Asaas" });
+  }
+}
+
 // GET /api/admin/export/users-csv — Exportar usuários em formato CSV
 export async function exportUsersCsv(req: Request, res: Response) {
   try {

@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2, CheckCircle, AlertCircle, Save, TestTube2, Copy, Webhook, ExternalLink, Clock, Server, Terminal } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { EncargosCobrancaCard } from '@/components/admin/EncargosCobrancaCard';
 
 interface PaymentSettings {
   id?: number;
@@ -512,7 +513,9 @@ export default function PaymentSettingsPage() {
               <Terminal className="h-5 w-5" />
               Resultado do Teste de Webhook
             </DialogTitle>
-            <DialogDescription>
+            <EncargosCobrancaCard />
+
+      <DialogDescription>
               Logs completos da requisição e resposta do webhook
             </DialogDescription>
           </DialogHeader>

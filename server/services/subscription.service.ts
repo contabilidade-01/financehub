@@ -13,6 +13,7 @@ import { getAsaasService, AsaasService, AsaasCreditCardData, AsaasCreditCardHold
 import { getNotificationService, NotificationService } from './notification.service';
 import type { IStorage } from '../storage';
 import { resolverPlanoDoUsuario } from './resolver-plano';
+import { obterEncargos, camposAsaas } from './cobranca-encargos';
 import { novaExpiracao, vencimentoPrimeiraCobranca, fimDoPeriodoPago, fimDoCicloPago, vencimentoDoCiclo, proximaCobrancaDoAcesso } from './assinatura-datas';
 import { rotuloModalidade } from '../../shared/modalidade';
 import { db } from '../db';
@@ -228,6 +229,7 @@ export class SubscriptionService {
       const cfgCiclo = CICLO_ASAAS[data.ciclo || 'mensal'] || CICLO_ASAAS.mensal;
       const valorCiclo = parseFloat(plan.priceMonthly.toString()) * cfgCiclo.meses;
       const asaasSubscription = await (await this.getAsaas()).createSubscription({
+        ...camposAsaas(await obterEncargos()),
         customer: asaasCustomer.asaasCustomerId,
         billingType: 'CREDIT_CARD',
         cycle: cfgCiclo.cycle,
@@ -447,6 +449,8 @@ export class SubscriptionService {
     const nextDueDate = vencimentoEsperado;
 
     const asaasSubscription = await asaas.createSubscription({
+      // Multa e juros de atraso (config do admin; padrão 2% + 1% a.m.).
+      ...camposAsaas(await obterEncargos()),
       customer: asaasCustomer.asaasCustomerId,
       billingType: 'UNDEFINED',
       cycle: cfgCiclo.cycle,

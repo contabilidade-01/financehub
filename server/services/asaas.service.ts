@@ -80,11 +80,14 @@ export interface AsaasSubscriptionData {
     dueDateLimitDays?: number;
   };
   interest?: {
-    value: number;
+    value: number; // % ao mês
   };
   fine?: {
     value: number;
+    type?: 'FIXED' | 'PERCENTAGE';
   };
+  /** Na atualização: aplica também às cobranças em aberto da assinatura. */
+  updatePendingPayments?: boolean;
   creditCard?: AsaasCreditCardData;
   creditCardHolderInfo?: AsaasCreditCardHolderInfo;
   creditCardToken?: string;

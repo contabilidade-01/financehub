@@ -86,9 +86,9 @@ export function textoCobranca(
     case "D0":
       return `${oi} Sua mensalidade de *R$ ${money(valor)}* vence *hoje* (${venc}).${fatura}\n\nSe já pagou, pode ignorar esta mensagem.`;
     case "D+1":
-      return `${oi} Não identificamos o pagamento da mensalidade de *R$ ${money(valor)}* que venceu em ${venc}.\nSeu acesso continua até *${limite}*.${fatura}\n\nSe já pagou, pode ignorar: a baixa é automática.`;
+      return `${oi} Não identificamos o pagamento da mensalidade de *R$ ${money(valor)}* que venceu em ${venc}.\nSeu acesso continua até *${limite}*. Pagando agora, a fatura inclui multa e juros de atraso.${fatura}\n\nSe já pagou, pode ignorar: a baixa é automática.`;
     case "D+3":
-      return `${oi} Hoje (${limite}) é o *último dia* de acesso: a mensalidade de *R$ ${money(valor)}* (vencida em ${venc}) ainda está em aberto.${fatura}\n\nAssim que o pagamento cair, o acesso é liberado na hora.`;
+      return `${oi} Hoje (${limite}) é o *último dia* de acesso: a mensalidade de *R$ ${money(valor)}* (vencida em ${venc}) ainda está em aberto (com multa e juros de atraso).${fatura}\n\nAssim que o pagamento cair, o acesso é liberado na hora.`;
   }
 }
 

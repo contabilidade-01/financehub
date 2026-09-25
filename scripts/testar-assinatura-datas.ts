@@ -21,6 +21,7 @@ import {
   textoPagamentoConfirmado,
 } from "../server/services/lembretes-cobranca";
 import { diaSP, dataBrSP } from "../shared/datas-sp";
+import { validarEncargos, camposAsaas, valorComEncargos } from "../server/services/cobranca-encargos";
 
 let falhas = 0;
 function igual(nome: string, obtido: unknown, esperado: unknown) {
@@ -99,6 +100,20 @@ console.log("Textos");
   igual("degustação D0", /termina hoje/.test(textoDegustacao("D0", "Ana", "https://app/subscription/renew")), true);
   const ok = textoPagamentoConfirmado("Rafael", 79.9, fimDoPeriodoPago("2026-09-25", 1));
   igual("confirmação com acesso até 28/10", /R\$ 79,90/.test(ok) && ok.includes(dataBrSP("2026-10-28") as string), true);
+}
+
+console.log("Multa e juros");
+{
+  const padrao = validarEncargos({ multa: 2, jurosMes: 1 });
+  igual("padrão 2% + 1% a.m.", padrao, { multa: 2, jurosMes: 1 });
+  igual("campos do Asaas", camposAsaas(padrao), { fine: { value: 2, type: "PERCENTAGE" }, interest: { value: 1 } });
+  igual("zerado não envia campos", camposAsaas({ multa: 0, jurosMes: 0 }), {});
+  igual("R$ 200 pago 3 dias depois = R$ 204,20", valorComEncargos(200, 3, padrao), 204.2);
+  igual("pago em dia = sem encargos", valorComEncargos(200, 0, padrao), 200);
+  let erro = "";
+  try { validarEncargos({ multa: 5, jurosMes: 1 }); } catch (e: any) { erro = e.message; }
+  igual("multa acima de 2% é recusada", /2%/.test(erro), true);
+  igual("aceita vírgula já convertida", validarEncargos({ multa: 1.5, jurosMes: 0.99 }), { multa: 1.5, jurosMes: 0.99 });
 }
 
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }

@@ -1387,6 +1387,16 @@ const STEPS: Step[] = [
           origem        VARCHAR(12) NOT NULL DEFAULT 'auto'
         )
       `);
+      // Multa e juros das mensalidades (padrão 2% + 1% a.m.; editável no admin).
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS cobranca_config (
+          id             INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+          multa_pct      NUMERIC(5,2) NOT NULL DEFAULT 2,
+          juros_mes_pct  NUMERIC(5,2) NOT NULL DEFAULT 1,
+          atualizado_em  TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `);
+      await db.execute(sql`INSERT INTO cobranca_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING`);
       // "Próxima cobrança" (user_subscriptions.current_period_end) = acesso − 3 dias
       // de tolerância, para assinaturas em que ficou igual ao acesso.
       await umaVez("assinatura.periodo_sem_tolerancia", async (tx) => {
