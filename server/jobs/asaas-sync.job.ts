@@ -3,25 +3,26 @@
  * quem pagou e ainda não teve o acesso liberado (webhook perdido, fila
  * pausada, token trocado). Inicializado em server/index.ts.
  *
- * Cada cliente é conferido no máximo a cada 5 horas. A conferência manual
- * ("Conferir pagamento" no admin, "Já paguei" do cliente) conta como feita:
- * a automática daquele cliente só volta 5 horas depois dela.
+ * Roda a cada 30 minutos. A conferência manual ("Conferir pagamento" no
+ * admin, "Já paguei" do cliente) conta como feita: a automática daquele
+ * cliente só volta 30 minutos depois dela.
  */
 import { db } from "../db";
 import { sql } from "drizzle-orm";
 import { storage } from "../storage";
 import { getSubscriptionService } from "../services/subscription.service";
 
-// O relógio passa de hora em hora; quem já foi conferido nas últimas 5h é pulado.
-const CHECK_INTERVAL = 60 * 60 * 1000;
-export const JANELA_CONFERENCIA_HORAS = 5;
+const CHECK_INTERVAL = 30 * 60 * 1000;
+// Quem foi conferido (manual ou automático) há menos disso é pulado. Um pouco
+// abaixo de 30 min para a rodada seguinte não pular por segundos.
+export const JANELA_CONFERENCIA_MIN = 28;
 const MAX_POR_RODADA = 200;
 let jobInterval: NodeJS.Timeout | null = null;
 let rodando = false;
 
 /**
  * Clientes com cadastro no Asaas cujo acesso não está garantido pelos próximos
- * 5 dias e que não foram conferidos (manual ou automático) nas últimas 5 horas.
+ * 5 dias e que não foram conferidos (manual ou automático) na última meia hora.
  */
 async function candidatos(): Promise<number[]> {
   const { garantirTabelaConferencias } = await import("../services/subscription.service");
@@ -31,7 +32,7 @@ async function candidatos(): Promise<number[]> {
     FROM usuarios u
     JOIN asaas_customers c ON c.usuario_id = u.id
     LEFT JOIN asaas_conferencias k ON k.usuario_id = u.id
-    WHERE (k.conferido_em IS NULL OR k.conferido_em < now() - make_interval(hours => ${JANELA_CONFERENCIA_HORAS}))
+    WHERE (k.conferido_em IS NULL OR k.conferido_em < now() - make_interval(mins => ${JANELA_CONFERENCIA_MIN}))
       AND EXISTS (SELECT 1 FROM user_subscriptions s WHERE s.usuario_id = u.id AND s.asaas_subscription_id IS NOT NULL)
       AND (
         u.status_assinatura IS DISTINCT FROM 'ativa'
@@ -75,7 +76,7 @@ async function run(): Promise<void> {
 }
 
 export function initializeAsaasSync(): void {
-  console.log(`[AsaasSync] ✅ Conferência de pagamentos no Asaas inicializada (cada cliente a cada ${JANELA_CONFERENCIA_HORAS}h)`);
+  console.log("[AsaasSync] ✅ Conferência de pagamentos no Asaas inicializada (intervalo: 30min)");
   setTimeout(run, 2 * 60 * 1000);
   jobInterval = setInterval(run, CHECK_INTERVAL);
 }

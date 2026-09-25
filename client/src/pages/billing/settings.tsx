@@ -1,4 +1,4 @@
-import { dataBrSP } from "@shared/datas-sp";
+import { dataBrSP, diasAteSP } from "@shared/datas-sp";
 import { useState } from 'react';
 import { useSubscription, useCancelSubscription } from '@/hooks/use-subscription';
 import { useSubscriptionStatus } from '@/hooks/use-subscription-status';
@@ -138,6 +138,8 @@ export default function BillingSettingsPage() {
     );
   }
 
+  const diasProxima = diasAteSP(data.subscription?.currentPeriodEnd);
+
   return (
     <div className="container max-w-4xl mx-auto py-8 space-y-6">
       <h1 className="text-2xl font-semibold tracking-tight">Configurações de Pagamento</h1>
@@ -155,17 +157,22 @@ export default function BillingSettingsPage() {
             <p className="text-sm text-muted-foreground">Próxima cobrança</p>
             <p className="text-lg">
               {dataBrSP(data.subscription?.currentPeriodEnd)}
-              {daysRemaining != null && daysRemaining >= 0 && (
+              {diasProxima != null && diasProxima >= 0 && (
                 <span className="ml-2 text-sm font-normal text-muted-foreground">
-                  ({daysRemaining === 0 ? "vence hoje" : daysRemaining === 1 ? "falta 1 dia" : `faltam ${daysRemaining} dias`})
+                  ({diasProxima === 0 ? "vence hoje" : diasProxima === 1 ? "falta 1 dia" : `faltam ${diasProxima} dias`})
                 </span>
               )}
             </p>
+            {expirationDate && dataBrSP(expirationDate) !== dataBrSP(data.subscription?.currentPeriodEnd) && (
+              <p className="text-xs text-muted-foreground">
+                Acesso garantido até {dataBrSP(expirationDate)} (3 dias de tolerância para o pagamento compensar).
+              </p>
+            )}
           </div>
           <div>
             <p className="text-sm text-muted-foreground">Valor</p>
             <p className="text-lg font-semibold">
-              R$ {parseFloat(data.subscription?.plan?.priceMonthly || '0').toFixed(2)}/mês
+              {parseFloat(data.subscription?.plan?.priceMonthly || '0').toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}/mês
             </p>
           </div>
         </CardContent>

@@ -91,3 +91,27 @@ export function vencimentoPrimeiraCobranca(
   const limite = somarDiasISO(hojeISO, 31);
   return fim > limite ? hojeISO : fim;
 }
+
+/**
+ * Vencimento que define o CICLO da cobrança paga. Se o vencimento foi alterado
+ * no painel do Asaas (ex.: fatura de 21/09 prorrogada para 21/10 para o cliente
+ * conseguir pagar), vale o original: a fatura continua sendo a do ciclo 21/09.
+ */
+export function vencimentoDoCiclo(p: { originalDueDate?: string | null; dueDate?: string | null } | null | undefined): string | null {
+  const o = String(p?.originalDueDate || "").slice(0, 10);
+  if (ISO.test(o)) return o;
+  const d = String(p?.dueDate || "").slice(0, 10);
+  return ISO.test(d) ? d : null;
+}
+
+/** Fim do dia (SP) da próxima cobrança depois de pagar a cobrança com esse vencimento — sem tolerância. */
+export function fimDoCicloPago(vencimentoISO: string, meses: number): Date {
+  return fimDoDiaSP(proximoVencimento(vencimentoISO, meses));
+}
+
+/** Próxima cobrança a partir do acesso gravado (que inclui a tolerância). */
+export function proximaCobrancaDoAcesso(acessoAte: Date | string | null | undefined, tolerancia = TOLERANCIA_DIAS): string | null {
+  if (!acessoAte) return null;
+  const dia = diaSP(acessoAte);
+  return dia ? somarDiasISO(dia, -tolerancia) : null;
+}

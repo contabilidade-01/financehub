@@ -13,7 +13,7 @@ import { getAsaasService, AsaasService, AsaasCreditCardData, AsaasCreditCardHold
 import { getNotificationService, NotificationService } from './notification.service';
 import type { IStorage } from '../storage';
 import { resolverPlanoDoUsuario } from './resolver-plano';
-import { novaExpiracao, vencimentoPrimeiraCobranca, fimDoPeriodoPago } from './assinatura-datas';
+import { novaExpiracao, vencimentoPrimeiraCobranca, fimDoPeriodoPago, fimDoCicloPago, vencimentoDoCiclo, proximaCobrancaDoAcesso } from './assinatura-datas';
 import { rotuloModalidade } from '../../shared/modalidade';
 import { db } from '../db';
 import { sql } from 'drizzle-orm';
@@ -450,7 +450,8 @@ export class SubscriptionService {
       externalReference: `user:${userId}`,
     });
 
-    const periodEnd = fimDoPeriodoPago(nextDueDate, cfgCiclo.meses);
+    // currentPeriodEnd = próxima cobrança (sem a tolerância) — é o que a tela mostra.
+    const periodEnd = fimDoCicloPago(nextDueDate, cfgCiclo.meses);
     const subscription = await this.storage.createUserSubscription({
       usuarioId: userId,
       planId: plan.id,
@@ -580,6 +581,40 @@ export class SubscriptionService {
   }
 
   /**
+   * "Pagamento confirmado" por e-mail e WhatsApp — uma vez por cobrança
+   * (o Asaas manda CONFIRMED e depois RECEIVED no cartão; a conferência
+   * automática também pode reconhecer o mesmo pagamento).
+   */
+  async avisarPagamentoConfirmado(
+    userId: number,
+    p: { id: string; value?: number | string; invoiceUrl?: string; transactionReceiptUrl?: string },
+    acessoAte: Date,
+  ): Promise<void> {
+    const user = await this.storage.getUserById(userId);
+    if (!user) return;
+    const valor = Number(p.value ?? 0);
+    try {
+      const { reservarAvisoUnico } = await import('./lembretes-cobranca');
+      if (await reservarAvisoUnico(userId, `email-pago:${p.id}`)) {
+        const ativa = await this.storage.getActiveSubscriptionByUserId(userId).catch(() => undefined);
+        const plano = ativa ? (await this.storage.getSubscriptionPlanById(ativa.planId).catch(() => undefined))?.name : undefined;
+        await this.notificationService.sendPaymentConfirmed(user, valor, p.invoiceUrl, {
+          acessoAte,
+          proximaCobranca: proximaCobrancaDoAcesso(acessoAte),
+          plano: plano || undefined,
+          comprovanteUrl: p.transactionReceiptUrl,
+        });
+      }
+    } catch (err: any) {
+      console.warn('[Assinatura] e-mail de pagamento confirmado:', err?.message);
+    }
+    try {
+      const { avisarPagamentoConfirmado } = await import('./lembretes-cobranca');
+      await avisarPagamentoConfirmado(user as any, p.id, valor, acessoAte);
+    } catch { /* WhatsApp é best-effort */ }
+  }
+
+  /**
    * Confere no Asaas (fonte da verdade) se o cliente pagou alguma cobrança que
    * o sistema ainda não reconheceu — webhook perdido, fila pausada, token
    * errado — e libera o acesso. Idempotente: só age quando o pagamento
@@ -613,6 +648,32 @@ export class SubscriptionService {
     let acessoAte: Date | undefined;
     let ativado = false;
 
+    // Correção: versões anteriores ancoravam no vencimento ALTERADO no painel do
+    // Asaas (fatura de 21/09 prorrogada para 21/10 virava acesso até 24/11).
+    // Se o acesso gravado é exatamente esse cálculo errado, volta para o certo.
+    const correto = pagos
+      .map((p: any) => vencimentoDoCiclo(p))
+      .filter((v): v is string => !!v)
+      .map((v) => fimDoPeriodoPago(v, meses))
+      .sort((a, b) => b.getTime() - a.getTime())[0];
+    const errados = new Set(
+      pagos
+        .filter((p: any) => p.originalDueDate && String(p.originalDueDate).slice(0, 10) !== String(p.dueDate).slice(0, 10))
+        .map((p: any) => fimDoPeriodoPago(String(p.dueDate).slice(0, 10), meses).toISOString()),
+    );
+    const expGravada = (user as any).data_expiracao_assinatura ? new Date((user as any).data_expiracao_assinatura) : null;
+    if (correto && expGravada && errados.has(expGravada.toISOString()) && expGravada > correto) {
+      await this.storage.updateUser(userId, { data_expiracao_assinatura: correto } as any);
+      const proxima = proximaCobrancaDoAcesso(correto);
+      const subAtiva = subs.find((x) => x.status === 'active');
+      if (subAtiva && proxima) {
+        await this.storage.updateUserSubscription(subAtiva.id, { currentPeriodEnd: new Date(`${proxima}T23:59:59.999-03:00`) } as any);
+      }
+      console.log(`[Assinatura] user ${userId}: acesso corrigido de ${expGravada.toISOString()} para ${correto.toISOString()} (vencimento original do Asaas)`);
+      acessoAte = correto;
+      ativado = true;
+    }
+
     for (const p of pagos as any[]) {
       const localSub =
         subs.find((x) => x.asaasSubscriptionId && x.asaasSubscriptionId === p.subscription) ||
@@ -620,6 +681,9 @@ export class SubscriptionService {
       if (!localSub) continue;
 
       let local = await this.storage.getPaymentTransactionByAsaasId(p.id);
+      // Pagamento que o sistema ainda não tinha como confirmado (webhook perdido):
+      // o cliente precisa receber a confirmação, mesmo que o acesso já esteja ok.
+      const novoParaOSistema = !local || local.status !== 'confirmed';
       if (!local) {
         local = await this.storage.createPaymentTransaction({
           usuarioId: userId,
@@ -640,19 +704,18 @@ export class SubscriptionService {
 
       // Já refletido? (ativa e com acesso até, pelo menos, o período desta cobrança)
       const atual = await this.storage.getUserById(userId);
-      const alvo = fimDoPeriodoPago(String(p.dueDate).slice(0, 10), meses);
+      const venc = vencimentoDoCiclo(p) as string;
+      const alvo = fimDoPeriodoPago(venc, meses);
       const expAtual = (atual as any)?.data_expiracao_assinatura ? new Date((atual as any).data_expiracao_assinatura) : null;
       if ((atual as any)?.status_assinatura === 'ativa' && expAtual && expAtual >= alvo) {
         acessoAte = expAtual;
+        if (novoParaOSistema) await this.avisarPagamentoConfirmado(userId, p, expAtual);
         continue;
       }
-      acessoAte = await this.activateUserSubscription(userId, localSub.id, String(p.dueDate).slice(0, 10));
+      acessoAte = await this.activateUserSubscription(userId, localSub.id, venc);
       ativado = true;
-      try {
-        const { avisarPagamentoConfirmado } = await import('./lembretes-cobranca');
-        await avisarPagamentoConfirmado((await this.storage.getUserById(userId)) as any, p.id, Number(p.value), acessoAte);
-      } catch { /* aviso é best-effort */ }
-      console.log(`[Assinatura] Pagamento ${p.id} (venc. ${p.dueDate}) reconhecido pela sincronização — user ${userId} até ${acessoAte.toISOString()}`);
+      await this.avisarPagamentoConfirmado(userId, p, acessoAte);
+      console.log(`[Assinatura] Pagamento ${p.id} (venc. ${venc}) reconhecido pela sincronização — user ${userId} até ${acessoAte.toISOString()}`);
     }
     return { ativado, pagos: pagos.length, acessoAte };
   }
@@ -671,11 +734,14 @@ export class SubscriptionService {
       // desalinha do Asaas, e CONFIRMED + RECEIVED (cartão) dão o mesmo resultado.
       // Nunca reduz um acesso já concedido.
       const periodEnd = novaExpiracao((user as any)?.data_expiracao_assinatura, vencimento, meses, agora);
+      // Assinatura local: período = próxima cobrança do Asaas (sem a tolerância),
+      // que é o que a tela "Próxima cobrança" mostra.
+      const proxima = proximaCobrancaDoAcesso(periodEnd);
 
       await this.storage.updateUserSubscription(subscriptionId, {
         status: 'active',
         currentPeriodStart: agora,
-        currentPeriodEnd: periodEnd,
+        currentPeriodEnd: proxima ? new Date(`${proxima}T23:59:59.999-03:00`) : periodEnd,
       });
 
       // Fonte de acesso do app é data_expiracao_assinatura — precisa ir junto.

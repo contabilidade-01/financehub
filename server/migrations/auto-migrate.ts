@@ -1387,6 +1387,18 @@ const STEPS: Step[] = [
           origem        VARCHAR(12) NOT NULL DEFAULT 'auto'
         )
       `);
+      // "Próxima cobrança" (user_subscriptions.current_period_end) = acesso − 3 dias
+      // de tolerância, para assinaturas em que ficou igual ao acesso.
+      await umaVez("assinatura.periodo_sem_tolerancia", async (tx) => {
+        await tx.execute(sql`
+          UPDATE user_subscriptions s
+          SET current_period_end = ((((u.data_expiracao_assinatura AT TIME ZONE 'America/Sao_Paulo')::date - 3) + time '23:59:59.999') AT TIME ZONE 'America/Sao_Paulo')
+          FROM usuarios u
+          WHERE u.id = s.usuario_id AND s.status = 'active'
+            AND u.data_expiracao_assinatura IS NOT NULL
+            AND s.current_period_end = u.data_expiracao_assinatura
+        `);
+      });
       // Assinantes ativos: recalcula pelo vencimento do último pagamento
       // confirmado (vencimento + ciclo + 3 dias, fim do dia em SP). Só ESTENDE
       // — nunca tira acesso de ninguém.

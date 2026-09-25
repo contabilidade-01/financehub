@@ -271,7 +271,7 @@ app.use((req, res, next) => {
     console.error("[Mensalidades] Falha ao carregar job de mensalidades:", err.message);
   });
 
-  // Assinaturas: confere no Asaas (cada cliente a cada 5h; manual reinicia) quem pagou e não foi liberado
+  // Assinaturas: confere no Asaas a cada 30min (manual reinicia a janela) quem pagou e não foi liberado
   import("./jobs/asaas-sync.job").then(({ initializeAsaasSync }) => {
     initializeAsaasSync();
   }).catch(err => {

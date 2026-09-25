@@ -237,27 +237,23 @@ async function processWebhookEvent(eventType: string, paymentData: any, webhookI
 
       // Ativar assinatura do usuário
       if (payment.subscriptionId) {
-        // Vencimento da cobrança paga ancora o período (ver assinatura-datas.ts).
-        const vencimento = String(paymentData.dueDate || (payment as any).dueDate || '').slice(0, 10) || null;
+        // O ciclo é o do vencimento ORIGINAL da cobrança (se foi prorrogada no
+        // painel do Asaas, continua sendo a fatura daquele ciclo).
+        const { vencimentoDoCiclo } = await import('../services/assinatura-datas');
+        const vencimento = vencimentoDoCiclo(paymentData) || vencimentoDoCiclo({ dueDate: (payment as any).dueDate });
         const acessoAte = await subscriptionService.activateUserSubscription(payment.usuarioId, payment.subscriptionId, vencimento);
-        try {
-          const { avisarPagamentoConfirmado } = await import('../services/lembretes-cobranca');
-          await avisarPagamentoConfirmado(user as any, paymentData.id, Number(paymentData.value ?? payment.amount), acessoAte);
-        } catch (err: any) {
-          console.warn('[AsaasWebhook] WhatsApp de pagamento confirmado não enviado:', err?.message);
+        // E-mail e WhatsApp de confirmação: uma vez por cobrança (CONFIRMED e
+        // RECEIVED chegam os dois no cartão), respeitando a config do admin.
+        if (notificationSettings.sendEmail || notificationSettings.sendWhatsApp) {
+          await subscriptionService.avisarPagamentoConfirmado(payment.usuarioId, {
+            id: paymentData.id,
+            value: paymentData.value ?? payment.amount,
+            invoiceUrl: paymentData.invoiceUrl || payment.asaasInvoiceUrl || undefined,
+            transactionReceiptUrl: paymentData.transactionReceiptUrl,
+          }, acessoAte);
+        } else {
+          console.log('[AsaasWebhook] Payment notifications disabled by admin settings');
         }
-      }
-
-      // Enviar notificação de pagamento confirmado (respeitando configurações do super_admin)
-      if (notificationSettings.sendEmail || notificationSettings.sendWhatsApp) {
-        console.log(`[AsaasWebhook] Sending payment notification (Email: ${notificationSettings.sendEmail}, WhatsApp: ${notificationSettings.sendWhatsApp})`);
-        await notificationService.sendPaymentConfirmed(
-          user,
-          parseFloat(payment.amount.toString()),
-          payment.asaasInvoiceUrl || undefined
-        );
-      } else {
-        console.log('[AsaasWebhook] Payment notifications disabled by admin settings');
       }
 
       // IMPORTANTE: Webhook de ativação é SEMPRE enviado, independente das configurações de email/whatsapp

@@ -125,6 +125,8 @@ export interface AsaasPaymentResponse {
   billingType: string;
   value: number;
   dueDate: string;
+  /** Vencimento original — o Asaas guarda quando o vencimento é alterado no painel. */
+  originalDueDate?: string;
   status: 'PENDING' | 'RECEIVED' | 'CONFIRMED' | 'OVERDUE' | 'REFUNDED' | 'RECEIVED_IN_CASH' | 'REFUND_REQUESTED' | 'CHARGEBACK_REQUESTED' | 'CHARGEBACK_DISPUTE' | 'AWAITING_CHARGEBACK_REVERSAL' | 'DUNNING_REQUESTED' | 'DUNNING_RECEIVED' | 'AWAITING_RISK_ANALYSIS';
   description?: string;
   invoiceUrl?: string;

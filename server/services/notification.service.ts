@@ -430,34 +430,43 @@ ${systemConfig.system_name} Team
   /**
    * Notificação: Pagamento confirmado
    */
-  async sendPaymentConfirmed(user: User, amount: number, invoiceUrl?: string): Promise<void> {
+  async sendPaymentConfirmed(
+    user: User,
+    amount: number,
+    invoiceUrl?: string,
+    info: { acessoAte?: Date | null; proximaCobranca?: string | null; plano?: string; comprovanteUrl?: string } = {},
+  ): Promise<void> {
     try {
       const systemConfig = await getSystemConfig();
-      const subject = '✅ Pagamento confirmado';
-      const message = `
-Olá ${user.nome}!
-
-Seu pagamento de R$ ${amount.toFixed(2)} foi confirmado com sucesso!
-
-${invoiceUrl ? `Fatura: ${invoiceUrl}` : ''}
-
-Obrigado por continuar conosco!
-
-${systemConfig.system_name} Team
-      `.trim();
+      const { dataBrSP } = await import('../../shared/datas-sp');
+      const nome = String(user.nome || '').trim().split(/\s+/)[0] || 'cliente';
+      const valor = amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+      const acesso = info.acessoAte ? dataBrSP(info.acessoAte) : null;
+      const proxima = info.proximaCobranca ? dataBrSP(info.proximaCobranca) : null;
+      const app = (process.env.BASE_URL || '').replace(/\/+$/, '');
+      const subject = `✅ Pagamento confirmado — ${systemConfig.system_name}`;
+      const linhas = [
+        `Olá, ${nome}!`,
+        '',
+        `Recebemos seu pagamento de ${valor}${info.plano ? ` referente ao ${info.plano}` : ''}. Obrigado!`,
+        '',
+        ...(proxima ? [`• Próxima cobrança: ${proxima} — o Asaas envia a fatura automaticamente por e-mail.`] : []),
+        ...(acesso && acesso !== proxima ? [`• Acesso garantido até: ${acesso} (inclui 3 dias de tolerância para o pagamento compensar).`] : []),
+        '',
+        ...(info.comprovanteUrl ? [`Comprovante: ${info.comprovanteUrl}`] : invoiceUrl ? [`Fatura: ${invoiceUrl}`] : []),
+        ...(app ? [`Acesse o sistema: ${app}`] : []),
+        '',
+        `Dúvidas? Responda este e-mail ou fale com ${systemConfig.support_email}.`,
+        '',
+        `Equipe ${systemConfig.system_name}`,
+      ];
+      const message = linhas.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 
       await this.sendEmail({
         to: user.email,
         subject,
         body: message
       });
-
-      if (user.telefone) {
-        await this.sendWhatsApp({
-          phone: user.telefone,
-          message
-        });
-      }
     } catch (error) {
       console.error('[NotificationService] Error in sendPaymentConfirmed:', error);
     }

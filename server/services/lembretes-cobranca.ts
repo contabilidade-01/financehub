@@ -126,6 +126,11 @@ async function reservarAviso(usuarioId: number, chave: string): Promise<boolean>
   return rows.length > 0;
 }
 
+/** Reserva de uso único (ex.: e-mail de pagamento confirmado): true = primeira vez. */
+export async function reservarAvisoUnico(usuarioId: number, chave: string): Promise<boolean> {
+  return reservarAviso(usuarioId, chave);
+}
+
 async function liberarAviso(usuarioId: number, chave: string): Promise<void> {
   await db.execute(sql`DELETE FROM avisos_cobranca WHERE usuario_id = ${usuarioId} AND chave = ${chave}`);
 }

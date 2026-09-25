@@ -24,13 +24,13 @@ type Assinatura = {
   conferido_em?: string | null; conferido_origem?: string | null;
 };
 
-// Conferência automática no Asaas: cada cliente a cada 5h (a manual reinicia).
-const JANELA_CONFERENCIA_H = 5;
+// Conferência automática no Asaas: a cada 30 min (a manual reinicia a janela).
+const JANELA_CONFERENCIA_MIN = 30;
 const horaSP = (d: Date) => d.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 function textoConferencia(a: Assinatura): string {
   if (!a.conferido_em) return "Pagamento ainda não conferido no Asaas";
   const em = new Date(a.conferido_em);
-  const proxima = new Date(em.getTime() + JANELA_CONFERENCIA_H * 3_600_000);
+  const proxima = new Date(em.getTime() + JANELA_CONFERENCIA_MIN * 60_000);
   const como = a.conferido_origem === "manual" ? "manual" : "automática";
   return `Conferido ${horaSP(em)} (${como}) · próxima automática após ${horaSP(proxima)}`;
 }
@@ -106,7 +106,7 @@ export default function AdminAssinaturas() {
       if (r?.ativado) {
         toast({ title: "Pagamento reconhecido", description: `Acesso liberado até ${r.acessoAte ? new Date(r.acessoAte).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "—"}.` });
       } else {
-        toast({ title: "Nada a liberar", description: `${r?.motivo || (r?.pagos ? "Os pagamentos do Asaas já estão refletidos." : "Nenhum pagamento confirmado no Asaas.")} A conferência automática deste cliente volta em ${JANELA_CONFERENCIA_H}h.` });
+        toast({ title: "Nada a liberar", description: `${r?.motivo || (r?.pagos ? "Os pagamentos do Asaas já estão refletidos." : "Nenhum pagamento confirmado no Asaas.")} A conferência automática deste cliente volta em ${JANELA_CONFERENCIA_MIN} min.` });
       }
     },
     onError: (err: any) => toast({ title: "Erro", description: err?.error || err?.message || "Falha ao consultar o Asaas", variant: "destructive" }),

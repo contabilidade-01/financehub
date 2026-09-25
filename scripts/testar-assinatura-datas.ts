@@ -7,6 +7,9 @@ import {
   vencimentoPrimeiraCobranca,
   somarMesesISO,
   proximoVencimento,
+  vencimentoDoCiclo,
+  fimDoCicloPago,
+  proximaCobrancaDoAcesso,
 } from "../server/services/assinatura-datas";
 import {
   etapaDegustacao,
@@ -58,6 +61,19 @@ igual("degustação expirada → hoje",
   vencimentoPrimeiraCobranca("2026-09-25", { status_assinatura: "degustacao_expirada", data_expiracao_assinatura: "2026-09-20T12:00:00Z" }), "2026-09-25");
 igual("data absurda → hoje",
   vencimentoPrimeiraCobranca("2026-09-25", { status_assinatura: "degustacao", data_expiracao_assinatura: "2027-09-30T12:00:00Z" }), "2026-09-25");
+
+console.log("Vencimento prorrogado no painel do Asaas (caso Rafael)");
+{
+  const pago = { originalDueDate: "2026-09-21", dueDate: "2026-10-21" };
+  const venc = vencimentoDoCiclo(pago) as string;
+  igual("ciclo = vencimento original (21/09)", venc, "2026-09-21");
+  igual("vigência / próxima cobrança = 21/10", diaSP(fimDoCicloPago(venc, 1)), "2026-10-21");
+  const acesso = fimDoPeriodoPago(venc, 1);
+  igual("acesso até 24/10 (3 dias de tolerância)", diaSP(acesso), "2026-10-24");
+  igual("próxima cobrança derivada do acesso", proximaCobrancaDoAcesso(acesso), "2026-10-21");
+  igual("sem originalDueDate usa dueDate", vencimentoDoCiclo({ dueDate: "2026-10-21" }), "2026-10-21");
+  igual("sem datas → null", vencimentoDoCiclo({}), null);
+}
 
 console.log("Etapas dos lembretes");
 igual("degustação", [4, 3, 2, 1, 0, -1].map(etapaDegustacao), [null, "D-3", null, "D-1", "D0", null]);
