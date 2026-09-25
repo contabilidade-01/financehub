@@ -7,7 +7,7 @@
  */
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "../../db";
-import { hojeSP } from "../nlp-br";
+import { hojeSP, somarDias } from "../nlp-br";
 import { ErroErp, type Regime } from "./erp.service";
 import {
   calcularIndicadores, grupoDreDaConta, somasVazias, ESTRUTURA_DRE, ROTULO_GRUPO_DRE,
@@ -309,4 +309,122 @@ export function razaoParaCsv(r: Awaited<ReturnType<typeof lancamentosDaConta>>):
   }
   const esc = (s: string) => (/[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
   return "﻿" + linhas.map((l) => l.map((c) => esc(String(c ?? ""))).join(";")).join("\r\n");
+}
+
+// ----------------------------------------------------------------------------
+// Dashboard de análise
+// ----------------------------------------------------------------------------
+
+/**
+ * Período de comparação: meses cheios comparam com os mesmos meses cheios
+ * anteriores (set → ago; 1º tri → 4º tri); outros recortes, com o mesmo
+ * número de dias imediatamente antes.
+ */
+export function periodoAnterior(de: string, ate: string): { de: string; ate: string } {
+  const dia = 86_400_000;
+  const [a1, m1, d1] = de.split("-").map(Number);
+  const [a2, m2] = ate.split("-").map(Number);
+  if (d1 === 1 && ate === fimDoMes(ate.slice(0, 7))) {
+    const n = (a2 - a1) * 12 + (m2 - m1) + 1;
+    const ini = new Date(Date.UTC(a1, m1 - 1 - n, 1)).toISOString().slice(0, 10);
+    const fim = new Date(Date.UTC(a1, m1 - 1, 0)).toISOString().slice(0, 10);
+    return { de: ini, ate: fim };
+  }
+  const ini = Date.parse(`${de}T12:00:00Z`);
+  const dias = Math.round((Date.parse(`${ate}T12:00:00Z`) - ini) / dia) + 1;
+  const iso = (t: number) => new Date(t).toISOString().slice(0, 10);
+  return { de: iso(ini - dias * dia), ate: iso(ini - dia) };
+}
+
+function fimDoMes(ym: string): string {
+  const [a, m] = ym.split("-").map(Number);
+  return new Date(Date.UTC(a, m, 0)).toISOString().slice(0, 10);
+}
+
+export async function painelAnalise(empresaId: number, f: FiltrosAnalise) {
+  const { saldoConta } = await import("../conta-bancaria.service");
+  const { listarTitulos } = await import("./titulos.service");
+  const { projecaoCaixa } = await import("./projecao.service");
+
+  const atual = await somarPorConta(empresaId, f);
+  const ant = periodoAnterior(atual.base.de, atual.base.ate);
+  const anterior = await somarPorConta(empresaId, { ...f, ...ant });
+  const somas = somasDe(atual.linhas);
+
+  // Série de 12 meses terminando no fim do período (regime escolhido).
+  const [aAte, mAte] = atual.base.ate.split("-").map(Number);
+  const ini12 = new Date(Date.UTC(aAte, mAte - 12, 1)).toISOString().slice(0, 10);
+  const serie = await somarPorConta(empresaId, { ...f, de: ini12, ate: fimDoMes(atual.base.ate.slice(0, 7)) });
+  const meses12 = mesesEntre(ini12, atual.base.ate);
+  const saidaGrupos: GrupoDre[] = ["deducao", "cmv", "variavel", "fixa", "financeiro_despesa", "outras"];
+  const mensal = meses12.map((m) => {
+    const s = somasDe(serie.linhas, m);
+    const ind = calcularIndicadores(s);
+    return {
+      mes: m,
+      receitas: r2(s.receita + s.financeiro_receita),
+      despesas: r2(saidaGrupos.reduce((t, g) => t + s[g], 0)),
+      lucro_liquido: ind.lucro_liquido,
+    };
+  });
+
+  // Saldo dos bancos hoje e no fim de cada mês da série.
+  const bancos = (await db.execute(sql`
+    SELECT id, COALESCE(nome, banco) AS nome FROM contas_bancarias
+    WHERE empresa_id = ${empresaId} AND ativo = true
+      AND (${atual.base.banco}::int IS NULL OR id = ${atual.base.banco})
+  `)) as any[];
+  const hoje = hojeSP();
+  const saldoBancos = await Promise.all(bancos.map(async (b) => ({ id: Number(b.id), nome: b.nome, saldo: await saldoConta(Number(b.id)) })));
+  const evolucaoSaldo = [];
+  for (const m of meses12) {
+    const corte = fimDoMes(m) > hoje ? hoje : fimDoMes(m);
+    const valores = await Promise.all(bancos.map((b) => saldoConta(Number(b.id), corte)));
+    evolucaoSaldo.push({ mes: m, saldo: r2(valores.reduce((s, v) => s + v, 0)) });
+  }
+
+  // Top clientes e fornecedores no período.
+  const tops = (await db.execute(sql`
+    SELECT t.tipo, c.id, c.nome, SUM(t.valor::numeric) AS total
+    FROM empresas_transacoes t
+    JOIN empresas_contatos c ON c.id = t.contato_id
+    WHERE t.empresa_id = ${empresaId} AND ${atual.base.filtro}
+    GROUP BY t.tipo, c.id, c.nome
+    ORDER BY total DESC
+  `)) as any[];
+  const top = (tipo: string) => tops.filter((t) => t.tipo === tipo).slice(0, 5).map((t) => ({ id: Number(t.id), nome: t.nome, total: r2(Number(t.total)) }));
+
+  const receber = await listarTitulos(empresaId, "Receita", { status: "aberto" });
+  const pagar = await listarTitulos(empresaId, "Despesa", { status: "aberto" });
+  const em7 = (l: any) => {
+    const v = String(l.data_vencimento || l.data_transacao).slice(0, 10);
+    return v >= hoje && v <= somarDias(hoje, 7);
+  };
+  const proximos = [
+    ...receber.linhas.filter(em7).map((l: any) => ({ ...l, tipo: "Receita" })),
+    ...pagar.linhas.filter(em7).map((l: any) => ({ ...l, tipo: "Despesa" })),
+  ]
+    .sort((a, b) => String(a.data_vencimento).localeCompare(String(b.data_vencimento)))
+    .slice(0, 12)
+    .map((l) => ({ id: l.id, descricao: l.descricao, valor: Number(l.valor), tipo: l.tipo, vencimento: String(l.data_vencimento || l.data_transacao).slice(0, 10), contato: l.contato_nome }));
+
+  const projecao = await projecaoCaixa(empresaId, { horizonte: 90, agrupar: "semana", conta_bancaria_id: atual.base.banco });
+
+  return {
+    periodo: { de: atual.base.de, ate: atual.base.ate },
+    anterior: ant,
+    regime: atual.base.regime,
+    indicadores: calcularIndicadores(somas),
+    indicadores_anterior: calcularIndicadores(somasDe(anterior.linhas)),
+    somas,
+    mensal,
+    saldo_bancos: { total: r2(saldoBancos.reduce((s, b) => s + b.saldo, 0)), bancos: saldoBancos },
+    evolucao_saldo: evolucaoSaldo,
+    top_clientes: top("Receita"),
+    top_fornecedores: top("Despesa"),
+    receber: { resumo: receber.resumo, aging: receber.aging },
+    pagar: { resumo: pagar.resumo, aging: pagar.aging },
+    proximos_7_dias: proximos,
+    projecao: { periodos: projecao.periodos, primeiro_negativo: projecao.primeiro_negativo, saldo_final: projecao.saldo_final, menor_saldo: projecao.menor_saldo },
+  };
 }

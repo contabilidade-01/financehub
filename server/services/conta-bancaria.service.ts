@@ -48,7 +48,8 @@ export async function saldoConta(contaId: number, ate?: string): Promise<number>
   // SALDO ATUAL = só dinheiro que JÁ se moveu (status Efetivada). Conta a pagar
   // em aberto é PREVISÃO e nunca entra aqui — ela aparece no Fluxo Projetado e
   // no "Saldo em aberto" da tela de Lançamentos. Regra idêntica para PF e PJ.
-  const filtroAte = ate ? sql`AND data_transacao <= ${ate}` : sql``;
+  // Saldo numa data: vale o dia em que o dinheiro se moveu (baixa), não o da competência.
+  const filtroAte = ate ? sql`AND COALESCE(data_pagamento, data_transacao) <= ${ate}` : sql``;
 
   const pf = await db.execute(sql`
     SELECT COALESCE(SUM(
@@ -129,8 +130,9 @@ export async function movimentoContaPeriodo(
   de?: string,
   ate?: string,
 ): Promise<{ movimento: number; entradas: number; saidas: number; qtd: number }> {
-  const filtroDe = de ? sql`AND data_transacao >= ${de}` : sql``;
-  const filtroAte = ate ? sql`AND data_transacao <= ${ate}` : sql``;
+  // Extrato bancário: vale o dia em que o dinheiro se moveu (baixa), não o da competência.
+  const filtroDe = de ? sql`AND COALESCE(data_pagamento, data_transacao) >= ${de}` : sql``;
+  const filtroAte = ate ? sql`AND COALESCE(data_pagamento, data_transacao) <= ${ate}` : sql``;
 
   const pf = await db.execute(sql`
     SELECT
@@ -193,11 +195,12 @@ export async function listarLancamentosContaPf(
   `);
   if (!(conta as any[])[0]) return [];
 
-  const filtroDe = de ? sql`AND t.data_transacao >= ${de}` : sql``;
-  const filtroAte = ate ? sql`AND t.data_transacao <= ${ate}` : sql``;
+  // Data do extrato = dia em que o dinheiro se moveu (baixa), como no banco.
+  const filtroDe = de ? sql`AND COALESCE(t.data_pagamento, t.data_transacao) >= ${de}` : sql``;
+  const filtroAte = ate ? sql`AND COALESCE(t.data_pagamento, t.data_transacao) <= ${ate}` : sql``;
 
   const rows = await db.execute(sql`
-    SELECT t.id, t.descricao, t.valor, t.tipo, t.data_transacao, t.status,
+    SELECT t.id, t.descricao, t.valor, t.tipo, COALESCE(t.data_pagamento, t.data_transacao) AS data_transacao, t.status,
            t.movimenta_caixa, c.nome AS categoria, fp.nome AS forma_pagamento
     FROM transacoes t
     LEFT JOIN categorias c ON c.id = t.categoria_id
@@ -207,7 +210,7 @@ export async function listarLancamentosContaPf(
       AND t.status = 'Efetivada'
       ${filtroDe}
       ${filtroAte}
-    ORDER BY t.data_transacao DESC, t.id DESC
+    ORDER BY COALESCE(t.data_pagamento, t.data_transacao) DESC, t.id DESC
   `);
   const transf = await transferenciasDaConta(contaId, de, ate);
   return [...(rows as any[]), ...transf].sort((a, b) => diaDe(b.data_transacao) - diaDe(a.data_transacao));
@@ -323,11 +326,12 @@ export async function listarLancamentosContaPj(
   if (!(conta as any[])[0]) return [];
   const rotuloConta = (conta as any[])[0].nome || (conta as any[])[0].banco || "Conta";
 
-  const filtroDe = de ? sql`AND t.data_transacao >= ${de}` : sql``;
-  const filtroAte = ate ? sql`AND t.data_transacao <= ${ate}` : sql``;
+  // Data do extrato = dia em que o dinheiro se moveu (baixa), como no banco.
+  const filtroDe = de ? sql`AND COALESCE(t.data_pagamento, t.data_transacao) >= ${de}` : sql``;
+  const filtroAte = ate ? sql`AND COALESCE(t.data_pagamento, t.data_transacao) <= ${ate}` : sql``;
 
   const rows = await db.execute(sql`
-    SELECT t.id, t.descricao, t.valor, t.tipo, t.data_transacao, t.status,
+    SELECT t.id, t.descricao, t.valor, t.tipo, COALESCE(t.data_pagamento, t.data_transacao) AS data_transacao, t.status,
            t.movimenta_caixa, t.metodo_pagamento, t.parcela_num, t.parcela_total,
            c.nome AS categoria, c.codigo AS categoria_codigo
     FROM empresas_transacoes t
@@ -338,7 +342,7 @@ export async function listarLancamentosContaPj(
       AND t.status = 'Efetivada'
       ${filtroDe}
       ${filtroAte}
-    ORDER BY t.data_transacao ASC, t.id ASC
+    ORDER BY COALESCE(t.data_pagamento, t.data_transacao) ASC, t.id ASC
   `);
   const lancs = (rows as any[]).map((r) => ({
     ...r,

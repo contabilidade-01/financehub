@@ -1607,6 +1607,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/empresas/:id/erp/estornos", ...erpAuth, erpCtrl.estornar);
   app.get("/api/empresas/:id/erp/dre", ...erpAuth, erpCtrl.dre);
   app.get("/api/empresas/:id/erp/razao", ...erpAuth, erpCtrl.razao);
+  app.get("/api/empresas/:id/erp/analise", ...erpAuth, erpCtrl.painel);
+  app.get("/api/empresas/:id/erp/projecao", ...erpAuth, erpCtrl.projecaoCaixa);
   app.get("/api/empresas/:id/erp/razao/:cid", ...erpAuth, erpCtrl.razaoConta);
   app.post("/api/empresas/:id/erp/contas-plano", ...erpAuth, erpCtrl.criarContaPlano);
   app.get("/api/empresas/:id/erp/transferencias", ...erpAuth, erpCtrl.listarTransferencias);

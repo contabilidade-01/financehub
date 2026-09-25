@@ -19,6 +19,10 @@ import CentrosCustoPage from "@/pages/pj/erp/centros-custo";
 import ContasReceberPage from "@/pages/pj/erp/contas-receber";
 import ContasPagarPage from "@/pages/pj/erp/contas-pagar";
 import RazaoPage from "@/pages/pj/erp/razao";
+import ProjecoesPage from "@/pages/pj/erp/projecoes";
+import AnalisePage from "@/pages/pj/erp/analise";
+import { useAuth } from "@/hooks/use-auth";
+import { temErpPj } from "@shared/modalidade";
 import DreGerencialPage from "@/pages/pj/erp/dre";
 import TransferenciasPage from "@/pages/pj/erp/transferencias";
 import PjReembolsos from "@/pages/pj/reembolsos";
@@ -33,6 +37,7 @@ import MensalidadesPage from "@/pages/mensalidades";
  */
 export default function PjRouter() {
   const [location] = useLocation();
+  const { user } = useAuth() as { user?: any };
 
   const { data: empresas = [], isLoading } = useQuery<Empresa[]>({
     queryKey: ["/api/empresas"],
@@ -81,7 +86,10 @@ export default function PjRouter() {
   const renderPage = () => {
     switch (subPath) {
       case "dashboard":
-        return <PjDashboard empresaId={empresaAtiva} />;
+        // PJ ME abre na análise completa (ERP); PJ MEI mantém o painel simples.
+        return temErpPj(user as any) ? <AnalisePage empresaId={empresaAtiva} /> : <PjDashboard empresaId={empresaAtiva} />;
+      case "projecoes":
+        return <ProjecoesPage empresaId={empresaAtiva} />;
       case "transacoes":
         return <PjTransactions empresaId={empresaAtiva} />;
       case "categorias":

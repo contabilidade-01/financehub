@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import * as erp from "../services/erp/erp.service";
 import * as titulos from "../services/erp/titulos.service";
 import * as analise from "../services/erp/analise.service";
+import * as projecao from "../services/erp/projecao.service";
 
 /** Rotas do ERP (PJ ME). requireErpPj já garantiu a modalidade; aqui, a empresa do usuário. */
 function falha(res: Response, err: any) {
@@ -124,6 +125,23 @@ export async function dre(req: Request, res: Response) {
       return res.send(analise.dreParaCsv(d));
     }
     res.json(d);
+  } catch (err) { falha(res, err); }
+}
+
+export async function painel(req: Request, res: Response) {
+  try { const e = await empresa(req); res.json(await analise.painelAnalise(e.id, filtrosAnalise(req.query))); } catch (err) { falha(res, err); }
+}
+
+export async function projecaoCaixa(req: Request, res: Response) {
+  try {
+    const e = await empresa(req);
+    res.json(await projecao.projecaoCaixa(e.id, {
+      horizonte: Number(req.query.horizonte) || undefined,
+      agrupar: req.query.agrupar as string | undefined,
+      conta_bancaria_id: num(req.query.conta_bancaria_id),
+      cenario: req.query.cenario as string | undefined,
+      inadimplencia_pct: num(req.query.inadimplencia_pct),
+    }));
   } catch (err) { falha(res, err); }
 }
 
