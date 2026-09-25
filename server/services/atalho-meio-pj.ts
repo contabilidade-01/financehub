@@ -3,6 +3,7 @@
  * Não deixa o modelo inventar cartão nem "nenhum cartão cadastrado".
  */
 import { detectarMeio, textoMeioDeDetect } from "./parse-meio";
+import { detectarDirecao, extrairValorBR } from "./nlp-br";
 
 export type LancamentoSemMeio = {
   descricao: string;
@@ -28,16 +29,8 @@ function norm(s: string): string {
 }
 
 function parseValorBR(texto: string): number | null {
-  const m = String(texto || "").match(
-    /(?:r\$\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)/i,
-  );
-  if (!m) return null;
-  let n = m[1];
-  if (n.includes(",") && n.includes(".")) n = n.replace(/\./g, "").replace(",", ".");
-  else if (n.includes(",")) n = n.replace(",", ".");
-  const v = Number(n);
-  if (!Number.isFinite(v) || v <= 0 || v > 9_999_999) return null;
-  return Math.round(v * 100) / 100;
+  // Fase 1: "1.500" = 1500, "1,5k", "dia 5 ... 1500" → valor monetário, não o 1º número.
+  return extrairValorBR(texto);
 }
 
 function pareceConsultaOuComando(n: string): boolean {
@@ -58,10 +51,12 @@ export function pareceLancamentoSemMeio(texto: string): LancamentoSemMeio | null
   if (valor == null) return null;
 
   // "entrada", "recebi", "venda"… = RECEITA (antes só entrava como despesa).
+  // Sem sinal claro ("abastecimento 124,50") segue como despesa, o caso comum.
   const tipo: "Receita" | "Despesa" =
-    /\b(recebi|receita|entrada|entrei|entrou|recebimento|venda|vendi|vendeu|faturei|faturamento|deposito|caiu)\b/.test(n)
+    detectarDirecao(raw) ??
+    (/\b(recebi|receita|entrada|entrei|entrou|recebimento|venda|vendi|vendeu|faturei|faturamento|deposito|caiu)\b/.test(n)
       ? "Receita"
-      : "Despesa";
+      : "Despesa");
 
   // Limpa a descrição: tira valores e verbos/comandos, para o nome do lançamento
   // não virar "Registra a entrada de", "Adiciona", "Anota…".

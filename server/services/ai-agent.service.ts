@@ -4,6 +4,7 @@ import { buscarTransacoesPorFiltro, buscarEmpresaTransacoesPorFiltro, empresaTra
 import { FINANCIAL_AGENT_SYSTEM_PROMPT, buildDynamicContext } from "../prompts/financial-agent";
 import { insertTransactionSchema } from "../../shared/schema";
 import { withRetry } from "../utils/ai-errors";
+import { reconciliarLancamento, trechoDoLancamento, segmentarLancamentos, hojeSP, contextoDataParaPrompt } from "./nlp-br";
 import { resolverContaPj } from "./classificar-conta-pj";
 import { atualizarTransacaoEmpresa, baixarTransacaoEmpresa } from "./empresa-transacao.service";
 import { listarCartoes as listarCartoesPj, criarCartao as criarCartaoPj, listarFaturas as listarFaturasPj, getSaldoCartaoEmpresa } from "./fatura-pj.service";
@@ -1291,10 +1292,21 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
 
     switch (name) {
       case "insere_transacao": {
-        // Normaliza o tipo para o padrão do banco ("Receita" | "Despesa").
-        const tipo = /receita|entrada|income|recebimento/i.test(args.tipo || "")
-          ? "Receita"
-          : "Despesa";
+        // Fase 1 — o texto do cliente corrige valor/data/tipo do LLM
+        // ("1.500" lido como 1,5; "ontem"; "me pagou" ≠ "paguei").
+        const rec = reconciliarLancamento(
+          { valor: args.valor, data: args.data_transacao, tipo: args.tipo },
+          ctx.userMessage || "",
+          { origemMidia: ctx.origemMidia },
+        );
+        if (rec.ajustes.length) console.log(`[AI Agent] insere_transacao ajustes (user ${ctx.userId}):`, rec.ajustes.join("; "));
+        if (!rec.valor) {
+          return JSON.stringify({ precisa_valor: true, mensagem: "Pergunte ao usuário o valor do lançamento. Não grave nada ainda." });
+        }
+        if (!rec.tipo) {
+          return JSON.stringify({ precisa_tipo: true, mensagem: "Não ficou claro se é entrada ou saída. Pergunte: 'É entrada ou saída?'. Não grave nada ainda." });
+        }
+        const tipo = rec.tipo;
 
         // forma_pagamento é OPCIONAL. Sem forma (ou "dinheiro/caixinha/à vista/espécie")
         // => CAIXINHA (dinheiro): o usuário novo consegue lançar de cara, só para saber
@@ -1371,14 +1383,13 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         }
         if (ehCaixinha) formaPagNome = "Caixinha";
 
-        const today = new Date().toISOString().slice(0, 10);
         const txData: any = {
           carteira_id: ctx.walletId,
           categoria_id: categoriaId,
           descricao: args.descricao || "Transação",
-          valor: args.valor || 0,
+          valor: rec.valor,
           tipo,
-          data_transacao: args.data_transacao || today,
+          data_transacao: rec.data,
           status: "Efetivada",
         };
         if (formaPagId) txData.forma_pagamento_id = formaPagId;
@@ -1579,7 +1590,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       }
 
       case "resumo_dia": {
-        const data = args.data || new Date().toISOString().slice(0, 10);
+        const data = args.data || hojeSP();
         const summary = await getDailySummary(ctx.walletId, data);
         return JSON.stringify({ data, ...summary });
       }
@@ -1608,14 +1619,14 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       case "gastos_por_categoria": {
         const now = new Date();
         const de = args.data_inicio || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-        const ate = args.data_fim || now.toISOString().slice(0, 10);
+        const ate = args.data_fim || hojeSP();
         const cats = await getCategoryBreakdown(ctx.walletId, de, ate);
         return JSON.stringify({ de, ate, categorias: cats });
       }
 
       case "gerar_grafico": {
         const tipo = args.tipo || "bar";
-        const data = args.data || new Date().toISOString().slice(0, 10);
+        const data = args.data || hojeSP();
         const baseUrl = process.env.BASE_URL || "http://localhost:5000";
         // Gera URL do endpoint de chart existente (requer auth — usar API key interna)
         const chartUrl = `${baseUrl}/api/charts/${tipo === "pizza" ? "pizza" : "bar"}?date=${data}`;
@@ -2175,7 +2186,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           formaNome = fp.nome;
           if (fp.incompleto) cartaoIncompletoP = { nome: fp.nome, faltando: fp.faltando };
         }
-        const dataInicio = /^\d{4}-\d{2}-\d{2}$/.test(args.data_inicio || "") ? args.data_inicio : new Date().toISOString().slice(0, 10);
+        const dataInicio = /^\d{4}-\d{2}-\d{2}$/.test(args.data_inicio || "") ? args.data_inicio : hojeSP();
 
         // Conta padrão se não for cartão completo (criarCompraParcelada já amarra fatura no cartão).
         let contaBancariaId: number | null = null;
@@ -2378,8 +2389,18 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           });
         }
 
-        if (!(Number(args.valor) > 0)) {
-          return JSON.stringify({ error: "Informe o valor do lançamento." });
+        // Fase 1 — texto do cliente corrige valor/data/tipo do LLM.
+        const recPj = reconciliarLancamento(
+          { valor: args.valor, data: args.data_transacao, tipo: args.tipo },
+          msgUser,
+          { origemMidia: ctx.origemMidia },
+        );
+        if (recPj.ajustes.length) console.log(`[AI Agent] lancar_empresa ajustes (user ${ctx.userId}):`, recPj.ajustes.join("; "));
+        if (!recPj.valor) {
+          return JSON.stringify({ error: "Informe o valor do lançamento.", precisa_valor: true });
+        }
+        if (!recPj.tipo) {
+          return JSON.stringify({ precisa_tipo: true, mensagem: "Não ficou claro se é entrada ou saída. Pergunte: 'É entrada ou saída?'. Não grave nada ainda." });
         }
 
         let resolvido = await resolverMeioPorNomePj(empresa.id, ctx.userId, meioTexto);
@@ -2406,12 +2427,14 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         }
 
         const contas = await storage.getEmpresasContasByEmpresaId(empresa.id);
-        const tipo = args.tipo === "Receita" ? "Receita" : "Despesa";
+        const tipo = recPj.tipo;
+        // Com vários lançamentos na mesma mensagem, classifica só pelo trecho deste item.
+        const trechoItem = trechoDoLancamento(msgUser, recPj.valor, args.descricao);
         const { conta, usouOutras, motivo, ignorouInformada } = resolverContaPj({
           contas,
           tipo,
           contaInformada: args.conta,
-          descricao: `${args.descricao || ""} ${ctx.userMessage || ""}`,
+          descricao: `${args.descricao || ""} ${trechoItem}`,
           segmento: ctx.empresaAtiva?.segmento || (empresa as any).segmento,
         });
         if (ignorouInformada) {
@@ -2421,8 +2444,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           return JSON.stringify({ error: `A empresa não tem uma conta do tipo ${tipo} no plano de contas. Peça ao usuário para escolher uma conta.` });
         }
 
-        const today = new Date().toISOString().slice(0, 10);
-        const dataISO = (args.data_transacao || today).slice(0, 10);
+        const dataISO = recPj.data;
         let meio;
         try {
           meio = await aplicarMeioPagamentoPj({
@@ -2443,7 +2465,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           empresa_id: empresa.id,
           categoria_id: conta.id,
           descricao: args.descricao || "Lançamento",
-          valor: Number(args.valor) || 0,
+          valor: recPj.valor,
           tipo,
           data_transacao: dataISO,
           status: "Efetivada",
@@ -2655,7 +2677,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         }
 
         // 1ª parcela: HOJE → fatura vigente (respeita dia de fechamento do cartão).
-        const today = new Date().toISOString().slice(0, 10);
+        const today = hojeSP();
         const dataInicio = /^\d{4}-\d{2}-\d{2}/.test(args.data_inicio || "")
           ? String(args.data_inicio).slice(0, 10)
           : today;
@@ -3326,7 +3348,12 @@ export async function runAgent(
       return "Não consegui lançar com esse meio. Diga dinheiro, pix + banco, ou o nome do cartão.";
     }
 
-    const semMeio = pareceLancamentoSemMeio(userMessage);
+    // Mídia (foto/áudio) exige confirmação antes de gravar; vários itens na
+    // mesma mensagem vão para o agente (o atalho juntaria tudo em um só).
+    const semMeio =
+      !ctx.origemMidia && segmentarLancamentos(userMessage).length <= 1
+        ? pareceLancamentoSemMeio(userMessage)
+        : null;
     if (semMeio) {
       registrarPendenteMeio(ctx.userId, empNome, semMeio);
       return mensagemPedirMeio(semMeio);
@@ -3489,7 +3516,18 @@ Se for ambíguo → pergunte só sim ou não.
 ## Categorias Disponíveis
 ${ctx.categories.map(c => `- ${c.nome} (${c.tipo})`).join("\n")}`;
 
-  const systemPrompt = FINANCIAL_AGENT_SYSTEM_PROMPT + buildDynamicContext() + pjInstructions + midiaInstructions + categoriasBloco;
+  const regrasInterpretacao = `
+
+## Datas e interpretação (obrigatório)
+${contextoDataParaPrompt()}
+- "ontem", "sexta passada", "dia 5", "05/09" → converta para YYYY-MM-DD usando HOJE acima.
+- Valores em formato brasileiro: "1.500" = 1500; "1.500,50" = 1500.50; "2k" = 2000; "mil e duzentos" = 1200.
+- O valor é o dinheiro, não quantidades nem datas ("2 pizzas 80" → 80; "dia 5 aluguel 1500" → 1500).
+- "paguei/gastei/comprei/fiz pix para" = Despesa. "recebi/me pagou/pagaram/caiu/vendi/estorno/reembolso" = Receita.
+- Sem sinal de entrada ou saída e sem contexto claro → pergunte "É entrada ou saída?" antes de lançar.
+- Vários lançamentos na mesma mensagem ("frete 50 e comissão 30") → um lançamento por item, cada um com a própria descrição e valor.
+- Se a ferramenta responder precisa_valor / precisa_tipo / precisa_meio, faça a pergunta ao usuário e NÃO diga que registrou.`;
+  const systemPrompt = FINANCIAL_AGENT_SYSTEM_PROMPT + buildDynamicContext() + regrasInterpretacao + pjInstructions + midiaInstructions + categoriasBloco;
 
   // Histórico curto da conversa (memória entre mensagens) entra entre o
   // system prompt e a mensagem atual, para o agente manter contexto.

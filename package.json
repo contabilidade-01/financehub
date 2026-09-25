@@ -46,7 +46,8 @@
     "test:segregacao-regras": "tsx scripts/testar-segregacao-pj-regras.ts",
     "test:backup": "tsx scripts/testar-backup.ts",
     "test:seguranca": "tsx scripts/testar-seguranca.ts",
-    "test:modalidade": "tsx scripts/testar-modalidade.ts"
+    "test:modalidade": "tsx scripts/testar-modalidade.ts",
+    "test:nlp-br": "tsx scripts/testar-nlp-br.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

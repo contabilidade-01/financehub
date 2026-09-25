@@ -54,6 +54,7 @@ jobs:
           npm run test:resumo-semanal
           npm run test:seguranca
           npm run test:modalidade
+          npm run test:nlp-br
           npm run flags:auditar
 
       - name: Baterias com lógica pura / scripts

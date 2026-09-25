@@ -11,19 +11,12 @@ import { sql } from "drizzle-orm";
 import { storage } from "../storage";
 import { interpretarConfirmacao } from "./confirmacao-usuario";
 import { montarReciboDeEscrita } from "./recibo-agente";
+import { extrairValorBR, hojeSP } from "./nlp-br";
 
 /** Valor em reais a partir de texto BR (ex.: "1.234,56", "128,3", "50"). */
 function parseValorBR(texto: string): number | null {
-  const m = String(texto || "").match(
-    /(?:r\$\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)/i,
-  );
-  if (!m) return null;
-  let n = m[1];
-  if (n.includes(",") && n.includes(".")) n = n.replace(/\./g, "").replace(",", ".");
-  else if (n.includes(",")) n = n.replace(",", ".");
-  const v = Number(n);
-  if (!Number.isFinite(v) || v <= 0 || v > 9_999_999) return null;
-  return Math.round(v * 100) / 100;
+  // Fase 1: "1.500" = 1500, "1,5k", "dia 5 ... 1500" → valor monetário, não o 1º número.
+  return extrairValorBR(texto);
 }
 
 function money(v: number): string {
@@ -161,7 +154,7 @@ export async function prepararRepetir(ctx: {
 }
 
 async function executarRepetir(p: PendenteRepetir): Promise<string> {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = hojeSP();
 
   if (p.modoPj && p.empresaId) {
     const { aplicarMeioPagamentoPj } = await import("./meio-pagamento-pj");
