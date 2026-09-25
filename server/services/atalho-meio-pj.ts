@@ -15,6 +15,8 @@ export type LancamentoSemMeio = {
   data?: string;
   /** Meio já informado enquanto faltava o valor. */
   meio?: string;
+  /** Código da conta do plano informado antes de lançar ("Código 3.07"). */
+  conta?: string;
 };
 
 type Pendente = LancamentoSemMeio & {
@@ -41,8 +43,12 @@ function parseValorBR(texto: string): number | null {
 }
 
 function pareceConsultaOuComando(n: string): boolean {
-  return /\b(quanto|saldo|resumo|extrato|apaga|exclui|delete|edita|corrige|desfaz|restaura|ola|oi\b|menu|ajuda)\b/.test(
-    n,
+  return (
+    /\b(quanto|saldo|resumo|extrato|apaga|exclui|delete|edita|corrige|corrigir|corrija|desfaz|restaura|ola|oi\b|menu|ajuda)\b/.test(n) ||
+    // "Código 3.07" / "conta 3.07" = conta do plano, não um lançamento de R$ 3,07.
+    /\b(codigo|cod|categoria|classifica\w*)\b/.test(n) ||
+    /\b\d{1,2}\.\d{2}\.\d{1,3}\b/.test(n) ||
+    /^\s*(?:(?:na|no|em|a|o)\s+)?conta\s+\d{1,2}\.\d{1,3}\s*$/.test(n)
   );
 }
 
@@ -132,6 +138,74 @@ export function pareceLancamentoSemMeio(texto: string, hoje: string = hojeSP()):
     return null;
   }
   return { descricao, valor, tipo, ...(data ? { data } : {}) };
+}
+
+/** Regex que casa o termo sem ligar para acento ("itau" casa "Itaú"). */
+function termoSemAcento(termo: string): string {
+  const cls: Record<string, string> = { a: "[aáàâã]", e: "[eéê]", i: "[ií]", o: "[oóôõ]", u: "[uúü]", c: "[cç]" };
+  return termo
+    .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    .split("")
+    .map((ch) => cls[ch] || ch)
+    .join("")
+    .replace(/\s+/g, "\\s+");
+}
+
+const PREP_MEIO = "(?:\\b(?:n[ao]|em|via|pel[ao]|com|d[ao]|de|pra|para)\\s+)?";
+// Fim de palavra que funciona com acento no fim ("Itaú"): \b falha depois de "ú".
+const FIM = "(?=[\\s,.;:!]|$)";
+
+/** Tira da frase o trecho do meio ("na caixinha", "no pix", "no banco Itaú", "cartão Inter"). */
+export function tirarMeio(texto: string, det: ReturnType<typeof detectarMeio>): string {
+  let t = texto;
+  if (det.tipo === "nome") {
+    const termo = termoSemAcento(det.termo.replace(/^(banco|conta|cartao)\s+/, ""));
+    t = t.replace(
+      new RegExp(`${PREP_MEIO}(?:(?:banco|conta(?:\\s+banc[aá]ria)?|cart[aã]o(?:\\s+de\\s+cr[eé]dito)?)\\s+)?${termo}${FIM}`, "gi"),
+      " ",
+    );
+  }
+  return t.replace(
+    new RegExp(
+      `${PREP_MEIO}\\b(?:caixinha|caixa|dinheiro(?:\\s+vivo)?|esp[eé]cie|cash|pix|pics|d[eé]bito|ted|doc|boleto|transfer[eê]ncia)${FIM}`,
+      "gi",
+    ),
+    " ",
+  );
+}
+
+export type LancamentoCompleto = LancamentoSemMeio & { valor: number; meio: string };
+
+/**
+ * Frase com tudo — descrição, valor e meio ("Despesa Pedágio na caixinha 100 reais").
+ * Lança direto, sem o modelo pedir "Confirma?" nem inventar "não há contas".
+ * Fica de fora o que o agente trata melhor: parcelado, fatura de cartão,
+ * transferência entre contas, "cartão"/"conta" sem nome.
+ */
+export function pareceLancamentoCompletoPj(texto: string, hoje: string = hojeSP()): LancamentoCompleto | null {
+  const raw = String(texto || "").trim();
+  if (!raw || raw.length < 6 || raw.length > 160) return null;
+  const n = norm(raw);
+  if (pareceConsultaOuComando(n) || /\?/.test(raw)) return null;
+  if (/\b(parcelad|em\s+\d+\s*x|\d+\s*x\s*(de)?)\b/.test(n)) return null;
+  if (/\b(fatura|transferi|transfere|transferir|saque|saquei|estorno|estorna|reembols)\b/.test(n)) return null;
+  const det = detectarMeio(raw);
+  if (det.tipo === "nenhum" || det.tipo === "cartao_generico" || det.tipo === "conta_generica") return null;
+  const meio = textoMeioDeDetect(det);
+  if (!meio) return null;
+
+  const dataExt = extrairDataBR(raw, hoje);
+  const semData = tirarData(raw, dataExt?.trecho ?? null);
+  const valor = parseValorBR(semData);
+  if (valor == null) return null;
+  const descricao = limparDescricao(tirarValor(tirarMeio(semData, det)));
+  const tipo = tipoDoTexto(raw, n);
+  const data = dataExt && dataExt.data !== hoje ? dataExt.data : undefined;
+  if (descricao.length < 3) {
+    if (tipo !== "Receita") return null;
+    return { descricao: "Recebimento", valor, tipo, meio, ...(data ? { data } : {}) };
+  }
+  return { descricao, valor, tipo, meio, ...(data ? { data } : {}) };
 }
 
 // Palavras que deixam claro que é um lançamento (e não conversa) quando falta o valor.

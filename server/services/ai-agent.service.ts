@@ -4,6 +4,8 @@ import { buscarTransacoesPorFiltro, buscarEmpresaTransacoesPorFiltro, empresaTra
 import { FINANCIAL_AGENT_SYSTEM_PROMPT, buildDynamicContext } from "../prompts/financial-agent";
 import { insertTransactionSchema } from "../../shared/schema";
 import { withRetry } from "../utils/ai-errors";
+import { db } from "../db";
+import { sql } from "drizzle-orm";
 import { casarCategoriaPorNome, sugerirCategoriaPorDescricao, chaveMemoria, type CategoriaPf } from "./categorizar-pf";
 import { hidratarPendencias } from "./ia-pendencias";
 import { reconciliarLancamento, trechoDoLancamento, segmentarLancamentos, hojeSP, contextoDataParaPrompt } from "./nlp-br";
@@ -21,8 +23,18 @@ import {
   pareceLancamentoSemValor,
   respostaEhSoMeio,
   respostaEhSoValor,
+  pareceLancamentoCompletoPj,
   type LancamentoSemMeio,
 } from "./atalho-meio-pj";
+import {
+  detectarCodigoConta,
+  detectarCorrecaoValor,
+  registrarEdicao,
+  obterEdicao,
+  limparEdicao,
+  mensagemConfirmarValor,
+  mensagemConfirmarConta,
+} from "./correcao-rapida-pj";
 import {
   registrarOfertaCriarConta,
   limparOfertaCriarConta,
@@ -3362,6 +3374,148 @@ async function callChatCompletion(
 
 export type AgentLlm = "openai" | "deepseek";
 
+/** Lança um item já entendido (descrição/valor/tipo/data/conta) com o meio informado. */
+async function lancarItemPj(
+  ctx: ToolContext,
+  item: LancamentoSemMeio & { empresaNome?: string },
+  meio: string,
+  empNome: string,
+): Promise<string> {
+  const raw = await executeTool(
+    "lancar_empresa",
+    {
+      empresa: item.empresaNome || empNome,
+      descricao: item.descricao,
+      valor: item.valor,
+      tipo: item.tipo,
+      forma_pagamento: meio,
+      // A data dita na 1ª mensagem ("no dia 22/09/2026"); sem ela, hoje.
+      ...(item.data ? { data_transacao: item.data } : {}),
+      // Conta do plano informada pelo cliente ("Código 3.07").
+      ...(item.conta ? { conta: item.conta } : {}),
+    },
+    ctx,
+  );
+  let parsed: any = null;
+  try { parsed = JSON.parse(raw); } catch { parsed = null; }
+  if (parsed?.id) {
+    limparPendenteMeio(ctx.userId);
+    const { montarReciboDeEscrita } = await import("./recibo-agente");
+    return montarReciboDeEscrita({ tool: "lancar_empresa", raw, parsed });
+  }
+  if (parsed?.mensagem || parsed?.error) {
+    return String(parsed.mensagem || parsed.error);
+  }
+  return "Não consegui lançar com esse meio. Diga dinheiro, pix + banco, ou o nome do cartão.";
+}
+
+type LancamentoAlvoPj = { id: number; descricao: string; valor: number; tipo: string; contaAtual: string | null };
+
+/** Lançamento citado pelo código, ou o último feito pelo WhatsApp nas últimas horas. */
+async function buscarLancamentoPj(empresaId: number, id?: number): Promise<LancamentoAlvoPj | null> {
+  const rows = (id
+    ? await db.execute(sql`
+        SELECT t.id, t.descricao, t.valor, t.tipo, c.codigo || ' — ' || c.nome AS conta_atual
+        FROM empresas_transacoes t LEFT JOIN empresas_contas c ON c.id = t.categoria_id
+        WHERE t.empresa_id = ${empresaId} AND t.id = ${id}
+        LIMIT 1`)
+    : await db.execute(sql`
+        SELECT t.id, t.descricao, t.valor, t.tipo, c.codigo || ' — ' || c.nome AS conta_atual
+        FROM empresas_transacoes t LEFT JOIN empresas_contas c ON c.id = t.categoria_id
+        WHERE t.empresa_id = ${empresaId} AND t.origem = 'whatsapp'
+          AND t.data_registro > now() - interval '6 hours'
+        ORDER BY t.id DESC
+        LIMIT 1`)) as any[];
+  const r = rows[0];
+  return r ? { id: Number(r.id), descricao: r.descricao, valor: Number(r.valor), tipo: r.tipo, contaAtual: r.conta_atual ?? null } : null;
+}
+
+async function contaPjPorCodigo(empresaId: number, codigo: string) {
+  const rows = (await db.execute(sql`
+    SELECT id, codigo, nome, tipo, sintetica FROM empresas_contas
+    WHERE empresa_id = ${empresaId} AND codigo = ${codigo} AND ativo = true
+    LIMIT 1`)) as any[];
+  return rows[0] as { id: number; codigo: string; nome: string; tipo: string; sintetica: boolean } | undefined;
+}
+
+/**
+ * Correções rápidas PJ sem o modelo: "SIM" de uma edição pendente,
+ * "Corrige o valor 100,00" e "Código 3.07". null = não é com este atalho.
+ */
+async function tentarCorrecaoRapidaPj(ctx: ToolContext, msg: string): Promise<string | null> {
+  const emp = ctx.empresaAtiva;
+  if (!emp) return null;
+
+  const ed = obterEdicao(ctx.userId);
+  if (ed && ed.empresaId === emp.id) {
+    const c = interpretarConfirmacao(msg);
+    if (c === "sim") {
+      limparEdicao(ctx.userId);
+      const raw = await executeTool("atualiza_transacao_empresa", { empresa: emp.nome, id_transacao: ed.id, ...ed.campos }, ctx);
+      let r: any = null;
+      try { r = JSON.parse(raw); } catch { r = null; }
+      if (!r?.success) return `Não consegui alterar o #${ed.id}: ${r?.error || "erro ao salvar"}.`;
+      const t = r.transacao || {};
+      const linhas = [`✅ *Alterado* — #${ed.id} ${ed.descricao}`];
+      if (ed.campos.valor != null) linhas.push(`💰 R$ ${Number(ed.campos.valor).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+      if (ed.campos.conta) {
+        const conta = await contaPjPorCodigo(emp.id, ed.campos.conta);
+        linhas.push(`📊 ${conta ? `${conta.codigo} — ${conta.nome}` : ed.campos.conta}`);
+      }
+      void t;
+      return linhas.join("\n");
+    }
+    if (c === "nao") {
+      limparEdicao(ctx.userId);
+      return "Ok, não alterei nada.";
+    }
+  }
+
+  const cv = detectarCorrecaoValor(msg);
+  if (cv) {
+    const pend = obterPendenteMeio(ctx.userId);
+    if (pend && !cv.id) {
+      // Ainda não foi lançado: corrige o que está esperando o meio.
+      const atualizado = { ...pend, valor: cv.valor };
+      if (pend.meio) return lancarItemPj(ctx, atualizado, pend.meio, emp.nome);
+      registrarPendenteMeio(ctx.userId, pend.empresaNome || emp.nome, atualizado);
+      return mensagemPedirMeio(atualizado, true);
+    }
+    const alvo = await buscarLancamentoPj(emp.id, cv.id);
+    if (!alvo) {
+      return cv.id
+        ? `Não achei o lançamento #${cv.id} nesta empresa. Confira o código no recibo.`
+        : "Qual lançamento devo corrigir? Me mande o código que aparece no recibo (ex.: *corrige o valor do #204 para 100*).";
+    }
+    limparOfertaCriarConta(ctx.userId);
+    registrarEdicao({ userId: ctx.userId, empresaId: emp.id, id: alvo.id, descricao: alvo.descricao, campos: { valor: cv.valor } });
+    return mensagemConfirmarValor(alvo, cv.valor);
+  }
+
+  const cod = detectarCodigoConta(msg);
+  if (cod) {
+    const conta = await contaPjPorCodigo(emp.id, cod);
+    if (!conta) return `Não achei a conta *${cod}* no plano de contas desta empresa. Confira o código em *Plano de Contas* ou me diga o nome da conta.`;
+    if (conta.sintetica) return `*${conta.codigo} — ${conta.nome}* é um grupo e não recebe lançamento. Me diga uma conta dentro dele (ex.: ${conta.codigo}.01).`;
+    const pend = obterPendenteMeio(ctx.userId);
+    if (pend) {
+      const atualizado = { ...pend, conta: conta.codigo };
+      registrarPendenteMeio(ctx.userId, pend.empresaNome || emp.nome, atualizado);
+      if (atualizado.valor == null) return `Ok, vai na conta *${conta.codigo} — ${conta.nome}*.\n\n${mensagemPedirValor(atualizado)}`;
+      if (pend.meio) return lancarItemPj(ctx, atualizado, pend.meio, emp.nome);
+      return `Ok, vai na conta *${conta.codigo} — ${conta.nome}*.\n\n${mensagemPedirMeio(atualizado)}`;
+    }
+    const alvo = await buscarLancamentoPj(emp.id);
+    if (!alvo || alvo.tipo !== conta.tipo) {
+      return `A conta *${conta.codigo} — ${conta.nome}* é de ${conta.tipo.toLowerCase()}. Qual lançamento devo mover para ela? Me mande o código do recibo (ex.: *#204*).`;
+    }
+    limparOfertaCriarConta(ctx.userId);
+    registrarEdicao({ userId: ctx.userId, empresaId: emp.id, id: alvo.id, descricao: alvo.descricao, campos: { conta: conta.codigo } });
+    return mensagemConfirmarConta(alvo, conta);
+  }
+  return null;
+}
+
 export async function runAgent(
   userMessage: string,
   ctx: ToolContext,
@@ -3407,6 +3561,12 @@ export async function runAgent(
     }
   }
 
+  // PJ: "SIM" de edição pendente, "Corrige o valor 100", "Código 3.07" — sem o modelo.
+  if (emModoPj(ctx) && ctx.empresaAtiva && !ctx.origemMidia) {
+    const correcao = await tentarCorrecaoRapidaPj(ctx, userMessage);
+    if (correcao) return correcao;
+  }
+
   // Oferta "criar conta e mover" (PJ): respostas curtas sim/não executam sem depender do LLM.
   if (emModoPj(ctx)) {
     const resolved = await tentarResolverOfertaCriarConta(ctx.userId, userMessage);
@@ -3420,32 +3580,8 @@ export async function runAgent(
     const soValor = ctx.origemMidia ? null : respostaEhSoValor(userMessage);
     const pend = obterPendenteMeio(ctx.userId);
 
-    const lancarPendente = async (item: LancamentoSemMeio & { empresaNome?: string }, meio: string) => {
-      const raw = await executeTool(
-        "lancar_empresa",
-        {
-          empresa: item.empresaNome || empNome,
-          descricao: item.descricao,
-          valor: item.valor,
-          tipo: item.tipo,
-          forma_pagamento: meio,
-          // A data dita na 1ª mensagem ("no dia 22/09/2026"); sem ela, hoje.
-          ...(item.data ? { data_transacao: item.data } : {}),
-        },
-        ctx,
-      );
-      let parsed: any = null;
-      try { parsed = JSON.parse(raw); } catch { parsed = null; }
-      if (parsed?.id) {
-        limparPendenteMeio(ctx.userId);
-        const { montarReciboDeEscrita } = await import("./recibo-agente");
-        return montarReciboDeEscrita({ tool: "lancar_empresa", raw, parsed });
-      }
-      if (parsed?.mensagem || parsed?.error) {
-        return String(parsed.mensagem || parsed.error);
-      }
-      return "Não consegui lançar com esse meio. Diga dinheiro, pix + banco, ou o nome do cartão.";
-    };
+    const lancarPendente = (item: LancamentoSemMeio & { empresaNome?: string }, meio: string) =>
+      lancarItemPj(ctx, item, meio, empNome);
 
     if (pend && soValor != null) {
       // "Valor de 870,00 Reais" depois do "Anotei…": completa/corrige o pendente
@@ -3482,6 +3618,16 @@ export async function runAgent(
     if (semValor) {
       registrarPendenteMeio(ctx.userId, empNome, semValor);
       return mensagemPedirValor(semValor);
+    }
+    // "Despesa Pedágio na caixinha 100 reais": tudo informado → lança direto
+    // (o modelo pedia "Confirma?" e depois dizia que não havia contas).
+    const completo =
+      !ctx.origemMidia && segmentarLancamentos(userMessage).length <= 1
+        ? pareceLancamentoCompletoPj(userMessage)
+        : null;
+    if (completo) {
+      limparPendenteMeio(ctx.userId);
+      return await lancarPendente(completo, completo.meio);
     }
   }
 
