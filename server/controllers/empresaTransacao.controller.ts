@@ -1,3 +1,4 @@
+import { condicaoCaixaPj } from "../services/erp/caixa-sql";
 import { Request, Response } from "express";
 import { storage } from "../storage";
 import { softDeleteEmpresaTransacao } from "../storage";
@@ -50,6 +51,9 @@ export const createEmpresaTransacao = async (req: Request, res: Response) => {
     if (!conta) return res.status(400).json({ error: "Categoria não encontrada." });
     if (conta.empresa_id !== empresaId) {
       return res.status(400).json({ error: "Categoria não pertence a esta empresa." });
+    }
+    if (conta.sintetica) {
+      return res.status(400).json({ error: `"${conta.nome}" é um grupo do plano de contas; escolha uma conta dentro dele.` });
     }
 
     // Validar que o tipo da transação bate com o tipo da conta
@@ -498,7 +502,7 @@ export const listarVencimentosPj = async (req: Request, res: Response) => {
         AND t.tipo = 'Despesa'
         AND COALESCE(t.reembolso_pessoal, false) = false
         AND t.fatura_id IS NULL
-        AND COALESCE(t.movimenta_caixa, true) = true
+        AND ${condicaoCaixaPj("t")}
         AND (t.data_vencimento IS NOT NULL OR t.data_transacao IS NOT NULL)
         ${de ? sql`AND COALESCE(t.data_vencimento, t.data_transacao) >= ${de}` : sql``}
         ${ate ? sql`AND COALESCE(t.data_vencimento, t.data_transacao) <= ${ate}` : sql``}

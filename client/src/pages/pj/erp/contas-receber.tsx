@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronsUpDown, Loader2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { CategoriaCombobox } from "@/components/importacao/CategoriaCombobox";
+import { ContaPlanoCombobox, usePlanoContasPj } from "@/components/shared/ContaPlanoCombobox";
 import { apiErp, brl, CabecalhoPagina, dataBr, SomenteErp } from "./comum";
 import type { Contato } from "./contatos";
 import type { CentroCusto } from "./centros-custo";
@@ -53,11 +53,10 @@ function ContasReceber({ empresaId }: { empresaId: number }) {
   const [periodo, setPeriodo] = useState({ de: "", ate: "" });
   const url = `/api/empresas/${empresaId}/erp/receber?status=${status}&de=${periodo.de}&ate=${periodo.ate}`;
   const { data, isLoading } = useQuery<Resposta>({ queryKey: [url], queryFn: () => apiErp(url) });
-  const { data: plano = [] } = useQuery<any[]>({ queryKey: [`/api/empresas/${empresaId}/contas`], queryFn: () => apiErp(`/api/empresas/${empresaId}/contas`) });
+  const { contas: categorias, grupos, criarConta } = usePlanoContasPj(empresaId);
   const { data: contas = [] } = useQuery<any[]>({ queryKey: [`/api/empresas/${empresaId}/contas-bancarias`], queryFn: () => apiErp(`/api/empresas/${empresaId}/contas-bancarias`) });
   const { data: centros = [] } = useQuery<CentroCusto[]>({ queryKey: [`/api/empresas/${empresaId}/erp/centros-custo`], queryFn: () => apiErp(`/api/empresas/${empresaId}/erp/centros-custo`) });
   const { data: clientes = [] } = useQuery<Contato[]>({ queryKey: [`/api/empresas/${empresaId}/erp/contatos`, "cliente"], queryFn: () => apiErp(`/api/empresas/${empresaId}/erp/contatos?tipo=cliente`) });
-  const categorias = useMemo(() => plano.filter((c) => c.ativo !== false).map((c) => ({ id: c.id, nome: c.nome, tipo: c.tipo, codigo: c.codigo })), [plano]);
 
   const invalidar = () => {
     qc.invalidateQueries({ predicate: (q) => String(q.queryKey[0]).includes(`/api/empresas/${empresaId}/erp/`) });
@@ -66,17 +65,6 @@ function ContasReceber({ empresaId }: { empresaId: number }) {
   const [novo, setNovo] = useState<null | { descricao: string; valor: string; data_vencimento: string; data_competencia: string; parcelas: string; categoria_id: number | null; contato_id: number | null; centro_custo_id: string }>(null);
   const [baixa, setBaixa] = useState<null | { l: Receber; conta_bancaria_id: string; data_pagamento: string }>(null);
   const [salvando, setSalvando] = useState(false);
-
-  const criarConta = async (nome: string, tipo: "Receita" | "Despesa") => {
-    try {
-      const c = await apiErp<{ id: number }>(`/api/empresas/${empresaId}/erp/contas-plano`, { method: "POST", body: { nome, tipo } });
-      await qc.invalidateQueries({ queryKey: [`/api/empresas/${empresaId}/contas`] });
-      return c.id;
-    } catch (e: any) {
-      toast({ title: "Não foi possível criar a conta", description: e?.message, variant: "destructive" });
-      return null;
-    }
-  };
 
   const salvarNovo = async () => {
     if (!novo) return;
@@ -247,7 +235,7 @@ function ContasReceber({ empresaId }: { empresaId: number }) {
               </div>
               <div className="space-y-1.5">
                 <Label>Conta de receita</Label>
-                <CategoriaCombobox categorias={categorias} tipo="Receita" valor={novo.categoria_id} onChange={(id) => setNovo({ ...novo, categoria_id: id })} onCriar={criarConta} escopo="pj" />
+                <ContaPlanoCombobox categorias={categorias} grupos={grupos} tipo="Receita" valor={novo.categoria_id} onChange={(id) => setNovo({ ...novo, categoria_id: id })} onCriar={criarConta} escopo="pj" />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="nr-valor">Valor total (R$)</Label>

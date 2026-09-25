@@ -1,3 +1,6 @@
+import { dataCaixaPj } from "./services/erp/caixa-sql";
+import { codigoPai, contasDoModelo, modeloDoSegmento, type ModeloPlano } from "./data/plano-contas-pj-modelos";
+import { chaveNome, compararCodigos, grupoDaConta, prefixoLegado, proximoCodigoFilho, resolverPai } from "./services/plano-contas-pj";
 import bcrypt from "bcryptjs";
 import { randomBytes, randomUUID } from "crypto";
 import { db } from "./db";
@@ -84,6 +87,9 @@ import { hashApiToken, mascararApiToken } from "./utils/api-token-hash";
 // entrou por competência no dia em que foi feita. Sem excluir o pagamento, o
 // mesmo gasto conta duas vezes no DRE e no Resumo. Vale só onde a transação
 // estiver com o alias 't'. Cobre PF (faturas) e PJ (empresas_faturas).
+// Data de caixa (baixa) do lançamento PJ: recebimento/pagamento cai no mês
+// em que o dinheiro se moveu, não no da competência.
+const DATA_CAIXA_PJ = dataCaixaPj("t");
 const NAO_E_PAGAMENTO_FATURA = sql`NOT EXISTS (
   SELECT 1 FROM empresas_faturas f WHERE f.transacao_pagamento_id = t.id
 ) AND NOT EXISTS (
@@ -311,10 +317,12 @@ export interface IStorage {
   updateEmpresa(id: number, empresaData: UpdateEmpresa): Promise<Empresa | undefined>;
   deleteEmpresa(id: number): Promise<boolean>;
   // EmpresaConta (plano de contas PJ)
-  seedEmpresasContas(empresaId: number): Promise<EmpresaConta[]>;
+  seedEmpresasContas(empresaId: number, modelo?: ModeloPlano): Promise<EmpresaConta[]>;
+  completarPlanoComModelo(empresaId: number, modelo: ModeloPlano): Promise<{ criadas: number }>;
+  getPlanoContasCompleto(empresaId: number): Promise<EmpresaConta[]>;
   getEmpresasContasByEmpresaId(empresaId: number): Promise<EmpresaConta[]>;
   getEmpresaContaById(id: number): Promise<EmpresaConta | undefined>;
-  proximoCodigoConta(empresaId: number, tipo: string, classificacao?: string | null): Promise<string>;
+  proximoCodigoConta(empresaId: number, tipo: string, classificacao?: string | null, opts?: { parentId?: number | null; grupo_gerencial?: string | null }): Promise<string>;
   createEmpresaConta(contaData: InsertEmpresaConta): Promise<EmpresaConta>;
   updateEmpresaConta(id: number, contaData: UpdateEmpresaConta): Promise<EmpresaConta | undefined>;
   deleteEmpresaConta(id: number): Promise<boolean>;
@@ -1705,39 +1713,78 @@ export class DbStorage implements IStorage {
     return result.length > 0;
   }
 
-  // Plano de contas padrão (Yampa-like), criado quando a empresa é cadastrada.
-  async seedEmpresasContas(empresaId: number): Promise<EmpresaConta[]> {
-    // ativo/is_cmv têm default no banco; omitidos aqui de propósito (cast no insert).
-    const seed = [
-      // Receitas
-      { empresa_id: empresaId, codigo: '1.01', nome: 'Receita de Vendas',            tipo: 'Receita', classificacao: 'OUTRA',     icone: 'shopping-bag', cor: '#10B981', descricao: 'Vendas de mercadorias/produtos.' },
-      { empresa_id: empresaId, codigo: '1.02', nome: 'Receita de Serviços',          tipo: 'Receita', classificacao: 'OUTRA',     icone: 'briefcase',    cor: '#10B981', descricao: 'Prestação de serviços.' },
-      { empresa_id: empresaId, codigo: '1.03', nome: 'Outras Receitas Operacionais', tipo: 'Receita', classificacao: 'OUTRA',     icone: 'plus-circle',  cor: '#10B981', descricao: 'Receitas operacionais diversas.' },
-      { empresa_id: empresaId, codigo: '1.04', nome: 'Receitas Financeiras',        tipo: 'Receita', classificacao: 'OUTRA',     icone: 'trending-up',  cor: '#10B981', descricao: 'Rendimentos de aplicações, juros recebidos.' },
+  // Plano de contas do modelo (Base Serviços ou Base Comércio), criado quando a
+  // empresa é cadastrada. Sem modelo explícito, usa o segmento da empresa.
+  async seedEmpresasContas(empresaId: number, modelo?: ModeloPlano): Promise<EmpresaConta[]> {
+    if (!modelo) {
+      const emp = await this.getEmpresaById(empresaId);
+      modelo = modeloDoSegmento((emp as any)?.segmento);
+    }
+    const criadas: EmpresaConta[] = [];
+    const idPorCodigo = new Map<string, number>();
+    // Grupos antes das filhas (o modelo já vem nessa ordem), para ter o parent_id.
+    for (const c of contasDoModelo(modelo)) {
+      const pai = codigoPai(c.codigo);
+      const [row] = await db.insert(empresasContas).values({
+        empresa_id: empresaId,
+        codigo: c.codigo,
+        nome: c.nome,
+        tipo: c.tipo,
+        classificacao: c.classificacao,
+        grupo_gerencial: c.grupo,
+        is_cmv: !!c.is_cmv,
+        sintetica: !!c.sintetica,
+        parent_id: pai ? idPorCodigo.get(pai) ?? null : null,
+        descricao: c.descricao ?? null,
+      } as any).onConflictDoNothing().returning();
+      if (row) {
+        idPorCodigo.set(c.codigo, row.id);
+        criadas.push(row);
+      }
+    }
+    return criadas;
+  }
 
-      // Despesas Fixas
-      { empresa_id: empresaId, codigo: '2.01', nome: 'Folha de Pagamento',           tipo: 'Despesa', classificacao: 'FIXA',      icone: 'users',        cor: '#EF4444', descricao: 'Salários, encargos e benefícios.' },
-      { empresa_id: empresaId, codigo: '2.02', nome: 'Aluguel',                      tipo: 'Despesa', classificacao: 'FIXA',      icone: 'home',         cor: '#EF4444', descricao: 'Aluguel do imóvel comercial.' },
-      { empresa_id: empresaId, codigo: '2.03', nome: 'Energia / Água / Internet',    tipo: 'Despesa', classificacao: 'FIXA',      icone: 'zap',          cor: '#EF4444', descricao: 'Contas de consumo fixo.' },
-      { empresa_id: empresaId, codigo: '2.04', nome: 'Contabilidade',                tipo: 'Despesa', classificacao: 'FIXA',      icone: 'file-text',    cor: '#EF4444', descricao: 'Honorários contábeis.' },
-      { empresa_id: empresaId, codigo: '2.05', nome: 'Impostos e Taxas',             tipo: 'Despesa', classificacao: 'FIXA',      icone: 'percent',      cor: '#EF4444', descricao: 'Impostos fixos, taxas municipais.' },
-      { empresa_id: empresaId, codigo: '2.06', nome: 'Pró-labore / Retiradas',       tipo: 'Despesa', classificacao: 'FIXA',      icone: 'user-check',   cor: '#EF4444', descricao: 'Retirada dos sócios.' },
+  /**
+   * Completa o plano da empresa com as contas do modelo que ainda não existem
+   * (comparando pelo nome). Nunca altera nem renumera contas existentes.
+   */
+  async completarPlanoComModelo(empresaId: number, modelo: ModeloPlano): Promise<{ criadas: number }> {
+    const atuais = await this.getPlanoContasCompleto(empresaId);
+    const porNome = new Set(atuais.map((c) => `${c.tipo}|${chaveNome(c.nome)}`));
+    const sinteticaDoGrupo = new Map<string, EmpresaConta>();
+    for (const c of atuais) if ((c as any).sintetica && !sinteticaDoGrupo.has(String(c.grupo_gerencial))) sinteticaDoGrupo.set(String(c.grupo_gerencial), c);
 
-      // Despesas Variáveis
-      { empresa_id: empresaId, codigo: '3.01', nome: 'Compras de Mercadoria (CMV)',  tipo: 'Despesa', classificacao: 'VARIAVEL',  icone: 'package',      cor: '#F59E0B', descricao: 'CMV — Custo da Mercadoria Vendida.' },
-      { empresa_id: empresaId, codigo: '3.02', nome: 'Matéria-prima / Insumos',      tipo: 'Despesa', classificacao: 'VARIAVEL',  icone: 'tool',         cor: '#F59E0B', descricao: 'Insumos para produção/serviço.' },
-      { empresa_id: empresaId, codigo: '3.03', nome: 'Comissão de Vendedores',       tipo: 'Despesa', classificacao: 'VARIAVEL',  icone: 'percent',      cor: '#F59E0B', descricao: 'Comissões variáveis sobre vendas.' },
-      { empresa_id: empresaId, codigo: '3.04', nome: 'Frete',                        tipo: 'Despesa', classificacao: 'VARIAVEL',  icone: 'truck',        cor: '#F59E0B', descricao: 'Fretes e logística variável.' },
-      { empresa_id: empresaId, codigo: '3.05', nome: 'Marketing / Anúncios',         tipo: 'Despesa', classificacao: 'VARIAVEL',  icone: 'megaphone',    cor: '#F59E0B', descricao: 'Mídia, tráfego pago, anúncios.' },
-      { empresa_id: empresaId, codigo: '3.06', nome: 'Despesas Financeiras',         tipo: 'Despesa', classificacao: 'VARIAVEL',  icone: 'credit-card',  cor: '#F59E0B', descricao: 'Juros, taxas bancárias, IOF.' },
+    let criadas = 0;
+    for (const m of contasDoModelo(modelo)) {
+      if (porNome.has(`${m.tipo}|${chaveNome(m.nome)}`)) continue;
+      if (m.sintetica) {
+        if (sinteticaDoGrupo.has(m.grupo)) continue;
+        const usados = new Set((await this.getPlanoContasCompleto(empresaId)).map((c) => c.codigo));
+        let codigo = m.codigo;
+        for (let n = 8; usados.has(codigo) && n < 99; n++) codigo = String(n);
+        const [g] = await db.insert(empresasContas).values({
+          empresa_id: empresaId, codigo, nome: m.nome, tipo: m.tipo, classificacao: m.classificacao,
+          grupo_gerencial: m.grupo, sintetica: true, descricao: m.descricao ?? null,
+        } as any).onConflictDoNothing().returning();
+        if (g) { sinteticaDoGrupo.set(m.grupo, g); criadas++; }
+        continue;
+      }
+      await this.createEmpresaConta({
+        empresa_id: empresaId, nome: m.nome, tipo: m.tipo, classificacao: m.classificacao,
+        grupo_gerencial: m.grupo, is_cmv: !!m.is_cmv, descricao: m.descricao ?? null,
+        parent_id: sinteticaDoGrupo.get(m.grupo)?.id ?? null,
+      } as any);
+      porNome.add(`${m.tipo}|${chaveNome(m.nome)}`);
+      criadas++;
+    }
+    return { criadas };
+  }
 
-      // Outras
-      { empresa_id: empresaId, codigo: '4.01', nome: 'Outras Despesas Operacionais', tipo: 'Despesa', classificacao: 'OUTRA',     icone: 'more-horizontal', cor: '#6366F1', descricao: 'Demais despesas operacionais.' }
-    ];
-
-    if (seed.length === 0) return [];
-    const result = await db.insert(empresasContas).values(seed as any).returning();
-    return result;
+  /** Plano inteiro (grupos sintéticos e contas inativas), para a tela de árvore. */
+  async getPlanoContasCompleto(empresaId: number): Promise<EmpresaConta[]> {
+    const rows = await db.select().from(empresasContas).where(eq(empresasContas.empresa_id, empresaId));
+    return (rows as EmpresaConta[]).sort((a: EmpresaConta, b: EmpresaConta) => compararCodigos(a.codigo, b.codigo));
   }
 
   async getEmpresasContasByEmpresaId(empresaId: number): Promise<EmpresaConta[]> {
@@ -1746,7 +1793,10 @@ export class DbStorage implements IStorage {
       .where(
         and(
           eq(empresasContas.empresa_id, empresaId),
-          eq(empresasContas.ativo, true)
+          eq(empresasContas.ativo, true),
+          // Só contas analíticas: grupo sintético nunca recebe lançamento, então
+          // não aparece em selects, na IA nem na importação.
+          eq(empresasContas.sintetica, false)
         )
       )
       .orderBy(empresasContas.codigo);
@@ -1757,32 +1807,48 @@ export class DbStorage implements IStorage {
     return result[0];
   }
 
-  // Próximo código livre da sequência, no mesmo padrão G.NN do plano base
-  // (seedEmpresasContas): 1=Receita, 2=Despesa FIXA, 3=Despesa VARIAVEL, 4=Despesa OUTRA.
-  async proximoCodigoConta(empresaId: number, tipo: string, classificacao?: string | null): Promise<string> {
-    const grupo = tipo === 'Receita'
-      ? '1'
-      : ({ FIXA: '2', VARIAVEL: '3' } as Record<string, string>)[(classificacao || 'OUTRA').toUpperCase()] || '4';
+  // Próximo código livre: filho do grupo sintético (pai informado ou o do mesmo
+  // grupo gerencial). Plano antigo, sem grupos: sequência G.NN por classificação.
+  async proximoCodigoConta(
+    empresaId: number,
+    tipo: string,
+    classificacao?: string | null,
+    opts: { parentId?: number | null; grupo_gerencial?: string | null } = {},
+  ): Promise<string> {
+    // Tabela inteira (inclusive inativas): a constraint única não ignora conta inativa.
+    const todas = await this.getPlanoContasCompleto(empresaId);
+    const pai = opts.parentId
+      ? todas.find((c) => c.id === opts.parentId)
+      : resolverPai(todas as any, { tipo, classificacao, grupo_gerencial: opts.grupo_gerencial });
+    if (pai) return proximoCodigoFilho(todas, pai.codigo);
 
-    // Consulta a tabela direto (e não getEmpresasContasByEmpresaId, que filtra
-    // ativo=true): a constraint única não ignora conta inativa.
-    const rows = await db.execute(sql`
-      SELECT codigo FROM empresas_contas
-      WHERE empresa_id = ${empresaId} AND codigo LIKE ${grupo + '.%'}
-    `);
-
+    const grupo = prefixoLegado(tipo, classificacao);
     let maior = 0;
-    for (const r of rows as any[]) {
-      const m = String(r.codigo).match(/^\d+\.(\d+)$/);
-      if (m) maior = Math.max(maior, parseInt(m[1], 10));
+    for (const c of todas) {
+      const m = String(c.codigo).match(/^(\d+)\.(\d+)$/);
+      if (m && m[1] === grupo) maior = Math.max(maior, parseInt(m[2], 10));
     }
     return `${grupo}.${String(maior + 1).padStart(2, '0')}`;
   }
 
   async createEmpresaConta(contaData: InsertEmpresaConta): Promise<EmpresaConta> {
+    const empresaId = contaData.empresa_id!;
+    const todas = await this.getPlanoContasCompleto(empresaId);
+
+    // Pai: o informado (precisa ser grupo sintético da mesma empresa) ou o
+    // grupo sintético do mesmo grupo gerencial. A conta herda o grupo do pai.
+    let pai = contaData.parent_id ? todas.find((c) => c.id === contaData.parent_id) : undefined;
+    if (contaData.parent_id && (!pai || !(pai as any).sintetica)) {
+      throw Object.assign(new Error('O grupo escolhido não é um grupo do plano de contas desta empresa.'), { status: 400 });
+    }
+    if (!pai && !contaData.sintetica) pai = resolverPai(todas as any, contaData) as any;
+    const grupo = contaData.grupo_gerencial || (pai ? (pai as any).grupo_gerencial : null) || grupoDaConta(contaData);
+
     const inserir = (codigo: string) => db.insert(empresasContas).values({
       ...contaData,
       codigo,
+      grupo_gerencial: grupo,
+      parent_id: pai?.id ?? null,
       created_at: new Date()
     } as any).returning();
 
@@ -1793,11 +1859,12 @@ export class DbStorage implements IStorage {
 
     // Sem código informado: gera na sequência. Em corrida (23505), tenta o próximo.
     for (let tentativa = 0; tentativa < 5; tentativa++) {
-      const codigo = await this.proximoCodigoConta(
-        contaData.empresa_id!,
-        contaData.tipo,
-        contaData.classificacao,
-      );
+      const codigo = contaData.sintetica && !pai
+        ? String(Math.max(0, ...(await this.getPlanoContasCompleto(empresaId)).map((c) => (/^\d+$/.test(c.codigo) ? Number(c.codigo) : 0))) + 1)
+        : await this.proximoCodigoConta(empresaId, contaData.tipo, contaData.classificacao, {
+            parentId: pai?.id ?? null,
+            grupo_gerencial: grupo,
+          });
       try {
         const result = await inserir(codigo);
         return result[0];
@@ -1817,6 +1884,8 @@ export class DbStorage implements IStorage {
     // Bloqueia exclusão se houver transação vinculada
     const used = await db.select({ count: count() }).from(empresasTransacoes).where(eq(empresasTransacoes.categoria_id, id));
     if ((used[0]?.count ?? 0) > 0) return false;
+    const filhas = await db.select({ count: count() }).from(empresasContas).where(eq(empresasContas.parent_id, id));
+    if ((filhas[0]?.count ?? 0) > 0) return false;
     const result = await db.delete(empresasContas).where(eq(empresasContas.id, id)).returning({ id: empresasContas.id });
     return result.length > 0;
   }
@@ -1972,8 +2041,8 @@ export class DbStorage implements IStorage {
       FROM empresas_transacoes t
       JOIN empresas_contas c ON t.categoria_id = c.id
       WHERE t.empresa_id = ${empresaId}
-        AND t.data_transacao >= ${de}
-        AND t.data_transacao <= ${ate}
+        AND ${DATA_CAIXA_PJ} >= ${de}
+        AND ${DATA_CAIXA_PJ} <= ${ate}
         AND t.status = 'Efetivada'
         AND NOT (COALESCE(t.reembolso_pessoal, false) = true AND t.status = 'Pendente')
         AND ${NAO_E_PAGAMENTO_FATURA}
@@ -2053,8 +2122,8 @@ export class DbStorage implements IStorage {
       JOIN empresas_contas c ON t.categoria_id = c.id
       WHERE t.empresa_id = ${empresaId}
         AND t.tipo = 'Despesa'
-        AND t.data_transacao >= ${de}
-        AND t.data_transacao <= ${ate}
+        AND ${DATA_CAIXA_PJ} >= ${de}
+        AND ${DATA_CAIXA_PJ} <= ${ate}
         AND t.status = 'Efetivada'
         AND NOT (COALESCE(t.reembolso_pessoal, false) = true AND t.status = 'Pendente')
         AND ${NAO_E_PAGAMENTO_FATURA}
@@ -2068,14 +2137,13 @@ export class DbStorage implements IStorage {
 
     // receita
     const recRows = await db.execute(sql`
-      SELECT COALESCE(SUM(valor::numeric), 0) AS total
-      FROM empresas_transacoes
-      WHERE empresa_id = ${empresaId}
-        AND tipo = 'Receita'
-        AND data_transacao >= ${de}
-        AND data_transacao <= ${ate}
-        AND status = 'Efetivada'
-        AND NOT (COALESCE(reembolso_pessoal, false) = true AND status = 'Pendente')
+      SELECT COALESCE(SUM(t.valor::numeric), 0) AS total
+      FROM empresas_transacoes t
+      WHERE t.empresa_id = ${empresaId}
+        AND t.tipo = 'Receita'
+        AND ${DATA_CAIXA_PJ} >= ${de}
+        AND ${DATA_CAIXA_PJ} <= ${ate}
+        AND t.status = 'Efetivada'
     `);
     receita = parseFloat((recRows as any[])[0]?.total) || 0;
 
@@ -2115,18 +2183,18 @@ export class DbStorage implements IStorage {
   // mês mostraria dinheiro que ainda não saiu.
   async getEmpresaFluxoCaixaMensal(empresaId: number, ano: number): Promise<EmpresaFluxoCaixaMensal> {
     const contas = await db.select().from(empresasContas)
-      .where(eq(empresasContas.empresa_id, empresaId))
+      .where(and(eq(empresasContas.empresa_id, empresaId), eq(empresasContas.sintetica, false)))
       .orderBy(empresasContas.codigo);
 
     const rows = await db.execute(sql`
       SELECT t.categoria_id AS conta_id,
-             EXTRACT(MONTH FROM t.data_transacao)::int AS mes,
+             EXTRACT(MONTH FROM ${DATA_CAIXA_PJ})::int AS mes,
              SUM(CASE WHEN t.tipo = 'Receita' THEN t.valor::numeric ELSE -t.valor::numeric END) AS total
       FROM empresas_transacoes t
       WHERE t.empresa_id = ${empresaId}
         AND COALESCE(t.movimenta_caixa, true) = true
         AND t.status = 'Efetivada'
-        AND EXTRACT(YEAR FROM t.data_transacao) = ${ano}
+        AND EXTRACT(YEAR FROM ${DATA_CAIXA_PJ}) = ${ano}
       GROUP BY t.categoria_id, mes
     `);
 
@@ -2150,14 +2218,14 @@ export class DbStorage implements IStorage {
     // Movimento (com sinal) por conta bancária × mês, dentro do ano.
     const movRows = await db.execute(sql`
       SELECT t.conta_bancaria_id,
-             EXTRACT(MONTH FROM t.data_transacao)::int AS mes,
+             EXTRACT(MONTH FROM ${DATA_CAIXA_PJ})::int AS mes,
              SUM(CASE WHEN t.tipo = 'Receita' THEN t.valor::numeric ELSE -t.valor::numeric END) AS total
       FROM empresas_transacoes t
       WHERE t.empresa_id = ${empresaId}
         AND t.conta_bancaria_id IS NOT NULL
         AND COALESCE(t.movimenta_caixa, true) = true
         AND t.status = 'Efetivada'
-        AND EXTRACT(YEAR FROM t.data_transacao) = ${ano}
+        AND EXTRACT(YEAR FROM ${DATA_CAIXA_PJ}) = ${ano}
       GROUP BY t.conta_bancaria_id, mes
     `);
     const movContas = (movRows as any[]).map((r) => ({
@@ -2173,7 +2241,7 @@ export class DbStorage implements IStorage {
         AND t.conta_bancaria_id IS NOT NULL
         AND COALESCE(t.movimenta_caixa, true) = true
         AND t.status = 'Efetivada'
-        AND EXTRACT(YEAR FROM t.data_transacao) < ${ano}
+        AND EXTRACT(YEAR FROM ${DATA_CAIXA_PJ}) < ${ano}
       GROUP BY t.conta_bancaria_id
     `);
     const saldoAntesAno = (antesRows as any[]).map((r) => ({
@@ -2191,7 +2259,7 @@ export class DbStorage implements IStorage {
       WHERE t.empresa_id = ${empresaId}
         AND COALESCE(t.movimenta_caixa, true) = true
         AND t.status = 'Efetivada'
-        AND EXTRACT(YEAR FROM t.data_transacao) < ${ano}
+        AND EXTRACT(YEAR FROM ${DATA_CAIXA_PJ}) < ${ano}
     `);
     const movimentoAntesAno = parseFloat((antesTotalRows as any[])[0]?.total) || 0;
 

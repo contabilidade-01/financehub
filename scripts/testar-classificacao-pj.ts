@@ -1,5 +1,12 @@
 // Teste do classificador PJ com o plano de contas do seed.
 import { resolverContaPj, type ContaPjRef } from "../server/services/classificar-conta-pj";
+import { MODELO_COMERCIO, MODELO_SERVICOS, type ContaModelo } from "../server/data/plano-contas-pj-modelos";
+
+// Contas analíticas dos modelos novos (o que a IA enxerga: grupo sintético não entra).
+const doModelo = (m: ContaModelo[]): ContaPjRef[] =>
+  m.filter((c) => !c.sintetica).map((c, i) => ({ id: 100 + i, codigo: c.codigo, nome: c.nome, tipo: c.tipo, is_cmv: !!c.is_cmv }));
+const COMERCIO = doModelo(MODELO_COMERCIO);
+const SERVICOS = doModelo(MODELO_SERVICOS);
 
 const PLANO: ContaPjRef[] = [
   { id: 1, codigo: "1.01", nome: "Receita de Vendas", tipo: "Receita" },
@@ -62,6 +69,28 @@ const CASOS: Caso[] = [
   { nome: "Entrada + segmento comércio", descricao: "Entrada", tipo: "Receita", segmento: "comercio", esperado: "1.01" },
   { nome: "Usuário nomeia a conta", descricao: "lança 300 em marketing", tipo: "Despesa", esperado: "3.05" },
   { nome: "Contador", descricao: "honorário do contador", contaInformada: "2.04", tipo: "Despesa", esperado: "2.04" },
+
+  // --- modelos Base Comércio / Base Serviços (códigos diferentes do plano antigo) ---
+  { nome: "Comércio: aluguel", descricao: "aluguel da loja", tipo: "Despesa", plano: COMERCIO, esperado: "4.04" },
+  { nome: "Comércio: luz", descricao: "conta de luz", tipo: "Despesa", plano: COMERCIO, esperado: "4.05" },
+  { nome: "Comércio: internet", descricao: "internet do escritório", tipo: "Despesa", plano: COMERCIO, esperado: "4.06" },
+  { nome: "Comércio: DAS é dedução", descricao: "paguei o DAS do mês", tipo: "Despesa", plano: COMERCIO, esperado: "2.01" },
+  { nome: "Comércio: IPVA é imposto fixo", descricao: "paguei o IPVA do carro", tipo: "Despesa", plano: COMERCIO, esperado: "4.14" },
+  { nome: "Comércio: mercadoria é CMV", descricao: "compra de mercadoria do fornecedor", tipo: "Despesa", plano: COMERCIO, esperado: "3.01" },
+  { nome: "Comércio: frete de entrega", descricao: "frete de entrega para cliente", tipo: "Despesa", plano: COMERCIO, esperado: "3.03" },
+  { nome: "Comércio: maquininha", descricao: "taxa da maquininha", tipo: "Despesa", plano: COMERCIO, esperado: "2.03" },
+  { nome: "Comércio: tarifa bancária", descricao: "tarifa bancária do mês", tipo: "Despesa", plano: COMERCIO, esperado: "5.04" },
+  { nome: "Comércio: juros de boleto", descricao: "juros de boleto atrasado", tipo: "Despesa", plano: COMERCIO, esperado: "5.05" },
+  { nome: "Comércio: abastecimento", descricao: "abastecimento de carro", contaInformada: "3.01", tipo: "Despesa", plano: COMERCIO, esperado: "4.12" },
+  { nome: "Comércio: pró-labore", descricao: "retirada de pró-labore", tipo: "Despesa", plano: COMERCIO, esperado: "4.03" },
+  { nome: "Comércio: venda", descricao: "vendi 500 reais", tipo: "Receita", plano: COMERCIO, esperado: "1.01" },
+  { nome: "Comércio: entrada + segmento", descricao: "Entrada", tipo: "Receita", plano: COMERCIO, segmento: "comercio", esperado: "1.01" },
+  { nome: "Comércio: rendimento", descricao: "rendimento da aplicação", tipo: "Receita", plano: COMERCIO, esperado: "5.01" },
+  { nome: "Serviços: serviço prestado", descricao: "recebi de um serviço de consultoria", tipo: "Receita", plano: SERVICOS, esperado: "1.01" },
+  { nome: "Serviços: entrada + segmento", descricao: "Entrada", tipo: "Receita", plano: SERVICOS, segmento: "servicos", esperado: "1.01" },
+  { nome: "Serviços: DAS é dedução", descricao: "paguei o DAS", tipo: "Despesa", plano: SERVICOS, esperado: "2.01" },
+  { nome: "Serviços: software", descricao: "assinatura do sistema de gestão", tipo: "Despesa", plano: SERVICOS, esperado: "4.08" },
+  { nome: "Serviços: sem pista cai em Outras", descricao: "despesa diversa", tipo: "Despesa", plano: SERVICOS, esperado: "4.15" },
 ];
 
 let falhas = 0;

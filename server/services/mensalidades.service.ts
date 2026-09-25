@@ -56,7 +56,8 @@ async function categoriaPadrao(m: any): Promise<number | null> {
     const r = await db.execute(sql`
       SELECT id FROM empresas_contas
       WHERE empresa_id = ${Number(m.empresa_id)} AND tipo = 'Despesa'
-      ORDER BY id LIMIT 1
+        AND sintetica = false AND ativo = true
+      ORDER BY (nome ILIKE 'outr%') DESC, id LIMIT 1
     `);
     const row = (r as any[])[0];
     return row ? Number(row.id) : null;

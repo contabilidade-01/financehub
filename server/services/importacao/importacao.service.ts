@@ -100,10 +100,10 @@ export function resumoLinhas(linhas: any[]) {
 }
 
 /** Categorias (PF) ou plano de contas (PJ) do escopo da sessão. */
-export async function categoriasDoEscopo(s: any): Promise<{ id: number; nome: string; tipo: string; codigo?: string; descricao?: string | null }[]> {
+export async function categoriasDoEscopo(s: any): Promise<{ id: number; nome: string; tipo: string; codigo?: string; descricao?: string | null; parent_id?: number | null }[]> {
   if (s.escopo === "pj") {
     const contas = (await storage.getEmpresasContasByEmpresaId(s.empresa_id)) as any[];
-    return contas.filter((c) => c.ativo !== false).map((c) => ({ id: c.id, nome: c.nome, tipo: c.tipo, codigo: c.codigo, descricao: c.descricao }));
+    return contas.filter((c) => c.ativo !== false).map((c) => ({ id: c.id, nome: c.nome, tipo: c.tipo, codigo: c.codigo, descricao: c.descricao, parent_id: c.parent_id }));
   }
   const cats = (await storage.getCategoriesByUserId(s.usuario_id)) as any[];
   return cats.map((c) => ({ id: c.id, nome: c.nome, tipo: c.tipo, descricao: c.descricao }));
@@ -127,6 +127,11 @@ export async function detalharSessao(id: number, usuarioId: number) {
     linhas,
     resumo: resumoLinhas(linhas),
     categorias: await categoriasDoEscopo(sessao),
+    // Grupos do plano PJ: o seletor agrupa as contas e a conta nova escolhe o grupo.
+    grupos: sessao.escopo === "pj"
+      ? (await storage.getPlanoContasCompleto(sessao.empresa_id)).filter((c: any) => c.sintetica && c.ativo)
+          .map((c: any) => ({ id: c.id, codigo: c.codigo, nome: c.nome, tipo: c.tipo, classificacao: c.classificacao, grupo_gerencial: c.grupo_gerencial }))
+      : [],
     contas_bancarias: await contasBancariasDoEscopo(sessao),
   };
 }
@@ -604,33 +609,20 @@ export async function criarCategoriaInline(id: number, usuarioId: number, b: { n
   const igual = existentes.find((c) => normalizarBusca(c.nome) === normalizarBusca(nome) && c.tipo === tipo);
   if (igual) return igual;
   if (s.escopo === "pj") {
-    const contas = (await storage.getEmpresasContasByEmpresaId(s.empresa_id)) as any[];
-    const pai = b.parent_id ? contas.find((c) => c.id === Number(b.parent_id)) : null;
-    const codigo = proximoCodigoConta(contas, tipo, pai?.codigo);
     const classificacao = ["FIXA", "VARIAVEL", "OUTRA"].includes(String(b.classificacao)) ? String(b.classificacao) : tipo === "Receita" ? "OUTRA" : "VARIAVEL";
-    const c = await storage.createEmpresaConta({
-      empresa_id: s.empresa_id, codigo, nome, tipo, classificacao, parent_id: pai?.id ?? null,
-    } as any);
-    return { id: c.id, nome: c.nome, tipo: c.tipo, codigo: c.codigo };
+    try {
+      // Código e grupo pela regra única do plano (storage.createEmpresaConta).
+      const c = await storage.createEmpresaConta({
+        empresa_id: s.empresa_id, nome, tipo, classificacao, parent_id: b.parent_id ? Number(b.parent_id) : null,
+      } as any);
+      return { id: c.id, nome: c.nome, tipo: c.tipo, codigo: c.codigo };
+    } catch (e: any) {
+      if (e?.status === 400) throw new ErroImportacao(e.message);
+      throw e;
+    }
   }
   const c = await storage.createCategory({ nome, tipo, usuario_id: usuarioId, global: false } as any);
   return { id: c.id, nome: c.nome, tipo: c.tipo };
-}
-
-/** Próximo código livre: filho do pai ("3.03" → "3.03.01") ou no grupo mais usado do tipo ("3.NN"). */
-export function proximoCodigoConta(contas: { codigo: string; tipo: string }[], tipo: string, codigoPai?: string | null): string {
-  const usados = new Set(contas.map((c) => c.codigo));
-  let prefixo = codigoPai || "";
-  if (!prefixo) {
-    const freq = new Map<string, number>();
-    for (const c of contas) if (c.tipo === tipo) { const p = c.codigo.split(".")[0]; freq.set(p, (freq.get(p) || 0) + 1); }
-    prefixo = [...freq.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || (tipo === "Receita" ? "1" : "3");
-  }
-  for (let n = 1; n < 1000; n++) {
-    const cod = `${prefixo}.${String(n).padStart(2, "0")}`;
-    if (!usados.has(cod)) return cod;
-  }
-  return `${prefixo}.${Date.now() % 100000}`;
 }
 
 // ----------------------------------------------------------------------------

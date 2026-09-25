@@ -783,6 +783,8 @@ export const empresasContas = pgTable("empresas_contas", {
   grupo_gerencial: varchar("grupo_gerencial", { length: 30 }),
   is_cmv: boolean("is_cmv").notNull().default(false), // custo da mercadoria vendida → habilita Margem Bruta/Markup
   parent_id: integer("parent_id"),
+  // Grupo sintético: só soma as filhas, nunca recebe lançamento.
+  sintetica: boolean("sintetica").notNull().default(false),
   icone: varchar("icone", { length: 100 }),
   cor: varchar("cor", { length: 50 }),
   descricao: text("descricao"),
@@ -880,6 +882,7 @@ export const insertEmpresaContaSchema = z.object({
   grupo_gerencial: z.string().optional().nullable(),
   is_cmv: z.boolean().optional().default(false),
   parent_id: z.number().int().optional().nullable(),
+  sintetica: z.boolean().optional().default(false),
   icone: z.string().optional().nullable(),
   cor: z.string().optional().nullable(),
   descricao: z.string().optional().nullable(),

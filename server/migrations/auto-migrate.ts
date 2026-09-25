@@ -15,6 +15,24 @@ import { sql } from "drizzle-orm";
 
 type Step = { name: string; run: () => Promise<void> };
 
+/**
+ * Correção de dados que deve rodar UMA vez (os passos rodam a cada boot).
+ * Sem isso, um backfill "re-corrigiria" o que o usuário mudou depois.
+ */
+type Exec = { execute: typeof db.execute };
+
+async function umaVez(chave: string, fn: (tx: Exec) => Promise<void>): Promise<void> {
+  await db.execute(sql`CREATE TABLE IF NOT EXISTS auto_migrate_marcos (chave VARCHAR(120) PRIMARY KEY, aplicado_em TIMESTAMPTZ NOT NULL DEFAULT now())`);
+  const ja = await db.execute(sql`SELECT 1 FROM auto_migrate_marcos WHERE chave = ${chave}`);
+  if ((ja as any[]).length) return;
+  await db.transaction(async (tx: Exec) => {
+    // A marca é gravada na mesma transação da correção: ou as duas ou nenhuma.
+    const ins = await tx.execute(sql`INSERT INTO auto_migrate_marcos (chave) VALUES (${chave}) ON CONFLICT DO NOTHING RETURNING chave`);
+    if (!(ins as any[]).length) return; // outra instância chegou antes
+    await fn(tx);
+  });
+}
+
 const STEPS: Step[] = [
   {
     name: "transacoes: campos de contas a pagar / fluxo de caixa",
@@ -522,12 +540,15 @@ const STEPS: Step[] = [
         WHERE grupo_gerencial IS NULL
       `);
       // Marca CMV pelas contas de custo variável ligadas a mercadoria vendida.
-      await db.execute(sql`
-        UPDATE empresas_contas SET is_cmv = true
-        WHERE grupo_gerencial = 'custo_variavel'
-          AND is_cmv = false
-          AND (nome ILIKE '%CMV%' OR nome ILIKE '%mercadoria vendida%' OR codigo = '3.01')
-      `);
+      // Uma vez só: rodando a cada boot, desfazia quem desmarcou CMV na tela.
+      await umaVez("empresas_contas.is_cmv.backfill", async (tx) => {
+        await tx.execute(sql`
+          UPDATE empresas_contas SET is_cmv = true
+          WHERE grupo_gerencial = 'custo_variavel'
+            AND is_cmv = false
+            AND (nome ILIKE '%CMV%' OR nome ILIKE '%mercadoria vendida%' OR codigo = '3.01')
+        `);
+      });
     },
   },
   {
@@ -1210,6 +1231,74 @@ const STEPS: Step[] = [
       await db.execute(sql`ALTER TABLE importacao_linhas ALTER COLUMN status TYPE VARCHAR(20)`);
       await db.execute(sql`ALTER TABLE importacao_linhas ADD COLUMN IF NOT EXISTS transferencia_conta_id INTEGER`);
       await db.execute(sql`ALTER TABLE importacao_linhas ADD COLUMN IF NOT EXISTS transferencia_id INTEGER`);
+    },
+  },
+  {
+    name: "plano de contas PJ: grupos sintéticos (Base Serviços / Base Comércio)",
+    run: async () => {
+      await db.execute(sql`ALTER TABLE empresas_contas ADD COLUMN IF NOT EXISTS sintetica BOOLEAN NOT NULL DEFAULT false`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_emp_contas_parent ON empresas_contas(parent_id) WHERE parent_id IS NOT NULL`);
+
+      // Defesa em profundidade: grupo sintético nunca recebe lançamento, venha
+      // de onde vier (tela, IA, importação, integração).
+      await db.execute(sql`
+        CREATE OR REPLACE FUNCTION fn_bloqueia_lanc_conta_sintetica() RETURNS trigger AS $$
+        BEGIN
+          IF NEW.categoria_id IS NOT NULL AND EXISTS (
+            SELECT 1 FROM empresas_contas c WHERE c.id = NEW.categoria_id AND c.sintetica = true
+          ) THEN
+            RAISE EXCEPTION 'Lançamento em grupo do plano de contas não é permitido; escolha uma conta.'
+              USING ERRCODE = 'check_violation';
+          END IF;
+          RETURN NEW;
+        END $$ LANGUAGE plpgsql
+      `);
+      await db.execute(sql`DROP TRIGGER IF EXISTS trg_bloqueia_lanc_conta_sintetica ON empresas_transacoes`);
+      await db.execute(sql`
+        CREATE TRIGGER trg_bloqueia_lanc_conta_sintetica
+        BEFORE INSERT OR UPDATE OF categoria_id ON empresas_transacoes
+        FOR EACH ROW EXECUTE FUNCTION fn_bloqueia_lanc_conta_sintetica()
+      `);
+
+      // Empresas com o plano antigo (1=Receita, 2=Fixas, 3=Variáveis, 4=Outras):
+      // cria os grupos sintéticos pelos prefixos, sem renumerar nada, e pendura
+      // as contas neles. Uma vez só, para respeitar o que o usuário mover depois.
+      await umaVez("empresas_contas.grupos_legado", async (tx) => {
+        const grupos: [string, string, string, string, string][] = [
+          ["1", "Receitas", "Receita", "OUTRA", "receita"],
+          ["2", "Despesas fixas", "Despesa", "FIXA", "despesa_fixa"],
+          ["3", "Custos e despesas variáveis", "Despesa", "VARIAVEL", "custo_variavel"],
+          ["4", "Outras despesas", "Despesa", "OUTRA", "outras"],
+        ];
+        // Empresas ainda sem nenhum grupo (listadas antes de inserir o primeiro).
+        const alvo = ((await tx.execute(sql`
+          SELECT DISTINCT c.empresa_id FROM empresas_contas c
+          WHERE NOT EXISTS (SELECT 1 FROM empresas_contas s WHERE s.empresa_id = c.empresa_id AND s.sintetica = true)
+        `)) as any[]).map((r) => Number(r.empresa_id));
+        if (!alvo.length) return;
+        const ids = sql.join(alvo.map((id) => sql`${id}`), sql`, `);
+        for (const [codigo, nome, tipo, classificacao, grupo] of grupos) {
+          await tx.execute(sql`
+            INSERT INTO empresas_contas (empresa_id, codigo, nome, tipo, classificacao, grupo_gerencial, sintetica, ativo)
+            SELECT DISTINCT c.empresa_id, ${codigo}, ${nome}, ${tipo}, ${classificacao}, ${grupo}, true, true
+            FROM empresas_contas c
+            WHERE c.empresa_id IN (${ids})
+              AND c.codigo LIKE ${codigo + ".%"}
+              AND NOT EXISTS (SELECT 1 FROM empresas_contas x WHERE x.empresa_id = c.empresa_id AND x.codigo = ${codigo})
+          `);
+        }
+        await tx.execute(sql`
+          UPDATE empresas_contas f SET parent_id = g.id
+          FROM empresas_contas g
+          WHERE g.empresa_id = f.empresa_id
+            AND f.empresa_id IN (${ids})
+            AND g.sintetica = true
+            AND f.sintetica = false
+            AND f.parent_id IS NULL
+            AND f.codigo LIKE g.codigo || '.%'
+            AND position('.' in substring(f.codigo from length(g.codigo) + 2)) = 0
+        `);
+      });
     },
   },
 ];

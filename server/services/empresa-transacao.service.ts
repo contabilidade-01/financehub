@@ -43,6 +43,9 @@ export async function atualizarTransacaoEmpresa(
   if (conta.empresa_id !== empresaId) {
     return { ok: false, status: 400, error: "Categoria não pertence a esta empresa." };
   }
+  if (conta.sintetica) {
+    return { ok: false, status: 400, error: `"${conta.nome}" é um grupo do plano de contas; escolha uma conta dentro dele.` };
+  }
   if (conta.tipo !== tipoFinal) {
     return {
       ok: false,

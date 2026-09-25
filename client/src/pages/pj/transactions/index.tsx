@@ -11,6 +11,7 @@ import { Plus, Trash2, Edit2, Search, X, CheckCircle2, RotateCcw, Undo2 } from "
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 import type { EmpresaTransacaoWithDetails, EmpresaConta } from "@shared/schema";
+import { ContaPlanoCombobox, usePlanoContasPj, type GrupoPlano } from "@/components/shared/ContaPlanoCombobox";
 
 type ContaBancariaPj = { id: number; banco: string; nome?: string | null; tipo?: string; ativo?: boolean };
 
@@ -72,6 +73,8 @@ const stBadgePj = (s: string) =>
  */
 function TransacaoForm({
   contas,
+  grupos,
+  onCriarConta,
   bancos,
   cartoes,
   inicial,
@@ -80,6 +83,8 @@ function TransacaoForm({
   onCancel,
 }: {
   contas: EmpresaConta[];
+  grupos?: GrupoPlano[];
+  onCriarConta?: (nome: string, tipo: "Receita" | "Despesa", grupoId?: number | null) => Promise<number | null>;
   bancos: ContaBancariaPj[];
   cartoes: { id: number; nome: string; ativo?: boolean }[];
   inicial?: EmpresaTransacaoWithDetails | null;
@@ -103,7 +108,6 @@ function TransacaoForm({
   const [valorDigitado, setValorDigitado] = useState<string>(inicial ? String(inicial.valor) : "");
   const [reembolsoReceber, setReembolsoReceber] = useState<boolean>(!!(inicial as any)?.reembolso_pessoal);
 
-  const contasDoTipo = contas.filter((c) => c.tipo === tipo);
   const bancosAtivos = bancos.filter((b) => b.ativo !== false);
   const cartoesAtivos = cartoes.filter((c) => c.ativo !== false);
   const rotuloBanco = rotuloContaBanc;
@@ -230,16 +234,16 @@ function TransacaoForm({
         </SelectContent>
       </Select>
 
-      <Select value={categoriaId} onValueChange={setCategoriaId}>
-        <SelectTrigger><SelectValue placeholder="Classificação (plano de contas)" /></SelectTrigger>
-        <SelectContent>
-          {contasDoTipo.map((c) => (
-            <SelectItem key={c.id} value={String(c.id)}>
-              {c.codigo} — {c.nome}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <ContaPlanoCombobox
+        categorias={contas as any}
+        grupos={grupos}
+        tipo={tipo === "Receita" ? "Receita" : "Despesa"}
+        valor={categoriaId ? Number(categoriaId) : null}
+        onChange={(v) => setCategoriaId(v ? String(v) : "")}
+        onCriar={onCriarConta}
+        escopo="pj"
+        placeholder="Classificação (plano de contas)"
+      />
 
       <Select value={pagamento || undefined} onValueChange={trocarPagamento}>
         <SelectTrigger><SelectValue placeholder="Conta ou cartão" /></SelectTrigger>
@@ -389,10 +393,9 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
     enabled: !!empresaId,
   });
 
-  const { data: contas = [] } = useQuery<EmpresaConta[]>({
-    queryKey: [`/api/empresas/${empresaId}/contas`],
-    enabled: !!empresaId,
-  });
+  // Plano de contas com grupos: o seletor agrupa e permite criar conta na hora.
+  const plano = usePlanoContasPj(empresaId);
+  const contas = plano.contas as unknown as EmpresaConta[];
 
   const { data: bancos = [] } = useQuery<ContaBancariaPj[]>({
     queryKey: [`/api/empresas/${empresaId}/contas-bancarias`],
@@ -667,6 +670,8 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
           <CardContent className="pt-4">
             <TransacaoForm
               contas={contas}
+              grupos={plano.grupos}
+              onCriarConta={plano.criarConta}
               bancos={bancos}
               cartoes={cartoes}
               salvando={createMut.isPending}
@@ -866,21 +871,16 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
                       </td>
                       <td className="p-3 text-xs">
                         {trocandoConta === t.id ? (
-                          <Select
-                            defaultValue={String(t.categoria_id)}
-                            onValueChange={(v) => updateMut.mutate({ id: t.id, dados: { categoria_id: Number(v) } })}
-                          >
-                            <SelectTrigger className="h-8 text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {contas.filter((c) => c.tipo === t.tipo).map((c) => (
-                                <SelectItem key={c.id} value={String(c.id)}>
-                                  {c.codigo} — {c.nome}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <ContaPlanoCombobox
+                            categorias={contas as any}
+                            grupos={plano.grupos}
+                            tipo={t.tipo === "Receita" ? "Receita" : "Despesa"}
+                            valor={t.categoria_id}
+                            onChange={(v) => { if (v) updateMut.mutate({ id: t.id, dados: { categoria_id: v } }); setTrocandoConta(null); }}
+                            onCriar={plano.criarConta}
+                            escopo="pj"
+                            className="h-8 text-xs"
+                          />
                         ) : (
                           <button
                             type="button"
@@ -924,6 +924,8 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
           {editando && (
             <TransacaoForm
               contas={contas}
+              grupos={plano.grupos}
+              onCriarConta={plano.criarConta}
               bancos={bancos}
               cartoes={cartoes}
               inicial={editando}

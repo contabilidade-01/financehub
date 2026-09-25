@@ -48,6 +48,16 @@ export interface Categoria {
   nome: string;
   tipo: "Receita" | "Despesa";
   codigo?: string;
+  parent_id?: number | null;
+}
+
+export interface GrupoPlano {
+  id: number;
+  codigo: string;
+  nome: string;
+  tipo: string;
+  classificacao?: string | null;
+  grupo_gerencial?: string | null;
 }
 
 export interface ContaBancaria {
@@ -99,6 +109,7 @@ export interface Detalhe {
   linhas: Linha[];
   resumo: Resumo;
   categorias: Categoria[];
+  grupos: GrupoPlano[];
   contas_bancarias: ContaBancaria[];
 }
 

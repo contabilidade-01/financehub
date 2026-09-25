@@ -382,7 +382,7 @@ function ResetFormCard({ token, info }: { token: string; info: TokenInfo }) {
                           name="segmento"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>{t("reset.segmento_label", "Segmento")}</FormLabel>
+                              <FormLabel>{t("reset.segmento_label", "Plano de contas da empresa")}</FormLabel>
                               <FormControl>
                                 <select
                                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -390,9 +390,9 @@ function ResetFormCard({ token, info }: { token: string; info: TokenInfo }) {
                                   onChange={field.onChange}
                                 >
                                   <option value="">{t("reset.segmento_placeholder", "Selecione")}</option>
-                                  <option value="servicos">Serviços</option>
-                                  <option value="comercio">Comércio</option>
-                                  <option value="misto">Misto</option>
+                                  <option value="servicos">Base Serviços</option>
+                                  <option value="comercio">Base Comércio</option>
+                                  <option value="misto">Base Comércio (comércio e serviços)</option>
                                 </select>
                               </FormControl>
                               <FormMessage />

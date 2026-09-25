@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, ArrowLeft, Check, CheckCircle2, Loader2, Sparkles, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,10 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { CategoriaCombobox } from "./CategoriaCombobox";
+import { ContaPlanoCombobox, type GrupoPlano } from "@/components/shared/ContaPlanoCombobox";
+
+/** Grupos do plano PJ para os seletores de conta (evita repassar prop em cada linha). */
+const GruposPlanoCtx = createContext<GrupoPlano[]>([]);
 import {
   api, brl, dataBr, BANCOS, ROTULO_ORIGEM,
   type Detalhe, type Linha, type Mapeamento, type StatusLinha,
@@ -116,9 +119,9 @@ export function SessaoImportacao({ id, onVoltar }: { id: number; onVoltar: () =>
   }), [linhasLocais]);
 
   // ---------------- ações ----------------
-  const criarCategoria = async (nome: string, tipo: "Receita" | "Despesa") => {
+  const criarCategoria = async (nome: string, tipo: "Receita" | "Despesa", grupoId?: number | null) => {
     try {
-      const c = await api<{ id: number }>(`/api/importacoes/${id}/categorias`, { method: "POST", body: { nome, tipo } });
+      const c = await api<{ id: number }>(`/api/importacoes/${id}/categorias`, { method: "POST", body: { nome, tipo, parent_id: grupoId ?? null } });
       await qc.invalidateQueries({ queryKey: chave });
       toast({ title: `${data?.sessao.escopo === "pj" ? "Conta" : "Categoria"} “${nome}” criada` });
       return c.id;
@@ -197,6 +200,7 @@ export function SessaoImportacao({ id, onVoltar }: { id: number; onVoltar: () =>
   const semConta = !sessao.conta_bancaria_id;
 
   return (
+    <GruposPlanoCtx.Provider value={data.grupos ?? []}>
     <div className="space-y-4">
       {/* Cabeçalho */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -382,7 +386,8 @@ export function SessaoImportacao({ id, onVoltar }: { id: number; onVoltar: () =>
               </div>
               <div className="space-y-1.5">
                 <Label>{sessao.escopo === "pj" ? "Conta do plano" : "Categoria"}</Label>
-                <CategoriaCombobox
+                <ContaPlanoCombobox
+                  grupos={data.grupos}
                   categorias={categorias}
                   tipo={regra.tipo}
                   valor={regra.categoria_id}
@@ -404,6 +409,7 @@ export function SessaoImportacao({ id, onVoltar }: { id: number; onVoltar: () =>
         </DialogContent>
       </Dialog>
     </div>
+    </GruposPlanoCtx.Provider>
   );
 }
 
@@ -637,7 +643,7 @@ interface TabelaProps {
   selecionadas: Set<number>;
   setSelecionadas: (s: Set<number>) => void;
   alterar: (alts: Alteracao[], imediato?: boolean) => void;
-  onCriar: (nome: string, tipo: "Receita" | "Despesa") => Promise<number | null>;
+  onCriar: (nome: string, tipo: "Receita" | "Despesa", grupoId?: number | null) => Promise<number | null>;
 }
 
 const ROTULO_STATUS: Record<StatusLinha, string> = {
@@ -712,7 +718,7 @@ interface LinhaProps {
   marcada: boolean;
   onMarcar: () => void;
   alterar: (alts: Alteracao[], imediato?: boolean) => void;
-  onCriar: (nome: string, tipo: "Receita" | "Despesa") => Promise<number | null>;
+  onCriar: (nome: string, tipo: "Receita" | "Despesa", grupoId?: number | null) => Promise<number | null>;
 }
 
 function Valor({ v }: { v: string }) {
@@ -772,11 +778,13 @@ function Situacao({ l, alterar, outrasContas }: { l: Linha; alterar: LinhaProps[
 }
 
 function CampoCategoria({ l, categorias, escopo, alterar, onCriar }: Omit<LinhaProps, "marcada" | "onMarcar">) {
+  const gruposPlano = useContext(GruposPlanoCtx);
   const tipo = Number(l.valor) >= 0 ? "Receita" : "Despesa";
   if (l.status !== "pendente") return <span className="text-xs text-muted-foreground">—</span>;
   return (
     <div className="flex items-center gap-2">
-      <CategoriaCombobox
+      <ContaPlanoCombobox
+        grupos={gruposPlano}
         categorias={categorias}
         tipo={tipo}
         valor={l.categoria_id}
@@ -851,10 +859,11 @@ function AcoesEmMassa({ qtd, linhas, categorias, escopo, onCriar, onAplicar, onL
   linhas: Linha[];
   categorias: Detalhe["categorias"];
   escopo: "pf" | "pj";
-  onCriar: (nome: string, tipo: "Receita" | "Despesa") => Promise<number | null>;
+  onCriar: (nome: string, tipo: "Receita" | "Despesa", grupoId?: number | null) => Promise<number | null>;
   onAplicar: (alts: Alteracao[]) => void;
   onLimpar: () => void;
 }) {
+  const gruposPlano = useContext(GruposPlanoCtx);
   const tipos = new Set(linhas.map((l) => (Number(l.valor) >= 0 ? "Receita" : "Despesa")));
   const tipoUnico = tipos.size === 1 ? ([...tipos][0] as "Receita" | "Despesa") : null;
   return (
@@ -862,7 +871,8 @@ function AcoesEmMassa({ qtd, linhas, categorias, escopo, onCriar, onAplicar, onL
       <span className="px-1 text-sm font-medium">{qtd} selecionado(s)</span>
       {tipoUnico ? (
         <div className="sm:w-72">
-          <CategoriaCombobox
+          <ContaPlanoCombobox
+            grupos={gruposPlano}
             categorias={categorias}
             tipo={tipoUnico}
             valor={null}

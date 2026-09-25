@@ -1483,6 +1483,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Plano de contas PJ
   app.get("/api/empresas/:id/contas", combinedAuth, empresaContaCtrl.listEmpresasContas);
   app.post("/api/empresas/:id/contas", combinedAuth, empresaContaCtrl.createEmpresaConta);
+  app.post("/api/empresas/:id/contas/completar-modelo", combinedAuth, empresaContaCtrl.completarComModelo);
   app.put("/api/empresas/:id/contas/:contaId", combinedAuth, empresaContaCtrl.updateEmpresaConta);
   app.delete("/api/empresas/:id/contas/:contaId", combinedAuth, empresaContaCtrl.deleteEmpresaConta);
 

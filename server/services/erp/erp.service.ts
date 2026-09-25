@@ -171,23 +171,24 @@ export async function removerCentro(empresaId: number, id: number) {
 
 /** Garante que contato/centro/conta pertencem à empresa (nunca confiar em id vindo do cliente). */
 export async function validarVinculos(empresaId: number, v: { contato_id?: unknown; centro_custo_id?: unknown; categoria_id?: unknown; conta_bancaria_id?: unknown }) {
-  const checar = async (id: unknown, tabela: string, msg: string) => {
+  const checar = async (id: unknown, tabela: string, msg: string, extra = sql``) => {
     if (id === undefined || id === null || id === "") return null;
     const n = Number(id);
     if (!Number.isInteger(n)) throw new ErroErp(msg);
-    const r = (await db.execute(sql`SELECT 1 FROM ${sql.raw(tabela)} WHERE id = ${n} AND empresa_id = ${empresaId} LIMIT 1`)) as any[];
+    const r = (await db.execute(sql`SELECT 1 FROM ${sql.raw(tabela)} WHERE id = ${n} AND empresa_id = ${empresaId} ${extra} LIMIT 1`)) as any[];
     if (!r[0]) throw new ErroErp(msg);
     return n;
   };
   return {
     contato_id: await checar(v.contato_id, "empresas_contatos", "Cliente/fornecedor inválido."),
     centro_custo_id: await checar(v.centro_custo_id, "empresas_centros_custo", "Centro de custo inválido."),
-    categoria_id: await checar(v.categoria_id, "empresas_contas", "Conta do plano inválida."),
+    // Lançamento só em conta analítica ativa (grupo sintético só soma).
+    categoria_id: await checar(v.categoria_id, "empresas_contas", "Escolha uma conta do plano (não um grupo).", sql`AND sintetica = false AND ativo = true`),
     conta_bancaria_id: await checar(v.conta_bancaria_id, "contas_bancarias", "Conta bancária inválida."),
   };
 }
 
-/** Conta nova no plano de contas, com código gerado no grupo certo (mesma regra da importação). */
+/** Conta nova no plano de contas; código e grupo vêm do storage (regra única). */
 export async function criarContaPlano(empresaId: number, b: any) {
   const nome = texto(b.nome, 120);
   if (!nome || nome.length < 2) throw new ErroErp("Informe o nome da conta.");
@@ -195,12 +196,17 @@ export async function criarContaPlano(empresaId: number, b: any) {
   const contas = (await storage.getEmpresasContasByEmpresaId(empresaId)) as any[];
   const igual = contas.find((c) => c.tipo === tipo && String(c.nome).toLowerCase() === nome.toLowerCase());
   if (igual) return igual;
-  const pai = b.parent_id ? contas.find((c) => c.id === Number(b.parent_id)) : null;
-  const { proximoCodigoConta } = await import("../importacao/importacao.service");
   const classificacao = ["FIXA", "VARIAVEL", "OUTRA"].includes(String(b.classificacao)) ? String(b.classificacao) : tipo === "Receita" ? "OUTRA" : "VARIAVEL";
-  return storage.createEmpresaConta({
-    empresa_id: empresaId, codigo: proximoCodigoConta(contas, tipo, pai?.codigo), nome, tipo, classificacao, parent_id: pai?.id ?? null,
-  } as any);
+  try {
+    return await storage.createEmpresaConta({
+      empresa_id: empresaId, nome, tipo, classificacao,
+      parent_id: b.parent_id ? Number(b.parent_id) : null,
+      grupo_gerencial: b.grupo_gerencial || null,
+    } as any);
+  } catch (e: any) {
+    if (e?.status === 400) throw new ErroErp(e.message);
+    throw e;
+  }
 }
 
 // ----------------------------------------------------------------------------

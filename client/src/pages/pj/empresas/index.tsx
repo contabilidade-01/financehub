@@ -76,11 +76,11 @@ export default function PjEmpresas() {
                 </SelectContent>
               </Select>
               <Select name="segmento">
-                <SelectTrigger><SelectValue placeholder="Segmento" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Plano de contas" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="servicos">Serviços</SelectItem>
-                  <SelectItem value="comercio">Comércio</SelectItem>
-                  <SelectItem value="misto">Misto</SelectItem>
+                  <SelectItem value="servicos">Base Serviços</SelectItem>
+                  <SelectItem value="comercio">Base Comércio</SelectItem>
+                  <SelectItem value="misto">Base Comércio (comércio e serviços)</SelectItem>
                 </SelectContent>
               </Select>
               <Button type="submit" disabled={createMut.isPending}>Cadastrar</Button>
@@ -112,7 +112,7 @@ export default function PjEmpresas() {
               <CardContent className="text-sm space-y-1">
                 {emp.cnpj && <p><span className="font-medium">CNPJ:</span> {emp.cnpj}</p>}
                 {emp.regime_tributario && <p><span className="font-medium">Regime:</span> {emp.regime_tributario}</p>}
-                {emp.segmento && <p><span className="font-medium">Segmento:</span> {emp.segmento}</p>}
+                {emp.segmento && <p><span className="font-medium">Plano de contas:</span> {emp.segmento === "servicos" ? "Base Serviços" : "Base Comércio"}</p>}
               </CardContent>
             </Card>
           ))}
