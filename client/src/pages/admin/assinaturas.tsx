@@ -21,7 +21,19 @@ type Assinatura = {
   data_expiracao_assinatura: string | null;
   situacao: string; dias_para_vencer: number | null;
   com_consultoria?: boolean; plano_forcado_id?: number | null;
+  conferido_em?: string | null; conferido_origem?: string | null;
 };
+
+// Conferência automática no Asaas: cada cliente a cada 5h (a manual reinicia).
+const JANELA_CONFERENCIA_H = 5;
+const horaSP = (d: Date) => d.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+function textoConferencia(a: Assinatura): string {
+  if (!a.conferido_em) return "Pagamento ainda não conferido no Asaas";
+  const em = new Date(a.conferido_em);
+  const proxima = new Date(em.getTime() + JANELA_CONFERENCIA_H * 3_600_000);
+  const como = a.conferido_origem === "manual" ? "manual" : "automática";
+  return `Conferido ${horaSP(em)} (${como}) · próxima automática após ${horaSP(proxima)}`;
+}
 
 const CICLOS = [
   { value: "mensal", label: "Mensal", meses: 1 },
@@ -94,7 +106,7 @@ export default function AdminAssinaturas() {
       if (r?.ativado) {
         toast({ title: "Pagamento reconhecido", description: `Acesso liberado até ${r.acessoAte ? new Date(r.acessoAte).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "—"}.` });
       } else {
-        toast({ title: "Nada a liberar", description: r?.motivo || (r?.pagos ? "Os pagamentos do Asaas já estão refletidos." : "Nenhum pagamento confirmado no Asaas.") });
+        toast({ title: "Nada a liberar", description: `${r?.motivo || (r?.pagos ? "Os pagamentos do Asaas já estão refletidos." : "Nenhum pagamento confirmado no Asaas.")} A conferência automática deste cliente volta em ${JANELA_CONFERENCIA_H}h.` });
       }
     },
     onError: (err: any) => toast({ title: "Erro", description: err?.error || err?.message || "Falha ao consultar o Asaas", variant: "destructive" }),
@@ -187,6 +199,11 @@ export default function AdminAssinaturas() {
                     {a.dias_para_vencer != null && (
                       <div className="text-xs text-muted-foreground">{a.dias_para_vencer < 0 ? `há ${-a.dias_para_vencer}d` : `em ${a.dias_para_vencer}d`}</div>
                     )}
+                    {a.conferido_em && (
+                      <div className="text-[11px] text-muted-foreground" title={textoConferencia(a)}>
+                        Asaas: {horaSP(new Date(a.conferido_em))}{a.conferido_origem === "manual" ? " (manual)" : ""}
+                      </div>
+                    )}
                   </div>
                   <Badge className={s.cls}>{s.label}</Badge>
                   {a.tipo_pessoa === "juridica" && (
@@ -201,7 +218,7 @@ export default function AdminAssinaturas() {
                     </button>
                   )}
                   <div className="flex items-center gap-1">
-                    <Button size="sm" variant="outline" title="Confere no Asaas se o cliente pagou e libera o acesso" onClick={() => sincronizarMut.mutate(a.id)} disabled={sincronizarMut.isPending}>
+                    <Button size="sm" variant="outline" title={`Confere agora no Asaas se o cliente pagou e libera o acesso. ${textoConferencia(a)}`} onClick={() => sincronizarMut.mutate(a.id)} disabled={sincronizarMut.isPending}>
                       <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Conferir pagamento
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => renovarMut.mutate(a.id)} disabled={!a.ciclo_assinatura || renovarMut.isPending}>

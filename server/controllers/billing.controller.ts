@@ -445,7 +445,7 @@ export async function conferirPagamento(req: Request, res: Response) {
       return res.status(429).json({ error: "Aguarde alguns segundos e tente de novo." });
     }
     ultimaConferencia.set(user.id, agora);
-    const r = await getSubscriptionService(storage).sincronizarPagamentosAsaas(user.id);
+    const r = await getSubscriptionService(storage).sincronizarPagamentosAsaas(user.id, "manual");
     return res.json(r);
   } catch (err: any) {
     console.error("conferirPagamento:", err);

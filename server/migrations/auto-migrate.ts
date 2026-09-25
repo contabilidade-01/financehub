@@ -1380,6 +1380,13 @@ const STEPS: Step[] = [
           PRIMARY KEY (usuario_id, chave)
         )
       `);
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS asaas_conferencias (
+          usuario_id    INTEGER PRIMARY KEY,
+          conferido_em  TIMESTAMPTZ NOT NULL DEFAULT now(),
+          origem        VARCHAR(12) NOT NULL DEFAULT 'auto'
+        )
+      `);
       // Assinantes ativos: recalcula pelo vencimento do último pagamento
       // confirmado (vencimento + ciclo + 3 dias, fim do dia em SP). Só ESTENDE
       // — nunca tira acesso de ninguém.

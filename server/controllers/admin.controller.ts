@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { storage } from "../storage";
 import { db } from "../db";
 import { wallets, users } from "../../shared/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import "../types/session.types";
@@ -1447,6 +1447,14 @@ export async function getAssinaturas(req: Request, res: Response) {
     const hoje = new Date();
     const planos = await storage.getActiveSubscriptionPlans();
     const consultoriaId = planos.find((p) => p.planCode === "mensal_pj_consultoria")?.id ?? null;
+    // Última conferência de pagamento no Asaas (manual ou automática).
+    const conferencias = new Map<number, { em: string; origem: string }>();
+    try {
+      const { garantirTabelaConferencias } = await import("../services/subscription.service");
+      await garantirTabelaConferencias();
+      const rows = (await db.execute(sql`SELECT usuario_id, conferido_em, origem FROM asaas_conferencias`)) as any[];
+      for (const r of rows) conferencias.set(Number(r.usuario_id), { em: new Date(r.conferido_em).toISOString(), origem: r.origem });
+    } catch { /* coluna informativa */ }
     const lista = todos
       .filter((u) => u.tipo_usuario === "normal" || u.tipo_usuario === "usuario")
       .map((u) => {
@@ -1468,6 +1476,8 @@ export async function getAssinaturas(req: Request, res: Response) {
           situacao, dias_para_vencer: dias,
           plano_forcado_id: (u as any).plano_forcado_id ?? null,
           com_consultoria: consultoriaId != null && (u as any).plano_forcado_id === consultoriaId,
+          conferido_em: conferencias.get(u.id)?.em ?? null,
+          conferido_origem: conferencias.get(u.id)?.origem ?? null,
         };
       });
     return res.json(lista);
@@ -1586,7 +1596,7 @@ export async function sincronizarAssinaturaAsaas(req: Request, res: Response) {
   try {
     const userId = parseInt(req.params.id);
     if (!Number.isFinite(userId)) return res.status(400).json({ error: "id inválido" });
-    const r = await getSubscriptionService(storage).sincronizarPagamentosAsaas(userId);
+    const r = await getSubscriptionService(storage).sincronizarPagamentosAsaas(userId, "manual");
     return res.json(r);
   } catch (err: any) {
     console.error("sincronizarAssinaturaAsaas:", err);

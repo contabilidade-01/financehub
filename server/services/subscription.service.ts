@@ -123,6 +123,28 @@ export function podeReaproveitarCobranca(
   return venc >= hoje;
 }
 
+/** Última conferência de pagamento no Asaas por cliente (manual ou automática). */
+let tabelaConferenciasPronta = false;
+export async function garantirTabelaConferencias(): Promise<void> {
+  if (tabelaConferenciasPronta) return;
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS asaas_conferencias (
+      usuario_id    INTEGER PRIMARY KEY,
+      conferido_em  TIMESTAMPTZ NOT NULL DEFAULT now(),
+      origem        VARCHAR(12) NOT NULL DEFAULT 'auto'
+    )
+  `);
+  tabelaConferenciasPronta = true;
+}
+
+async function registrarConferencia(userId: number, origem: 'auto' | 'manual'): Promise<void> {
+  await garantirTabelaConferencias();
+  await db.execute(sql`
+    INSERT INTO asaas_conferencias (usuario_id, conferido_em, origem) VALUES (${userId}, now(), ${origem})
+    ON CONFLICT (usuario_id) DO UPDATE SET conferido_em = now(), origem = EXCLUDED.origem
+  `);
+}
+
 export class SubscriptionService {
   private asaasService: AsaasService | null = null;
   private notificationService: NotificationService;
@@ -563,12 +585,15 @@ export class SubscriptionService {
    * errado — e libera o acesso. Idempotente: só age quando o pagamento
    * estende o acesso atual ou o usuário ainda não está como 'ativa'.
    */
-  async sincronizarPagamentosAsaas(userId: number): Promise<{
+  async sincronizarPagamentosAsaas(userId: number, origem: 'auto' | 'manual' = 'auto'): Promise<{
     ativado: boolean;
     pagos: number;
     acessoAte?: Date;
     motivo?: string;
   }> {
+    // Conferência feita (manual ou automática): a automática deste cliente
+    // só volta depois da janela (ver asaas-sync.job.ts).
+    await registrarConferencia(userId, origem).catch((e) => console.warn('[Assinatura] registrar conferência:', e?.message));
     const user = await this.storage.getUserById(userId);
     if (!user) return { ativado: false, pagos: 0, motivo: 'Usuário não encontrado' };
     const cliente = await this.storage.getAsaasCustomerByUserId(userId);
