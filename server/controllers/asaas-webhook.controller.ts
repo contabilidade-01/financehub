@@ -234,7 +234,15 @@ async function processWebhookEvent(eventType: string, paymentData: any, webhookI
 
       // Ativar assinatura do usuário
       if (payment.subscriptionId) {
-        await subscriptionService.activateUserSubscription(payment.usuarioId, payment.subscriptionId);
+        // Vencimento da cobrança paga ancora o período (ver assinatura-datas.ts).
+        const vencimento = String(paymentData.dueDate || (payment as any).dueDate || '').slice(0, 10) || null;
+        const acessoAte = await subscriptionService.activateUserSubscription(payment.usuarioId, payment.subscriptionId, vencimento);
+        try {
+          const { avisarPagamentoConfirmado } = await import('../services/lembretes-cobranca');
+          await avisarPagamentoConfirmado(user as any, paymentData.id, Number(paymentData.value ?? payment.amount), acessoAte);
+        } catch (err: any) {
+          console.warn('[AsaasWebhook] WhatsApp de pagamento confirmado não enviado:', err?.message);
+        }
       }
 
       // Enviar notificação de pagamento confirmado (respeitando configurações do super_admin)

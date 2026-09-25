@@ -13,6 +13,7 @@ import { getAsaasService, AsaasService, AsaasCreditCardData, AsaasCreditCardHold
 import { getNotificationService, NotificationService } from './notification.service';
 import type { IStorage } from '../storage';
 import { resolverPlanoDoUsuario } from './resolver-plano';
+import { novaExpiracao, vencimentoPrimeiraCobranca, fimDoPeriodoPago } from './assinatura-datas';
 import { rotuloModalidade } from '../../shared/modalidade';
 import { db } from '../db';
 import { sql } from 'drizzle-orm';
@@ -323,7 +324,14 @@ export class SubscriptionService {
 
     const existingActive = await this.storage.getActiveSubscriptionByUserId(userId);
     if (existingActive) {
-      throw new Error('Usuário já possui uma assinatura ativa');
+      // Assinante com mensalidade em aberto (renovação gerada pelo Asaas): o
+      // "renovar" devolve a fatura dessa cobrança, em vez de criar outra assinatura.
+      const doAtivo = await this.storage.getPaymentTransactionsBySubscriptionId(existingActive.id);
+      const aberta = doAtivo
+        .filter((p) => p.asaasInvoiceUrl && (p.status === 'pending' || p.status === 'overdue'))
+        .sort((a, b) => String((a as any).dueDate || '').localeCompare(String((b as any).dueDate || '')))[0];
+      if (aberta?.asaasInvoiceUrl) return { url: aberta.asaasInvoiceUrl, ciclo };
+      throw new Error('Sua assinatura está em dia. A próxima cobrança é gerada automaticamente pelo Asaas.');
     }
 
     const asaas = await this.getAsaas();
@@ -406,7 +414,9 @@ export class SubscriptionService {
 
     const systemName = await getSystemName();
     const valorCiclo = parseFloat(plan.priceMonthly.toString()) * cfgCiclo.meses;
-    const nextDueDate = AsaasService.getTodayForAsaas();
+    // Degustação ainda rodando: a 1ª mensalidade vence quando ela termina (pagar
+    // antes não faz perder os dias restantes). Senão, vence hoje.
+    const nextDueDate = vencimentoPrimeiraCobranca(AsaasService.getTodayForAsaas(), user as any);
 
     const asaasSubscription = await asaas.createSubscription({
       customer: asaasCustomer.asaasCustomerId,
@@ -418,7 +428,7 @@ export class SubscriptionService {
       externalReference: `user:${userId}`,
     });
 
-    const periodEnd = addMeses(new Date(), cfgCiclo.meses);
+    const periodEnd = fimDoPeriodoPago(nextDueDate, cfgCiclo.meses);
     const subscription = await this.storage.createUserSubscription({
       usuarioId: userId,
       planId: plan.id,
@@ -550,13 +560,17 @@ export class SubscriptionService {
   /**
    * Ativar assinatura do usuário (após confirmação de pagamento)
    */
-  async activateUserSubscription(userId: number, subscriptionId: number): Promise<void> {
+  async activateUserSubscription(userId: number, subscriptionId: number, vencimento?: string | null): Promise<Date> {
     try {
       const user = await this.storage.getUserById(userId);
       const ciclo = ((user as any)?.ciclo_assinatura as string) || 'mensal';
       const meses = CICLO_ASAAS[ciclo]?.meses || 1;
       const agora = new Date();
-      const periodEnd = addMeses(agora, meses);
+      // Ancorado no VENCIMENTO da cobrança paga (+ ciclo + tolerância), não no
+      // momento da confirmação: pagar antes não perde dias, pagar atrasado não
+      // desalinha do Asaas, e CONFIRMED + RECEIVED (cartão) dão o mesmo resultado.
+      // Nunca reduz um acesso já concedido.
+      const periodEnd = novaExpiracao((user as any)?.data_expiracao_assinatura, vencimento, meses, agora);
 
       await this.storage.updateUserSubscription(subscriptionId, {
         status: 'active',
@@ -574,6 +588,7 @@ export class SubscriptionService {
       } as any);
 
       console.log(`[SubscriptionService] User ${userId} subscription activated until ${periodEnd.toISOString()}`);
+      return periodEnd;
     } catch (error) {
       console.error('[SubscriptionService] Error activating subscription:', error);
       throw error;

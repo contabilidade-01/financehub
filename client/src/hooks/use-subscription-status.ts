@@ -2,6 +2,10 @@ import { useAuth } from "@/hooks/use-auth";
 import { diasAteSP } from "../../../shared/datas-sp";
 
 const AVISO_VENCIMENTO_DIAS = 7;
+// Assinante: o acesso já inclui 3 dias de tolerância depois do vencimento e o
+// Asaas cobra sozinho. O aviso só aparece quando a mensalidade venceu sem
+// pagamento (restam 3 dias ou menos de acesso).
+const AVISO_ASSINANTE_DIAS = 3;
 
 export function useSubscriptionStatus() {
   const { user } = useAuth();
@@ -44,7 +48,7 @@ export function useSubscriptionStatus() {
     hasActiveAccess() &&
     daysRemaining != null &&
     daysRemaining >= 0 &&
-    daysRemaining <= AVISO_VENCIMENTO_DIAS;
+    daysRemaining <= (isTrial ? AVISO_VENCIMENTO_DIAS : AVISO_ASSINANTE_DIAS);
 
   return {
     user,

@@ -65,6 +65,7 @@ jobs:
           npm run test:cora
           npm run test:datas-sp
           npm run test:atalho-pj
+          npm run test:assinatura-datas
           npm run flags:auditar
 
       - name: Baterias com lógica pura / scripts

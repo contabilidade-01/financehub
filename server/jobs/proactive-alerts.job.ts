@@ -348,6 +348,12 @@ async function runAllChecks(): Promise<void> {
     await sendWeeklySummary();      // valida internamente: segunda, 8–9h
     await checkUpcomingReminders();
     await checkDegustacaoExpirada();
+    try {
+      const { checkLembretesCobranca } = await import("../services/lembretes-cobranca");
+      await checkLembretesCobranca();
+    } catch (err: any) {
+      console.error("[Alerts] Erro nos lembretes de cobrança:", err.message);
+    }
     await checkAssinaturasVencidas();
     console.log("[Alerts] ✅ Verificações concluídas.");
   } catch (err: any) {

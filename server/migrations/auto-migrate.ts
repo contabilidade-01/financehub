@@ -1369,6 +1369,42 @@ const STEPS: Step[] = [
       `);
     },
   },
+  {
+    name: "assinatura: acesso ancorado no vencimento (+3 dias de tolerância) e avisos_cobranca",
+    run: async () => {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS avisos_cobranca (
+          usuario_id  INTEGER NOT NULL,
+          chave       VARCHAR(160) NOT NULL,
+          enviado_em  TIMESTAMPTZ NOT NULL DEFAULT now(),
+          PRIMARY KEY (usuario_id, chave)
+        )
+      `);
+      // Assinantes ativos: recalcula pelo vencimento do último pagamento
+      // confirmado (vencimento + ciclo + 3 dias, fim do dia em SP). Só ESTENDE
+      // — nunca tira acesso de ninguém.
+      await umaVez("assinatura.ancorar_vencimento", async (tx) => {
+        await tx.execute(sql`
+          WITH ultimo AS (
+            SELECT DISTINCT ON (p.usuario_id) p.usuario_id, p.due_date
+            FROM payment_transactions p
+            WHERE p.status IN ('confirmed', 'received', 'received_in_cash') AND p.due_date IS NOT NULL
+            ORDER BY p.usuario_id, p.due_date DESC
+          ), calc AS (
+            SELECT u.id,
+              ((((ul.due_date + make_interval(months => CASE u.ciclo_assinatura WHEN 'anual' THEN 12 WHEN 'trimestral' THEN 3 ELSE 1 END))::date
+                 + 3) + time '23:59:59.999') AT TIME ZONE 'America/Sao_Paulo') AS nova
+            FROM usuarios u JOIN ultimo ul ON ul.usuario_id = u.id
+            WHERE u.status_assinatura = 'ativa'
+          )
+          UPDATE usuarios u SET data_expiracao_assinatura = calc.nova
+          FROM calc
+          WHERE u.id = calc.id
+            AND (u.data_expiracao_assinatura IS NULL OR u.data_expiracao_assinatura < calc.nova)
+        `);
+      });
+    },
+  },
 ];
 
 export async function runAutoMigrations(): Promise<void> {

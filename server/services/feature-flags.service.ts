@@ -13,6 +13,7 @@ import {
   FLAG_ORQUESTRADOR_DEEPSEEK,
   FLAG_IMPORTACAO_EXTRATO_V2,
   FLAG_INTEGRACAO_CORA,
+  FLAG_LEMBRETES_COBRANCA,
   FLAGS_NO_CODIGO,
   DIAS_PARA_APOSENTAR,
   avaliarFlag,
@@ -26,6 +27,7 @@ export {
   FLAG_ORQUESTRADOR_DEEPSEEK,
   FLAG_IMPORTACAO_EXTRATO_V2,
   FLAG_INTEGRACAO_CORA,
+  FLAG_LEMBRETES_COBRANCA,
   FLAGS_NO_CODIGO,
   DIAS_PARA_APOSENTAR,
   avaliarFlag,
@@ -97,6 +99,16 @@ async function garantirTabelas(): Promise<void> {
     VALUES (
       ${FLAG_INTEGRACAO_CORA},
       ${"Recebimentos via Cora (PJ ME): cobrança boleto/Pix emitida pelo sistema e baixa automática quando o cliente paga. Super admin sempre acessa."},
+      false
+    )
+    ON CONFLICT (chave) DO NOTHING
+  `);
+  // Lembretes de cobrança no WhatsApp: nasce off — liberar no admin.
+  await db.execute(sql`
+    INSERT INTO feature_flags (chave, descricao, ativo_todos)
+    VALUES (
+      ${FLAG_LEMBRETES_COBRANCA},
+      ${"Lembretes de cobrança no WhatsApp: fim da degustação (3, 1 e 0 dias), renovação (3 e 0 dias), atraso (1 e 3 dias) e pagamento confirmado. Nunca avisa quem já pagou."},
       false
     )
     ON CONFLICT (chave) DO NOTHING

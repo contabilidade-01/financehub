@@ -20,7 +20,7 @@ export function ExpiringSoonBanner() {
     n <= 0 ? "hoje" : n === 1 ? "amanhã" : `em ${n} dias`;
   const titulo = isTrial
     ? `Sua degustação termina ${quando}`
-    : `Sua assinatura vence ${quando}`;
+    : `Mensalidade em aberto: seu acesso termina ${quando}`;
 
   return (
     <Alert className="mb-4 border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
@@ -31,13 +31,15 @@ export function ExpiringSoonBanner() {
             <p className="font-medium">{titulo}</p>
             {dataFmt && (
               <p className="text-xs opacity-80">
-                Acesso até {dataFmt}. Renove para não perder o acesso.
+                {isTrial
+                  ? `Acesso até ${dataFmt}. Assine para não perder o acesso.`
+                  : `Acesso até ${dataFmt}. Pague a fatura para não perder o acesso — se já pagou, a baixa é automática.`}
               </p>
             )}
           </AlertDescription>
         </div>
         <Button size="sm" className="shrink-0" asChild>
-          <a href="/subscription/renew">Renovar agora</a>
+          <a href="/subscription/renew">{isTrial ? "Assinar agora" : "Pagar fatura"}</a>
         </Button>
       </div>
     </Alert>
