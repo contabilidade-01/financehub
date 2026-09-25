@@ -175,7 +175,7 @@ export default function AdminStickyHeader({ userData }: AdminStickyHeaderProps) 
 
   return (
     <motion.div 
-      className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-slate-900/95 to-indigo-900/95 backdrop-blur-sm border-b border-slate-700/50"
+      className="fixed top-0 left-0 right-0 z-50 bg-slate-900 border-b border-slate-700/50"
       initial={{ y: -100, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.5 }}
@@ -256,9 +256,9 @@ export default function AdminStickyHeader({ userData }: AdminStickyHeaderProps) 
                         Personificar Usuário
                       </Badge>
                     </DialogTrigger>
-                    <DialogContent className={`${theme === 'light' ? 'bg-white border-gray-200' : 'glass-card'} max-w-2xl`}>
+                    <DialogContent className={`bg-card border-border max-w-2xl`}>
                       <DialogHeader>
-                        <DialogTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} flex items-center gap-2`}>
+                        <DialogTitle className={`text-foreground flex items-center gap-2`}>
                           <UserCog className="h-5 w-5" />
                           Personificar Usuário
                         </DialogTitle>
@@ -268,26 +268,22 @@ export default function AdminStickyHeader({ userData }: AdminStickyHeaderProps) 
                           placeholder="Buscar por nome ou email..."
                           value={searchTerm}
                           onChange={(e) => setSearchTerm(e.target.value)}
-                          className={theme === 'light' ? 'bg-white border-gray-300 text-gray-900' : 'bg-slate-800 border-slate-600 text-white'}
+                          className="bg-card border-border text-foreground"
                         />
                         <div className="max-h-96 overflow-y-auto space-y-2">
                           {filteredUsers.map((user) => (
                             <div
                               key={user.id}
-                              className={`flex items-center justify-between p-3 rounded-lg border ${
-                                theme === 'light' 
-                                  ? 'bg-gray-50 border-gray-200' 
-                                  : 'bg-slate-800/50 border-slate-600/50'
-                              }`}
+                              className={`flex items-center justify-between p-3 rounded-lg border bg-muted/50 border-border`}
                             >
                               <div>
-                                <div className={`font-medium ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>
+                                <div className={`font-medium text-foreground`}>
                                   {user.nome}
                                 </div>
-                                <div className={`text-sm ${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>
+                                <div className={`text-sm text-muted-foreground`}>
                                   {user.email}
                                 </div>
-                                <div className={`text-xs ${theme === 'light' ? 'text-gray-500' : 'text-gray-500'}`}>
+                                <div className={`text-xs text-muted-foreground`}>
                                   {user.transactionCount} transações | Último acesso: {user.lastAccess || 'Nunca'}
                                 </div>
                               </div>
@@ -295,11 +291,7 @@ export default function AdminStickyHeader({ userData }: AdminStickyHeaderProps) 
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handleImpersonate(user.id)}
-                                className={
-                                  theme === 'light'
-                                    ? 'border-blue-500 text-blue-600 hover:bg-blue-50'
-                                    : 'border-blue-400 text-blue-200 hover:bg-blue-400/10'
-                                }
+                                className="border-blue-500 text-blue-600 hover:bg-blue-50"
                               >
                                 <UserCog className="h-3 w-3 mr-1" />
                                 Personificar
@@ -321,12 +313,12 @@ export default function AdminStickyHeader({ userData }: AdminStickyHeaderProps) 
         <div className="fixed inset-0 z-[9999] flex items-center justify-center min-h-screen p-4">
           {/* Overlay com fade-in, z-[9998] */}
           <div 
-            className="fixed inset-0 z-[9998] bg-black/70 backdrop-blur-sm animate-in fade-in-0 duration-300"
+            className="fixed inset-0 z-[9998] bg-black/70 animate-in fade-in-0 duration-300"
             onClick={() => setErrorModal({ ...errorModal, isOpen: false })}
           />
           {/* Modal com zoom-in bounce effect, z-[9999] */}
           <div 
-            className="relative z-[9999] bg-gradient-to-br from-gray-900 to-gray-800 border-2 border-red-500/50 rounded-xl p-6 max-w-md w-full shadow-2xl"
+            className="relative z-[9999] bg-slate-900 border-2 border-red-500/50 rounded-lg p-6 max-w-md w-full shadow-2xl"
             style={{
               animation: 'zoomInBounce 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards'
             }}

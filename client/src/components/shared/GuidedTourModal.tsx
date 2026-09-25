@@ -33,7 +33,7 @@ export function GuidedTourModal() {
     {
       title: "Inteligência Artificial no WhatsApp 🤖",
       description: "Envie áudios ou mensagens no WhatsApp para registrar gastos na hora ('gastei 50 no mercado') ou simular metas ('em quanto tempo consigo 100k guardando 5k/mês?').",
-      icon: <MessageSquare className="w-12 h-12 text-emerald-500" />
+      icon: <MessageSquare className="w-12 h-12 text-income" />
     },
     {
       title: "Relatórios e DRE Gerencial 📊",
@@ -43,7 +43,7 @@ export function GuidedTourModal() {
     {
       title: "Tudo pronto para começar! ✅",
       description: "Você já pode explorar todas as funcionalidades. Se precisar de ajuda, o assistente virtual está sempre disponível.",
-      icon: <CheckCircle2 className="w-12 h-12 text-green-500" />
+      icon: <CheckCircle2 className="w-12 h-12 text-income" />
     }
   ];
 

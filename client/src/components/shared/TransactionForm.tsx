@@ -337,9 +337,7 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
                       variant={field.value === TransactionType.EXPENSE ? "default" : "outline"}
                       className={`flex-1 ${
                         field.value === TransactionType.EXPENSE
-                          ? theme === "light"
-                            ? "bg-red-500 text-white hover:bg-red-600"
-                            : "bg-red-500/20 text-red-400"
+                          ? "bg-red-500 text-white hover:bg-red-600"
                           : ""
                       }`}
                       onClick={() => {
@@ -355,9 +353,7 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
                       variant={field.value === TransactionType.INCOME ? "default" : "outline"}
                       className={`flex-1 ${
                         field.value === TransactionType.INCOME
-                          ? theme === "light"
-                            ? "bg-green-500 text-white hover:bg-green-600"
-                            : "bg-green-500/20 text-green-400"
+                          ? "bg-green-500 text-white hover:bg-green-600"
                           : ""
                       }`}
                       onClick={() => {
@@ -515,9 +511,7 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
 
                     {isOpen && (
                       <div
-                        className={`relative z-50 w-full mt-1 rounded-md border shadow-md max-h-[300px] overflow-y-auto ${
-                          theme === "light" ? "bg-white border-gray-200" : "bg-popover border-gray-700"
-                        } text-popover-foreground`}
+                        className={`relative z-50 w-full mt-1 rounded-md border shadow-md max-h-[300px] overflow-y-auto bg-card border-border text-popover-foreground`}
                       >
                         <div className="p-1">
                           {isCategoriesLoading ? (
@@ -602,9 +596,7 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
                     </FormControl>
                     {isOpen && (
                       <div
-                        className={`relative top-full left-0 right-0 z-50 mt-1 max-h-60 overflow-auto rounded-md border p-1 shadow-md ${
-                          theme === "light" ? "bg-white border-gray-200" : "bg-popover border-gray-700"
-                        } text-popover-foreground`}
+                        className={`relative top-full left-0 right-0 z-50 mt-1 max-h-60 overflow-auto rounded-md border p-1 shadow-md bg-card border-border text-popover-foreground`}
                       >
                         {loadingOpts ? (
                           <div className="px-2 py-1.5 text-sm text-muted-foreground">
@@ -617,7 +609,7 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
                               if (items.length === 0) return null;
                               return (
                                 <div key={group}>
-                                  <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+                                  <div className="px-2 py-1 text-xs uppercase tracking-wide text-muted-foreground">
                                     {group}
                                   </div>
                                   {items.map((o) => (

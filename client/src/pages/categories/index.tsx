@@ -436,14 +436,14 @@ export default function Categories() {
             className="mb-4 md:mb-0"
           >
             <h1 className="text-2xl md:text-3xl font-bold mb-1">{t('categories.title', 'Categorias')}</h1>
-            <p className="text-gray-400">{t('categories.subtitle', 'Organize suas receitas e despesas')}</p>
+            <p className="text-muted-foreground">{t('categories.subtitle', 'Organize suas receitas e despesas')}</p>
           </motion.div>
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: 0.1 }}
           >
-            <Button onClick={openNewCategoryDialog} className="neon-border">
+            <Button onClick={openNewCategoryDialog} className="">
               <PlusIcon className="mr-2 h-4 w-4" />
               {t('categories.new_category', 'Nova Categoria')}
             </Button>
@@ -455,7 +455,7 @@ export default function Categories() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3, delay: 0.2 }}
-        className={`glass-card neon-border rounded-2xl ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}
+        className={`border bg-card rounded-lg bg-card border border-border`}
       >
         <div className="p-5">
           <div className="flex flex-col md:flex-row gap-4 mb-6">
@@ -492,11 +492,11 @@ export default function Categories() {
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ duration: 0.3 }}
-                  className={`rounded-xl p-4 flex items-center justify-between category-card-container transition-colors duration-200 ${theme === 'light' ? 'bg-white border border-gray-200 hover:bg-primary/10' : 'glass-card'}`}
+                  className={`rounded-lg p-4 flex items-center justify-between category-card-container transition-colors duration-200 bg-card border border-border hover:bg-primary/10`}
                 >
                   <div className="flex items-center">
                     <div
-                      className="w-10 h-10 rounded-xl flex items-center justify-center mr-4"
+                      className="w-10 h-10 rounded-lg flex items-center justify-center mr-4"
                       style={{ backgroundColor: category.cor || "#6C63FF" }}
                     >
                       {category.icone ? (
@@ -506,8 +506,8 @@ export default function Categories() {
                       )}
                     </div>
                     <div>
-                      <h3 className={`font-medium ${theme === 'light' ? 'text-gray-900' : ''}`}>{translateCategoryName(category.nome, t)}</h3>
-                      <span className={`text-xs ${theme === 'light' ? (category.tipo === TransactionType.INCOME ? 'text-green-600' : 'text-red-600') : (category.tipo === TransactionType.INCOME ? 'text-green-400' : 'text-red-400')}`}>
+                      <h3 className={`font-medium text-foreground`}>{translateCategoryName(category.nome, t)}</h3>
+                      <span className={`text-xs ${category.tipo === TransactionType.INCOME ? 'text-income' : 'text-expense'}`}>
                         {translateCategoryType(category.tipo, t)}
                       </span>
                     </div>
@@ -518,7 +518,7 @@ export default function Categories() {
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          className={`h-8 w-8 ${theme === 'light' ? 'text-gray-500 hover:text-gray-900' : ''}`}
+                          className={`h-8 w-8 text-muted-foreground hover:text-foreground`}
                           onClick={(e) => {
                             e.stopPropagation();
                             setOpenMenuId(openMenuId === category.id ? null : category.id);
@@ -533,7 +533,7 @@ export default function Categories() {
                               onClick={() => setOpenMenuId(null)}
                             />
                             <div 
-                              className={`absolute right-0 top-full mt-1 w-40 rounded-md shadow-lg z-50 ${theme === 'light' ? 'bg-white border border-gray-200' : 'bg-slate-800 border border-slate-600'}`}
+                              className={`absolute right-0 top-full mt-1 w-40 rounded-md shadow-lg z-50 bg-card border border-border`}
                               onClick={(e) => e.stopPropagation()}
                             >
                               <button
@@ -541,7 +541,7 @@ export default function Categories() {
                                   openEditDialog(category);
                                   setOpenMenuId(null);
                                 }}
-                                className={`flex items-center w-full px-3 py-2 text-sm rounded-t-md ${theme === 'light' ? 'text-gray-700 hover:bg-gray-100' : 'text-white hover:bg-slate-700'}`}
+                                className={`flex items-center w-full px-3 py-2 text-sm rounded-t-md text-foreground hover:bg-muted`}
                               >
                                 <PencilIcon className="mr-2 h-4 w-4" />
                                 <span>{t('common.edit', 'Edit')}</span>
@@ -551,7 +551,7 @@ export default function Categories() {
                                   setDeletingCategory(category);
                                   setOpenMenuId(null);
                                 }}
-                                className={`flex items-center w-full px-3 py-2 text-sm rounded-b-md ${theme === 'light' ? 'text-red-600 hover:bg-gray-100' : 'text-red-400 hover:bg-slate-700'}`}
+                                className={`flex items-center w-full px-3 py-2 text-sm rounded-b-md text-expense hover:bg-muted`}
                               >
                                 <Trash2Icon className="mr-2 h-4 w-4" />
                                 <span>{t('common.delete', 'Delete')}</span>
@@ -562,7 +562,7 @@ export default function Categories() {
                       </div>
                     )}
                     {category.global && (
-                      <span className={`text-xs px-2 py-1 rounded-full ${theme === 'light' ? 'bg-gray-100 text-gray-700' : 'bg-primary/20'}`}>{t('categories.scope.global', 'Global')}</span>
+                      <span className={`text-xs px-2 py-1 rounded-full bg-muted text-foreground`}>{t('categories.scope.global', 'Global')}</span>
                     )}
                   </div>
                 </motion.div>
@@ -645,7 +645,7 @@ export default function Categories() {
       )}
 
       <AlertDialog open={!!deletingCategory} onOpenChange={(open) => !open && setDeletingCategory(null)}>
-        <AlertDialogContent className="glass-card">
+        <AlertDialogContent className="border bg-card">
           <AlertDialogHeader>
             <AlertDialogTitle>{t('categories.delete_category', 'Delete Category')}</AlertDialogTitle>
             <AlertDialogDescription>

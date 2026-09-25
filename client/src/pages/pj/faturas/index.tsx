@@ -37,7 +37,7 @@ const dataBR = (s: string) => {
   return `${d}/${m}/${y}`;
 };
 const hoje = () => new Date().toISOString().slice(0, 10);
-const stBadge = (s: string) => s === "paga" ? { t: "Paga", c: "bg-emerald-500/15 text-emerald-600" } : s === "fechada" ? { t: "Fechada", c: "bg-amber-500/15 text-amber-600" } : { t: "Aberta", c: "bg-blue-500/15 text-blue-600" };
+const stBadge = (s: string) => s === "paga" ? { t: "Paga", c: "bg-emerald-500/15 text-income" } : s === "fechada" ? { t: "Fechada", c: "bg-amber-500/15 text-amber-600" } : { t: "Aberta", c: "bg-blue-500/15 text-blue-600" };
 
 export default function PjFaturas({ empresaId }: { empresaId: number }) {
   const { toast } = useToast();
@@ -184,7 +184,7 @@ export default function PjFaturas({ empresaId }: { empresaId: number }) {
   };
 
   return (
-    <div className="space-y-4 p-4">
+    <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2"><CreditCard className="h-6 w-6" /> Faturas de Cartão</h1>
@@ -233,7 +233,7 @@ export default function PjFaturas({ empresaId }: { empresaId: number }) {
                     <div className="text-muted-foreground">
                       Fatura {c.fatura_corrente?.competencia || "corrente"}
                     </div>
-                    <div className="text-rose-500 font-medium text-base">
+                    <div className="text-expense font-medium text-base">
                       {money(Number(c.fatura_corrente?.total ?? 0))}
                     </div>
                     {c.limite != null && Number(c.limite) > 0 && (
@@ -241,7 +241,7 @@ export default function PjFaturas({ empresaId }: { empresaId: number }) {
                         <div className="text-muted-foreground">
                           Limite usado: {money(Number(c.usado || 0))} ({Number(c.percentual || 0).toFixed(0)}%)
                         </div>
-                        <div className="text-emerald-600">Disponível: {money(Number(c.disponivel || 0))}</div>
+                        <div className="text-income">Disponível: {money(Number(c.disponivel || 0))}</div>
                       </>
                     )}
                     <div className="text-muted-foreground">toque para ver compras da fatura</div>
@@ -287,7 +287,7 @@ export default function PjFaturas({ empresaId }: { empresaId: number }) {
             <>
               <div className="rounded-lg border border-border/60 px-3 py-2 mb-2">
                 <p className="text-xs text-muted-foreground">Gasto do período</p>
-                <p className="text-xl font-semibold text-rose-500">
+                <p className="text-xl font-semibold text-expense">
                   {money(Number(detalhePeriodo?.saldo ?? detalhePeriodo?.usado ?? 0))}
                 </p>
               </div>
@@ -304,7 +304,7 @@ export default function PjFaturas({ empresaId }: { empresaId: number }) {
                           {l.categoria ? ` · ${l.categoria_codigo ? `${l.categoria_codigo} — ` : ""}${l.categoria}` : ""}
                         </p>
                       </div>
-                      <span className="text-sm font-semibold shrink-0 text-red-500">
+                      <span className="text-sm font-semibold shrink-0 text-expense">
                         −{money(Math.abs(Number(l.valor) || 0))}
                       </span>
                     </div>
@@ -375,7 +375,7 @@ export default function PjFaturas({ empresaId }: { empresaId: number }) {
                         <div className="truncate">
                           {c.descricao}
                           {c.parcela_num && c.parcela_total && Number(c.parcela_total) > 1 && (
-                            <Badge variant="secondary" className="ml-2 text-[10px]">
+                            <Badge variant="secondary" className="ml-2 text-xs">
                               {c.parcela_num}/{c.parcela_total}
                             </Badge>
                           )}
@@ -398,14 +398,14 @@ export default function PjFaturas({ empresaId }: { empresaId: number }) {
                 {conc && (
                   <div className="text-xs space-y-2">
                     <div className="flex flex-wrap gap-3">
-                      <span className="text-emerald-600">✅ {conc.conciliados_qtd} casado(s)</span>
+                      <span className="text-income">✅ {conc.conciliados_qtd} casado(s)</span>
                       <span className="text-amber-600">⚠ {conc.extrato_sem_par.length} no extrato sem lançamento</span>
                       <span className="text-blue-600">ℹ {conc.compras_sem_par.length} lançado(s) fora do extrato</span>
                     </div>
                     <div className="flex flex-wrap gap-3 text-muted-foreground">
                       <span>Extrato: <strong>{money(conc.total_extrato)}</strong></span>
                       <span>Fatura: <strong>{money(conc.total_fatura)}</strong></span>
-                      <span>Diferença: <strong className={Math.abs(conc.diferenca) > 0.005 ? "text-rose-500" : "text-emerald-600"}>{money(conc.diferenca)}</strong></span>
+                      <span>Diferença: <strong className={Math.abs(conc.diferenca) > 0.005 ? "text-expense" : "text-income"}>{money(conc.diferenca)}</strong></span>
                     </div>
                     {conc.extrato_sem_par.length > 0 && (
                       <div className="border-t pt-2">

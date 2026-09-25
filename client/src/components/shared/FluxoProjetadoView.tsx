@@ -159,12 +159,12 @@ export default function FluxoProjetadoView({ endpoint, titulo, subtitulo, habili
         <td
           key={i}
           className={`p-2 text-right font-numeric text-sm tabular-nums ${
-            v === 0 ? "text-muted-foreground/50" : negativa ? "text-rose-500" : "text-emerald-600"
+            v === 0 ? "text-muted-foreground/50" : negativa ? "text-expense" : "text-income"
           }`}
           title={l.previstos[i] > 0 ? `${fmt(l.previstos[i])} ainda previsto` : undefined}
         >
           {fmtCurto(v)}
-          {l.previstos[i] > 0 && v > 0 && <span className="ml-1 text-[10px] text-amber-500">•</span>}
+          {l.previstos[i] > 0 && v > 0 && <span className="ml-1 text-xs text-amber-500">•</span>}
         </td>
       ))}
       <td className="p-2 text-right font-numeric text-sm font-medium">{fmtCurto(l.total)}</td>
@@ -201,19 +201,19 @@ export default function FluxoProjetadoView({ endpoint, titulo, subtitulo, habili
         <Card>
           <CardContent className="p-4">
             <p className="text-xs text-muted-foreground flex items-center gap-1"><TrendingUp className="h-3 w-3" /> Entradas do período</p>
-            <p className="text-xl font-numeric font-semibold text-emerald-600">{fmt(data.totais.entradas)}</p>
+            <p className="text-xl font-numeric font-semibold text-income">{fmt(data.totais.entradas)}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <p className="text-xs text-muted-foreground flex items-center gap-1"><TrendingDown className="h-3 w-3" /> Saídas do período</p>
-            <p className="text-xl font-numeric font-semibold text-rose-500">{fmt(data.totais.saidas)}</p>
+            <p className="text-xl font-numeric font-semibold text-expense">{fmt(data.totais.saidas)}</p>
           </CardContent>
         </Card>
         <Card className={saldoFinal >= 0 ? "bg-emerald-50 dark:bg-emerald-950/20" : "bg-rose-50 dark:bg-rose-950/20"}>
           <CardContent className="p-4">
             <p className="text-xs text-muted-foreground">Saldo projetado ao final</p>
-            <p className={`text-xl font-numeric font-semibold ${saldoFinal >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+            <p className={`text-xl font-numeric font-semibold ${saldoFinal >= 0 ? "text-income" : "text-expense"}`}>
               {fmt(saldoFinal)}
             </p>
           </CardContent>
@@ -245,7 +245,7 @@ export default function FluxoProjetadoView({ endpoint, titulo, subtitulo, habili
                     className={`p-2 text-right text-xs font-label min-w-[92px] ${m.passado ? "text-muted-foreground" : ""}`}
                   >
                     {m.rotulo}
-                    {!m.passado && <span className="block text-[9px] font-normal normal-case text-amber-500">previsto</span>}
+                    {!m.passado && <span className="block text-xs font-normal normal-case text-amber-500">previsto</span>}
                   </th>
                 ))}
                 <th className="p-2 text-right text-xs font-label min-w-[100px]">Total</th>
@@ -269,7 +269,7 @@ export default function FluxoProjetadoView({ endpoint, titulo, subtitulo, habili
               <tr className="border-y-2 bg-background font-semibold">
                 <td className="sticky left-0 z-10 bg-background p-2 text-sm">Resultado do mês</td>
                 {data.meses.map((m) => (
-                  <td key={m.mes} className={`p-2 text-right font-numeric text-sm ${m.resultado >= 0 ? "text-emerald-600" : "text-rose-500"}`}>
+                  <td key={m.mes} className={`p-2 text-right font-numeric text-sm ${m.resultado >= 0 ? "text-income" : "text-expense"}`}>
                     {fmtCurto(m.resultado)}
                   </td>
                 ))}
@@ -286,7 +286,7 @@ export default function FluxoProjetadoView({ endpoint, titulo, subtitulo, habili
               <tr className="bg-muted/60 font-bold">
                 <td className="sticky left-0 z-10 bg-muted/60 p-2 text-sm">Saldo acumulado</td>
                 {saldos.map((v, i) => (
-                  <td key={i} className={`p-2 text-right font-numeric text-sm ${v >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-rose-600"}`}>
+                  <td key={i} className={`p-2 text-right font-numeric text-sm ${v >= 0 ? "text-income" : "text-expense"}`}>
                     {fmtCurto(v)}
                   </td>
                 ))}

@@ -34,9 +34,9 @@ const hoje = () => new Date().toISOString().slice(0, 10);
 const addMesesISO = (iso: string, meses: number) => { const d = new Date(iso + "T00:00:00"); d.setMonth(d.getMonth() + meses); return d.toLocaleDateString("pt-BR"); };
 
 const SIT: Record<string, { label: string; cls: string }> = {
-  em_dia: { label: "Em dia", cls: "bg-emerald-500/15 text-emerald-600" },
+  em_dia: { label: "Em dia", cls: "bg-emerald-500/15 text-income" },
   vence_breve: { label: "Vence em breve", cls: "bg-amber-500/15 text-amber-600" },
-  vencido: { label: "Vencido", cls: "bg-rose-500/15 text-rose-600" },
+  vencido: { label: "Vencido", cls: "bg-rose-500/15 text-expense" },
   degustacao: { label: "Degustação", cls: "bg-blue-500/15 text-blue-600" },
   sem_data: { label: "Sem plano", cls: "bg-muted text-muted-foreground" },
 };
@@ -123,9 +123,9 @@ export default function AdminAssinaturas() {
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         {[
           { k: "total", label: "Total", v: resumo.total, cls: "" },
-          { k: "em_dia", label: "Em dia", v: resumo.em_dia, cls: "text-emerald-600" },
+          { k: "em_dia", label: "Em dia", v: resumo.em_dia, cls: "text-income" },
           { k: "vence_breve", label: "Vence ≤7d", v: resumo.vence_breve, cls: "text-amber-600" },
-          { k: "vencido", label: "Vencidos", v: resumo.vencido, cls: "text-rose-600" },
+          { k: "vencido", label: "Vencidos", v: resumo.vencido, cls: "text-expense" },
           { k: "degustacao", label: "Degustação", v: resumo.degustacao, cls: "text-blue-600" },
         ].map((c) => (
           <Card key={c.k} className={filtro === c.k || (c.k === "total" && filtro === "todos") ? "ring-1 ring-primary" : "cursor-pointer"} onClick={() => setFiltro(c.k === "total" ? "todos" : c.k)}>
@@ -161,7 +161,7 @@ export default function AdminAssinaturas() {
                   <div className="flex-1 min-w-[180px]">
                     <div className="font-medium flex items-center gap-2">
                       {a.nome}
-                      <Badge variant="outline" className="text-[10px]">{rotuloModalidade(a, true)}</Badge>
+                      <Badge variant="outline" className="text-xs">{rotuloModalidade(a, true)}</Badge>
                     </div>
                     <div className="text-xs text-muted-foreground">{a.telefone || a.email}</div>
                   </div>
@@ -173,7 +173,7 @@ export default function AdminAssinaturas() {
                     <div className="text-xs text-muted-foreground">Vencimento</div>
                     <div className="font-medium">{fmtDate(a.data_expiracao_assinatura)}</div>
                     {a.dias_para_vencer != null && (
-                      <div className="text-[11px] text-muted-foreground">{a.dias_para_vencer < 0 ? `há ${-a.dias_para_vencer}d` : `em ${a.dias_para_vencer}d`}</div>
+                      <div className="text-xs text-muted-foreground">{a.dias_para_vencer < 0 ? `há ${-a.dias_para_vencer}d` : `em ${a.dias_para_vencer}d`}</div>
                     )}
                   </div>
                   <Badge className={s.cls}>{s.label}</Badge>
@@ -183,7 +183,7 @@ export default function AdminAssinaturas() {
                       onClick={() => consultoriaMut.mutate({ id: a.id, ativar: !a.com_consultoria })}
                       disabled={consultoriaMut.isPending}
                       title={`Alternar cobrança: Base (R$ ${precoBase(a)}) ↔ Com consultoria (R$ ${precoConsultoria})`}
-                      className={`text-[11px] rounded-full px-2.5 py-1 border transition-colors ${a.com_consultoria ? "bg-violet-500/15 text-violet-600 border-violet-500/30" : "bg-muted text-muted-foreground border-transparent hover:bg-muted/70"}`}
+                      className={`text-xs rounded-full px-2.5 py-1 border transition-colors ${a.com_consultoria ? "bg-violet-500/15 text-violet-600 border-violet-500/30" : "bg-muted text-muted-foreground border-transparent hover:bg-muted/70"}`}
                     >
                       {a.com_consultoria ? `Consultoria R$ ${precoConsultoria}` : `Base R$ ${precoBase(a)}`}
                     </button>

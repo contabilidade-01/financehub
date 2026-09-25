@@ -160,7 +160,7 @@ export default function MensalidadesPage({ empresaId }: { empresaId?: number }) 
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="space-y-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-3xl font-bold flex items-center gap-2">
@@ -204,7 +204,7 @@ export default function MensalidadesPage({ empresaId }: { empresaId?: number }) 
                 <div className="flex items-center gap-3">
                   <span className="text-lg font-numeric font-bold">{money(m.valor)}</span>
                   <Button variant="ghost" size="icon" title={m.ativo ? "Pausar" : "Reativar"} onClick={() => alternarAtivo.mutate(m)}>
-                    <Power className={`h-4 w-4 ${m.ativo ? "text-emerald-600" : "text-muted-foreground"}`} />
+                    <Power className={`h-4 w-4 ${m.ativo ? "text-income" : "text-muted-foreground"}`} />
                   </Button>
                   <Button variant="ghost" size="icon" title="Editar" onClick={() => abrirEdicao(m)}>
                     <Edit className="h-4 w-4" />
@@ -215,7 +215,7 @@ export default function MensalidadesPage({ empresaId }: { empresaId?: number }) 
                     title="Excluir"
                     onClick={() => { if (confirm(`Excluir a mensalidade "${m.descricao}"? Os lançamentos já gerados permanecem.`)) excluir.mutate(m.id); }}
                   >
-                    <Trash2 className="h-4 w-4 text-red-500" />
+                    <Trash2 className="h-4 w-4 text-expense" />
                   </Button>
                 </div>
               </CardContent>

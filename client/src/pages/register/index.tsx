@@ -182,7 +182,7 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-pattern">
+    <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-6">
           <div className="flex items-center justify-center mb-4">
@@ -198,11 +198,11 @@ export default function Register() {
             </div>
           </div>
           {!logoUrl && logoChecked && (
-            <p className="text-gray-400 mt-2">{t('register.tagline', 'Seu controle financeiro pessoal')}</p>
+            <p className="text-muted-foreground mt-2">{t('register.tagline', 'Seu controle financeiro pessoal')}</p>
           )}
         </div>
 
-        <Card className="glass-card neon-border">
+        <Card className="border bg-card">
           <CardHeader>
             <CardTitle>{t('register.title', 'Criar Conta')}</CardTitle>
             <CardDescription>
@@ -294,7 +294,7 @@ export default function Register() {
             </Form>
           </CardContent>
           <CardFooter className="flex justify-center">
-            <p className="text-sm text-gray-400">
+            <p className="text-sm text-muted-foreground">
               {t('register.have_account', 'Já tem uma conta?')}{" "}
               <Button variant="link" className="p-0" onClick={() => navigate("/")}>
                 {t('register.login_link', 'Fazer login')}

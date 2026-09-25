@@ -18,7 +18,7 @@ export function TransactionBadge({ count, onDismiss }: TransactionBadgeProps) {
       transition={{ duration: 0.3, ease: "easeOut" }}
       className="relative"
     >
-      <div className="flex items-center gap-2 bg-green-500/20 border border-green-500/30 rounded-lg px-3 py-1.5 text-green-400 text-sm font-medium shadow-lg backdrop-blur-sm">
+      <div className="flex items-center gap-2 bg-green-500/20 border border-green-500/30 rounded-lg px-3 py-1.5 text-income text-sm font-medium shadow-lg backdrop-blur-sm">
         <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
         <span className="font-semibold">
           {count === 1 ? 'Nova Transação' : `${count} Novas Transações`}

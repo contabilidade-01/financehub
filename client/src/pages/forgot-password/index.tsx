@@ -87,7 +87,7 @@ export default function ForgotPassword() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-pattern">
+    <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-6">
           <div className="flex items-center justify-center mb-4">
@@ -106,7 +106,7 @@ export default function ForgotPassword() {
           </div>
         </div>
 
-        <Card className="glass-card neon-border">
+        <Card className="border bg-card">
           <CardHeader>
             <CardTitle>{t("forgot.title", "Recuperar senha")}</CardTitle>
             <CardDescription>

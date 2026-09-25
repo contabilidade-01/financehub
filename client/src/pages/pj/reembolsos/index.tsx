@@ -152,7 +152,7 @@ export default function PjReembolsos({ empresaId }: { empresaId: number }) {
   const ordenados = [...grupos.entries()].sort((a, b) => b[0].localeCompare(a[0]));
 
   return (
-    <div className="space-y-4 p-4 max-w-4xl">
+    <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
@@ -269,7 +269,7 @@ export default function PjReembolsos({ empresaId }: { empresaId: number }) {
           <CardContent className="p-4 flex items-center justify-between">
             <div>
               <p className="text-xs text-muted-foreground">Já recebido no período</p>
-              <p className="text-2xl font-numeric font-semibold text-emerald-600">{fmt(totalRecebido)}</p>
+              <p className="text-2xl font-numeric font-semibold text-income">{fmt(totalRecebido)}</p>
             </div>
             <Badge variant="outline">{recebidos.length} lote(s)</Badge>
           </CardContent>
@@ -324,7 +324,7 @@ export default function PjReembolsos({ empresaId }: { empresaId: number }) {
                           Marcar recebido
                         </Button>
                       ) : (
-                        <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
+                        <span className="inline-flex items-center gap-1 text-xs text-income">
                           <CheckCircle2 className="h-3 w-3" /> Recebido
                         </span>
                       )}

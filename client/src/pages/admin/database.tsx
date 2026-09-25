@@ -194,7 +194,7 @@ export default function DatabasePage() {
   };
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold flex items-center gap-2">
@@ -240,16 +240,16 @@ export default function DatabasePage() {
           )}
         </div>
       </div>
-      {resetSuccess && <div className="mt-2 text-green-700">{resetSuccess}</div>}
-      {resetError && <div className="mt-2 text-red-700">{resetError}</div>}
+      {resetSuccess && <div className="mt-2 text-income">{resetSuccess}</div>}
+      {resetError && <div className="mt-2 text-expense">{resetError}</div>}
 
       <div className="grid gap-6">
         {/* Backups do banco */}
-        <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
+        <Card className={`border bg-card bg-card border border-border`}>
           <CardHeader>
             <div className="flex items-start justify-between gap-4 flex-wrap">
               <div>
-                <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} flex items-center gap-2`}>
+                <CardTitle className={`text-foreground flex items-center gap-2`}>
                   <HardDriveDownload className="h-5 w-5" />
                   Backups do banco
                 </CardTitle>
@@ -335,9 +335,9 @@ export default function DatabasePage() {
         </Card>
 
         {/* Estatísticas */}
-        <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
+        <Card className={`border bg-card bg-card border border-border`}>
           <CardHeader>
-            <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} flex items-center gap-2`}>
+            <CardTitle className={`text-foreground flex items-center gap-2`}>
               <FileText className="h-5 w-5" />
               {t("admin.database.stats.title", "Estatísticas do Banco")}
             </CardTitle>
@@ -354,7 +354,7 @@ export default function DatabasePage() {
               </div>
               
               <div className="text-center">
-                <div className="text-2xl font-bold text-green-600">
+                <div className="text-2xl font-bold text-income">
                   {databaseInfo?.tables?.filter(t => t.type === 'BASE TABLE').length || 0}
                 </div>
                 <div className="text-sm text-muted-foreground">
@@ -375,9 +375,9 @@ export default function DatabasePage() {
         </Card>
 
         {/* Lista de Tabelas */}
-        <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
+        <Card className={`border bg-card bg-card border border-border`}>
           <CardHeader>
-            <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} flex items-center gap-2`}>
+            <CardTitle className={`text-foreground flex items-center gap-2`}>
               <Database className="h-5 w-5" />
               {t("admin.database.table_list.title", "Tabelas do Banco de Dados")}
             </CardTitle>
@@ -409,7 +409,7 @@ export default function DatabasePage() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="text-green-600 border-green-600">
+                        <Badge variant="outline" className="text-income border-green-600">
                           {t("admin.database.table_list.status.active", "Ativa")}
                         </Badge>
                       </TableCell>
@@ -426,9 +426,9 @@ export default function DatabasePage() {
         </Card>
 
         {/* Informações do DDL */}
-        <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
+        <Card className={`border bg-card bg-card border border-border`}>
           <CardHeader>
-            <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>
+            <CardTitle className={`text-foreground`}>
               {t("admin.database.download.section_title", "Download do DDL")}
             </CardTitle>
           </CardHeader>

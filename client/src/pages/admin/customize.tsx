@@ -365,7 +365,7 @@ function LanguageManagementSection() {
 
   if (isLoading) {
     return (
-      <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
+      <Card className={`border bg-card bg-card border border-border`}>
         <CardContent className="flex items-center justify-center py-10">
           <Loader2 className="h-6 w-6 animate-spin mr-2" />
           {t('admin.customize.loading_language', 'Carregando configurações de idioma...')}
@@ -376,7 +376,7 @@ function LanguageManagementSection() {
 
   if (error) {
     return (
-      <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
+      <Card className={`border bg-card bg-card border border-border`}>
         <CardContent className="flex items-center justify-center py-10 text-destructive">
           <AlertTriangle className="h-6 w-6 mr-2" />
           {t('admin.customize.error_loading', 'Erro ao carregar configurações')}: {error}
@@ -390,13 +390,13 @@ function LanguageManagementSection() {
   return (
     <div className="space-y-6">
       {/* Status Atual do Idioma */}
-      <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
+      <Card className={`border bg-card bg-card border border-border`}>
         <CardHeader>
-          <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} flex items-center gap-2`}>
+          <CardTitle className={`text-foreground flex items-center gap-2`}>
             <Globe className="h-5 w-5" />
             {t('admin.customize.current_language', 'Idioma Atual do Sistema')}
           </CardTitle>
-          <CardDescription className={`${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>
+          <CardDescription className={`text-muted-foreground`}>
             {t('admin.customize.current_language_desc', 'Idioma atualmente ativo em todo o sistema')}
           </CardDescription>
         </CardHeader>
@@ -412,8 +412,8 @@ function LanguageManagementSection() {
                 </p>
                 {currentLocale?.isDefault && (
                   <div className="flex items-center gap-1 mt-2">
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
-                    <span className="text-sm text-green-600">Idioma Padrão</span>
+                    <CheckCircle2 className="h-4 w-4 text-income" />
+                    <span className="text-sm text-income">Idioma Padrão</span>
                   </div>
                 )}
               </div>
@@ -424,13 +424,13 @@ function LanguageManagementSection() {
       </Card>
 
       {/* Idiomas Disponíveis */}
-      <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
+      <Card className={`border bg-card bg-card border border-border`}>
         <CardHeader>
-          <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} flex items-center gap-2`}>
+          <CardTitle className={`text-foreground flex items-center gap-2`}>
             <Settings className="h-5 w-5" />
             {t('admin.customize.language_activation', 'Ativação de Idiomas')}
           </CardTitle>
-          <CardDescription className={`${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>
+          <CardDescription className={`text-muted-foreground`}>
             {t('admin.customize.language_activation_desc', 'Ative ou desative idiomas disponíveis no sistema')}
           </CardDescription>
         </CardHeader>
@@ -511,13 +511,13 @@ function LanguageManagementSection() {
       </Card>
 
       {/* Gerenciamento Avançado */}
-      <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
+      <Card className={`border bg-card bg-card border border-border`}>
         <CardHeader>
-          <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} flex items-center gap-2`}>
+          <CardTitle className={`text-foreground flex items-center gap-2`}>
             <Settings className="h-5 w-5" />
             {t('admin.customize.advanced_management', 'Gerenciamento Avançado')}
           </CardTitle>
-          <CardDescription className={`${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>
+          <CardDescription className={`text-muted-foreground`}>
             {t('admin.customize.admin_panel_access', 'Acesso ao painel completo de configuração de idiomas')}
           </CardDescription>
         </CardHeader>
@@ -646,15 +646,15 @@ function NotificationTestingCard() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'connected': return 'text-green-600';
+      case 'connected': return 'text-income';
       case 'connecting': return 'text-yellow-600';
-      case 'error': return 'text-red-600';
-      default: return 'text-gray-600';
+      case 'error': return 'text-expense';
+      default: return 'text-muted-foreground';
     }
   };
 
   return (
-    <Card className="glass-card neon-border">
+    <Card className="border bg-card">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Bell className="h-5 w-5" />
@@ -1995,7 +1995,7 @@ export default function CustomizePage() {
   // Só superadmin pode acessar
   if (user?.tipo_usuario !== 'super_admin') {
     return (
-      <div className="container mx-auto py-10">
+      <div>
         <Card>
           <CardHeader>
             <CardTitle>Acesso negado</CardTitle>
@@ -2081,15 +2081,15 @@ export default function CustomizePage() {
   };
 
   return (
-    <div className="container mx-auto py-10">
+    <div>
       <h1 className="text-3xl font-bold mb-6">{t('admin.customize.title', 'Personalização do Sistema')}</h1>
       
       <div className="flex gap-6">
         {/* Sidebar */}
         <div className="w-64 flex-shrink-0">
-          <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
+          <Card className={`border bg-card bg-card border border-border`}>
             <CardHeader>
-              <CardTitle className={`flex items-center gap-2 ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>
+              <CardTitle className={`flex items-center gap-2 text-foreground`}>
                 <Settings className="h-5 w-5" />
                 {t('admin.customize.settings', 'Configurações')}
               </CardTitle>
@@ -2168,9 +2168,9 @@ export default function CustomizePage() {
         {/* Conteúdo Principal */}
         <div className="flex-1">
           {activeTab === "personalizar" && (
-            <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
+            <Card className={`border bg-card bg-card border border-border`}>
               <CardHeader>
-                <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>{t('admin.customize.customize_saas', 'Personalizar SaaS')}</CardTitle>
+                <CardTitle className={`text-foreground`}>{t('admin.customize.customize_saas', 'Personalizar SaaS')}</CardTitle>
               </CardHeader>
               <CardContent>
                 {/* Seção de Configurações do Sistema */}
@@ -2194,7 +2194,7 @@ export default function CustomizePage() {
                           ) : logoLightUrl ? (
                             <>
                               <img src={logoLightUrl} alt="Logo light atual" />
-                              <button className="absolute top-1 right-1 text-red-500 hover:text-red-700" onClick={() => setShowDeleteModal('light')} title={t('admin.customize.buttons.remove_logo', 'Remover logo')}>
+                              <button className="absolute top-1 right-1 text-expense hover:text-red-700" onClick={() => setShowDeleteModal('light')} title={t('admin.customize.buttons.remove_logo', 'Remover logo')}>
                                 <Trash2 size={18} />
                               </button>
                             </>
@@ -2218,13 +2218,13 @@ export default function CustomizePage() {
                     <div className="flex flex-col items-center gap-2">
                       <span className="text-xs mb-1">{t('admin.customize.logo_dark', 'Logo Dark')}</span>
                       <SpinningBorder className="w-[230px] h-[60px]" borderSize={0} blurOffset={0} borderRadius={6}>
-                        <div className="logo-inner bg-zinc-900">
+                        <div className="logo-inner bg-card">
                           {previewDark ? (
                             <img src={previewDark} alt="Preview logo dark" />
                           ) : logoDarkUrl ? (
                             <>
                               <img src={logoDarkUrl} alt="Logo dark atual" />
-                              <button className="absolute top-1 right-1 text-red-500 hover:text-red-700" onClick={() => setShowDeleteModal('dark')} title={t('admin.customize.buttons.remove_logo', 'Remover logo')}>
+                              <button className="absolute top-1 right-1 text-expense hover:text-red-700" onClick={() => setShowDeleteModal('dark')} title={t('admin.customize.buttons.remove_logo', 'Remover logo')}>
                                 <Trash2 size={18} />
                               </button>
                             </>
@@ -2256,10 +2256,10 @@ export default function CustomizePage() {
           )}
 
           {activeTab === "mensagens" && (
-            <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
+            <Card className={`border bg-card bg-card border border-border`}>
               <CardHeader>
-                <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>{t('admin.customize.welcome_messages', 'Mensagens de Boas Vindas')}</CardTitle>
-                <CardDescription className={`${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>
+                <CardTitle className={`text-foreground`}>{t('admin.customize.welcome_messages', 'Mensagens de Boas Vindas')}</CardTitle>
+                <CardDescription className={`text-muted-foreground`}>
                   {t('admin.customize.welcome_messages_desc', 'Configure mensagens personalizadas para diferentes tipos de usuários.')}
                 </CardDescription>
               </CardHeader>
@@ -2324,7 +2324,7 @@ export default function CustomizePage() {
                     </div>
 
                     {/* Skeleton para Configurações Gerais */}
-                    <div className="p-4 border rounded-lg bg-gray-50 dark:bg-gray-900">
+                    <div className="p-4 border rounded-lg bg-muted/50 dark:bg-gray-900">
                       <div className="h-5 bg-gray-300 dark:bg-gray-700 rounded w-40 mb-2 animate-pulse"></div>
                       <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-full mb-4 animate-pulse"></div>
                       <div className="space-y-4">
@@ -2352,7 +2352,7 @@ export default function CustomizePage() {
                         <div className="w-3 h-3 bg-green-500 rounded-full"></div>
                         <h3 className="font-semibold text-green-800 dark:text-green-200">{t('admin.customize.new_user_welcome', 'Boas Vindas - Usuário Recém-Cadastrado')}</h3>
                       </div>
-                      <p className="text-sm text-green-700 dark:text-green-300 mb-4">
+                      <p className="text-sm text-income mb-4">
                         {t('admin.customize.new_user_desc', 'Mensagem exibida quando o usuário acabou de ser cadastrado, com orientações de boas vindas.')}
                       </p>
                       <div className="space-y-4">
@@ -2381,7 +2381,7 @@ export default function CustomizePage() {
                             new_user: { ...prev.new_user, message: e.target.value }
                           }))}
                         />
-                        <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                        <p className="text-xs text-income mt-1">
                           {t('admin.customize.use_name_placeholder', 'Use {nome} para incluir o nome do usuário')}
                         </p>
                       </div>
@@ -2397,13 +2397,13 @@ export default function CustomizePage() {
                             new_user: { ...prev.new_user, email_content: e.target.value }
                           }))}
                         />
-                        <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                        <p className="text-xs text-income mt-1">
                           {t('admin.customize.email_after_signup', 'Email enviado após o cadastro bem-sucedido')}
                         </p>
                       </div>
                       <Button 
                         variant="outline" 
-                        className="border-green-300 text-green-700 hover:bg-green-100 dark:hover:bg-green-900"
+                        className="border-green-300 text-income hover:bg-green-100 dark:hover:bg-green-900"
                         onClick={() => saveWelcomeMessage('new_user', {
                           title: welcomeMessages.new_user?.title || '',
                           message: welcomeMessages.new_user?.message || '',
@@ -2580,7 +2580,7 @@ export default function CustomizePage() {
                   </div>
 
                   {/* Configurações Gerais */}
-                  <div className="p-4 border rounded-lg bg-gray-50 dark:bg-gray-900">
+                  <div className="p-4 border rounded-lg bg-muted/50 dark:bg-gray-900">
                     <h3 className="font-medium mb-2">{t('admin.customize.general_settings', 'Configurações Gerais')}</h3>
                     <p className="text-sm text-muted-foreground mb-4">
                       {t('admin.customize.general_settings_desc', 'Configurações adicionais para as mensagens de boas vindas.')}
@@ -2661,10 +2661,10 @@ export default function CustomizePage() {
           )}
 
           {false && activeTab === "waha" && (
-            <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
+            <Card className={`border bg-card bg-card border border-border`}>
               <CardHeader>
-                <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>Integração WhatsApp (WAHA)</CardTitle>
-                <CardDescription className={`${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>
+                <CardTitle className={`text-foreground`}>Integração WhatsApp (WAHA)</CardTitle>
+                <CardDescription className={`text-muted-foreground`}>
                   Configure a integração com o WAHA para envio de mensagens via WhatsApp.
                 </CardDescription>
               </CardHeader>
@@ -2697,11 +2697,11 @@ export default function CustomizePage() {
                         <input
                           type="url"
                           placeholder="https://whatsapp-waha-whatsapp.ie5w7f.easypanel.host"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white dark:bg-gray-800"
+                          className="w-full px-3 py-2 border border-border rounded-md bg-white dark:bg-gray-800"
                           value={wahaConfig.waha_url || ''}
                           onChange={(e) => setWahaConfig(prev => ({ ...prev, waha_url: e.target.value }))}
                         />
-                        <p className="text-xs text-gray-500 mt-1">URL base da instância WAHA</p>
+                        <p className="text-xs text-muted-foreground mt-1">URL base da instância WAHA</p>
                       </div>
 
                       <div>
@@ -2709,11 +2709,11 @@ export default function CustomizePage() {
                         <input
                           type="password"
                           placeholder={t('admin.customize.placeholders.auth_password', 'Deixe vazio se não usar autenticação')}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white dark:bg-gray-800"
+                          className="w-full px-3 py-2 border border-border rounded-md bg-white dark:bg-gray-800"
                           value={wahaConfig.api_key || ''}
                           onChange={(e) => setWahaConfig(prev => ({ ...prev, api_key: e.target.value }))}
                         />
-                        <p className="text-xs text-gray-500 mt-1">Chave de API para autenticação (opcional)</p>
+                        <p className="text-xs text-muted-foreground mt-1">Chave de API para autenticação (opcional)</p>
                       </div>
 
                       <div>
@@ -2721,11 +2721,11 @@ export default function CustomizePage() {
                         <input
                           type="text"
                           placeholder="khesef"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white dark:bg-gray-800"
+                          className="w-full px-3 py-2 border border-border rounded-md bg-white dark:bg-gray-800"
                           value={wahaConfig.session_name || ''}
                           onChange={(e) => setWahaConfig(prev => ({ ...prev, session_name: e.target.value }))}
                         />
-                        <p className="text-xs text-gray-500 mt-1">Nome da sessão WhatsApp no WAHA</p>
+                        <p className="text-xs text-muted-foreground mt-1">Nome da sessão WhatsApp no WAHA</p>
                       </div>
 
                       <div>
@@ -2738,7 +2738,7 @@ export default function CustomizePage() {
                         <div className="flex gap-2">
                           <input
                             type="url"
-                            className="flex-1 px-3 py-2 border border-gray-300 rounded-md bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-400 cursor-not-allowed"
+                            className="flex-1 px-3 py-2 border border-border rounded-md bg-muted/50 dark:bg-gray-700 text-muted-foreground dark:text-gray-400 cursor-not-allowed"
                             value={wahaConfig.webhook_url || t('admin.customize.labels.auto_generated', 'Será gerado automaticamente')}
                             readOnly
                           />
@@ -2769,7 +2769,7 @@ export default function CustomizePage() {
                             🔄
                           </button>
                         </div>
-                        <div className="text-xs text-gray-500 mt-1 space-y-1">
+                        <div className="text-xs text-muted-foreground mt-1 space-y-1">
                           <p>• URL única e segura gerada automaticamente para esta sessão</p>
                           <p>• Configure esta URL no WAHA para receber eventos em tempo real</p>
                           <p>• Hash de 5 caracteres: {wahaConfig.webhook_hash || 'será gerado'}</p>
@@ -2822,24 +2822,24 @@ export default function CustomizePage() {
                         ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800"
                         : connectionStatus?.error
                         ? "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800"
-                        : "bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700"
+                        : "bg-muted/50 dark:bg-gray-900 border-border dark:border-gray-700"
                     )}>
                       <div className="flex items-center justify-between mb-3">
                         <h3 className="font-semibold text-base flex items-center gap-2">
                           {connectionStatus?.connected ? (
                             <>
-                              <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400" />
+                              <CheckCircle2 className="w-5 h-5 text-income" />
                               <span className="text-green-800 dark:text-green-200">API Conectada</span>
                             </>
                           ) : connectionStatus?.error ? (
                             <>
-                              <XCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
+                              <XCircle className="w-5 h-5 text-expense" />
                               <span className="text-red-800 dark:text-red-200">Desconectado</span>
                             </>
                           ) : (
                             <>
-                              <WifiOff className="w-5 h-5 text-gray-500" />
-                              <span className="text-gray-700 dark:text-gray-300">Status da Integração</span>
+                              <WifiOff className="w-5 h-5 text-muted-foreground" />
+                              <span className="text-foreground dark:text-gray-300">Status da Integração</span>
                             </>
                           )}
                         </h3>
@@ -2852,8 +2852,8 @@ export default function CustomizePage() {
                         <div className="space-y-3">
                           {/* Status da API */}
                           <div className="flex items-center gap-2">
-                            <Wifi className="w-4 h-4 text-green-600 dark:text-green-400" />
-                            <span className="text-sm text-green-700 dark:text-green-300">
+                            <Wifi className="w-4 h-4 text-income" />
+                            <span className="text-sm text-income">
                               API WAHA respondendo corretamente
                             </span>
                           </div>
@@ -2861,13 +2861,13 @@ export default function CustomizePage() {
                           {/* Informações da sessão se disponível */}
                           {connectionStatus.phoneNumber && (
                             <div className="mt-3 p-3 bg-white dark:bg-gray-800 rounded-lg">
-                              <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Sessão Principal Detectada:</p>
+                              <p className="text-xs text-muted-foreground dark:text-gray-400 mb-2">Sessão Principal Detectada:</p>
                               
                               {/* Número do WhatsApp */}
                               {connectionStatus.phoneNumber && (
                                 <div className="flex items-center gap-2 mb-1">
-                                  <Phone className="w-4 h-4 text-gray-500" />
-                                  <span className="text-sm text-gray-700 dark:text-gray-300">
+                                  <Phone className="w-4 h-4 text-muted-foreground" />
+                                  <span className="text-sm text-foreground dark:text-gray-300">
                                     {formatPhoneNumber(connectionStatus.phoneNumber)}
                                   </span>
                                 </div>
@@ -2876,8 +2876,8 @@ export default function CustomizePage() {
                               {/* Nome do perfil */}
                               {connectionStatus.pushName && (
                                 <div className="flex items-center gap-2">
-                                  <User className="w-4 h-4 text-gray-500" />
-                                  <span className="text-sm text-gray-700 dark:text-gray-300">
+                                  <User className="w-4 h-4 text-muted-foreground" />
+                                  <span className="text-sm text-foreground dark:text-gray-300">
                                     {connectionStatus.pushName}
                                   </span>
                                 </div>
@@ -2885,16 +2885,16 @@ export default function CustomizePage() {
                             </div>
                           )}
                           
-                          <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
+                          <p className="text-xs text-muted-foreground dark:text-gray-500 mt-2">
                             URL e API Key estão configurados corretamente
                           </p>
                         </div>
                       ) : connectionStatus?.error ? (
                         <div className="space-y-2">
-                          <p className="text-sm text-red-700 dark:text-red-300">
+                          <p className="text-sm text-expense">
                             {connectionStatus.error}
                           </p>
-                          <p className="text-xs text-red-600 dark:text-red-400">
+                          <p className="text-xs text-expense">
                             Verifique se a URL, API Key e nome da sessão estão corretos.
                           </p>
                         </div>
@@ -2905,11 +2905,11 @@ export default function CustomizePage() {
                               "w-3 h-3 rounded-full animate-pulse",
                               wahaConfig.enabled ? 'bg-green-500' : 'bg-gray-400'
                             )}></div>
-                            <span className="text-sm text-gray-600 dark:text-gray-400">
+                            <span className="text-sm text-muted-foreground dark:text-gray-400">
                               {t('admin.customize.labels.integration', 'Integração')}: {wahaConfig.enabled ? t('admin.customize.status.enabled', 'Habilitada') : t('admin.customize.status.disabled', 'Desabilitada')}
                             </span>
                           </div>
-                          <p className="text-xs text-gray-500 dark:text-gray-500">
+                          <p className="text-xs text-muted-foreground dark:text-gray-500">
                             Clique em "Testar Conexão" para verificar o status do WhatsApp
                           </p>
                         </div>
@@ -2917,8 +2917,8 @@ export default function CustomizePage() {
                       
                       {/* Última atualização */}
                       {wahaConfig.updated_at && (
-                        <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-                          <p className="text-xs text-gray-500 dark:text-gray-500">
+                        <div className="mt-3 pt-3 border-t border-border dark:border-gray-700">
+                          <p className="text-xs text-muted-foreground dark:text-gray-500">
                             <strong>Última atualização:</strong> {new Date(wahaConfig.updated_at).toLocaleString('pt-BR')}
                           </p>
                         </div>
@@ -2990,9 +2990,9 @@ export default function CustomizePage() {
                                   >
                                     <div className="flex items-center gap-3">
                                       {isExpanded ? (
-                                        <ChevronDown className="w-5 h-5 text-gray-500" />
+                                        <ChevronDown className="w-5 h-5 text-muted-foreground" />
                                       ) : (
-                                        <ChevronRight className="w-5 h-5 text-gray-500" />
+                                        <ChevronRight className="w-5 h-5 text-muted-foreground" />
                                       )}
                                       <div className="flex items-center gap-2">
                                         <div className={cn(
@@ -3001,7 +3001,7 @@ export default function CustomizePage() {
                                         )} />
                                         <span className="font-medium">{session.name}</span>
                                         {isRefreshingSessions && (
-                                          <Loader2 className="w-4 h-4 animate-spin text-gray-500 ml-2" />
+                                          <Loader2 className="w-4 h-4 animate-spin text-muted-foreground ml-2" />
                                         )}
                                       </div>
                                     </div>
@@ -3019,7 +3019,7 @@ export default function CustomizePage() {
                                           className="flex items-center justify-center w-7 h-7 rounded-full bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700 hover:bg-green-200 dark:hover:bg-green-800/50 transition-colors"
                                           title="Abrir chat"
                                         >
-                                          <MessageCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
+                                          <MessageCircle className="w-4 h-4 text-income" />
                                         </button>
                                         {hasWebhooks && (
                                           <div className="flex items-center gap-1 text-blue-600 dark:text-blue-400">
@@ -3041,7 +3041,7 @@ export default function CustomizePage() {
 
                                   {/* Conteúdo Expandido */}
                                   {isExpanded && (
-                                    <div className="px-4 pb-4 space-y-4 border-t border-gray-200 dark:border-gray-700">
+                                    <div className="px-4 pb-4 space-y-4 border-t border-border dark:border-gray-700">
                                       {/* Ações da Sessão */}
                                       <div className="flex flex-wrap gap-2 pt-2">
                                         {session.status === 'STOPPED' || session.status === 'FAILED' ? (
@@ -3132,9 +3132,9 @@ export default function CustomizePage() {
                                       {session.me && (
                                         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                                           <div className="flex items-center gap-3 p-3 bg-white dark:bg-gray-800 rounded-lg">
-                                            <Phone className="w-6 h-6 text-green-600 dark:text-green-400" />
+                                            <Phone className="w-6 h-6 text-income" />
                                             <div>
-                                              <p className="text-xs text-gray-500 dark:text-gray-400">Número</p>
+                                              <p className="text-xs text-muted-foreground dark:text-gray-400">Número</p>
                                               <p className="font-medium">
                                                 {formatPhoneNumber(session.me.id?.replace('@c.us', '').replace('@s.whatsapp.net', '') || '')}
                                               </p>
@@ -3142,9 +3142,9 @@ export default function CustomizePage() {
                                           </div>
                                           {session.me.pushName && (
                                             <div className="flex items-center gap-3 p-3 bg-white dark:bg-gray-800 rounded-lg">
-                                              <User className="w-6 h-6 text-green-600 dark:text-green-400" />
+                                              <User className="w-6 h-6 text-income" />
                                               <div>
-                                                <p className="text-xs text-gray-500 dark:text-gray-400">Nome</p>
+                                                <p className="text-xs text-muted-foreground dark:text-gray-400">Nome</p>
                                                 <p className="font-medium">{session.me.pushName}</p>
                                               </div>
                                             </div>
@@ -3163,13 +3163,13 @@ export default function CustomizePage() {
                                             <div key={idx} className="p-3 bg-white dark:bg-gray-800 rounded-lg space-y-2">
                                               <div className="flex items-start justify-between">
                                                 <div className="flex-grow">
-                                                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">URL</p>
+                                                  <p className="text-xs text-muted-foreground dark:text-gray-400 mb-1">URL</p>
                                                   <p className="text-sm font-mono break-all">{webhook.url}</p>
                                                 </div>
                                               </div>
                                               {webhook.events && webhook.events.length > 0 && (
                                                 <div>
-                                                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Eventos</p>
+                                                  <p className="text-xs text-muted-foreground dark:text-gray-400 mb-1">Eventos</p>
                                                   <div className="flex flex-wrap gap-1">
                                                     {webhook.events.map((event: string) => (
                                                       <span key={event} className="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-xs rounded">
@@ -3180,7 +3180,7 @@ export default function CustomizePage() {
                                                 </div>
                                               )}
                                               {webhook.retries && (
-                                                <div className="flex gap-4 text-xs text-gray-600 dark:text-gray-400">
+                                                <div className="flex gap-4 text-xs text-muted-foreground dark:text-gray-400">
                                                   <span>Tentativas: {webhook.retries.attempts}</span>
                                                   <span>Delay: {webhook.retries.delaySeconds}s</span>
                                                   <span>Política: {webhook.retries.policy}</span>
@@ -3193,20 +3193,20 @@ export default function CustomizePage() {
 
                                       {/* Status do Engine */}
                                       {session.engine && (
-                                        <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
-                                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Detalhes da Conexão</p>
+                                        <div className="p-3 bg-muted/50 dark:bg-gray-900 rounded-lg">
+                                          <p className="text-xs text-muted-foreground dark:text-gray-400 mb-1">Detalhes da Conexão</p>
                                           <div className="grid grid-cols-2 gap-2 text-sm">
                                             <div>
-                                              <span className="text-gray-600 dark:text-gray-400">Engine:</span>
+                                              <span className="text-muted-foreground dark:text-gray-400">Engine:</span>
                                               <span className="ml-2 font-medium">{session.engine.engine}</span>
                                             </div>
                                             <div>
-                                              <span className="text-gray-600 dark:text-gray-400">Estado:</span>
+                                              <span className="text-muted-foreground dark:text-gray-400">Estado:</span>
                                               <span className="ml-2 font-medium">{session.engine.state}</span>
                                             </div>
                                             {session.engine.WWebVersion && (
                                               <div className="col-span-2">
-                                                <span className="text-gray-600 dark:text-gray-400">Versão:</span>
+                                                <span className="text-muted-foreground dark:text-gray-400">Versão:</span>
                                                 <span className="ml-2 font-mono text-xs">{session.engine.WWebVersion}</span>
                                               </div>
                                             )}
@@ -3220,10 +3220,10 @@ export default function CustomizePage() {
                             })}
                           </div>
                         ) : (
-                          <div className="p-8 text-center border rounded-lg bg-gray-50 dark:bg-gray-900">
-                            <Smartphone className="w-12 h-12 mx-auto mb-3 text-gray-400" />
-                            <p className="text-gray-600 dark:text-gray-400 mb-2">Nenhuma sessão encontrada</p>
-                            <p className="text-sm text-gray-500 dark:text-gray-500">
+                          <div className="p-8 text-center border rounded-lg bg-muted/50 dark:bg-gray-900">
+                            <Smartphone className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
+                            <p className="text-muted-foreground dark:text-gray-400 mb-2">Nenhuma sessão encontrada</p>
+                            <p className="text-sm text-muted-foreground dark:text-gray-500">
                               Configure a integração e clique em "Testar Conexão" para verificar as sessões
                             </p>
                           </div>
@@ -3271,11 +3271,11 @@ export default function CustomizePage() {
               <input
                 type="text"
                 placeholder={t('admin.customize.placeholders.session_name', 'Ex: atendimento-1, vendas, suporte')}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white dark:bg-gray-800"
+                className="w-full px-3 py-2 border border-border rounded-md bg-white dark:bg-gray-800"
                 value={newSessionData.sessionName}
                 onChange={(e) => setNewSessionData(prev => ({ ...prev, sessionName: e.target.value }))}
               />
-              <p className="text-xs text-gray-500 mt-1">Utilize apenas letras, números e hífens. Ex: vendas-1</p>
+              <p className="text-xs text-muted-foreground mt-1">Utilize apenas letras, números e hífens. Ex: vendas-1</p>
             </div>
             
             <div>
@@ -3283,14 +3283,14 @@ export default function CustomizePage() {
               <input
                 type="url"
                 placeholder="https://meusite.com/webhook/whatsapp"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white dark:bg-gray-800"
+                className="w-full px-3 py-2 border border-border rounded-md bg-white dark:bg-gray-800"
                 value={newSessionData.webhooks[0]?.url || ''}
                 onChange={(e) => setNewSessionData(prev => ({
                   ...prev,
                   webhooks: [{ ...prev.webhooks[0], url: e.target.value }]
                 }))}
               />
-              <p className="text-xs text-gray-500 mt-1">URL para receber notificações de mensagens (opcional)</p>
+              <p className="text-xs text-muted-foreground mt-1">URL para receber notificações de mensagens (opcional)</p>
             </div>
           </div>
           <DialogFooter>
@@ -3346,18 +3346,18 @@ export default function CustomizePage() {
                 </div>
                 
                 {isLoadingSessionWebhook ? (
-                  <div className="flex items-center gap-2 text-gray-500">
+                  <div className="flex items-center gap-2 text-muted-foreground">
                     <Loader2 className="w-4 h-4 animate-spin" />
                     Carregando webhook da sessão...
                   </div>
                 ) : sessionWebhook ? (
                   <div className="space-y-3">
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                      <label className="block text-xs font-medium text-muted-foreground dark:text-gray-400 mb-1">
                         Hash de Segurança
                       </label>
                       <div className="flex items-center gap-2">
-                        <code className="px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded text-sm font-mono">
+                        <code className="px-2 py-1 bg-muted dark:bg-gray-800 rounded text-sm font-mono">
                           {sessionWebhook.webhook_hash}
                         </code>
                         <Button
@@ -3372,7 +3372,7 @@ export default function CustomizePage() {
                     </div>
                     
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                      <label className="block text-xs font-medium text-muted-foreground dark:text-gray-400 mb-1">
                         URL do Webhook
                       </label>
                       <div className="flex items-center gap-2">
@@ -3380,7 +3380,7 @@ export default function CustomizePage() {
                           type="text"
                           value={sessionWebhook.webhook_url}
                           readOnly
-                          className="flex-1 px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800 border rounded-md font-mono"
+                          className="flex-1 px-3 py-2 text-sm bg-muted/50 dark:bg-gray-800 border rounded-md font-mono"
                         />
                         <Button
                           size="sm"
@@ -3406,14 +3406,14 @@ export default function CustomizePage() {
                       </div>
                     </div>
                     
-                    <div className="text-xs text-gray-600 dark:text-gray-400">
+                    <div className="text-xs text-muted-foreground dark:text-gray-400">
                       <p>• Use esta URL no WAHA para enviar eventos diretamente para esta sessão</p>
                       <p>• O hash de segurança garante que apenas eventos desta sessão sejam aceitos</p>
                       <p>• Regenerar o webhook criará uma nova URL (a anterior ficará inválida)</p>
                     </div>
                   </div>
                 ) : (
-                  <div className="text-center py-4 text-gray-500">
+                  <div className="text-center py-4 text-muted-foreground">
                     Erro ao carregar webhook da sessão
                   </div>
                 )}
@@ -3422,7 +3422,7 @@ export default function CustomizePage() {
               {/* Divisor */}
               <div className="border-t pt-4">
                 <h4 className="font-medium mb-3">Webhooks Customizados (Opcional)</h4>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                <p className="text-sm text-muted-foreground dark:text-gray-400 mb-4">
                   Configure webhooks adicionais se necessário
                 </p>
               </div>
@@ -3448,7 +3448,7 @@ export default function CustomizePage() {
                     <input
                       type="url"
                       placeholder="https://meusite.com/webhook/whatsapp"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white dark:bg-gray-800"
+                      className="w-full px-3 py-2 border border-border rounded-md bg-white dark:bg-gray-800"
                       value={webhook.url || ''}
                       onChange={(e) => {
                         const newWebhooks = [...editingWebhooks];
@@ -3457,7 +3457,7 @@ export default function CustomizePage() {
                       }}
                     />
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Eventos</label>
+                      <label className="block text-xs text-muted-foreground mb-1">Eventos</label>
                       <div className="flex flex-wrap gap-2">
                         {['message', 'session.status', 'message.any'].map(event => (
                           <label key={event} className="flex items-center gap-1 text-sm">
@@ -3525,9 +3525,9 @@ export default function CustomizePage() {
 
       {/* Modal de confirmação de exclusão de logo */}
       <Dialog open={!!showDeleteModal} onOpenChange={open => { if (!open) setShowDeleteModal(null); }}>
-        <DialogContent className="max-w-md glass-card">
+        <DialogContent className="max-w-md border bg-card">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-red-500">
+            <DialogTitle className="flex items-center gap-2 text-expense">
               <Trash2 className="h-5 w-5" />
               Excluir Logo
             </DialogTitle>
@@ -3538,10 +3538,10 @@ export default function CustomizePage() {
                 <strong>Atenção:</strong> Esta ação irá remover <b>definitivamente</b> o logo customizado do sistema. Não será possível recuperar!
               </p>
             </div>
-            <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+            <div className="p-3 bg-muted/50 dark:bg-gray-800 rounded-lg">
               <p className="text-sm"><strong>Logo:</strong> {showDeleteModal === 'light' ? 'Light' : 'Dark'}</p>
             </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400">Tem certeza que deseja excluir este logo permanentemente?</p>
+            <p className="text-sm text-muted-foreground dark:text-gray-400">Tem certeza que deseja excluir este logo permanentemente?</p>
           </div>
           <div className="flex gap-3 justify-end">
             <Button variant="outline" onClick={() => setShowDeleteModal(null)} disabled={isDeleting}>Cancelar</Button>
@@ -3569,10 +3569,10 @@ export default function CustomizePage() {
         setIsSessionConnected(false);
         setConnectedSessionInfo(null);
       }}>
-        <DialogContent className="w-full sm:w-[400px] max-h-[80vh] flex flex-col p-0 border border-gray-200 dark:border-gray-700 shadow-lg bg-white dark:bg-gray-900">
+        <DialogContent className="w-full sm:w-[400px] max-h-[80vh] flex flex-col p-0 border border-border dark:border-gray-700 shadow-lg bg-white dark:bg-gray-900">
           {/* Header simples */}
-          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-            <h2 className="text-lg font-medium text-center text-gray-900 dark:text-white">
+          <div className="px-6 py-4 border-b border-border dark:border-gray-700">
+            <h2 className="text-lg font-medium text-center text-foreground dark:text-white">
               Conectar WhatsApp - {showQRModal}
             </h2>
           </div>
@@ -3585,34 +3585,34 @@ export default function CustomizePage() {
                 // Mostrar status de conectado
                 <div className="flex flex-col items-center space-y-4">
                   <div className="w-20 h-20 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center">
-                    <CheckCircle2 className="w-12 h-12 text-green-600 dark:text-green-400" />
+                    <CheckCircle2 className="w-12 h-12 text-income" />
                   </div>
                   <div className="text-center space-y-2">
-                    <h3 className="text-lg font-semibold text-green-700 dark:text-green-300">
+                    <h3 className="text-lg font-semibold text-income">
                       WhatsApp Conectado!
                     </h3>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                    <p className="text-sm text-muted-foreground dark:text-gray-400">
                       Sessão {showQRModal} conectada com sucesso
                     </p>
                     {connectedSessionInfo?.me && (
-                      <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                      <div className="mt-3 p-3 bg-muted/50 dark:bg-gray-800 rounded-lg">
                         <div className="flex items-center justify-center gap-2 text-sm">
-                          <Phone className="w-4 h-4 text-gray-500" />
-                          <span className="text-gray-700 dark:text-gray-300">
+                          <Phone className="w-4 h-4 text-muted-foreground" />
+                          <span className="text-foreground dark:text-gray-300">
                             {formatPhoneNumber(connectedSessionInfo.me.id?.replace('@c.us', '').replace('@s.whatsapp.net', '') || '')}
                           </span>
                         </div>
                         {connectedSessionInfo.me.pushName && (
                           <div className="flex items-center justify-center gap-2 text-sm mt-1">
-                            <User className="w-4 h-4 text-gray-500" />
-                            <span className="text-gray-700 dark:text-gray-300">
+                            <User className="w-4 h-4 text-muted-foreground" />
+                            <span className="text-foreground dark:text-gray-300">
                               {connectedSessionInfo.me.pushName}
                             </span>
                           </div>
                         )}
                       </div>
                     )}
-                    <p className="text-xs text-gray-500 mt-2">
+                    <p className="text-xs text-muted-foreground mt-2">
                       Fechando automaticamente...
                     </p>
                   </div>
@@ -3620,35 +3620,35 @@ export default function CustomizePage() {
               ) : isGeneratingQR || isRefreshingQR ? (
                 <div className="flex flex-col items-center space-y-3">
                   <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  <span className="text-sm font-medium text-foreground dark:text-gray-300">
                     {isRefreshingQR ? t('admin.customize.buttons.update_qr', 'Atualizando QR Code...') : t('admin.customize.buttons.generate_qr', 'Gerando QR Code...')}
                   </span>
-                  <p className="text-xs text-gray-500 text-center">
+                  <p className="text-xs text-muted-foreground text-center">
                     {isRefreshingQR ? "Buscando novo código" : "Iniciando sessão e preparando conexão"}
                   </p>
                 </div>
               ) : qrCodeData ? (
                 <div className="flex flex-col items-center space-y-4">
                   {/* Container fixo para QR Code - evita resize */}
-                  <div className="w-60 h-60 bg-gray-50 dark:bg-gray-800 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center">
+                  <div className="w-60 h-60 bg-muted/50 dark:bg-gray-800 rounded-lg border-2 border-dashed border-border dark:border-gray-600 flex items-center justify-center">
                     {qrCodeData?.qr ? (
-                      <div className="p-2 bg-white rounded-lg border border-gray-200">
+                      <div className="p-2 bg-white rounded-lg border border-border">
                         <img src={qrCodeData.qr} alt="QR Code" className="w-56 h-56" />
                       </div>
                     ) : qrCodeData?.code ? (
-                      <div className="p-2 bg-white rounded-lg border border-gray-200">
-                        <div className="w-56 h-56 flex items-center justify-center text-sm break-all font-mono bg-gray-50 rounded">
+                      <div className="p-2 bg-white rounded-lg border border-border">
+                        <div className="w-56 h-56 flex items-center justify-center text-sm break-all font-mono bg-muted/50 rounded">
                           {qrCodeData.code}
                         </div>
                       </div>
                     ) : (
                       <div className="text-center space-y-2">
                         <div className="w-12 h-12 mx-auto bg-gray-300 dark:bg-gray-600 rounded-full flex items-center justify-center">
-                          <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-6 h-6 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
                           </svg>
                         </div>
-                        <p className="text-gray-600 dark:text-gray-400 font-medium">QR Code não disponível</p>
+                        <p className="text-muted-foreground dark:text-gray-400 font-medium">QR Code não disponível</p>
                       </div>
                     )}
                   </div>
@@ -3668,17 +3668,17 @@ export default function CustomizePage() {
                       </div>
                     )}
                     
-                    <div className="text-xs text-gray-500 mt-1">
+                    <div className="text-xs text-muted-foreground mt-1">
                       Verificando status da conexão...
                     </div>
                   </div>
                   
                   {/* Instruções simples */}
                   <div className="text-center space-y-1">
-                    <p className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                    <p className="text-xs font-medium text-foreground dark:text-gray-300">
                       Como conectar:
                     </p>
-                    <div className="text-xs text-gray-500 space-y-0.5">
+                    <div className="text-xs text-muted-foreground space-y-0.5">
                       <p>1. WhatsApp → Menu → Aparelhos conectados</p>
                       <p>2. Conectar um aparelho → Escanear QR</p>
                     </div>
@@ -3686,16 +3686,16 @@ export default function CustomizePage() {
                 </div>
               ) : (
                 <div className="flex flex-col items-center space-y-3">
-                  <div className="w-8 h-8 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin"></div>
-                  <span className="text-sm text-gray-700 dark:text-gray-300">Preparando...</span>
-                  <p className="text-xs text-gray-500">Aguarde um momento</p>
+                  <div className="w-8 h-8 border-2 border-border border-t-blue-500 rounded-full animate-spin"></div>
+                  <span className="text-sm text-foreground dark:text-gray-300">Preparando...</span>
+                  <p className="text-xs text-muted-foreground">Aguarde um momento</p>
                 </div>
               )}
             </div>
           </div>
           
           {/* Footer simples */}
-          <div className="px-6 py-3 border-t border-gray-200 dark:border-gray-700">
+          <div className="px-6 py-3 border-t border-border dark:border-gray-700">
             <div className="flex justify-between items-center">
               {!isSessionConnected && qrCodeData && (
                 <Button 
@@ -3718,7 +3718,7 @@ export default function CustomizePage() {
                 </Button>
               )}
               {isSessionConnected && (
-                <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+                <div className="flex items-center gap-2 text-sm text-income">
                   <CheckCircle2 className="w-4 h-4" />
                   <span>Conectado com sucesso</span>
                 </div>
@@ -3768,12 +3768,12 @@ export default function CustomizePage() {
                   <input
                     type="tel"
                     placeholder={t('admin.customize.placeholders.phone_number', 'Ex: 5541999887766')}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white dark:bg-gray-800"
+                    className="w-full px-3 py-2 border border-border rounded-md bg-white dark:bg-gray-800"
                     value={pairingPhoneNumber}
                     onChange={(e) => setPairingPhoneNumber(e.target.value.replace(/\D/g, ''))}
                     maxLength={15}
                   />
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-muted-foreground mt-1">
                     Digite apenas números com código do país (55 para Brasil)
                   </p>
                 </div>
@@ -3796,20 +3796,20 @@ export default function CustomizePage() {
                   <input
                     type="text"
                     placeholder={t('admin.customize.placeholders.pairing_code', 'Digite o código recebido')}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white dark:bg-gray-800 text-center font-mono text-lg"
+                    className="w-full px-3 py-2 border border-border rounded-md bg-white dark:bg-gray-800 text-center font-mono text-lg"
                     value={pairingCode}
                     onChange={(e) => setPairingCode(e.target.value.replace(/\s/g, ''))}
                     maxLength={10}
                   />
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-muted-foreground mt-1">
                     Digite o código que você recebeu no WhatsApp
                   </p>
                 </div>
                 <div className="bg-green-50 dark:bg-green-950/20 p-3 rounded-lg">
-                  <p className="text-sm text-green-700 dark:text-green-300">
+                  <p className="text-sm text-income">
                     📱 Código enviado para: <strong>{pairingPhoneNumber}</strong>
                   </p>
-                  <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                  <p className="text-xs text-income mt-1">
                     Verifique suas mensagens no WhatsApp
                   </p>
                 </div>

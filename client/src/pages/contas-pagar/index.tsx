@@ -62,10 +62,10 @@ function diasAte(data: string | null | undefined): number | null {
 
 function badgeDias(dias: number | null) {
   if (dias == null) return { label: "—", className: "bg-muted text-muted-foreground" };
-  if (dias < 0) return { label: `${Math.abs(dias)}d vencido`, className: "bg-red-500/15 text-red-600" };
-  if (dias === 0) return { label: "Hoje", className: "bg-red-500/15 text-red-600" };
+  if (dias < 0) return { label: `${Math.abs(dias)}d vencido`, className: "bg-red-500/15 text-expense" };
+  if (dias === 0) return { label: "Hoje", className: "bg-red-500/15 text-expense" };
   if (dias <= 3) return { label: `${dias}d`, className: "bg-amber-500/15 text-amber-600" };
-  return { label: `${dias}d`, className: "bg-emerald-500/15 text-emerald-600" };
+  return { label: `${dias}d`, className: "bg-emerald-500/15 text-income" };
 }
 
 function fmtData(d: string | null | undefined) {
@@ -178,7 +178,7 @@ export default function ContasPagarPage() {
   });
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <h1 className="text-3xl font-bold">Vencimentos</h1>
@@ -278,8 +278,8 @@ export default function ContasPagarPage() {
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="font-medium">{f.cartao_nome}</span>
-                              <Badge variant="outline" className="text-[10px]">{f.competencia}</Badge>
-                              <Badge className={`${bd.className} text-[10px]`}>{bd.label}</Badge>
+                              <Badge variant="outline" className="text-xs">{f.competencia}</Badge>
+                              <Badge className={`${bd.className} text-xs`}>{bd.label}</Badge>
                             </div>
                             <p className="text-xs text-muted-foreground mt-0.5">
                               Vence {fmtData(f.data_vencimento)}
@@ -321,7 +321,7 @@ export default function ContasPagarPage() {
                               </>
                             ) : (
                               <>
-                                <Badge className="bg-emerald-500/15 text-emerald-600">Paga</Badge>
+                                <Badge className="bg-emerald-500/15 text-income">Paga</Badge>
                                 <Button
                                   size="sm"
                                   variant="outline"

@@ -187,7 +187,7 @@ export default function ReembolsosPage() {
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold flex items-center gap-2">
           <HandCoins className="h-8 w-8" /> A Receber
@@ -292,7 +292,7 @@ export default function ReembolsosPage() {
           {filtrados.length === 0 ? (
             <Card>
               <CardContent className="flex flex-col items-center gap-3 py-12 text-center text-muted-foreground">
-                <CheckCircle2 className="h-10 w-10 text-emerald-500" />
+                <CheckCircle2 className="h-10 w-10 text-income" />
                 Nenhum reembolso a receber neste período/filtro.
               </CardContent>
             </Card>

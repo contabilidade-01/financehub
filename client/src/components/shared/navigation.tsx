@@ -1,0 +1,198 @@
+import { useQuery } from "@tanstack/react-query";
+import type { LucideIcon } from "lucide-react";
+import {
+  LayoutDashboard,
+  ArrowLeftRight,
+  Wallet,
+  CreditCard,
+  Repeat,
+  CalendarClock,
+  HandCoins,
+  Upload,
+  Target,
+  BarChart3,
+  LineChart,
+  Banknote,
+  Bell,
+  Tag,
+  Settings,
+  DollarSign,
+  Receipt,
+  Shield,
+  Users,
+  CalendarCheck,
+  Search,
+  Palette,
+  Wrench,
+  Flag,
+  MessageSquare,
+  Bot,
+  ShieldCheck,
+  Landmark,
+  ListChecks,
+  ListTree,
+  Building2,
+} from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
+import { useTranslation } from "@/contexts/LocalizationContext";
+import { rotuloModalidade } from "@shared/modalidade";
+
+export interface NavItem {
+  icon: LucideIcon;
+  text: string;
+  path: string;
+}
+
+export interface NavGroup {
+  label: string;
+  items: NavItem[];
+}
+
+/** Rotas principais do ambiente (PF em "/", PJ em "/p/..."). */
+export interface PrimaryRoutes {
+  inicio: string;
+  lancamentos: string;
+  relatorios: string;
+}
+
+export function isPathActive(location: string, path: string): boolean {
+  if (path === "/") return location === "/";
+  return location === path || location.startsWith(path + "/") || location.startsWith(path + "?");
+}
+
+/**
+ * Menu do usuário logado. PJ vê só o ambiente PJ; PF vê só o PF (sem itens
+ * repetidos). Admin ganha a seção de administração.
+ */
+export function useNavigation() {
+  const { user: userData } = useAuth();
+  const { t } = useTranslation();
+
+  const isDirectAdmin = userData?.tipo_usuario === "super_admin";
+  const shouldShowAdminItems = isDirectAdmin || userData?.tipo_usuario === "admin";
+  const isImpersonating = !!(userData && "isImpersonating" in userData && (userData as any).isImpersonating);
+  const isPJ = userData?.tipo_pessoa === "juridica";
+
+  const { data: flagsData } = useQuery({
+    queryKey: ["minhas-flags"],
+    enabled: !!userData && !isDirectAdmin,
+    queryFn: async () => {
+      const res = await fetch("/api/flags", { credentials: "include" });
+      if (!res.ok) return { flags: {} as Record<string, boolean> };
+      return res.json();
+    },
+  });
+  const temOrquestrador =
+    isDirectAdmin || !!(flagsData?.flags as Record<string, boolean> | undefined)?.orquestrador_deepseek;
+
+  const secoesPF: NavGroup[] = [
+    {
+      label: t("navigation.sections.main", "PRINCIPAL"),
+      items: [
+        { icon: LayoutDashboard, text: t("navigation.dashboard", "Dashboard"), path: "/" },
+        { icon: ArrowLeftRight, text: t("navigation.transactions", "Transações"), path: "/transactions" },
+        { icon: Wallet, text: "Contas", path: "/contas-cartoes" },
+        { icon: CreditCard, text: "Cartões de Crédito", path: "/cartoes" },
+        { icon: Repeat, text: "Mensalidades", path: "/mensalidades" },
+        { icon: CalendarClock, text: "Vencimentos", path: "/contas-pagar" },
+        { icon: HandCoins, text: "A Receber", path: "/reembolsos" },
+        { icon: Upload, text: "Importar Lançamentos", path: "/importar" },
+        { icon: Target, text: "Metas e Sonhos", path: "/metas" },
+        { icon: BarChart3, text: t("navigation.reports", "Relatórios"), path: "/reports" },
+        { icon: LineChart, text: "Fluxo Projetado", path: "/fluxo-projetado" },
+        { icon: Banknote, text: "Formas de pagamento", path: "/payment-methods" },
+        { icon: Bell, text: t("navigation.reminders", "Lembretes"), path: "/reminders" },
+      ],
+    },
+  ];
+
+  // Menu PJ agrupado. O rótulo do primeiro grupo mostra a modalidade (PJ MEI / PJ ME).
+  const secoesPJ: NavGroup[] = [
+    {
+      label: rotuloModalidade(userData as any).toUpperCase(),
+      items: [
+        { icon: LayoutDashboard, text: "Dashboard", path: "/p/dashboard" },
+        { icon: ArrowLeftRight, text: "Transações", path: "/p/transacoes" },
+        { icon: Landmark, text: "Contas bancárias", path: "/p/contas-bancarias" },
+        { icon: CreditCard, text: "Cartões e Faturas", path: "/p/faturas" },
+        { icon: CalendarClock, text: "Vencimentos", path: "/p/vencimentos" },
+        { icon: Repeat, text: "Mensalidades", path: "/p/mensalidades" },
+        { icon: HandCoins, text: "Reembolsos a Receber", path: "/p/reembolsos" },
+        { icon: ListChecks, text: "Conciliação", path: "/p/conciliacao" },
+        { icon: Upload, text: "Importar Lançamentos", path: "/p/importar" },
+      ],
+    },
+    {
+      label: "RELATÓRIOS",
+      items: [
+        { icon: BarChart3, text: "Relatórios", path: "/p/relatorios" },
+        { icon: Target, text: "Metas", path: "/p/metas" },
+      ],
+    },
+    {
+      label: "CADASTROS",
+      items: [
+        { icon: ListTree, text: "Plano de Contas", path: "/p/categorias" },
+        { icon: Building2, text: "Minhas Empresas", path: "/p/empresas" },
+      ],
+    },
+  ];
+
+  const userGroups: NavGroup[] = [
+    ...(isPJ ? secoesPJ : secoesPF),
+    {
+      label: t("navigation.sections.settings", "CONFIGURAÇÕES"),
+      items: [
+        // "Categorias" é do PF; no PJ o equivalente é "Plano de Contas".
+        ...(!isPJ ? [{ icon: Tag, text: t("navigation.categories", "Categorias"), path: "/categories" }] : []),
+        { icon: Settings, text: t("navigation.settings", "Configurações"), path: "/settings" },
+      ],
+    },
+    {
+      label: t("navigation.sections.billing", "ASSINATURA"),
+      items: [
+        { icon: DollarSign, text: t("navigation.billing_settings", "Minha Assinatura"), path: "/billing/settings" },
+        { icon: Receipt, text: t("navigation.invoices", "Faturas"), path: "/billing/invoices" },
+      ],
+    },
+  ];
+
+  const orquestradorItem: NavItem = { icon: Bot, text: "Orquestrador (DeepSeek)", path: "/admin/orquestrador" };
+
+  const adminGroups: NavGroup[] = [
+    {
+      label: t("navigation.sections.admin", "ADMINISTRAÇÃO"),
+      items: [
+        { icon: Shield, text: t("navigation.admin_dashboard", "Dashboard Admin"), path: "/admin" },
+        { icon: Users, text: t("navigation.users", "Usuários"), path: "/admin/users" },
+        { icon: CalendarCheck, text: t("navigation.subscriptions", "Assinaturas"), path: "/admin/assinaturas" },
+        { icon: Banknote, text: t("navigation.billing", "Pagamentos"), path: "/admin/billing" },
+        { icon: Search, text: t("navigation.manage_payments", "Gerenciar Pagamentos"), path: "/admin/payments" },
+        { icon: CreditCard, text: t("navigation.payment_settings", "Config. Pagamento"), path: "/admin/payment-settings" },
+        { icon: Palette, text: t("navigation.customize", "Personalizar"), path: "/admin/customize" },
+        { icon: Wrench, text: t("navigation.maintenance", "Manutenção"), path: "/admin/maintenance" },
+        { icon: Flag, text: "Feature flags", path: "/admin/feature-flags" },
+        { icon: MessageSquare, text: "Simulador WhatsApp", path: "/admin/simular-whatsapp" },
+        ...(temOrquestrador ? [orquestradorItem] : []),
+        { icon: ShieldCheck, text: "Consentimentos LGPD", path: "/admin/lgpd" },
+      ],
+    },
+  ];
+
+  let groups: NavGroup[] = shouldShowAdminItems ? [...userGroups, ...adminGroups] : userGroups;
+  if (temOrquestrador && !shouldShowAdminItems) {
+    groups = [...groups, { label: "IA", items: [orquestradorItem] }];
+  }
+
+  const primary: PrimaryRoutes = isPJ
+    ? { inicio: "/p/dashboard", lancamentos: "/p/transacoes", relatorios: "/p/relatorios" }
+    : { inicio: "/", lancamentos: "/transactions", relatorios: "/reports" };
+
+  return {
+    groups,
+    primary,
+    isPJ,
+    user: userData,
+    showAdminHeader: isDirectAdmin || isImpersonating,
+  };
+}

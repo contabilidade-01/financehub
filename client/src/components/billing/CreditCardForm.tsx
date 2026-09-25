@@ -213,7 +213,7 @@ export function CreditCardForm({ onCardChange, onValidChange }: CreditCardFormPr
         </Alert>
       )}
 
-      <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-lg p-6 text-white">
+      <div className="bg-slate-900 rounded-lg p-6 text-white">
         <div className="flex justify-between items-start mb-8">
           <CreditCard className="h-8 w-8" />
           <span className="text-sm font-semibold">{cardBrand}</span>
@@ -223,11 +223,11 @@ export function CreditCardForm({ onCardChange, onValidChange }: CreditCardFormPr
         </div>
         <div className="flex justify-between items-end">
           <div>
-            <div className="text-xs text-gray-400 mb-1">Nome no cartão</div>
+            <div className="text-xs text-slate-400 mb-1">Nome no cartão</div>
             <div className="font-semibold">{card.holderName || 'NOME COMPLETO'}</div>
           </div>
           <div className="text-right">
-            <div className="text-xs text-gray-400 mb-1">Validade</div>
+            <div className="text-xs text-slate-400 mb-1">Validade</div>
             <div className="font-semibold">
               {card.expiryMonth || 'MM'}/{card.expiryYear ? card.expiryYear.slice(2) : 'AA'}
             </div>
@@ -247,7 +247,7 @@ export function CreditCardForm({ onCardChange, onValidChange }: CreditCardFormPr
             autoComplete="off"
             inputMode="numeric"
           />
-          {errors.number && <p className="text-sm text-red-500 mt-1">{errors.number}</p>}
+          {errors.number && <p className="text-sm text-expense mt-1">{errors.number}</p>}
         </div>
 
         <div>
@@ -260,7 +260,7 @@ export function CreditCardForm({ onCardChange, onValidChange }: CreditCardFormPr
             className={errors.holderName ? 'border-red-500' : ''}
             autoComplete="off"
           />
-          {errors.holderName && <p className="text-sm text-red-500 mt-1">{errors.holderName}</p>}
+          {errors.holderName && <p className="text-sm text-expense mt-1">{errors.holderName}</p>}
         </div>
 
         <div className="grid grid-cols-3 gap-4">
@@ -320,7 +320,7 @@ export function CreditCardForm({ onCardChange, onValidChange }: CreditCardFormPr
             <p className="text-xs text-muted-foreground mt-1">
               {getCvvConfig(card.number).helpText}
             </p>
-            {errors.ccv && <p className="text-sm text-red-500 mt-1">{errors.ccv}</p>}
+            {errors.ccv && <p className="text-sm text-expense mt-1">{errors.ccv}</p>}
           </div>
         </div>
       </div>

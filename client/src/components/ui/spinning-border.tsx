@@ -56,7 +56,7 @@ const SpinningBorder = React.forwardRef<HTMLDivElement, SpinningBorderProps>(
       blurAmount = 10,
       blurOpacity = 0.6,
       borderRadius = 6,
-      gradientColors = ["#00ff99", "#0099ff", "#ff00cc", "#ff9900", "#00ff99"],
+      gradientColors = ["#216283", "#94A3B8", "#216283"],
       animationDuration = 3,
       showBlur = true,
     },

@@ -84,7 +84,7 @@ const copyByVariant = {
 const tipoColors: Record<string, string> = {
   caixinha: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
   sonho: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
-  reserva: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
+  reserva: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30",
   limite_categoria: "bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300",
 };
 
@@ -192,7 +192,7 @@ export default function MetasPage({ variant = "pf", empresaId }: { variant?: Var
     Number(n).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">{copy.titulo}</h1>

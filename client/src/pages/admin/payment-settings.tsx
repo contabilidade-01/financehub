@@ -241,7 +241,7 @@ export default function PaymentSettingsPage() {
   }
 
   return (
-    <div className="container mx-auto py-8 max-w-4xl">
+    <div className="max-w-4xl">
       <div className="mb-6">
         <h1 className="text-3xl font-bold">Configurações de Pagamento</h1>
         <p className="text-muted-foreground mt-2">
@@ -523,9 +523,9 @@ export default function PaymentSettingsPage() {
               <Alert className={webhookTestResults.success ? 'border-green-500 bg-green-50 dark:bg-green-950' : 'border-red-500 bg-red-50 dark:bg-red-950'}>
                 <div className="flex items-center gap-2">
                   {webhookTestResults.success ? (
-                    <CheckCircle className="h-4 w-4 text-green-600" />
+                    <CheckCircle className="h-4 w-4 text-income" />
                   ) : (
-                    <AlertCircle className="h-4 w-4 text-red-600" />
+                    <AlertCircle className="h-4 w-4 text-expense" />
                   )}
                   <AlertDescription className="font-semibold">
                     {webhookTestResults.summary}
@@ -567,21 +567,21 @@ export default function PaymentSettingsPage() {
                       URL & Method
                     </h4>
                     <div className="p-3 bg-muted rounded font-mono text-sm">
-                      <span className="text-green-600 font-bold">{webhookTestResults.request?.method}</span>{' '}
+                      <span className="text-income font-bold">{webhookTestResults.request?.method}</span>{' '}
                       {webhookTestResults.request?.url}
                     </div>
                   </div>
 
                   <div>
                     <h4 className="font-semibold mb-2">Request Headers</h4>
-                    <pre className="p-3 bg-slate-950 text-slate-50 rounded text-xs overflow-x-auto">
+                    <pre className="p-3 bg-muted text-slate-50 rounded text-xs overflow-x-auto">
                       {JSON.stringify(webhookTestResults.request?.headers, null, 2)}
                     </pre>
                   </div>
 
                   <div>
                     <h4 className="font-semibold mb-2">Request Body (Payload)</h4>
-                    <pre className="p-3 bg-slate-950 text-slate-50 rounded text-xs overflow-x-auto">
+                    <pre className="p-3 bg-muted text-slate-50 rounded text-xs overflow-x-auto">
                       {JSON.stringify(webhookTestResults.request?.body, null, 2)}
                     </pre>
                     <Button
@@ -615,14 +615,14 @@ export default function PaymentSettingsPage() {
 
                       <div>
                         <h4 className="font-semibold mb-2">Response Headers</h4>
-                        <pre className="p-3 bg-slate-950 text-slate-50 rounded text-xs overflow-x-auto">
+                        <pre className="p-3 bg-muted text-slate-50 rounded text-xs overflow-x-auto">
                           {JSON.stringify(webhookTestResults.response.headers, null, 2)}
                         </pre>
                       </div>
 
                       <div>
                         <h4 className="font-semibold mb-2">Response Body</h4>
-                        <pre className="p-3 bg-slate-950 text-slate-50 rounded text-xs overflow-x-auto">
+                        <pre className="p-3 bg-muted text-slate-50 rounded text-xs overflow-x-auto">
                           {typeof webhookTestResults.response.body === 'object'
                             ? JSON.stringify(webhookTestResults.response.body, null, 2)
                             : webhookTestResults.response.body}

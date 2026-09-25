@@ -152,22 +152,22 @@ function ModalAnimadaErro({ open, onClose, mensagem, icone, titulo, fecharLabel 
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-xl shadow-xl p-6 w-full max-w-xs relative flex flex-col items-center animate-zoomin-bounce"
+        className="bg-white rounded-lg shadow-xl p-6 w-full max-w-xs relative flex flex-col items-center animate-zoomin-bounce"
         style={{ animationDuration: "350ms" }}
         onClick={e => e.stopPropagation()}
       >
         <div className="mb-2 flex justify-center w-full">
           {icone || (
-            <svg className="w-12 h-12 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-12 h-12 text-expense" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <circle cx="12" cy="12" r="10" strokeWidth="2" />
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01" />
             </svg>
           )}
         </div>
-        <div className="text-center text-lg font-semibold text-red-600 mb-2">
+        <div className="text-center text-lg font-semibold text-expense mb-2">
           {titulo}
         </div>
-        <div className="text-center text-gray-700 mb-4">{mensagem}</div>
+        <div className="text-center text-foreground mb-4">{mensagem}</div>
         <button
           className="mt-2 px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition"
           onClick={onClose}
@@ -575,11 +575,11 @@ export default function SettingsPage() {
               {user?.status_assinatura === "ativa" && (
                 <div className="p-4 border rounded-lg bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800">
                   <h4 className="font-medium mb-2 text-green-800 dark:text-green-200">{t('settings.subscription_active', 'Assinatura Ativa')}</h4>
-                  <p className="text-sm text-green-600 dark:text-green-300 mb-2">
+                  <p className="text-sm text-income mb-2">
                     {t('settings.subscription_active_desc', 'Sua assinatura está ativa e em dia.')}
                   </p>
                   {user?.data_expiracao_assinatura && (
-                    <p className="text-sm text-green-600 dark:text-green-300">
+                    <p className="text-sm text-income">
                   {t('settings.expires_on', 'Expira em')}: {formatLocalizedDate(user.data_expiracao_assinatura)}
                     </p>
                   )}
@@ -590,12 +590,12 @@ export default function SettingsPage() {
                 <div className={`p-4 border rounded-lg ${
                   user?.data_expiracao_assinatura && new Date(user.data_expiracao_assinatura) > new Date()
                     ? "border-orange-200 bg-orange-50 dark:bg-orange-950 dark:border-orange-800"
-                    : "border-gray-200 bg-gray-50 dark:bg-gray-900 dark:border-gray-700"
+                    : "border-border bg-muted/50 dark:bg-gray-900 dark:border-gray-700"
                 }`}>
                   <h4 className={`font-medium mb-2 ${
                     user?.data_expiracao_assinatura && new Date(user.data_expiracao_assinatura) > new Date()
                       ? "text-orange-800 dark:text-orange-200"
-                      : "text-gray-800 dark:text-gray-200"
+                      : "text-foreground dark:text-gray-200"
                   }`}>
                     {user?.data_expiracao_assinatura && new Date(user.data_expiracao_assinatura) > new Date()
                       ? t('settings.subscription_cancelled_access_maintained', 'Assinatura Cancelada - Acesso Mantido')
@@ -605,7 +605,7 @@ export default function SettingsPage() {
                   <p className={`text-sm mb-2 ${
                     user?.data_expiracao_assinatura && new Date(user.data_expiracao_assinatura) > new Date()
                       ? "text-orange-600 dark:text-orange-300"
-                      : "text-gray-600 dark:text-gray-400"
+                      : "text-muted-foreground dark:text-gray-400"
                   }`}>
                     {t('settings.cancelled_on', 'Cancelada em')}: {formatLocalizedDate(user.data_cancelamento)}
                   </p>
@@ -618,7 +618,7 @@ export default function SettingsPage() {
                     <p className={`text-sm ${
                       user?.data_expiracao_assinatura && new Date(user.data_expiracao_assinatura) > new Date()
                         ? "text-orange-600 dark:text-orange-300"
-                        : "text-gray-600 dark:text-gray-400"
+                        : "text-muted-foreground dark:text-gray-400"
                     }`}>
                       {t('settings.reason', 'Motivo')}: {user.motivo_cancelamento}
                     </p>

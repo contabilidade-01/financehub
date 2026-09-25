@@ -71,11 +71,11 @@ export default function PeriodoSelector({
           <Button
             key={p}
             size="sm"
-            variant={periodo === p ? "default" : "outline"}
+            variant="outline"
             onClick={() =>
               escolherPeriodo(p, customFrom, onPeriodoChange, onCustomFromChange, onCustomToChange)
             }
-            className={periodo === p ? "bg-primary/20" : ""}
+            className={periodo === p ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary" : "text-muted-foreground"}
           >
             {ROTULOS[p]}
           </Button>

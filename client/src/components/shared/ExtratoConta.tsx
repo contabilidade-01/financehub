@@ -121,7 +121,7 @@ export default function ExtratoConta({
 
       <div className="rounded-lg border border-border/60 px-3 py-2 text-sm flex items-center justify-between">
         <span className="text-muted-foreground">Saldo anterior</span>
-        <span className={saldoIni < 0 ? "text-red-500 font-semibold" : "font-semibold"}>
+        <span className={saldoIni < 0 ? "text-expense font-semibold" : "font-semibold"}>
           {money(saldoIni)}
         </span>
       </div>
@@ -171,7 +171,7 @@ export default function ExtratoConta({
                     </td>
                     <td
                       className={`p-2 text-right align-top font-medium whitespace-nowrap ${
-                        signed < 0 ? "text-red-500" : "text-emerald-600"
+                        signed < 0 ? "text-expense" : "text-income"
                       }`}
                     >
                       {signed < 0 ? "−" : "+"}
@@ -179,7 +179,7 @@ export default function ExtratoConta({
                     </td>
                     <td
                       className={`p-2 text-right align-top whitespace-nowrap ${
-                        saldoLinha < 0 ? "text-red-500" : ""
+                        saldoLinha < 0 ? "text-expense" : ""
                       }`}
                     >
                       {money(saldoLinha)}
@@ -194,7 +194,7 @@ export default function ExtratoConta({
 
       <div className="rounded-lg border border-border/60 px-3 py-2 text-sm flex items-center justify-between">
         <span className="text-muted-foreground">Saldo final</span>
-        <span className={saldoFim < 0 ? "text-red-500 font-semibold" : "font-semibold"}>
+        <span className={saldoFim < 0 ? "text-expense font-semibold" : "font-semibold"}>
           {money(saldoFim)}
         </span>
       </div>

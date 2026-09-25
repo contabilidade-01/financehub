@@ -61,7 +61,7 @@ const fmt = (n: number | string) =>
 
 const stBadgePj = (s: string) =>
   s === "Efetivada"
-    ? { t: "Efetivada", c: "bg-emerald-500/15 text-emerald-600" }
+    ? { t: "Efetivada", c: "bg-emerald-500/15 text-income" }
     : { t: "Pendente", c: "bg-amber-500/15 text-amber-700" };
 
 /**
@@ -202,7 +202,7 @@ function TransacaoForm({
           onChange={(e) => setValorDigitado(e.target.value)}
         />
         {podeParcelar && nParc > 1 && valorNum > 0 && (
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             {valorModo === "parcela"
               ? `${nParc}× de ${fmt(valorNum)} = ${fmt(valorTotalPreview)}`
               : `${fmt(valorNum)} em ${nParc}× de ~${fmt(valorParcelaPreview)}`}
@@ -584,7 +584,7 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
   };
 
   return (
-    <div className="space-y-4 p-4">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Transações PJ</h1>
         <div className="flex gap-2">
@@ -703,9 +703,9 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
             <span className="text-muted-foreground">
               {filtradas.length} de {transacoes.length} lançamento(s)
             </span>
-            <span className="text-emerald-600">Receitas: {fmt(totais.receitas)}</span>
-            <span className="text-rose-500">Despesas: {fmt(totais.despesas)}</span>
-            <span className={totais.saldo >= 0 ? "font-medium" : "font-medium text-rose-500"}>
+            <span className="text-income">Receitas: {fmt(totais.receitas)}</span>
+            <span className="text-expense">Despesas: {fmt(totais.despesas)}</span>
+            <span className={totais.saldo >= 0 ? "font-medium" : "font-medium text-expense"}>
               Saldo: {fmt(totais.saldo)}
             </span>
           </div>
@@ -746,10 +746,10 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
                       <td className="p-3">
                         {t.descricao}
                         {(t as any).reembolso_pessoal && (
-                          <Badge variant="secondary" className="ml-2 text-[10px]">Reembolso recebido</Badge>
+                          <Badge variant="secondary" className="ml-2 text-xs">Reembolso recebido</Badge>
                         )}
                         {(t as any).parcela_num && (t as any).parcela_total && (t as any).parcela_total > 1 && (
-                          <Badge variant="secondary" className="ml-2 text-[10px]">
+                          <Badge variant="secondary" className="ml-2 text-xs">
                             {(t as any).parcela_num}/{(t as any).parcela_total}
                           </Badge>
                         )}
@@ -785,7 +785,7 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
                           </button>
                         )}
                       </td>
-                      <td className={`p-3 text-right font-medium ${t.tipo === 'Receita' ? 'text-emerald-600' : 'text-rose-500'}`}>
+                      <td className={`p-3 text-right font-medium ${t.tipo === 'Receita' ? 'text-income' : 'text-expense'}`}>
                         {fmt(t.valor)}
                       </td>
                       <td className="p-3 text-center">
@@ -805,7 +805,7 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
                             onClick={() => pagarMut.mutate(t.id)}
                             disabled={pagarMut.isPending}
                           >
-                            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                            <CheckCircle2 className="h-4 w-4 text-income" />
                           </Button>
                         )}
                         {t.status === "Efetivada" && (

@@ -222,7 +222,7 @@ export default function ContasBancarias({ empresaId }: { empresaId: number }) {
   const planoDoTipo = plano.filter((c) => c.tipo === lancForm.tipo);
 
   return (
-    <div className="space-y-4 p-4 md:p-6 max-w-6xl mx-auto">
+    <div className="space-y-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-bold">Contas bancárias</h1>
@@ -323,7 +323,7 @@ export default function ContasBancarias({ empresaId }: { empresaId: number }) {
       {!periodoPronto || isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-40 w-full rounded-xl" />
+            <Skeleton key={i} className="h-40 w-full rounded-lg" />
           ))}
         </div>
       ) : contas.length === 0 ? (
@@ -354,7 +354,7 @@ export default function ContasBancarias({ empresaId }: { empresaId: number }) {
                     <p className="text-xs text-muted-foreground">Saldo do período</p>
                     <p
                       className={`text-xl font-bold ${
-                        saldoPeriodo < 0 ? "text-red-500" : "text-foreground"
+                        saldoPeriodo < 0 ? "text-expense" : "text-foreground"
                       }`}
                     >
                       {money(saldoPeriodo)}

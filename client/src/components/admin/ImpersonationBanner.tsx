@@ -59,7 +59,7 @@ export default function ImpersonationBanner() {
       initial={{ opacity: 0, y: -50 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-purple-900 to-indigo-900 border-b border-purple-500"
+      className="fixed top-0 left-0 right-0 z-50 bg-slate-900 border-b border-purple-500"
     >
       <div className="container mx-auto px-4 py-3">
         <Alert className="border-purple-400 bg-purple-900/20">

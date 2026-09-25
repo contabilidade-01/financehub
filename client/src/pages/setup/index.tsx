@@ -35,7 +35,7 @@ export default function SetupWizard() {
     },
     {
       title: t('setup.steps.finish', 'Conclusão'),
-      icon: <CheckCircle className="h-6 w-6 text-green-600" />,
+      icon: <CheckCircle className="h-6 w-6 text-income" />,
     },
   ];
 
@@ -123,7 +123,7 @@ export default function SetupWizard() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-muted/50 flex items-center justify-center p-4">
       <Card className="w-full max-w-xl shadow-xl border-0">
         <CardHeader className="text-center pb-2">
           <div className="flex items-center justify-center gap-2 mb-2">
@@ -135,8 +135,8 @@ export default function SetupWizard() {
           <div className="flex justify-center gap-4 mb-2">
             {steps.map((step, idx) => (
               <div key={step.title} className="flex flex-col items-center">
-                <div className={`rounded-full p-2 border-2 ${currentStep === idx + 1 ? 'border-blue-600 bg-blue-50' : 'border-gray-200 bg-white'} transition-all`}>{step.icon}</div>
-                <span className={`text-xs mt-1 ${currentStep === idx + 1 ? 'text-blue-700 font-semibold' : 'text-gray-400'}`}>{step.title}</span>
+                <div className={`rounded-full p-2 border-2 ${currentStep === idx + 1 ? 'border-blue-600 bg-blue-50' : 'border-border bg-white'} transition-all`}>{step.icon}</div>
+                <span className={`text-xs mt-1 ${currentStep === idx + 1 ? 'text-blue-700 font-semibold' : 'text-muted-foreground'}`}>{step.title}</span>
               </div>
             ))}
           </div>
@@ -158,7 +158,7 @@ export default function SetupWizard() {
                   className="mt-1"
                   required
                 />
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-muted-foreground mt-1">
                   {t('setup.database.url_example', 'Exemplo: postgresql://usuario:senha@localhost:5432/financeiro')}
                 </p>
               </div>
@@ -258,8 +258,8 @@ export default function SetupWizard() {
           )}
           {currentStep === 4 && (
             <div className="space-y-6 text-center">
-              <CheckCircle className="h-12 w-12 text-green-600 mx-auto mb-2" />
-              <h2 className="text-2xl font-bold text-green-700">
+              <CheckCircle className="h-12 w-12 text-income mx-auto mb-2" />
+              <h2 className="text-2xl font-bold text-income">
                 {t('setup.complete.title', 'Setup Concluído!')}
               </h2>
               <Alert className="border-green-200 bg-green-50">

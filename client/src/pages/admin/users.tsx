@@ -529,27 +529,27 @@ export default function AdminUsers() {
   const getStatusBadge = (user: UserWithStats) => {
     if (user.status_assinatura === 'cancelada' || user.data_cancelamento) {
       return (
-        <Badge className={`${theme === 'light' ? 'bg-red-500 text-white' : 'bg-red-600'} `}>
+        <Badge className={`bg-red-500 text-white `}>
           {t("admin.users.badges.cancelled", "Cancelado")}
         </Badge>
       );
     }
     if (!user.ativo) {
       return (
-        <Badge className={`${theme === 'light' ? 'bg-yellow-400 text-gray-900' : ''}`} variant={theme === 'light' ? undefined : 'destructive'}>
+        <Badge className="border-transparent bg-warning/10 text-warning hover:bg-warning/10">
           {t("admin.users.badges.inactive", "Inativo")}
         </Badge>
       );
     }
     if (user.tipo_usuario === "super_admin") {
       return (
-        <Badge className={`${theme === 'light' ? 'bg-purple-500 text-white' : 'bg-purple-600'}`}>
+        <Badge className={`bg-purple-500 text-white`}>
           {t("admin.users.badges.super_admin", "Super Admin")}
         </Badge>
       );
     }
     return (
-      <Badge className={`${theme === 'light' ? 'bg-emerald-400 text-white' : ''}`} variant={theme === 'light' ? undefined : 'default'}>
+      <Badge className="border-transparent bg-success/10 text-success hover:bg-success/10">
         {t("admin.users.badges.active", "Ativo")}
       </Badge>
     );
@@ -603,18 +603,18 @@ export default function AdminUsers() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className={`text-3xl font-bold mb-2 flex items-center gap-2 ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>
+          <h1 className={`text-3xl font-bold mb-2 flex items-center gap-2 text-foreground`}>
             <UserCog className="h-8 w-8 text-purple-500" />
             {t("admin.users.header.title", "Gerenciar Usuários")}
           </h1>
-          <p className={`${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>
+          <p className={`text-muted-foreground`}>
             {t("admin.users.header.subtitle", "Controle completo sobre os usuários do sistema")}
           </p>
         </div>
         
         <Button 
           onClick={() => setIsCreateModalOpen(true)}
-          className="gap-2 neon-border"
+          className="gap-2"
         >
           <Plus className="h-4 w-4" />
           {t("admin.users.actions.new_user", "Novo Usuário")}
@@ -741,28 +741,28 @@ export default function AdminUsers() {
       </div>
 
       {/* Filtro de busca */}
-      <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}> 
+      <Card className={`border bg-card bg-card border border-border`}> 
         <CardHeader>
-          <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>
+          <CardTitle className={`text-foreground`}>
             {t("admin.users.search.title", "Buscar Usuários")}
           </CardTitle>
           <Input
             placeholder={t("admin.users.search.placeholder", "Buscar por nome ou email...")}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className={`max-w-sm ${theme === 'light' ? 'bg-white border-gray-300 text-gray-900 placeholder-gray-400' : 'bg-gray-800 border-gray-700 text-white'}`}
+            className={`max-w-sm bg-card border-border text-foreground placeholder-gray-400`}
           />
         </CardHeader>
       </Card>
 
       {/* Sistema de Abas para Usuários */}
-      <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
+      <Card className={`border bg-card bg-card border border-border`}>
         <CardHeader>
-          <CardTitle className={`flex items-center gap-2 ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}> 
+          <CardTitle className={`flex items-center gap-2 text-foreground`}> 
             <Users className="h-5 w-5" />
             {t("admin.users.tabs.title", "Lista de Usuários")}
           </CardTitle>
-          <CardDescription className="text-gray-400">
+          <CardDescription className="text-muted-foreground">
             {t("admin.users.tabs.description", "Visualize e gerencie usuários por categoria")}
           </CardDescription>
         </CardHeader>
@@ -806,23 +806,23 @@ export default function AdminUsers() {
                     user.status_assinatura !== 'cancelada' && 
                     !user.data_cancelamento
                   ).map((user) => (
-                    <div key={user.id} className={`flex items-center justify-between p-4 border rounded-lg glass transition-all duration-300 ${theme === 'light' ? 'bg-white border-gray-200' : 'border-gray-700'} ${togglingUserId === user.id ? 'opacity-50 bg-blue-900/20 border-blue-500' : ''}`}>
+                    <div key={user.id} className={`flex items-center justify-between p-4 border rounded-lg border bg-card transition-all duration-300 bg-card border-border ${togglingUserId === user.id ? 'opacity-50 bg-blue-900/20 border-blue-500' : ''}`}>
                       <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold">
+                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold">
                           {user.nome.charAt(0).toUpperCase()}
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
-                            <h3 className={`font-medium ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>{user.nome}</h3>
+                            <h3 className={`font-medium text-foreground`}>{user.nome}</h3>
                             {getStatusBadge(user)}
                             {getTipoUsuarioBadge(user.tipo_usuario)}
                             {getPessoaBadge(user)}
                             {getWalletBalanceBadge(user.walletBalance || 0)}
                           </div>
-                          <p className={`text-sm ${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>
+                          <p className={`text-sm text-muted-foreground`}>
                             {user.email} • {user.transactionCount} {t("admin.users.list.transaction_count_suffix", "transações")}
                           </p>
-                          <p className={`text-xs ${theme === 'light' ? 'text-gray-400' : 'text-gray-500'}`}>
+                          <p className={`text-xs text-muted-foreground`}>
                             {t("admin.users.list.registered_label", "Cadastro")}: {user.data_cadastro ? new Date(user.data_cadastro).toLocaleDateString(normalizedLocale) : t("admin.users.list.not_available", "N/A")} • {t("admin.users.list.last_access_label", "Último acesso")}: {formatLastAccess(user.lastAccess)}
                           </p>
                         </div>
@@ -849,7 +849,7 @@ export default function AdminUsers() {
                             size="sm"
                             onClick={() => handleImpersonate(user.id, user.nome)}
                             disabled={selectedAction === `impersonate-${user.id}`}
-                            className="text-blue-600 hover:text-blue-700 neon-border"
+                            className="text-blue-600 hover:text-blue-700"
                             title={t("admin.users.actions.impersonate_user", "Personificar usuário")}
                           >
                             <Eye className="h-3 w-3" />
@@ -859,7 +859,7 @@ export default function AdminUsers() {
                           variant="outline"
                           size="sm"
                           onClick={() => handleEditUser(user)}
-                          className="neon-border"
+                          className=""
                           title={t("admin.users.actions.edit_user", "Editar usuário")}
                         >
                           <Edit className="h-3 w-3" />
@@ -869,7 +869,7 @@ export default function AdminUsers() {
                           size="sm"
                           onClick={() => handleResetUser(user)}
                           disabled={resetUserMutation.isPending}
-                          className="text-orange-600 hover:text-orange-700 neon-border"
+                          className="text-orange-600 hover:text-orange-700"
                           title={t("admin.users.actions.reset_user", "Resetar dados do usuário")}
                         >
                           <RotateCcw className="h-3 w-3" />
@@ -879,7 +879,7 @@ export default function AdminUsers() {
                           size="sm"
                           onClick={() => handleDeleteUser(user.id)}
                           disabled={deleteUserMutation.isPending}
-                          className="neon-border"
+                          className=""
                           title={t("admin.users.actions.deactivate_user", "Desativar usuário")}
                         >
                           <Trash2 className="h-3 w-3" />
@@ -912,9 +912,9 @@ export default function AdminUsers() {
                     user.status_assinatura === 'cancelada' || 
                     user.data_cancelamento !== null
                   ).map((user) => (
-                    <div key={user.id} className={`flex items-center justify-between p-4 border rounded-lg glass transition-all duration-300 ${theme === 'light' ? 'bg-red-50 border-red-200' : 'border-red-700 bg-red-900/10'} ${togglingUserId === user.id ? 'opacity-50 bg-blue-900/20 border-blue-500' : ''}`}>
+                    <div key={user.id} className={`flex items-center justify-between p-4 border rounded-lg border bg-card transition-all duration-300 bg-expense/10 border-red-200 ${togglingUserId === user.id ? 'opacity-50 bg-blue-900/20 border-blue-500' : ''}`}>
                       <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-full bg-gradient-to-r from-red-500 to-orange-600 flex items-center justify-center text-white font-semibold">
+                        <div className="h-10 w-10 rounded-full bg-destructive/10 flex items-center justify-center text-destructive font-semibold">
                           {user.nome.charAt(0).toUpperCase()}
                         </div>
                         <div>
@@ -925,13 +925,13 @@ export default function AdminUsers() {
                             {getPessoaBadge(user)}
                             {getWalletBalanceBadge(user.walletBalance || 0)}
                           </div>
-                          <p className="text-sm text-gray-400">
+                          <p className="text-sm text-muted-foreground">
                             {user.email} • {user.transactionCount} {t("admin.users.list.transaction_count_suffix", "transações")}
                           </p>
-                          <p className="text-xs text-gray-500">
+                          <p className="text-xs text-muted-foreground">
                             {t("admin.users.list.registered_label", "Cadastro")}: {user.data_cadastro ? new Date(user.data_cadastro).toLocaleDateString(normalizedLocale) : t("admin.users.list.not_available", "N/A")}
                           </p>
-                          <div className="text-xs text-red-400 mt-1">
+                          <div className="text-xs text-expense mt-1">
                             <div>
                               {t("admin.users.list.cancelled_at", "Cancelado em")}: {user.data_cancelamento ? new Date(user.data_cancelamento).toLocaleDateString(normalizedLocale) : t("admin.users.list.not_available", "N/A")}
                             </div>
@@ -957,14 +957,14 @@ export default function AdminUsers() {
                             <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                           )}
                         </div>
-                        <UserX className="h-5 w-5 text-red-400" />
+                        <UserX className="h-5 w-5 text-expense" />
                         {user.tipo_usuario !== 'super_admin' && (
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() => handleImpersonate(user.id, user.nome)}
                             disabled={selectedAction === `impersonate-${user.id}`}
-                            className="text-blue-600 hover:text-blue-700 neon-border"
+                            className="text-blue-600 hover:text-blue-700"
                             title={t("admin.users.actions.impersonate_user", "Personificar usuário")}
                           >
                             <Eye className="h-3 w-3" />
@@ -974,7 +974,7 @@ export default function AdminUsers() {
                           variant="outline"
                           size="sm"
                           onClick={() => handleEditUser(user)}
-                          className="neon-border"
+                          className=""
                           title={t("admin.users.actions.edit_user", "Editar usuário")}
                         >
                           <Edit className="h-3 w-3" />
@@ -984,7 +984,7 @@ export default function AdminUsers() {
                           size="sm"
                           onClick={() => handleResetUser(user)}
                           disabled={resetUserMutation.isPending}
-                          className="text-orange-600 hover:text-orange-700 neon-border"
+                          className="text-orange-600 hover:text-orange-700"
                           title={t("admin.users.actions.reset_user", "Resetar dados do usuário")}
                         >
                           <RotateCcw className="h-3 w-3" />
@@ -992,7 +992,7 @@ export default function AdminUsers() {
                       </div>
                     </div>
                   )) || (
-                    <div className="text-center py-8 text-gray-400">
+                    <div className="text-center py-8 text-muted-foreground">
                       {t("admin.users.empty_states.cancelled", "Nenhum usuário cancelado encontrado")}
                     </div>
                   )}
@@ -1022,9 +1022,9 @@ export default function AdminUsers() {
                     user.status_assinatura !== 'cancelada' && 
                     !user.data_cancelamento
                   ).map((user) => (
-                    <div key={user.id} className={`flex items-center justify-between p-4 border rounded-lg glass transition-all duration-300 ${theme === 'light' ? 'bg-yellow-50 border-yellow-200' : 'border-yellow-700 bg-yellow-900/10'} ${togglingUserId === user.id ? 'opacity-50 bg-blue-900/20 border-blue-500' : ''}`}>
+                    <div key={user.id} className={`flex items-center justify-between p-4 border rounded-lg border bg-card transition-all duration-300 bg-yellow-50 border-yellow-200 ${togglingUserId === user.id ? 'opacity-50 bg-blue-900/20 border-blue-500' : ''}`}>
                       <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-full bg-gradient-to-r from-yellow-500 to-orange-600 flex items-center justify-center text-white font-semibold">
+                        <div className="h-10 w-10 rounded-full bg-warning/10 flex items-center justify-center text-warning font-semibold">
                           {user.nome.charAt(0).toUpperCase()}
                         </div>
                         <div>
@@ -1035,10 +1035,10 @@ export default function AdminUsers() {
                             {getPessoaBadge(user)}
                             {getWalletBalanceBadge(user.walletBalance || 0)}
                           </div>
-                          <p className="text-sm text-gray-400">
+                          <p className="text-sm text-muted-foreground">
                             {user.email} • {user.transactionCount} {t("admin.users.list.transaction_count_suffix", "transações")}
                           </p>
-                          <p className="text-xs text-gray-500">
+                          <p className="text-xs text-muted-foreground">
                             {t("admin.users.list.registered_label", "Cadastro")}: {user.data_cadastro ? new Date(user.data_cadastro).toLocaleDateString(normalizedLocale) : t("admin.users.list.not_available", "N/A")} • {t("admin.users.list.last_access_label", "Último acesso")}: {formatLastAccess(user.lastAccess)}
                           </p>
                         </div>
@@ -1049,11 +1049,11 @@ export default function AdminUsers() {
                           <Button
                             variant="destructive"
                             size="icon"
-                            className={`${theme === 'light' ? 'bg-red-500 hover:bg-red-600' : 'bg-transparent hover:bg-red-900'}`}
+                            className={`bg-red-500 hover:bg-red-600`}
                             title={t("admin.users.actions.delete_user", "Excluir usuário permanentemente")}
                             onClick={() => setSelectedUser(user)}
                           >
-                            <Trash2 className={`h-5 w-5 ${theme === 'light' ? 'text-white' : 'text-red-500'}`} />
+                            <Trash2 className={`h-5 w-5 text-white`} />
                           </Button>
                         )}
                         <div className="flex items-center gap-2">
@@ -1078,7 +1078,7 @@ export default function AdminUsers() {
                             size="sm"
                             onClick={() => handleImpersonate(user.id, user.nome)}
                             disabled={selectedAction === `impersonate-${user.id}`}
-                            className="text-blue-600 hover:text-blue-700 neon-border"
+                            className="text-blue-600 hover:text-blue-700"
                             title={t("admin.users.actions.impersonate_user", "Personificar usuário")}
                           >
                             <Eye className="h-3 w-3" />
@@ -1088,7 +1088,7 @@ export default function AdminUsers() {
                           variant="outline"
                           size="sm"
                           onClick={() => handleEditUser(user)}
-                          className="neon-border"
+                          className=""
                           title={t("admin.users.actions.edit_user", "Editar usuário")}
                         >
                           <Edit className="h-3 w-3" />
@@ -1098,7 +1098,7 @@ export default function AdminUsers() {
                           size="sm"
                           onClick={() => handleResetUser(user)}
                           disabled={resetUserMutation.isPending}
-                          className="text-orange-600 hover:text-orange-700 neon-border"
+                          className="text-orange-600 hover:text-orange-700"
                           title={t("admin.users.actions.reset_user", "Resetar dados do usuário")}
                         >
                           <RotateCcw className="h-3 w-3" />
@@ -1106,7 +1106,7 @@ export default function AdminUsers() {
                       </div>
                     </div>
                   )) || (
-                    <div className="text-center py-8 text-gray-400">
+                    <div className="text-center py-8 text-muted-foreground">
                       {t("admin.users.empty_states.inactive", "Nenhum usuário inativo encontrado")}
                     </div>
                   )}
@@ -1235,7 +1235,7 @@ export default function AdminUsers() {
             onChange={(e) => setEditForm(prev => ({ ...prev, data_expiracao_assinatura: e.target.value }))}
             className="admin-user-form-input"
           />
-          <div className="text-xs text-gray-400 mt-1">
+          <div className="text-xs text-muted-foreground mt-1">
             {t("admin.users.edit_modal.fields.subscription_expiration.hint", "Deixe em branco para assinatura ilimitada")}
           </div>
         </div>
@@ -1284,7 +1284,7 @@ export default function AdminUsers() {
 
       {/* Modal de Confirmação de Reset */}
       <Dialog open={isResetModalOpen} onOpenChange={setIsResetModalOpen}>
-        <DialogContent className="glass-card">
+        <DialogContent className="border bg-card">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-orange-400">
               <RotateCcw className="h-5 w-5" />
@@ -1309,20 +1309,20 @@ export default function AdminUsers() {
             </div>
             
             {selectedUser && (
-              <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <div className="p-3 bg-muted/50 dark:bg-gray-800 rounded-lg">
                 <p className="text-sm">
                   <strong>{t("admin.users.reset_modal.user_label", "Usuário")}:</strong> {selectedUser.nome}
                 </p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
+                <p className="text-sm text-muted-foreground dark:text-gray-400">
                   <strong>{t("admin.users.reset_modal.email_label", "Email")}:</strong> {selectedUser.email}
                 </p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
+                <p className="text-sm text-muted-foreground dark:text-gray-400">
                   <strong>{t("admin.users.reset_modal.transactions_label", "Transações atuais")}:</strong> {selectedUser.transactionCount}
                 </p>
               </div>
             )}
 
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+            <p className="text-sm text-muted-foreground dark:text-gray-400">
               {t("admin.users.reset_modal.confirm_question", "Tem certeza que deseja resetar todos os dados deste usuário? Esta ação não pode ser desfeita.")}
             </p>
           </div>
@@ -1350,37 +1350,37 @@ export default function AdminUsers() {
 
       {/* Modal de Sucesso do Reset */}
       <Dialog open={isSuccessModalOpen} onOpenChange={setIsSuccessModalOpen}>
-        <DialogContent className="max-w-md glass-card">
+        <DialogContent className="max-w-md border bg-card">
           <div className="text-center space-y-6">
             {/* Ícone de sucesso */}
             <div className="mx-auto w-16 h-16 bg-green-900/20 rounded-full flex items-center justify-center">
-              <CheckCircle className="h-8 w-8 text-green-400" />
+              <CheckCircle className="h-8 w-8 text-income" />
             </div>
 
             {/* Título */}
             <div className="space-y-2">
-              <h2 className="text-xl font-semibold text-green-400">
+              <h2 className="text-xl font-semibold text-income">
                 {t("admin.users.reset_success.title", "Reset Concluído com Sucesso!")}
               </h2>
-              <p className="text-sm text-gray-400">
+              <p className="text-sm text-muted-foreground">
                 {t("admin.users.reset_success.description", "Os dados do usuário foram resetados conforme solicitado.")}
               </p>
             </div>
 
             {/* Informações do usuário */}
             {selectedUser && (
-              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 space-y-2">
+              <div className="bg-muted/50 dark:bg-gray-800 rounded-lg p-4 space-y-2">
                 <div className="text-sm">
-                  <span className="font-medium text-gray-900 dark:text-gray-100">
+                  <span className="font-medium text-foreground dark:text-gray-100">
                     {t("admin.users.reset_success.user.name_label", "Nome")}:
                   </span>
-                  <span className="ml-2 text-gray-700 dark:text-gray-300">{selectedUser.nome}</span>
+                  <span className="ml-2 text-foreground dark:text-gray-300">{selectedUser.nome}</span>
                 </div>
                 <div className="text-sm">
-                  <span className="font-medium text-gray-900 dark:text-gray-100">
+                  <span className="font-medium text-foreground dark:text-gray-100">
                     {t("admin.users.reset_success.user.email_label", "Email")}:
                   </span>
-                  <span className="ml-2 text-gray-700 dark:text-gray-300">{selectedUser.email}</span>
+                  <span className="ml-2 text-foreground dark:text-gray-300">{selectedUser.email}</span>
                 </div>
               </div>
             )}
@@ -1388,12 +1388,12 @@ export default function AdminUsers() {
             {/* Resumo do que foi resetado */}
             {resetResult && resetResult.resetData && (
               <div className="bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800 rounded-lg p-4">
-                <h4 className="font-medium text-green-800 dark:text-green-400 mb-3 text-sm">
+                <h4 className="font-medium text-green-800 mb-3 text-sm">
                   {t("admin.users.reset_success.summary.title", "Resumo do Reset:")}
                 </h4>
                 <div className="grid grid-cols-2 gap-3 text-xs">
                   <div className="flex justify-between">
-                    <span className="text-green-700 dark:text-green-300">
+                    <span className="text-income">
                       {t("admin.users.reset_success.summary.transactions", "Transações")}:
                     </span>
                     <span className="font-medium text-green-800 dark:text-green-200">
@@ -1402,7 +1402,7 @@ export default function AdminUsers() {
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-green-700 dark:text-green-300">
+                    <span className="text-income">
                       {t("admin.users.reset_success.summary.reminders", "Lembretes")}:
                     </span>
                     <span className="font-medium text-green-800 dark:text-green-200">
@@ -1411,7 +1411,7 @@ export default function AdminUsers() {
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-green-700 dark:text-green-300">
+                    <span className="text-income">
                       {t("admin.users.reset_success.summary.categories", "Categorias")}:
                     </span>
                     <span className="font-medium text-green-800 dark:text-green-200">
@@ -1420,7 +1420,7 @@ export default function AdminUsers() {
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-green-700 dark:text-green-300">
+                    <span className="text-income">
                       {t("admin.users.reset_success.summary.tokens", "Tokens extras")}:
                     </span>
                     <span className="font-medium text-green-800 dark:text-green-200">
@@ -1431,7 +1431,7 @@ export default function AdminUsers() {
                 </div>
                 <div className="mt-3 pt-3 border-t border-green-200 dark:border-green-700">
                   <div className="flex justify-between text-xs">
-                    <span className="text-green-700 dark:text-green-300">
+                    <span className="text-income">
                       {t("admin.users.reset_success.summary.wallet", "Saldo da carteira")}:
                     </span>
                     <span className="font-medium text-green-800 dark:text-green-200">
@@ -1457,26 +1457,26 @@ export default function AdminUsers() {
       {errorModal.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div 
-            className="absolute inset-0 bg-black/70 backdrop-blur-sm animate-in fade-in-0 duration-300"
+            className="absolute inset-0 bg-black/70 animate-in fade-in-0 duration-300"
             onClick={() => setErrorModal({ ...errorModal, isOpen: false })}
           />
           <div 
-            className="relative rounded-xl p-6 max-w-md w-full shadow-2xl bg-white dark:bg-gray-900 border border-red-200 dark:border-red-500/50"
+            className="relative rounded-lg p-6 max-w-md w-full shadow-2xl bg-white dark:bg-gray-900 border border-red-200 dark:border-red-500/50"
             style={{
               animation: 'zoomInBounce 0.35s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards'
             }}
           >
             <div className="flex justify-center mb-4">
               <div className="w-16 h-16 rounded-full flex items-center justify-center border-2 animate-pulse bg-red-100 border-red-200 dark:bg-red-500/20 dark:border-red-500/30">
-                <AlertTriangle className="w-8 h-8 text-red-500 dark:text-red-400" />
+                <AlertTriangle className="w-8 h-8 text-expense" />
               </div>
             </div>
-            <h3 className="text-xl font-bold text-center mb-2 text-red-600 dark:text-white">
+            <h3 className="text-xl font-bold text-center mb-2 text-expense dark:text-white">
               {t("admin.users.error_modal.title", "Erro ao criar usuário")}
             </h3>
             <div className="w-16 h-1 bg-red-500 rounded-full mx-auto mb-4"></div>
             <div className="border rounded-lg p-4 mb-6 bg-red-50 border-red-200 dark:bg-red-500/10 dark:border-red-500/20">
-              <p className="text-center leading-relaxed text-red-700 dark:text-gray-200">
+              <p className="text-center leading-relaxed text-expense dark:text-gray-200">
                 {errorModal.message}
               </p>
             </div>
@@ -1495,9 +1495,9 @@ export default function AdminUsers() {
       {/* Modal de confirmação de exclusão definitiva */}
       {selectedUser && !selectedUser.ativo && (
         <Dialog open={!!selectedUser && !selectedUser.ativo} onOpenChange={open => { if (!open) setSelectedUser(null); }}>
-          <DialogContent className="max-w-md glass-card">
+          <DialogContent className="max-w-md border bg-card">
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-red-500">
+              <DialogTitle className="flex items-center gap-2 text-expense">
                 <Trash2 className="h-5 w-5" />
                 {t("admin.users.delete_modal.title", "Excluir Usuário Permanentemente")}
               </DialogTitle>
@@ -1509,15 +1509,15 @@ export default function AdminUsers() {
                   {t("admin.users.delete_modal.warning", "Esta ação irá remover definitivamente todos os dados deste usuário do sistema. Não será possível recuperar!")}
                 </p>
               </div>
-              <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <div className="p-3 bg-muted/50 dark:bg-gray-800 rounded-lg">
                 <p className="text-sm">
                   <strong>{t("admin.users.delete_modal.user_label", "Usuário")}:</strong> {selectedUser.nome}
                 </p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
+                <p className="text-sm text-muted-foreground dark:text-gray-400">
                   <strong>{t("admin.users.delete_modal.email_label", "Email")}:</strong> {selectedUser.email}
                 </p>
               </div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
+              <p className="text-sm text-muted-foreground dark:text-gray-400">
                 {t("admin.users.delete_modal.confirm_question", "Tem certeza que deseja excluir este usuário permanentemente?")}
               </p>
             </div>

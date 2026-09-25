@@ -227,7 +227,7 @@ export default function AdminDashboard() {
       <div className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {[...Array(4)].map((_, i) => (
-            <Card key={i} className="animate-pulse glass-card">
+            <Card key={i} className="animate-pulse border bg-card">
               <CardHeader className="pb-2">
                 <div className="h-4 bg-gray-600 rounded w-3/4"></div>
               </CardHeader>
@@ -244,101 +244,101 @@ export default function AdminDashboard() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className={`text-3xl font-bold mb-2 flex items-center gap-2 ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}> 
+        <h1 className={`text-3xl font-bold mb-2 flex items-center gap-2 text-foreground`}> 
           <Shield className="h-8 w-8 text-purple-500" />
           {t("admin.dashboard.header.title", "Dashboard SaaS - Khesef")}
         </h1>
-        <p className={`${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>
+        <p className={`text-muted-foreground`}>
           {t("admin.dashboard.header.subtitle", "Visão geral administrativa da plataforma")}
         </p>
       </div>
 
       {/* Métricas Principais */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
+        <Card className={`border bg-card bg-card border border-border`}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} text-sm font-medium`}>
+            <CardTitle className={`text-foreground text-sm font-medium`}>
               {t("admin.dashboard.metrics.total_users.title", "Total de Usuários")}
             </CardTitle>
             <Users className="h-4 w-4 text-blue-400" />
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>{stats?.totalUsers || 0}</div>
-            <p className="text-xs text-green-400 mt-1">
+            <div className={`text-2xl font-bold text-foreground`}>{stats?.totalUsers || 0}</div>
+            <p className="text-xs text-income mt-1">
               +{Math.round(((stats?.totalUsers || 0) / 5) * 100)}% {t("admin.dashboard.metrics.total_users.growth_suffix", "crescimento")}
             </p>
           </CardContent>
         </Card>
 
-        <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
+        <Card className={`border bg-card bg-card border border-border`}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} text-sm font-medium`}>
+            <CardTitle className={`text-foreground text-sm font-medium`}>
               {t("admin.dashboard.metrics.active_users.title", "Usuários Ativos")}
             </CardTitle>
-            <Activity className="h-4 w-4 text-green-400" />
+            <Activity className="h-4 w-4 text-income" />
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>{stats?.activeUsers || 0}</div>
-            <p className="text-xs text-green-400 mt-1">
+            <div className={`text-2xl font-bold text-foreground`}>{stats?.activeUsers || 0}</div>
+            <p className="text-xs text-income mt-1">
               {Math.round(((stats?.activeUsers || 0) / (stats?.totalUsers || 1)) * 100)}% {t("admin.dashboard.metrics.active_users.rate_suffix", "taxa de ativação")}
             </p>
           </CardContent>
         </Card>
 
-        <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
+        <Card className={`border bg-card bg-card border border-border`}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} text-sm font-medium`}>
+            <CardTitle className={`text-foreground text-sm font-medium`}>
               {t("admin.dashboard.metrics.transactions.title", "Transações")}
             </CardTitle>
             <TrendingUp className="h-4 w-4 text-yellow-400" />
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>{stats?.totalTransactions || 0}</div>
+            <div className={`text-2xl font-bold text-foreground`}>{stats?.totalTransactions || 0}</div>
             <p className="text-xs text-yellow-400 mt-1">
               {t("admin.dashboard.metrics.transactions.average_prefix", "Média:")} {Math.round((stats?.totalTransactions || 0) / (stats?.activeUsers || 1))} {t("admin.dashboard.metrics.transactions.average_suffix", "por usuário")}
             </p>
           </CardContent>
         </Card>
 
-        <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
+        <Card className={`border bg-card bg-card border border-border`}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} text-sm font-medium`}>
+            <CardTitle className={`text-foreground text-sm font-medium`}>
               {t("admin.dashboard.metrics.cancelled_users.title", "Usuários Cancelados")}
             </CardTitle>
-            <UserX className="h-4 w-4 text-red-400" />
+            <UserX className="h-4 w-4 text-expense" />
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>{stats?.canceledUsers || 0}</div>
-            <p className="text-xs text-red-400 mt-1">
+            <div className={`text-2xl font-bold text-foreground`}>{stats?.canceledUsers || 0}</div>
+            <p className="text-xs text-expense mt-1">
               {Math.round(((stats?.canceledUsers || 0) / (stats?.totalUsers || 1)) * 100)}% {t("admin.dashboard.metrics.cancelled_users.base_suffix", "da base")}
             </p>
           </CardContent>
         </Card>
 
-        <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
+        <Card className={`border bg-card bg-card border border-border`}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} text-sm font-medium`}>
+            <CardTitle className={`text-foreground text-sm font-medium`}>
               {t("admin.dashboard.metrics.inactive_users.title", "Usuários Inativos")}
             </CardTitle>
             <AlertTriangle className="h-4 w-4 text-orange-400" />
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>{stats?.inactiveUsers || 0}</div>
+            <div className={`text-2xl font-bold text-foreground`}>{stats?.inactiveUsers || 0}</div>
             <p className="text-xs text-orange-400 mt-1">
               {Math.round(((stats?.inactiveUsers || 0) / (stats?.totalUsers || 1)) * 100)}% {t("admin.dashboard.metrics.inactive_users.base_suffix", "inativos")}
             </p>
           </CardContent>
         </Card>
 
-        <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
+        <Card className={`border bg-card bg-card border border-border`}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} text-sm font-medium`}>
+            <CardTitle className={`text-foreground text-sm font-medium`}>
               {t("admin.dashboard.metrics.wallets.title", "Carteiras")}
             </CardTitle>
             <CreditCard className="h-4 w-4 text-purple-400" />
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>{stats?.totalWallets || 0}</div>
+            <div className={`text-2xl font-bold text-foreground`}>{stats?.totalWallets || 0}</div>
             <p className="text-xs text-purple-400 mt-1">
               {Math.round(((stats?.totalWallets || 0) / (stats?.totalUsers || 1)) * 100)}% {t("admin.dashboard.metrics.wallets.base_suffix", "com carteiras")}
             </p>
@@ -349,13 +349,13 @@ export default function AdminDashboard() {
       {/* Gráficos de Analytics */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Crescimento de Usuários */}
-        <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
+        <Card className={`border bg-card bg-card border border-border`}>
           <CardHeader>
-            <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} flex items-center gap-2`}>
+            <CardTitle className={`text-foreground flex items-center gap-2`}>
               <BarChart3 className="h-5 w-5" />
               {t("admin.dashboard.charts.user_growth.title", "Crescimento de Usuários")}
             </CardTitle>
-            <CardDescription className={`${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>
+            <CardDescription className={`text-muted-foreground`}>
               {t("admin.dashboard.charts.user_growth.description", "Evolução mensal da base de usuários")}
             </CardDescription>
           </CardHeader>
@@ -381,13 +381,13 @@ export default function AdminDashboard() {
         </Card>
 
         {/* Volume de Transações */}
-        <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
+        <Card className={`border bg-card bg-card border border-border`}>
           <CardHeader>
-            <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} flex items-center gap-2`}>
+            <CardTitle className={`text-foreground flex items-center gap-2`}>
               <TrendingUp className="h-5 w-5" />
               {t("admin.dashboard.charts.transaction_volume.title", "Volume de Transações")}
             </CardTitle>
-            <CardDescription className={`${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>
+            <CardDescription className={`text-muted-foreground`}>
               {t("admin.dashboard.charts.transaction_volume.description", "Evolução mensal do volume transacional")}
             </CardDescription>
           </CardHeader>
@@ -415,13 +415,13 @@ export default function AdminDashboard() {
       {/* Segunda linha de gráficos */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Distribuição de Status de Usuários */}
-        <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
+        <Card className={`border bg-card bg-card border border-border`}>
           <CardHeader>
-            <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} flex items-center gap-2`}>
+            <CardTitle className={`text-foreground flex items-center gap-2`}>
               <PieChart className="h-5 w-5" />
               {t("admin.dashboard.charts.user_distribution.title", "Distribuição de Usuários")}
             </CardTitle>
-            <CardDescription className={`${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>
+            <CardDescription className={`text-muted-foreground`}>
               {t("admin.dashboard.charts.user_distribution.description", "Por status conforme regras de negócio")}
             </CardDescription>
           </CardHeader>
@@ -456,13 +456,13 @@ export default function AdminDashboard() {
         </Card>
 
         {/* Atividade Recente */}
-        <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
+        <Card className={`border bg-card bg-card border border-border`}>
           <CardHeader>
-            <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} flex items-center gap-2`}>
+            <CardTitle className={`text-foreground flex items-center gap-2`}>
               <Activity className="h-5 w-5" />
               {t("admin.dashboard.charts.recent_activity.title", "Atividade Recente")}
             </CardTitle>
-            <CardDescription className={`${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>
+            <CardDescription className={`text-muted-foreground`}>
               {t("admin.dashboard.charts.recent_activity.description", "Últimos 7 dias de atividade do sistema")}
             </CardDescription>
           </CardHeader>
@@ -489,13 +489,13 @@ export default function AdminDashboard() {
       </div>
 
       {/* Tabela de Usuários Recentes */}
-      <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
+      <Card className={`border bg-card bg-card border border-border`}>
         <CardHeader>
-          <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'} flex items-center gap-2`}>
+          <CardTitle className={`text-foreground flex items-center gap-2`}>
             <UserCog className="h-5 w-5" />
             {t("admin.dashboard.recent_users.title", "Gerenciamento de Usuários")}
           </CardTitle>
-          <CardDescription className={`${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>
+          <CardDescription className={`text-muted-foreground`}>
             {t("admin.dashboard.recent_users.description", "Últimos usuários cadastrados e ações administrativas")}
           </CardDescription>
         </CardHeader>
@@ -511,37 +511,37 @@ export default function AdminDashboard() {
                 {recentUsersLoading ? (
                   <div className="space-y-3">
                     {[...Array(5)].map((_, i) => (
-                      <Skeleton key={i} className="h-12 w-full bg-gray-700" />
+                      <Skeleton key={i} className="h-12 w-full bg-muted" />
                     ))}
                   </div>
                 ) : (
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-gray-700">
-                        <th className={`text-left py-3 px-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>
+                      <tr className="border-b border-border">
+                        <th className={`text-left py-3 px-2 text-foreground`}>
                           {t("admin.dashboard.recent_users.table.headers.name", "Nome")}
                         </th>
-                        <th className={`text-left py-3 px-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>
+                        <th className={`text-left py-3 px-2 text-foreground`}>
                           {t("admin.dashboard.recent_users.table.headers.email", "Email")}
                         </th>
-                        <th className={`text-left py-3 px-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>
+                        <th className={`text-left py-3 px-2 text-foreground`}>
                           {t("admin.dashboard.recent_users.table.headers.status", "Status")}
                         </th>
-                        <th className={`text-left py-3 px-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>
+                        <th className={`text-left py-3 px-2 text-foreground`}>
                           {t("admin.dashboard.recent_users.table.headers.created_at", "Data Cadastro")}
                         </th>
-                        <th className={`text-left py-3 px-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>
+                        <th className={`text-left py-3 px-2 text-foreground`}>
                           {t("admin.dashboard.recent_users.table.headers.actions", "Ações")}
                         </th>
                       </tr>
                     </thead>
                     <tbody>
                       {recentUsers?.map((user) => (
-                        <tr key={user.id} className={`border-b ${theme === 'light' ? 'border-gray-100 hover:bg-primary/10' : 'border-gray-800 hover:bg-gray-800/50'}`}> 
-                          <td className={`py-3 px-2 ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>{user.nome}</td>
-                          <td className={`py-3 px-2 ${theme === 'light' ? 'text-gray-600' : 'text-gray-300'}`}>{user.email}</td>
+                        <tr key={user.id} className={`border-b border-border hover:bg-primary/10`}> 
+                          <td className={`py-3 px-2 text-foreground`}>{user.nome}</td>
+                          <td className={`py-3 px-2 text-muted-foreground`}>{user.email}</td>
                           <td className="py-3 px-2">{getUserStatusBadge(user)}</td>
-                          <td className={`py-3 px-2 ${theme === 'light' ? 'text-gray-600' : 'text-gray-300'}`}>{formatLastAccess(user.data_cadastro)}</td>
+                          <td className={`py-3 px-2 text-muted-foreground`}>{formatLastAccess(user.data_cadastro)}</td>
                           <td className="py-3 px-2">
                             <Button
                               size="sm"
@@ -568,19 +568,19 @@ export default function AdminDashboard() {
             
             <TabsContent value="distribution" className="mt-6">
               {/* Cabeçalho explicativo sobre critérios de distribuição */}
-              <div className={`mb-6 p-4 rounded-lg border ${theme === 'light' ? 'bg-blue-100 border-blue-200' : 'bg-blue-900/20 border-blue-500/30'}`}>
+              <div className={`mb-6 p-4 rounded-lg border bg-blue-100 border-blue-200`}>
                 <div className="flex items-start gap-3">
-                  <Database className={`h-5 w-5 mt-0.5 flex-shrink-0 ${theme === 'light' ? 'text-blue-500' : 'text-blue-400'}`} />
+                  <Database className={`h-5 w-5 mt-0.5 flex-shrink-0 text-blue-500`} />
                   <div>
-                    <h4 className={`font-semibold mb-2 ${theme === 'light' ? 'text-gray-900' : 'text-blue-200'}`}>
+                    <h4 className={`font-semibold mb-2 text-foreground`}>
                       {t("admin.dashboard.wallet_distribution.criteria_title", "Critério de Distribuição")}
                     </h4>
-                    <p className={`text-sm leading-relaxed ${theme === 'light' ? 'text-gray-700' : 'text-blue-300/80'}`}>
+                    <p className={`text-sm leading-relaxed text-foreground`}>
                       {t("admin.dashboard.wallet_distribution.criteria_intro", "As carteiras são distribuídas por faixas de")}{" "}
                       <strong>{t("admin.dashboard.wallet_distribution.criteria_highlight", "saldo atual")}</strong>{" "}
                       {t("admin.dashboard.wallet_distribution.criteria_detail", "calculado em tempo real. O saldo é obtido pela soma de todas as receitas menos todas as despesas da carteira, incluindo transações pendentes e agendadas.")}
                     </p>
-                    <div className={`mt-3 text-xs ${theme === 'light' ? 'text-gray-500' : 'text-blue-300/60'}`}>
+                    <div className={`mt-3 text-xs text-muted-foreground`}>
                       <span className="font-medium">{t("admin.dashboard.wallet_distribution.update_label", "Atualização:")}</span>{" "}
                       {t("admin.dashboard.wallet_distribution.update_description", "Os dados são recalculados automaticamente a cada consulta")}
                     </div>
@@ -593,37 +593,28 @@ export default function AdminDashboard() {
                 {(analyticsData?.walletDistribution || []).map((range, index) => {
                   const isLoading = analyticsLoading;
                   // Cores iguais para ambos os temas
-                  const colors = ['text-green-600', 'text-yellow-600', 'text-red-600'];
-                  const bgColors = ['bg-green-100', 'bg-yellow-100', 'bg-red-100'];
-                  const borderColors = ['border-green-300', 'border-yellow-300', 'border-red-300'];
-                  const darkColors = ['text-green-400', 'text-yellow-400', 'text-red-400'];
-                  const darkBgColors = ['bg-green-900/20', 'bg-yellow-900/20', 'bg-red-900/20'];
-                  const darkBorderColors = ['border-green-500/30', 'border-yellow-500/30', 'border-red-500/30'];
+                  const colors = ['text-success', 'text-warning', 'text-destructive'];
                   return (
-                    <Card key={index} className={
-                      theme === 'light'
-                        ? `${bgColors[index]} ${borderColors[index]} border`
-                        : `${darkBgColors[index]} ${darkBorderColors[index]} border`
-                    }>
+                    <Card key={index}>
                       <CardContent className="p-4">
                         <div className="text-center">
                           {isLoading ? (
-                            <Skeleton className={`h-8 w-12 mx-auto mb-2 ${theme === 'light' ? 'bg-gray-200' : 'bg-gray-700'}`} />
+                            <Skeleton className={`h-8 w-12 mx-auto mb-2 bg-muted`} />
                           ) : (
-                            <div className={`text-2xl font-bold ${theme === 'light' ? colors[index] : darkColors[index]}`}>
+                            <div className={`text-2xl font-semibold tabular-nums ${colors[index]}`}>
                               {range.count}
                             </div>
                           )}
-                          <div className={`text-sm font-medium mb-2 ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}> 
+                          <div className={`text-sm font-medium mb-2 text-foreground`}> 
                             {range.range}
                           </div>
-                          <div className={`text-xs ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}> 
+                          <div className={`text-xs text-muted-foreground`}> 
                             {index === 0 && t("admin.dashboard.wallet_distribution.labels.low", "Carteiras com saldo baixo")}
                             {index === 1 && t("admin.dashboard.wallet_distribution.labels.medium", "Carteiras com saldo médio")}
                             {index === 2 && t("admin.dashboard.wallet_distribution.labels.high", "Carteiras com saldo alto")}
                           </div>
                           {!isLoading && (
-                            <div className={`mt-2 text-xs ${theme === 'light' ? 'text-gray-600' : 'text-gray-500'}`}> 
+                            <div className={`mt-2 text-xs text-muted-foreground`}> 
                               {((range.count / (analyticsData?.walletDistribution?.reduce((acc, r) => acc + r.count, 0) || 1)) * 100).toFixed(1)}% {t("admin.dashboard.wallet_distribution.percentage_suffix", "do total")}
                             </div>
                           )}
@@ -635,7 +626,7 @@ export default function AdminDashboard() {
               </div>
 
               {/* Rodapé informativo */}
-              <div className={`mt-4 text-xs text-center ${theme === 'light' ? 'text-gray-500' : 'text-gray-500'}`}> 
+              <div className={`mt-4 text-xs text-center text-muted-foreground`}> 
                 <p>
                   {t(
                     "admin.dashboard.wallet_distribution.footer",
@@ -659,20 +650,20 @@ export default function AdminDashboard() {
           
           {/* Modal com zoom-in bounce effect */}
           <div 
-            className={`relative rounded-xl p-6 max-w-md w-full shadow-2xl ${theme === 'light' ? 'bg-white border border-red-200' : 'bg-gradient-to-br from-gray-900 to-gray-800 border-2 border-red-500/50'}`}
+            className={`relative rounded-lg p-6 max-w-md w-full shadow-2xl bg-card border border-red-200`}
             style={{
               animation: 'zoomInBounce 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards'
             }}
           >
             {/* Ícone de erro com efeito pulsante */}
             <div className="flex justify-center mb-4">
-              <div className={`w-16 h-16 rounded-full flex items-center justify-center border-2 animate-pulse ${theme === 'light' ? 'bg-red-100 border-red-200' : 'bg-red-500/20 border-red-500/30'}`}>
-                <AlertTriangle className={`w-8 h-8 ${theme === 'light' ? 'text-red-500' : 'text-red-400'}`} />
+              <div className={`w-16 h-16 rounded-full flex items-center justify-center border-2 animate-pulse bg-expense/10 border-red-200`}>
+                <AlertTriangle className={`w-8 h-8 text-expense`} />
               </div>
             </div>
             
             {/* Título centralizado */}
-            <h3 className={`text-xl font-bold text-center mb-2 ${theme === 'light' ? 'text-red-600' : 'text-white'}`}>
+            <h3 className={`text-xl font-bold text-center mb-2 text-expense`}>
               {errorModal.title}
             </h3>
             
@@ -680,8 +671,8 @@ export default function AdminDashboard() {
             <div className={`w-16 h-1 bg-red-500 rounded-full mx-auto mb-4`}></div>
             
             {/* Mensagem de erro */}
-            <div className={`border rounded-lg p-4 mb-6 ${theme === 'light' ? 'bg-red-50 border-red-200' : 'bg-red-500/10 border-red-500/20'}`}>
-              <p className={`text-center leading-relaxed ${theme === 'light' ? 'text-red-700' : 'text-gray-200'}`}>
+            <div className={`border rounded-lg p-4 mb-6 bg-expense/10 border-red-200`}>
+              <p className={`text-center leading-relaxed text-expense`}>
                 {errorModal.message}
               </p>
             </div>
@@ -690,7 +681,7 @@ export default function AdminDashboard() {
             <div className="flex justify-center">
               <Button
                 onClick={() => setErrorModal({ ...errorModal, isOpen: false })}
-                className={`px-6 py-2 rounded-lg font-medium transition-colors duration-200 shadow-lg ${theme === 'light' ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-red-600 hover:bg-red-700 text-white'}`}
+                className={`px-6 py-2 rounded-lg font-medium transition-colors duration-200 shadow-lg bg-red-600 hover:bg-red-700 text-white`}
               >
                 {t("admin.dashboard.error_modal.close", "Entendi")}
               </Button>

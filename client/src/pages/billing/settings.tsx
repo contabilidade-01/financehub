@@ -208,7 +208,7 @@ export default function BillingSettingsPage() {
 
       <Card className="border-red-200">
         <CardHeader>
-          <CardTitle className="text-red-600">Cancelar Assinatura</CardTitle>
+          <CardTitle className="text-expense">Cancelar Assinatura</CardTitle>
           <CardDescription>
             A cobrança para de renovar. Você continua com acesso até{" "}
             {expirationDate

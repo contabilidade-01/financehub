@@ -106,15 +106,6 @@ function Router() {
 
   const isSetupMode = setupStatus?.setupMode === true;
 
-  // Debug logs
-  console.log('🔍 Setup Debug:', {
-    setupStatus,
-    setupError,
-    setupLoading,
-    isSetupMode,
-    location
-  });
-
   // Se houver erro na API, assumir que não está em modo setup
   if (setupError) {
     console.warn('⚠️ Erro ao verificar status do setup:', setupError);

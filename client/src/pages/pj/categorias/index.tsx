@@ -103,7 +103,7 @@ export default function PjCategorias({ empresaId }: { empresaId: number }) {
   ];
 
   return (
-    <div className="space-y-4 p-4">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Plano de Contas</h1>
         <Button onClick={() => setShowForm(!showForm)} size="sm">

@@ -61,11 +61,11 @@ export default function PjFluxoCaixa({ empresaId }: { empresaId: number }) {
 const model = useMemo(() => (data ? buildModel(data, empresaData) : null), [data, empresaData]);
 
   if (isLoading || !model) {
-    return <div className="p-4"><Skeleton className="h-[480px] w-full" /></div>;
+    return <div><Skeleton className="h-[480px] w-full" /></div>;
   }
   if (model.rows.length === 0) {
     return (
-      <div className="p-4">
+      <div>
         <Card><CardContent className="py-12 text-center text-muted-foreground">
           Sem lançamentos em {ano}. Registre transações PJ para ver o fluxo de caixa.
         </CardContent></Card>
@@ -74,7 +74,7 @@ const model = useMemo(() => (data ? buildModel(data, empresaData) : null), [data
   }
 
   return (
-    <div className="space-y-4 p-4">
+    <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="space-y-1">
           <h1 className="text-2xl font-bold">Fluxo de Caixa Gerencial</h1>
@@ -99,9 +99,9 @@ const model = useMemo(() => (data ? buildModel(data, empresaData) : null), [data
         {model.kpis.map((k) => (
           <Card key={k.label}>
             <CardContent className="p-3">
-              <div className="text-[10.5px] uppercase tracking-wide text-muted-foreground font-semibold">{k.label}</div>
-              <div className={`text-lg font-bold tabular-nums ${k.tone === "pos" ? "text-emerald-600" : k.tone === "neg" ? "text-rose-500" : ""}`}>{k.value}</div>
-              {k.hint && <div className="text-[10.5px] text-muted-foreground">{k.hint}</div>}
+              <div className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">{k.label}</div>
+              <div className={`text-lg font-bold tabular-nums ${k.tone === "pos" ? "text-income" : k.tone === "neg" ? "text-expense" : ""}`}>{k.value}</div>
+              {k.hint && <div className="text-xs text-muted-foreground">{k.hint}</div>}
             </CardContent>
           </Card>
         ))}
@@ -126,10 +126,10 @@ const model = useMemo(() => (data ? buildModel(data, empresaData) : null), [data
       ) : (
         <Card>
           <CardContent className="p-0 overflow-x-auto">
-            <table className="w-full text-[12.5px] border-collapse min-w-[900px]">
+            <table className="w-full text-sm border-collapse min-w-[900px]">
               <thead>
-                <tr className="bg-slate-800 text-slate-50">
-                  <th className="text-left sticky left-0 z-10 bg-slate-800 px-3 py-2 min-w-[250px]">Conta</th>
+                <tr className="bg-muted text-slate-50">
+                  <th className="text-left sticky left-0 z-10 bg-muted px-3 py-2 min-w-[250px]">Conta</th>
                   {MESES.map((m) => <th key={m} className="px-2.5 py-2 text-right font-semibold">{m}</th>)}
                   <th className="px-2.5 py-2 text-right font-semibold">Total</th>
                 </tr>
@@ -157,11 +157,11 @@ function totalDaLinha(r: Row): number {
 
 function ReportRow({ r }: { r: Row }) {
   const total = totalDaLinha(r);
-  const cell = (v: number, i: number) => <td key={i} className={`px-2.5 py-1.5 text-right tabular-nums ${v < 0 ? "text-rose-500" : ""}`}>{v === 0 ? "—" : money0(v)}</td>;
+  const cell = (v: number, i: number) => <td key={i} className={`px-2.5 py-1.5 text-right tabular-nums ${v < 0 ? "text-expense" : ""}`}>{v === 0 ? "—" : money0(v)}</td>;
   if (r.kind === "grupo") {
     return (
-      <tr className={`${r.receita ? "bg-emerald-600" : "bg-slate-700"} text-slate-50 font-bold`}>
-        <td className="text-left sticky left-0 z-10 px-3 py-1.5 uppercase text-[11px] tracking-wide" style={{ background: "inherit" }}>{r.label}</td>
+      <tr className={`${r.receita ? "bg-emerald-600" : "bg-muted"} text-slate-50 font-bold`}>
+        <td className="text-left sticky left-0 z-10 px-3 py-1.5 uppercase text-xs tracking-wide" style={{ background: "inherit" }}>{r.label}</td>
         {r.values.map(cell)}
         <td className="px-2.5 py-1.5 text-right tabular-nums">{money0(total)}</td>
       </tr>
@@ -170,7 +170,7 @@ function ReportRow({ r }: { r: Row }) {
   if (r.kind === "calc") {
     return (
       <tr className="bg-blue-50 dark:bg-blue-950/50 text-blue-800 dark:text-blue-200 font-extrabold border-y border-blue-200 dark:border-blue-800">
-        <td className="text-left sticky left-0 z-10 bg-blue-50 dark:bg-blue-950/50 px-3 py-1.5 uppercase text-[11px] tracking-wide">{r.label}</td>
+        <td className="text-left sticky left-0 z-10 bg-blue-50 dark:bg-blue-950/50 px-3 py-1.5 uppercase text-xs tracking-wide">{r.label}</td>
         {r.values.map((v, i) => <td key={i} className="px-2.5 py-1.5 text-right tabular-nums">{money0(v)}</td>)}
         <td className="px-2.5 py-1.5 text-right tabular-nums">{money0(total)}</td>
       </tr>
@@ -179,12 +179,12 @@ function ReportRow({ r }: { r: Row }) {
   if (r.kind === "saldohd") {
     return (
       <tr className="bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 font-bold">
-        <td className="text-left sticky left-0 z-10 bg-amber-50 dark:bg-amber-950/40 px-3 py-1.5 uppercase text-[11px] tracking-wide">{r.label}</td>
+        <td className="text-left sticky left-0 z-10 bg-amber-50 dark:bg-amber-950/40 px-3 py-1.5 uppercase text-xs tracking-wide">{r.label}</td>
         {/* Saldo negativo em vermelho: é a informação que o usuário procura. */}
         {r.values.map((v, i) => (
-          <td key={i} className={`px-2.5 py-1.5 text-right tabular-nums ${v < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{money0(v)}</td>
+          <td key={i} className={`px-2.5 py-1.5 text-right tabular-nums ${v < 0 ? "text-expense dark:text-rose-400" : ""}`}>{money0(v)}</td>
         ))}
-        <td className={`px-2.5 py-1.5 text-right tabular-nums ${total < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{money0(total)}</td>
+        <td className={`px-2.5 py-1.5 text-right tabular-nums ${total < 0 ? "text-expense dark:text-rose-400" : ""}`}>{money0(total)}</td>
       </tr>
     );
   }
@@ -192,7 +192,7 @@ function ReportRow({ r }: { r: Row }) {
     return (
       <tr className="border-b border-border/40">
         <td className="text-left sticky left-0 z-10 px-3 py-1.5 bg-background pl-6 text-muted-foreground">{r.label}</td>
-        {r.values.map((v, i) => <td key={i} className={`px-2.5 py-1.5 text-right tabular-nums ${v < 0 ? "text-rose-500" : ""}`}>{money0(v)}</td>)}
+        {r.values.map((v, i) => <td key={i} className={`px-2.5 py-1.5 text-right tabular-nums ${v < 0 ? "text-expense" : ""}`}>{money0(v)}</td>)}
         <td className="px-2.5 py-1.5 text-right tabular-nums font-medium">{money0(total)}</td>
       </tr>
     );
@@ -200,7 +200,7 @@ function ReportRow({ r }: { r: Row }) {
   return (
     <tr className="border-b border-border/40 hover:bg-muted/60">
       <td className="text-left sticky left-0 z-10 px-3 py-1.5 bg-background pl-8">
-        {r.code && <span className="font-mono text-muted-foreground mr-2 text-[11px]">{r.code}</span>}{r.label}
+        {r.code && <span className="font-mono text-muted-foreground mr-2 text-xs">{r.code}</span>}{r.label}
       </td>
       {r.values.map(cell)}
       <td className="px-2.5 py-1.5 text-right tabular-nums font-medium">{money0(total)}</td>
@@ -212,8 +212,8 @@ function MobileRow({ r, mes }: { r: Row; mes: number }) {
   const val = mes >= 12 ? totalDaLinha(r) : r.values[mes];
   if (r.kind === "grupo") {
     return (
-      <div className={`flex items-center justify-between px-3 py-2 ${r.receita ? "bg-emerald-600" : "bg-slate-700"} text-slate-50`}>
-        <span className="uppercase text-[11px] font-bold tracking-wide">{r.label}</span>
+      <div className={`flex items-center justify-between px-3 py-2 ${r.receita ? "bg-emerald-600" : "bg-muted"} text-slate-50`}>
+        <span className="uppercase text-xs font-bold tracking-wide">{r.label}</span>
         <span className="tabular-nums font-bold">{money0(val)}</span>
       </div>
     );
@@ -221,7 +221,7 @@ function MobileRow({ r, mes }: { r: Row; mes: number }) {
   if (r.kind === "calc") {
     return (
       <div className="flex items-center justify-between px-3 py-2 bg-blue-50 dark:bg-blue-950/50 text-blue-800 dark:text-blue-200">
-        <span className="uppercase text-[11px] font-extrabold tracking-wide">{r.label}</span>
+        <span className="uppercase text-xs font-extrabold tracking-wide">{r.label}</span>
         <span className="tabular-nums font-extrabold">{money0(val)}</span>
       </div>
     );
@@ -229,8 +229,8 @@ function MobileRow({ r, mes }: { r: Row; mes: number }) {
   if (r.kind === "saldohd") {
     return (
       <div className="flex items-center justify-between px-3 py-2 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300">
-        <span className="uppercase text-[11px] font-bold tracking-wide">{r.label}</span>
-        <span className={`tabular-nums font-bold ${val < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{money0(val)}</span>
+        <span className="uppercase text-xs font-bold tracking-wide">{r.label}</span>
+        <span className={`tabular-nums font-bold ${val < 0 ? "text-expense dark:text-rose-400" : ""}`}>{money0(val)}</span>
       </div>
     );
   }
@@ -238,14 +238,14 @@ function MobileRow({ r, mes }: { r: Row; mes: number }) {
     return (
       <div className="flex items-center justify-between px-3 py-2 pl-6">
         <span className="text-sm text-muted-foreground">{r.label}</span>
-        <span className={`tabular-nums font-medium ${val < 0 ? "text-rose-500" : ""}`}>{money0(val)}</span>
+        <span className={`tabular-nums font-medium ${val < 0 ? "text-expense" : ""}`}>{money0(val)}</span>
       </div>
     );
   }
   return (
     <div className="flex items-center justify-between px-3 py-2 pl-6">
       <span className="text-sm text-muted-foreground">{r.code && <span className="font-mono text-xs mr-1.5">{r.code}</span>}{r.label}</span>
-      <span className={`tabular-nums font-semibold ${val < 0 ? "text-rose-500" : ""}`}>{val === 0 ? "—" : money0(val)}</span>
+      <span className={`tabular-nums font-semibold ${val < 0 ? "text-expense" : ""}`}>{val === 0 ? "—" : money0(val)}</span>
     </div>
   );
 }

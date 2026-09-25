@@ -225,7 +225,7 @@ export default function PaymentMethodsPage() {
 
   if (isLoading) {
     return (
-      <div className="container mx-auto p-6">
+      <div>
         <div className="flex justify-between items-center mb-6">
           <div>
             <Skeleton className="h-8 w-64 mb-2" />
@@ -276,7 +276,7 @@ export default function PaymentMethodsPage() {
   }
 
   return (
-    <div className="container mx-auto p-6">
+    <div>
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
         <div>
           <h1 className="text-3xl font-bold">{t('payment_methods.title', 'Formas de Pagamento')}</h1>
@@ -512,7 +512,7 @@ export default function PaymentMethodsPage() {
                     {isTotalsFetching ? (
                       <Skeleton className="h-4 w-20" />
                     ) : (
-                      <span className="text-sm font-medium text-green-600">
+                      <span className="text-sm font-medium text-income">
                         {formatCurrency(getTotalsForPaymentMethod(method.id).incomeTotal)}
                       </span>
                     )}
@@ -522,7 +522,7 @@ export default function PaymentMethodsPage() {
                     {isTotalsFetching ? (
                       <Skeleton className="h-4 w-20" />
                     ) : (
-                      <span className="text-sm font-medium text-red-600">
+                      <span className="text-sm font-medium text-expense">
                         {formatCurrency(getTotalsForPaymentMethod(method.id).expenseTotal)}
                       </span>
                     )}

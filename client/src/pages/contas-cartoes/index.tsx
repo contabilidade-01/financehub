@@ -189,7 +189,7 @@ export default function ContasCartoesPage() {
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-8">
+    <div className="space-y-8">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-3xl font-bold">Contas</h1>
@@ -227,7 +227,7 @@ export default function ContasCartoesPage() {
         {!periodoPronto || loadingContas ? (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-36 w-full rounded-xl" />
+              <Skeleton key={i} className="h-36 w-full rounded-lg" />
             ))}
           </div>
         ) : contasAtivas.length === 0 ? (
@@ -250,7 +250,7 @@ export default function ContasCartoesPage() {
                   <CardHeader className="pb-2">
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <p className="text-[11px] font-label tracking-wide text-muted-foreground">
+                        <p className="text-xs font-label tracking-wide text-muted-foreground">
                           {tipoLabel(c.tipo)}
                         </p>
                         <CardTitle className="text-lg">{c.nome}</CardTitle>
@@ -280,12 +280,12 @@ export default function ContasCartoesPage() {
                       className="w-full text-left rounded-lg -mx-1 px-1 py-1 hover:bg-muted/50 transition-colors"
                       onClick={() => setDetalhe({ id: c.id, nome: c.nome })}
                     >
-                      <p className="text-[11px] text-muted-foreground mb-1">Saldo do período</p>
+                      <p className="text-xs text-muted-foreground mb-1">Saldo do período</p>
                       <div className="flex items-center gap-2">
                         <Wallet className="h-4 w-4 text-muted-foreground" />
                         <span
                           className={`text-2xl font-numeric font-semibold ${
-                            saldo < 0 ? "text-red-500" : "text-foreground"
+                            saldo < 0 ? "text-expense" : "text-foreground"
                           }`}
                         >
                           {money(saldo)}
@@ -340,7 +340,7 @@ export default function ContasCartoesPage() {
                 <p className="text-xs text-muted-foreground">Saldo do período</p>
                 <p
                   className={`text-xl font-numeric font-semibold ${
-                    Number(detalheData?.saldo ?? 0) < 0 ? "text-red-500" : ""
+                    Number(detalheData?.saldo ?? 0) < 0 ? "text-expense" : ""
                   }`}
                 >
                   {money(Number(detalheData?.saldo ?? 0))}
@@ -378,7 +378,7 @@ export default function ContasCartoesPage() {
                         </div>
                         <span
                           className={`text-sm font-numeric font-semibold shrink-0 ${
-                            receita ? "text-emerald-600" : "text-red-500"
+                            receita ? "text-income" : "text-expense"
                           }`}
                         >
                           {receita ? "+" : "−"}

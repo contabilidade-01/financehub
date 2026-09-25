@@ -127,7 +127,7 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-pattern">
+    <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-6">
           <div className="flex items-center justify-center mb-4">
@@ -142,10 +142,10 @@ export default function Login() {
               <h1 className="text-3xl font-bold">{systemConfig.system_name}</h1>
             </div>
           </div>
-          <p className="text-gray-400 mt-2">{t('login.subtitle', 'Seu controle financeiro pessoal')}</p>
+          <p className="text-muted-foreground mt-2">{t('login.subtitle', 'Seu controle financeiro pessoal')}</p>
         </div>
 
-        <Card className="glass-card neon-border">
+        <Card className="border bg-card">
           <CardHeader>
             <CardTitle>{t('login.title', 'Entrar')}</CardTitle>
             <CardDescription>
@@ -198,7 +198,7 @@ export default function Login() {
             </Form>
           </CardContent>
           <CardFooter className="flex justify-center">
-            <p className="text-sm text-gray-400">
+            <p className="text-sm text-muted-foreground">
               {t('login.no_account', 'Não tem uma conta?')}{" "}
               <Button variant="link" className="p-0" onClick={() => navigate("/register")}>
                 {t('login.create_account_link', 'Criar conta')}

@@ -1,12 +1,12 @@
-import { ReactNode } from "react";
+import { ReactNode, useState, type CSSProperties } from "react";
 import Sidebar from "@/components/shared/Sidebar";
-import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { User } from "@shared/schema";
 import AdminStickyHeader from "@/components/admin/AdminStickyHeader";
 import { GuidedTourModal } from "@/components/shared/GuidedTourModal";
 import { ExpiringSoonBanner } from "@/components/subscription/ExpiringSoonBanner";
+import { cn } from "@/lib/utils";
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -14,6 +14,7 @@ interface MainLayoutProps {
 
 export default function MainLayout({ children }: MainLayoutProps) {
   const { isAuthenticated, user } = useAuth();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const { data: userData } = useQuery<User>({
     queryKey: ["/api/auth/me"],
@@ -23,27 +24,24 @@ export default function MainLayout({ children }: MainLayoutProps) {
   // Verificar se é admin ou se há impersonificação ativa
   const isDirectAdmin = userData?.tipo_usuario === 'super_admin';
   const isImpersonating = userData && 'isImpersonating' in userData && userData.isImpersonating;
-  const shouldShowAdminHeader = isDirectAdmin || isImpersonating;
+  const shouldShowAdminHeader = !!(isDirectAdmin || isImpersonating);
 
   return (
-    <div className="flex flex-col lg:flex-row min-h-screen">
-      {/* Cabeçalho Administrativo Sticky - para super admins ou durante impersonificação */}
+    <div
+      className={cn("min-h-screen bg-background", shouldShowAdminHeader && "pt-[var(--admin-header-h)]")}
+      style={{ "--admin-header-h": "76px" } as CSSProperties}
+    >
+      {/* Cabeçalho Administrativo fixo - para super admins ou durante impersonificação */}
       {shouldShowAdminHeader && <AdminStickyHeader userData={userData as any} />}
-      
-      <Sidebar />
-      
-      <motion.main
-        className={`flex-1 lg:ml-64 p-4 md:p-6 ${shouldShowAdminHeader ? 'pt-6 lg:pt-24' : 'pt-4 lg:pt-6'}`}
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: 20 }}
-        transition={{ duration: 0.3 }}
-      >
-        <div className="max-w-7xl mx-auto">
+
+      <Sidebar mobileOpen={mobileMenuOpen} onMobileOpenChange={setMobileMenuOpen} />
+
+      <main className="min-w-0 px-4 py-4 sm:px-6 sm:py-6 lg:ml-64 lg:px-8">
+        <div className="mx-auto w-full max-w-7xl">
           <ExpiringSoonBanner />
           {children}
         </div>
-      </motion.main>
+      </main>
       <GuidedTourModal />
     </div>
   );

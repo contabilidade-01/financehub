@@ -153,9 +153,9 @@ export default function SetupPage() {
       {resetError && <Alert variant="destructive" className="mt-2"><AlertDescription>{resetError}</AlertDescription></Alert>}
 
       {/* Status da Conexão */}
-      <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
+      <Card className={`border bg-card bg-card border border-border`}>
         <CardHeader>
-          <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>
+          <CardTitle className={`text-foreground`}>
             <Database className="h-5 w-5" />
             Status da Conexão
           </CardTitle>
@@ -164,13 +164,13 @@ export default function SetupPage() {
           <div className="flex items-center gap-2">
             {status?.connected ? (
               <>
-                <CheckCircle className="h-5 w-5 text-green-500" />
-                <span className="text-green-700">Conectado ao banco de dados</span>
+                <CheckCircle className="h-5 w-5 text-income" />
+                <span className="text-income">Conectado ao banco de dados</span>
               </>
             ) : (
               <>
-                <AlertCircle className="h-5 w-5 text-red-500" />
-                <span className="text-red-700">Falha na conexão com banco</span>
+                <AlertCircle className="h-5 w-5 text-expense" />
+                <span className="text-expense">Falha na conexão com banco</span>
               </>
             )}
           </div>
@@ -178,9 +178,9 @@ export default function SetupPage() {
       </Card>
 
       {/* Status das Migrações */}
-      <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
+      <Card className={`border bg-card bg-card border border-border`}>
         <CardHeader>
-          <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>
+          <CardTitle className={`text-foreground`}>
             Status das Migrações
           </CardTitle>
         </CardHeader>
@@ -222,9 +222,9 @@ export default function SetupPage() {
       </Card>
 
       {/* Resumo dos Dados */}
-      <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
+      <Card className={`border bg-card bg-card border border-border`}>
         <CardHeader>
-          <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>
+          <CardTitle className={`text-foreground`}>
             Resumo dos Dados
           </CardTitle>
         </CardHeader>
@@ -235,7 +235,7 @@ export default function SetupPage() {
               <div className="text-sm text-muted-foreground">Total de Registros</div>
             </div>
             <div className="text-center p-4 bg-muted rounded-lg">
-              <div className="text-2xl font-bold text-green-600">
+              <div className="text-2xl font-bold text-income">
                 {status?.tables?.filter(t => t.exists).length || 0}
               </div>
               <div className="text-sm text-muted-foreground">Tabelas Criadas</div>
@@ -251,9 +251,9 @@ export default function SetupPage() {
       </Card>
 
       {/* Detalhes das Tabelas */}
-      <Card className={`glass-card neon-border ${theme === 'light' ? 'bg-white border border-gray-200' : ''}`}>
+      <Card className={`border bg-card bg-card border border-border`}>
         <CardHeader>
-          <CardTitle className={`${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>
+          <CardTitle className={`text-foreground`}>
             Integridade das Tabelas
           </CardTitle>
         </CardHeader>
@@ -265,9 +265,9 @@ export default function SetupPage() {
                   <div className="flex items-center gap-2">
                     <span className="font-medium">{table.name}</span>
                     {table.exists ? (
-                      <CheckCircle className="h-4 w-4 text-green-500" />
+                      <CheckCircle className="h-4 w-4 text-income" />
                     ) : (
-                      <AlertCircle className="h-4 w-4 text-red-500" />
+                      <AlertCircle className="h-4 w-4 text-expense" />
                     )}
                   </div>
                   <Badge variant={table.exists ? 'default' : 'destructive'}>
