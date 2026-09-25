@@ -4139,13 +4139,16 @@ export async function criarExtratoMovimento(data: any): Promise<any | null> {
             ${data.data}, ${Number(data.valor).toFixed(2)}, ${data.tipo}, ${data.descricao ?? null}, ${data.memo ?? null},
             ${data.status ?? 'pendente'}, ${data.transacao_id ?? null}, ${data.conta_contabil_id ?? null},
             ${data.sugestao_conta_id ?? null}, ${data.sugestao_origem ?? null}, ${data.sugestao_confianca ?? null})
-    ON CONFLICT (conta_bancaria_id, fitid) DO NOTHING
+    -- O índice único é parcial (WHERE fitid IS NOT NULL): o ON CONFLICT precisa
+    -- repetir o predicado, senão o Postgres recusa TODO insert.
+    ON CONFLICT (conta_bancaria_id, fitid) WHERE fitid IS NOT NULL DO NOTHING
     RETURNING *
   `);
   return (r as any[])[0] || null;
 }
-export async function getMovimentos(opts: { importacaoId?: number; contaBancariaId?: number; status?: string } = {}): Promise<any[]> {
+export async function getMovimentos(opts: { importacaoId?: number; contaBancariaId?: number; empresaId?: number; status?: string } = {}): Promise<any[]> {
   const conds: any[] = [];
+  if (opts.empresaId) conds.push(sql`empresa_id = ${opts.empresaId}`);
   if (opts.importacaoId) conds.push(sql`importacao_id = ${opts.importacaoId}`);
   if (opts.contaBancariaId) conds.push(sql`conta_bancaria_id = ${opts.contaBancariaId}`);
   if (opts.status) conds.push(sql`status = ${opts.status}`);
@@ -4170,14 +4173,21 @@ export async function updateMovimento(id: number, patch: any): Promise<any> {
 // Casamento determinístico: transação PJ não conciliada, mesmo valor absoluto,
 // MESMO sentido (crédito↔Receita, débito↔Despesa) e data dentro de ±tolDias.
 // O sentido evita casar um crédito de +100 com uma despesa de 100.
-export async function buscarCandidatosConciliacao(empresaId: number, valor: number, data: string, tolDias = 3): Promise<any[]> {
+export async function buscarCandidatosConciliacao(
+  empresaId: number, valor: number, data: string, tolDias = 3, contaBancariaId?: number | null,
+): Promise<any[]> {
   const abs = Math.abs(valor).toFixed(2);
   const tipoEsperado = valor >= 0 ? "Receita" : "Despesa";
+  // Só lançamentos desta conta (ou ainda sem conta) — nunca os de outro banco.
+  const filtroConta = contaBancariaId
+    ? sql`AND (conta_bancaria_id = ${contaBancariaId} OR conta_bancaria_id IS NULL)`
+    : sql``;
   return (await db.execute(sql`
     SELECT id, descricao, valor, tipo, data_transacao
     FROM empresas_transacoes
     WHERE empresa_id = ${empresaId}
       AND conciliado = false
+      ${filtroConta}
       AND LOWER(tipo) = LOWER(${tipoEsperado})
       AND ABS(valor::numeric) = ${abs}
       AND data_transacao BETWEEN (${data}::date - ${tolDias} * INTERVAL '1 day') AND (${data}::date + ${tolDias} * INTERVAL '1 day')

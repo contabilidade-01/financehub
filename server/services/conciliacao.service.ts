@@ -7,8 +7,9 @@
  */
 import { createHash } from "crypto";
 import axios from "axios";
-import * as XLSX from "xlsx";
-import { parseOfx } from "../utils/ofx-parser";
+import { lerArquivoExtrato, aplicarMapeamento, chavesDedup } from "./importacao/parsers";
+import { db } from "../db";
+import { sql } from "drizzle-orm";
 import { withRetry } from "../utils/ai-errors";
 import {
   storage,
@@ -76,60 +77,25 @@ async function classificarComIA(
   return conta ? conta.id : null;
 }
 
-// ---- Parser genérico de planilha (CSV / XLSX) --------------------------------
+// ---- Leitura de arquivo: server/services/importacao/parsers.ts -------------
 type MovExtrato = { fitid: string | null; data: string; valor: number; tipo: string; descricao: string; memo: string | null };
 
-const _norm = (s: string) => (s || "").toString().normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
-const _shortHash = (s: string) => createHash("sha1").update(s).digest("hex").slice(0, 32);
-
-function _normalizarData(v: any): string | null {
-  if (v instanceof Date && !isNaN(v.getTime())) return v.toISOString().slice(0, 10);
-  const s = String(v ?? "").trim();
-  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) return `${m[1]}-${m[2]}-${m[3]}`;
-  m = s.match(/^(\d{2})[\/.\-](\d{2})[\/.\-](\d{4})/); if (m) return `${m[3]}-${m[2]}-${m[1]}`;
-  m = s.match(/^(\d{2})[\/.\-](\d{2})[\/.\-](\d{2})$/); if (m) return `20${m[3]}-${m[2]}-${m[1]}`;
-  return null;
-}
-function _parseValor(v: any): number | null {
-  if (typeof v === "number") return isNaN(v) ? null : v;
-  let s = String(v ?? "").trim();
-  if (!s) return null;
-  let neg = false;
-  if (/^\(.*\)$/.test(s)) { neg = true; s = s.slice(1, -1); }
-  if (/[dD]$/.test(s) && !/[cC]$/.test(s)) neg = true;
-  s = s.replace(/[^0-9.,-]/g, "");
-  if (s.includes(".") && s.includes(",")) s = s.replace(/\./g, "").replace(",", ".");
-  else if (s.includes(",")) s = s.replace(",", ".");
-  const n = parseFloat(s);
-  if (isNaN(n)) return null;
-  return neg ? -Math.abs(n) : n;
-}
-function parsePlanilha(buffer: Buffer): MovExtrato[] {
-  const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  if (!ws) return [];
-  const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: "" });
-  const out: MovExtrato[] = [];
-  for (const row of rows) {
-    if (!Array.isArray(row) || row.length < 2) continue;
-    let data: string | null = null, dataIdx = -1;
-    for (let i = 0; i < row.length; i++) { const d = _normalizarData(row[i]); if (d) { data = d; dataIdx = i; break; } }
-    if (!data) continue; // cabeçalho ou linha inválida
-    let valor: number | null = null;
-    for (let i = row.length - 1; i >= 0; i--) {
-      if (i === dataIdx) continue;
-      const cell = row[i];
-      const isNumLike = typeof cell === "number" || /\d/.test(String(cell));
-      if (!isNumLike) continue;
-      const v = _parseValor(cell);
-      if (v != null) { valor = v; break; }
-    }
-    if (valor == null || valor === 0) continue;
-    let descricao = "Lançamento", maior = 0;
-    row.forEach((c, i) => { const s = String(c ?? ""); if (i !== dataIdx && !(c instanceof Date) && !/^-?[\d.,\s]+$/.test(s.trim()) && s.trim().length > maior) { maior = s.trim().length; descricao = s.trim(); } });
-    out.push({ fitid: _shortHash(`${data}|${valor.toFixed(2)}|${_norm(descricao)}`), data, valor, tipo: valor >= 0 ? "credito" : "debito", descricao: descricao.slice(0, 255), memo: null });
-  }
-  return out;
+/** Movimentos do arquivo com chave de dedup estável (FITID ou hash com ordem). */
+function movimentosDoArquivo(buffer: Buffer, filename: string): { movimentos: MovExtrato[]; ofx?: any } {
+  const lido = lerArquivoExtrato(buffer, filename);
+  const brutos = lido.ofx ? lido.ofx.movimentos : aplicarMapeamento(lido.tabela?.linhas || [], lido.tabela?.mapeamento || ({} as any));
+  const chaves = chavesDedup(brutos);
+  return {
+    ofx: lido.ofx,
+    movimentos: brutos.map((m, i) => ({
+      fitid: chaves[i],
+      data: m.data,
+      valor: m.valor,
+      tipo: m.valor >= 0 ? "credito" : "debito",
+      descricao: m.descricao,
+      memo: m.documento || null,
+    })),
+  };
 }
 
 // Núcleo comum: dedup -> importação -> movimentos -> casa/sugere.
@@ -154,7 +120,7 @@ async function _processarMovimentos(
     // devolve 500 no meio; segue processando as demais e conta os erros.
     try {
       // Casamento determinístico
-      const candidatos = await buscarCandidatosConciliacao(empresaId, mov.valor, mov.data);
+      const candidatos = await buscarCandidatosConciliacao(empresaId, mov.valor, mov.data, 3, contaBancariaId);
       let status = "pendente", transacaoId: number | null = null;
       let sug: SugestaoClassificacao = { conta_id: null, origem: null, confianca: null };
 
@@ -187,6 +153,14 @@ async function _processarMovimentos(
     }
   }
 
+  // Nada entrou e houve erro: remove a importação para o cliente poder tentar
+  // de novo (antes o hash ficava gravado e bloqueava "já importado").
+  if (conciliados + aClassificar === 0 && erros > 0) {
+    await db.execute(sql`DELETE FROM importacoes_extrato WHERE id = ${importacao.id}`);
+  } else {
+    await db.execute(sql`UPDATE importacoes_extrato SET status = 'concluida' WHERE id = ${importacao.id}`);
+  }
+
   return {
     importacao_id: importacao.id,
     total: movimentos.length,
@@ -197,34 +171,26 @@ async function _processarMovimentos(
 
 // Processa um extrato OFX.
 export async function processarImportacaoOfx(params: {
-  empresaId: number; contaBancariaId: number; usuarioId: number; arquivoNome: string; conteudo: string;
+  empresaId: number; contaBancariaId: number; usuarioId: number; arquivoNome: string; buffer: Buffer;
 }): Promise<any> {
-  const { empresaId, contaBancariaId, usuarioId, arquivoNome, conteudo } = params;
-  const hash = createHash("sha256").update(conteudo).digest("hex");
+  const { empresaId, contaBancariaId, usuarioId, arquivoNome, buffer } = params;
+  const hash = createHash("sha256").update(buffer).digest("hex");
   if (await hashExtratoJaImportado(contaBancariaId, hash)) {
     return { jaImportado: true, mensagem: "Este extrato já foi importado nesta conta." };
   }
-  const extrato = parseOfx(conteudo);
-  if (extrato.movimentos.length === 0) return { erro: "Nenhum movimento encontrado no arquivo OFX." };
+  const { movimentos, ofx } = movimentosDoArquivo(buffer, arquivoNome || "extrato.ofx");
+  if (movimentos.length === 0) return { erro: "Nenhum movimento encontrado no arquivo OFX." };
   return _processarMovimentos(
     { empresaId, contaBancariaId, usuarioId, arquivoNome, formato: "ofx", hash },
-    extrato.movimentos as any,
-    { periodoDe: extrato.periodoDe, periodoAte: extrato.periodoAte, saldoFinal: extrato.saldoFinal },
+    movimentos,
+    { periodoDe: ofx?.periodoDe, periodoAte: ofx?.periodoAte, saldoFinal: ofx?.saldoFinal },
   );
 }
 
 // Parser genérico (OFX/CSV/XLSX) → lista de movimentos. Usado também pela
 // conciliação de fatura de cartão.
 export function parseArquivoExtrato(buffer: Buffer, filename: string): MovExtrato[] {
-  const nome = (filename || "").toLowerCase();
-  const amostra = buffer.slice(0, 512).toString("utf8");
-  const ehOfx = nome.endsWith(".ofx") || /<ofx|<stmttrn/i.test(amostra);
-  if (ehOfx) {
-    let conteudo = buffer.toString("utf8");
-    if (/�/.test(conteudo)) conteudo = buffer.toString("latin1");
-    return (parseOfx(conteudo).movimentos as any) as MovExtrato[];
-  }
-  return parsePlanilha(buffer);
+  return movimentosDoArquivo(buffer, filename).movimentos;
 }
 
 // Processa um extrato de planilha (CSV ou XLSX).
@@ -238,7 +204,7 @@ export async function processarImportacaoPlanilha(params: {
   }
   let movimentos: MovExtrato[];
   try {
-    movimentos = parsePlanilha(buffer);
+    movimentos = movimentosDoArquivo(buffer, arquivoNome || `extrato.${formato}`).movimentos;
   } catch (e: any) {
     return { erro: "Não foi possível ler a planilha. Verifique o formato (colunas de data, descrição e valor)." };
   }
