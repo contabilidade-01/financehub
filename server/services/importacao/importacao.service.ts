@@ -75,17 +75,18 @@ export async function linhasDaSessao(id: number): Promise<any[]> {
   return (await db.execute(sql`
     SELECT id, ordem, data, descricao, valor, documento, chave, status, categoria_id, sugestao_categoria_id,
            sugestao_origem, transacao_existente_id, candidatos, transacao_criada_id, centro_custo_id,
-           contato_id, observacao
+           contato_id, observacao, transferencia_conta_id, transferencia_id
     FROM importacao_linhas WHERE importacao_id = ${id} ORDER BY data, ordem
   `)) as any[];
 }
 
 export function resumoLinhas(linhas: any[]) {
-  const r = { total: linhas.length, pendentes: 0, sem_categoria: 0, conciliar: 0, duplicadas: 0, ignoradas: 0, importadas: 0, entradas: 0, saidas: 0 };
+  const r = { total: linhas.length, pendentes: 0, sem_categoria: 0, conciliar: 0, transferencias: 0, duplicadas: 0, ignoradas: 0, importadas: 0, entradas: 0, saidas: 0 };
   for (const l of linhas) {
     const v = Number(l.valor);
     if (l.status === "pendente") { r.pendentes++; if (!l.categoria_id) r.sem_categoria++; }
     else if (l.status === "conciliar") r.conciliar++;
+    else if (l.status === "transferencia") r.transferencias++;
     else if (l.status === "duplicada") r.duplicadas++;
     else if (l.status === "ignorar") r.ignoradas++;
     else if (l.status === "importada") r.importadas++;
@@ -294,7 +295,7 @@ async function verificarDuplicadasEConciliacao(id: number, s: any) {
   const escopoTx = s.escopo === "pj" ? sql`t.empresa_id = ${s.empresa_id}` : sql`t.carteira_id = ${walletId}`;
   // volta linhas automáticas para pendente (troca de conta refaz a análise)
   await db.execute(sql`
-    UPDATE importacao_linhas SET status = 'pendente', transacao_existente_id = NULL, candidatos = NULL
+    UPDATE importacao_linhas SET status = 'pendente', transacao_existente_id = NULL, transferencia_id = NULL, candidatos = NULL
     WHERE importacao_id = ${id} AND status IN ('duplicada', 'conciliar')
   `);
   await db.execute(sql`
@@ -303,6 +304,35 @@ async function verificarDuplicadasEConciliacao(id: number, s: any) {
     WHERE l.importacao_id = ${id} AND ${escopoTx}
       AND t.conta_bancaria_id = ${s.conta_bancaria_id} AND t.fitid = l.chave
   `);
+  // Já registrada como transferência (lado desta conta) numa importação anterior.
+  await db.execute(sql`
+    UPDATE importacao_linhas l SET status = 'duplicada'
+    FROM transferencias_bancarias t
+    WHERE l.importacao_id = ${id} AND l.status = 'pendente'
+      AND ((t.conta_origem_id = ${s.conta_bancaria_id} AND t.chave_origem = l.chave)
+        OR (t.conta_destino_id = ${s.conta_bancaria_id} AND t.chave_destino = l.chave))
+  `);
+  // Transferência registrada pelo extrato da OUTRA conta: este é o outro lado → conciliar.
+  const semLado = (await db.execute(sql`
+    SELECT l.id AS linha_id, t.id AS transf_id
+    FROM importacao_linhas l
+    JOIN transferencias_bancarias t ON abs(l.valor) = t.valor
+      AND t.data BETWEEN l.data - 3 AND l.data + 3
+      AND ((l.valor < 0 AND t.conta_origem_id = ${s.conta_bancaria_id} AND t.chave_origem IS NULL)
+        OR (l.valor > 0 AND t.conta_destino_id = ${s.conta_bancaria_id} AND t.chave_destino IS NULL))
+    WHERE l.importacao_id = ${id} AND l.status = 'pendente'
+    ORDER BY l.ordem, t.id
+  `)) as any[];
+  const transfUsadas = new Set<number>();
+  for (const r of semLado) {
+    if (transfUsadas.has(Number(r.transf_id))) continue;
+    const upd = (await db.execute(sql`
+      UPDATE importacao_linhas SET status = 'conciliar', transferencia_id = ${r.transf_id}
+      WHERE id = ${r.linha_id} AND status = 'pendente' RETURNING id
+    `)) as any[];
+    if (upd.length) transfUsadas.add(Number(r.transf_id));
+  }
+
   const pendentes = (await db.execute(sql`
     SELECT id, data, valor FROM importacao_linhas WHERE importacao_id = ${id} AND status = 'pendente'
   `)) as any[];
@@ -452,12 +482,12 @@ async function executarSugestaoIa(s: any) {
 // 5. Edição (autosave) e regras em massa
 // ----------------------------------------------------------------------------
 
-const STATUS_EDITAVEIS = new Set(["pendente", "conciliar", "ignorar", "duplicada"]);
+const STATUS_EDITAVEIS = new Set(["pendente", "conciliar", "ignorar", "duplicada", "transferencia"]);
 
 export async function atualizarLinhas(
   id: number,
   usuarioId: number,
-  alteracoes: { id: number; categoria_id?: number | null; descricao?: string; data?: string; status?: string; transacao_existente_id?: number | null; centro_custo_id?: number | null; contato_id?: number | null; observacao?: string | null }[],
+  alteracoes: { id: number; categoria_id?: number | null; descricao?: string; data?: string; status?: string; transacao_existente_id?: number | null; transferencia_conta_id?: number | null; centro_custo_id?: number | null; contato_id?: number | null; observacao?: string | null }[],
 ) {
   const s = await obterSessao(id, usuarioId);
   exigirRascunho(s);
@@ -483,6 +513,16 @@ export async function atualizarLinhas(
     if (a.status !== undefined) {
       if (!STATUS_EDITAVEIS.has(String(a.status))) throw new ErroImportacao("Status inválido.");
       sets.push(sql`status = ${a.status}`);
+    }
+    if (a.transferencia_conta_id !== undefined) {
+      if (a.transferencia_conta_id !== null) {
+        const outra = Number(a.transferencia_conta_id);
+        const contas = await contasBancariasDoEscopo(s);
+        if (!contas.some((c) => Number(c.id) === outra) || outra === Number(s.conta_bancaria_id)) {
+          throw new ErroImportacao("Conta da transferência inválida.");
+        }
+      }
+      sets.push(sql`transferencia_conta_id = ${a.transferencia_conta_id}`);
     }
     if (a.transacao_existente_id !== undefined) {
       // Só um candidato que o próprio servidor propôs para esta linha.
@@ -605,8 +645,12 @@ export async function confirmar(id: number, usuarioId: number, opts: { semCatego
   const cats = await categoriasDoEscopo(s);
   const aCriar = linhas.filter((l) => l.status === "pendente");
   const aConciliar = linhas.filter((l) => l.status === "conciliar" && l.transacao_existente_id);
+  const ladoTransf = linhas.filter((l) => l.status === "conciliar" && l.transferencia_id);
+  const novasTransf = linhas.filter((l) => l.status === "transferencia");
+  const semContaTransf = novasTransf.filter((l) => !l.transferencia_conta_id);
+  if (semContaTransf.length) throw new ErroImportacao(`${semContaTransf.length} transferência(s) sem a outra conta escolhida.`, 422);
   const semCat = aCriar.filter((l) => !l.categoria_id);
-  if (!aCriar.length && !aConciliar.length) throw new ErroImportacao("Não há lançamentos para importar.");
+  if (!aCriar.length && !aConciliar.length && !ladoTransf.length && !novasTransf.length) throw new ErroImportacao("Não há lançamentos para importar.");
 
   let outras: Record<string, number | undefined> = {};
   if (semCat.length) {
@@ -675,7 +719,33 @@ export async function confirmar(id: number, usuarioId: number, opts: { semCatego
       await tx.execute(sql`UPDATE importacao_linhas SET status = 'importada', transacao_criada_id = ${l.transacao_existente_id} WHERE id = ${l.id}`);
       conciliados++;
     }
-    const res = { criados, conciliados, ignorados: linhas.filter((l) => l.status === "ignorar").length, duplicados: linhas.filter((l) => l.status === "duplicada").length };
+    // Transferências entre contas próprias (não são receita nem despesa).
+    let transferencias = 0;
+    for (const l of novasTransf) {
+      const v = Number(l.valor);
+      const saida = v < 0;
+      const r = (await tx.execute(sql`
+        INSERT INTO transferencias_bancarias
+          (usuario_id, empresa_id, conta_origem_id, conta_destino_id, valor, data, descricao, chave_origem, chave_destino)
+        VALUES (${usuarioId}, ${s.escopo === "pj" ? s.empresa_id : null},
+                ${saida ? s.conta_bancaria_id : l.transferencia_conta_id}, ${saida ? l.transferencia_conta_id : s.conta_bancaria_id},
+                ${Math.abs(v).toFixed(2)}, ${String(l.data).slice(0, 10)}, ${l.descricao},
+                ${saida ? l.chave : null}, ${saida ? null : l.chave})
+        RETURNING id
+      `)) as any[];
+      await tx.execute(sql`UPDATE importacao_linhas SET status = 'importada', transferencia_id = ${r[0].id} WHERE id = ${l.id}`);
+      transferencias++;
+    }
+    for (const l of ladoTransf) {
+      const v = Number(l.valor);
+      const upd = v < 0
+        ? ((await tx.execute(sql`UPDATE transferencias_bancarias SET chave_origem = ${l.chave} WHERE id = ${l.transferencia_id} AND conta_origem_id = ${s.conta_bancaria_id} AND chave_origem IS NULL RETURNING id`)) as any[])
+        : ((await tx.execute(sql`UPDATE transferencias_bancarias SET chave_destino = ${l.chave} WHERE id = ${l.transferencia_id} AND conta_destino_id = ${s.conta_bancaria_id} AND chave_destino IS NULL RETURNING id`)) as any[]);
+      if (!upd.length) throw new ErroImportacao(`A transferência ligada a "${l.descricao}" mudou. Revise a linha.`, 409);
+      await tx.execute(sql`UPDATE importacao_linhas SET status = 'importada' WHERE id = ${l.id}`);
+      conciliados++;
+    }
+    const res = { criados, conciliados, transferencias, ignorados: linhas.filter((l) => l.status === "ignorar").length, duplicados: linhas.filter((l) => l.status === "duplicada").length };
     await tx.execute(sql`
       UPDATE importacoes SET status = 'concluida', concluido_em = now(), atualizado_em = now(),
         resultado = ${JSON.stringify(res)}::jsonb, linhas_brutas = NULL

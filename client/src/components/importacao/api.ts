@@ -1,7 +1,7 @@
 /** Cliente da API de importação de extratos (/api/importacoes). */
 
 export type Escopo = "pf" | "pj";
-export type StatusLinha = "pendente" | "conciliar" | "duplicada" | "ignorar" | "importada";
+export type StatusLinha = "pendente" | "conciliar" | "duplicada" | "ignorar" | "importada" | "transferencia";
 
 export interface Mapeamento {
   data: number;
@@ -37,6 +37,10 @@ export interface Linha {
   candidatos: Candidato[] | null;
   transacao_criada_id: number | null;
   observacao: string | null;
+  /** Transferência para/de outra conta própria (não é receita nem despesa). */
+  transferencia_conta_id: number | null;
+  /** Transferência já registrada pelo extrato da outra conta (este é o outro lado). */
+  transferencia_id: number | null;
 }
 
 export interface Categoria {
@@ -82,6 +86,7 @@ export interface Resumo {
   pendentes: number;
   sem_categoria: number;
   conciliar: number;
+  transferencias: number;
   duplicadas: number;
   ignoradas: number;
   importadas: number;

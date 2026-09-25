@@ -1185,6 +1185,33 @@ const STEPS: Step[] = [
       await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_emp_tx_centro ON empresas_transacoes(centro_custo_id) WHERE centro_custo_id IS NOT NULL`);
     },
   },
+  {
+    name: "transferências entre contas bancárias (não entram no DRE)",
+    run: async () => {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS transferencias_bancarias (
+          id                SERIAL PRIMARY KEY,
+          usuario_id        INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+          empresa_id        INTEGER REFERENCES empresas(id) ON DELETE CASCADE,
+          conta_origem_id   INTEGER NOT NULL REFERENCES contas_bancarias(id) ON DELETE CASCADE,
+          conta_destino_id  INTEGER NOT NULL REFERENCES contas_bancarias(id) ON DELETE CASCADE,
+          valor             NUMERIC(14,2) NOT NULL CHECK (valor > 0),
+          data              DATE NOT NULL,
+          descricao         VARCHAR(255),
+          chave_origem      VARCHAR(120),   -- chave do extrato da conta de origem (dedup)
+          chave_destino     VARCHAR(120),   -- chave do extrato da conta de destino
+          criado_em         TIMESTAMPTZ NOT NULL DEFAULT now(),
+          CHECK (conta_origem_id <> conta_destino_id)
+        )
+      `);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_transf_origem ON transferencias_bancarias(conta_origem_id, data)`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_transf_destino ON transferencias_bancarias(conta_destino_id, data)`);
+      // 'transferencia' (13) não cabe em VARCHAR(12); alargar é seguro e idempotente.
+      await db.execute(sql`ALTER TABLE importacao_linhas ALTER COLUMN status TYPE VARCHAR(20)`);
+      await db.execute(sql`ALTER TABLE importacao_linhas ADD COLUMN IF NOT EXISTS transferencia_conta_id INTEGER`);
+      await db.execute(sql`ALTER TABLE importacao_linhas ADD COLUMN IF NOT EXISTS transferencia_id INTEGER`);
+    },
+  },
 ];
 
 export async function runAutoMigrations(): Promise<void> {

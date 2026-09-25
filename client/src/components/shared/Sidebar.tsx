@@ -175,6 +175,7 @@ function Sidebar() {
         { icon: <HandCoins className="mr-3 h-4 w-4" />, text: 'Contas a receber', path: "/p/contas-receber" },
         { icon: <BarChart3 className="mr-3 h-4 w-4" />, text: 'DRE gerencial', path: "/p/dre-gerencial" },
         { icon: <Users className="mr-3 h-4 w-4" />, text: 'Clientes e fornecedores', path: "/p/clientes-fornecedores" },
+        { icon: <Wallet className="mr-3 h-4 w-4" />, text: 'Transferências', path: "/p/transferencias" },
         { icon: <Target className="mr-3 h-4 w-4" />, text: 'Centros de custo', path: "/p/centros-custo" },
         ...(temImportacaoV2 ? [{ icon: <FileUp className="mr-3 h-4 w-4" />, text: 'Importar extrato', path: "/p/importar-extrato" }] : []),
       ],

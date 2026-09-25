@@ -315,6 +315,49 @@ export async function receber(empresaId: number, usuarioId: number, transacaoId:
 }
 
 // ----------------------------------------------------------------------------
+// Transferências entre contas (não são receita nem despesa)
+// ----------------------------------------------------------------------------
+
+export async function listarTransferencias(empresaId: number, f: { de?: string; ate?: string } = {}) {
+  const iso = (x?: string) => (x && /^\d{4}-\d{2}-\d{2}$/.test(x) ? x : null);
+  return (await db.execute(sql`
+    SELECT t.*, COALESCE(o.nome, o.banco) AS origem_nome, COALESCE(d.nome, d.banco) AS destino_nome
+    FROM transferencias_bancarias t
+    JOIN contas_bancarias o ON o.id = t.conta_origem_id
+    JOIN contas_bancarias d ON d.id = t.conta_destino_id
+    WHERE t.empresa_id = ${empresaId}
+      AND (${iso(f.de)}::date IS NULL OR t.data >= ${iso(f.de)}::date)
+      AND (${iso(f.ate)}::date IS NULL OR t.data <= ${iso(f.ate)}::date)
+    ORDER BY t.data DESC, t.id DESC
+    LIMIT 500
+  `)) as any[];
+}
+
+export async function criarTransferencia(empresaId: number, usuarioId: number, b: any, tx: any = db) {
+  const origem = await validarVinculos(empresaId, { conta_bancaria_id: b.conta_origem_id });
+  const destino = await validarVinculos(empresaId, { conta_bancaria_id: b.conta_destino_id });
+  if (!origem.conta_bancaria_id || !destino.conta_bancaria_id) throw new ErroErp("Escolha as contas de origem e destino.");
+  if (origem.conta_bancaria_id === destino.conta_bancaria_id) throw new ErroErp("Origem e destino precisam ser contas diferentes.");
+  const valor = Number(String(b.valor ?? "").replace(",", "."));
+  if (!(valor > 0) || valor > 99_999_999) throw new ErroErp("Informe um valor válido.");
+  const data = /^\d{4}-\d{2}-\d{2}$/.test(String(b.data || "")) ? String(b.data) : hojeSP();
+  const r = (await tx.execute(sql`
+    INSERT INTO transferencias_bancarias
+      (usuario_id, empresa_id, conta_origem_id, conta_destino_id, valor, data, descricao, chave_origem, chave_destino)
+    VALUES (${usuarioId}, ${empresaId}, ${origem.conta_bancaria_id}, ${destino.conta_bancaria_id}, ${valor.toFixed(2)}, ${data},
+            ${texto(b.descricao, 255)}, ${b.chave_origem ?? null}, ${b.chave_destino ?? null})
+    RETURNING *
+  `)) as any[];
+  return r[0];
+}
+
+export async function removerTransferencia(empresaId: number, id: number) {
+  const r = (await db.execute(sql`DELETE FROM transferencias_bancarias WHERE id = ${id} AND empresa_id = ${empresaId} RETURNING id`)) as any[];
+  if (!r[0]) throw new ErroErp("Transferência não encontrada", 404);
+  return { removida: true };
+}
+
+// ----------------------------------------------------------------------------
 // DRE gerencial
 // ----------------------------------------------------------------------------
 

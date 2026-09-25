@@ -1601,6 +1601,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/empresas/:id/erp/receber/:tid/baixa", ...erpAuth, erpCtrl.receber);
   app.get("/api/empresas/:id/erp/dre", ...erpAuth, erpCtrl.dre);
   app.post("/api/empresas/:id/erp/contas-plano", ...erpAuth, erpCtrl.criarContaPlano);
+  app.get("/api/empresas/:id/erp/transferencias", ...erpAuth, erpCtrl.listarTransferencias);
+  app.post("/api/empresas/:id/erp/transferencias", ...erpAuth, erpCtrl.criarTransferencia);
+  app.delete("/api/empresas/:id/erp/transferencias/:tid", ...erpAuth, erpCtrl.removerTransferencia);
 
   // Importação de extratos (PF e PJ) — sessão persistente com autosave.
   const importacaoCtrl = await import("./controllers/importacao.controller");

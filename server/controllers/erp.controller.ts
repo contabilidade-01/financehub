@@ -86,3 +86,21 @@ export async function dre(req: Request, res: Response) {
 export async function criarContaPlano(req: Request, res: Response) {
   try { const e = await empresa(req); res.status(201).json(await erp.criarContaPlano(e.id, req.body || {})); } catch (err) { falha(res, err); }
 }
+
+export async function listarTransferencias(req: Request, res: Response) {
+  try {
+    const e = await empresa(req);
+    res.json(await erp.listarTransferencias(e.id, { de: req.query.de as string, ate: req.query.ate as string }));
+  } catch (err) { falha(res, err); }
+}
+export async function criarTransferencia(req: Request, res: Response) {
+  try {
+    const e = await empresa(req);
+    const b = req.body || {};
+    // chaves de extrato só são gravadas pela importação, nunca pelo formulário
+    res.status(201).json(await erp.criarTransferencia(e.id, (req.user as any).id, { ...b, chave_origem: null, chave_destino: null }));
+  } catch (err) { falha(res, err); }
+}
+export async function removerTransferencia(req: Request, res: Response) {
+  try { const e = await empresa(req); res.json(await erp.removerTransferencia(e.id, Number(req.params.tid))); } catch (err) { falha(res, err); }
+}

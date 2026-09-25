@@ -24,7 +24,7 @@ import {
 } from "./api";
 
 type Filtro = "todas" | "sem_categoria" | "conciliar" | "duplicada" | "ignorar";
-type Alteracao = Partial<Pick<Linha, "categoria_id" | "descricao" | "status" | "transacao_existente_id">> & { id: number };
+type Alteracao = Partial<Pick<Linha, "categoria_id" | "descricao" | "status" | "transacao_existente_id" | "transferencia_conta_id">> & { id: number };
 
 const CAMPOS_MAPA: { campo: keyof Mapeamento; rotulo: string; obrigatorio?: boolean }[] = [
   { campo: "data", rotulo: "Data", obrigatorio: true },
@@ -292,6 +292,7 @@ export function SessaoImportacao({ id, onVoltar }: { id: number; onVoltar: () =>
             <TabelaLinhas
               linhas={visiveis}
               categorias={categorias}
+              outrasContas={contas_bancarias.filter((c) => c.id !== sessao.conta_bancaria_id)}
               escopo={sessao.escopo}
               selecionadas={selecionadas}
               setSelecionadas={setSelecionadas}
@@ -327,6 +328,12 @@ export function SessaoImportacao({ id, onVoltar }: { id: number; onVoltar: () =>
             <AlertDialogDescription asChild>
               <div className="space-y-1 text-sm">
                 <p>{linhasLocais.filter((l) => l.status === "pendente").length} lançamento(s) serão criados e {contagem.conciliar} conciliado(s) com lançamentos existentes, todos na conta bancária escolhida.</p>
+                {linhasLocais.some((l) => l.status === "transferencia" || (l.status === "conciliar" && l.transferencia_id)) && (
+                  <p>
+                    {linhasLocais.filter((l) => l.status === "transferencia" || (l.status === "conciliar" && l.transferencia_id)).length} transferência(s)
+                    entre contas próprias: movimentam o saldo, mas não entram no resultado.
+                  </p>
+                )}
                 <p>{contagem.duplicada} já importado(s) e {contagem.ignorar} ignorado(s) ficam de fora.</p>
                 {contagem.sem_categoria > 0 && (
                   <p className="text-amber-700 dark:text-amber-400">{contagem.sem_categoria} lançamento(s) ainda estão sem categoria.</p>
@@ -625,6 +632,7 @@ function PassoMapeamento({ id, sessao, aberto, onAplicado }: { id: number; sessa
 interface TabelaProps {
   linhas: Linha[];
   categorias: Detalhe["categorias"];
+  outrasContas: Detalhe["contas_bancarias"];
   escopo: "pf" | "pj";
   selecionadas: Set<number>;
   setSelecionadas: (s: Set<number>) => void;
@@ -636,11 +644,12 @@ const ROTULO_STATUS: Record<StatusLinha, string> = {
   pendente: "Novo",
   conciliar: "Conciliar",
   duplicada: "Já importado",
+  transferencia: "Transferência",
   ignorar: "Ignorado",
   importada: "Importado",
 };
 
-function TabelaLinhas({ linhas, categorias, escopo, selecionadas, setSelecionadas, alterar, onCriar }: TabelaProps) {
+function TabelaLinhas({ linhas, categorias, outrasContas, escopo, selecionadas, setSelecionadas, alterar, onCriar }: TabelaProps) {
   const [limite, setLimite] = useState(150);
   const pagina = linhas.slice(0, limite);
   const todasMarcadas = pagina.length > 0 && pagina.every((l) => selecionadas.has(l.id));
@@ -675,7 +684,7 @@ function TabelaLinhas({ linhas, categorias, escopo, selecionadas, setSelecionada
           </thead>
           <tbody>
             {pagina.map((l) => (
-              <LinhaDesktop key={l.id} l={l} categorias={categorias} escopo={escopo} marcada={selecionadas.has(l.id)} onMarcar={() => alternar(l.id)} alterar={alterar} onCriar={onCriar} />
+              <LinhaDesktop key={l.id} l={l} categorias={categorias} outrasContas={outrasContas} escopo={escopo} marcada={selecionadas.has(l.id)} onMarcar={() => alternar(l.id)} alterar={alterar} onCriar={onCriar} />
             ))}
           </tbody>
         </table>
@@ -683,7 +692,7 @@ function TabelaLinhas({ linhas, categorias, escopo, selecionadas, setSelecionada
       {/* Celular */}
       <div className="divide-y md:hidden">
         {pagina.map((l) => (
-          <LinhaCartao key={l.id} l={l} categorias={categorias} escopo={escopo} marcada={selecionadas.has(l.id)} onMarcar={() => alternar(l.id)} alterar={alterar} onCriar={onCriar} />
+          <LinhaCartao key={l.id} l={l} categorias={categorias} outrasContas={outrasContas} escopo={escopo} marcada={selecionadas.has(l.id)} onMarcar={() => alternar(l.id)} alterar={alterar} onCriar={onCriar} />
         ))}
       </div>
       {linhas.length > limite && (
@@ -698,6 +707,7 @@ function TabelaLinhas({ linhas, categorias, escopo, selecionadas, setSelecionada
 interface LinhaProps {
   l: Linha;
   categorias: Detalhe["categorias"];
+  outrasContas: Detalhe["contas_bancarias"];
   escopo: "pf" | "pj";
   marcada: boolean;
   onMarcar: () => void;
@@ -710,28 +720,8 @@ function Valor({ v }: { v: string }) {
   return <span className={cn("tabular-nums font-medium", n >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-400")}>{brl(n)}</span>;
 }
 
-function Situacao({ l, alterar }: { l: Linha; alterar: LinhaProps["alterar"] }) {
-  if (l.status === "conciliar" || (l.status === "pendente" && l.candidatos?.length)) {
-    const cands = l.candidatos || [];
-    return (
-      <div className="space-y-1">
-        <Select
-          value={l.status === "conciliar" && l.transacao_existente_id ? String(l.transacao_existente_id) : "novo"}
-          onValueChange={(v) => alterar([{ id: l.id, status: v === "novo" ? "pendente" : "conciliar", transacao_existente_id: v === "novo" ? null : Number(v) }])}
-        >
-          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="novo">Criar novo lançamento</SelectItem>
-            {cands.map((c) => (
-              <SelectItem key={c.id} value={String(c.id)}>
-                Conciliar: {c.descricao} ({dataBr(c.data_transacao)}{c.status === "Pendente" ? ", em aberto" : ""})
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-    );
-  }
+function Situacao({ l, alterar, outrasContas }: { l: Linha; alterar: LinhaProps["alterar"]; outrasContas: LinhaProps["outrasContas"] }) {
+  const saida = Number(l.valor) < 0;
   if (l.status === "duplicada" || l.status === "ignorar") {
     return (
       <div className="flex items-center gap-2">
@@ -740,11 +730,44 @@ function Situacao({ l, alterar }: { l: Linha; alterar: LinhaProps["alterar"] }) 
       </div>
     );
   }
+  if (l.status === "conciliar" && l.transferencia_id) {
+    return (
+      <div className="flex items-center gap-2">
+        <Badge variant="secondary" className="font-normal">Transferência já registrada</Badge>
+        <Button variant="link" size="sm" className="h-auto p-0 text-xs text-muted-foreground" onClick={() => alterar([{ id: l.id, status: "pendente" }])}>Não é</Button>
+      </div>
+    );
+  }
+  // Valor do seletor: novo | conciliar:<id> | transf:<contaId> | ignorar
+  const cands = l.candidatos || [];
+  const valor =
+    l.status === "conciliar" && l.transacao_existente_id ? `conciliar:${l.transacao_existente_id}`
+    : l.status === "transferencia" ? (l.transferencia_conta_id ? `transf:${l.transferencia_conta_id}` : "transf:")
+    : "novo";
+  const escolher = (v: string) => {
+    if (v === "novo") alterar([{ id: l.id, status: "pendente", transacao_existente_id: null, transferencia_conta_id: null }]);
+    else if (v === "ignorar") alterar([{ id: l.id, status: "ignorar" }]);
+    else if (v.startsWith("conciliar:")) alterar([{ id: l.id, status: "conciliar", transacao_existente_id: Number(v.split(":")[1]) }]);
+    else if (v.startsWith("transf:")) alterar([{ id: l.id, status: "transferencia", transferencia_conta_id: Number(v.split(":")[1]) || null }]);
+  };
   return (
-    <div className="flex items-center gap-2">
-      <Badge variant="secondary" className="font-normal">{ROTULO_STATUS[l.status]}</Badge>
-      <Button variant="link" size="sm" className="h-auto p-0 text-xs text-muted-foreground" onClick={() => alterar([{ id: l.id, status: "ignorar" }])}>Ignorar</Button>
-    </div>
+    <Select value={valor} onValueChange={escolher}>
+      <SelectTrigger className={cn("h-8 text-xs", l.status === "transferencia" && !l.transferencia_conta_id && "border-amber-500/60")}><SelectValue /></SelectTrigger>
+      <SelectContent>
+        <SelectItem value="novo">Novo lançamento</SelectItem>
+        {cands.map((c) => (
+          <SelectItem key={c.id} value={`conciliar:${c.id}`}>
+            Conciliar: {c.descricao} ({dataBr(c.data_transacao)}{c.status === "Pendente" ? ", em aberto" : ""})
+          </SelectItem>
+        ))}
+        {outrasContas.map((c) => (
+          <SelectItem key={`t${c.id}`} value={`transf:${c.id}`}>
+            Transferência {saida ? "para" : "de"} {c.nome || c.banco}
+          </SelectItem>
+        ))}
+        <SelectItem value="ignorar">Ignorar</SelectItem>
+      </SelectContent>
+    </Select>
   );
 }
 
@@ -794,7 +817,7 @@ function LinhaDesktop(p: LinhaProps) {
       <td className="px-2 py-1.5"><DescricaoEditavel l={l} alterar={p.alterar} /></td>
       <td className="px-2 py-1.5 text-right"><Valor v={l.valor} /></td>
       <td className="px-2 py-1.5"><CampoCategoria {...p} /></td>
-      <td className="px-4 py-1.5"><Situacao l={l} alterar={p.alterar} /></td>
+      <td className="px-4 py-1.5"><Situacao l={l} alterar={p.alterar} outrasContas={p.outrasContas} /></td>
     </tr>
   );
 }
@@ -814,7 +837,7 @@ function LinhaCartao(p: LinhaProps) {
         </div>
       </div>
       <CampoCategoria {...p} />
-      <Situacao l={l} alterar={p.alterar} />
+      <Situacao l={l} alterar={p.alterar} outrasContas={p.outrasContas} />
     </div>
   );
 }
