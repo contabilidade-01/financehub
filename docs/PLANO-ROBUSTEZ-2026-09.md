@@ -9,7 +9,7 @@ Todas as fases seguem o CLAUDE.md: feature flag para funcionalidade nova, `npm r
 
 ---
 
-## FASE 0 — Segurança (hotfix, commit isolado)
+## FASE 0 — Segurança (hotfix, commit isolado) — ✅ críticas C1–C5 e H1–H4 feitas
 
 ### Críticas (exploráveis sem login ou por qualquer usuário)
 | # | Falha | Onde | Correção |
@@ -42,7 +42,7 @@ Todas as fases seguem o CLAUDE.md: feature flag para funcionalidade nova, `npm r
 
 ---
 
-## FASE 1 — IA operacional (WhatsApp), mantendo gpt-4o-mini
+## FASE 1 — IA operacional (WhatsApp), mantendo gpt-4o-mini — ✅ itens 1–7 feitos; pendentes: estado em tabela (`ia_pendencias`), dedup por messageid em banco, auditoria estendida, golden set com LLM
 Princípio: **o LLM só interpreta; código determinístico valida, normaliza e decide**. Arquivos centrais: `server/services/ai-agent.service.ts`, `server/prompts/financial-agent.ts`, `server/services/atalho-meio-pj.ts`, `classificar-conta-pj.ts`, `storage.ts` (memória).
 
 1. **Parsers determinísticos** em um novo `server/services/nlp-br/`:
@@ -104,7 +104,8 @@ Tudo atrás da flag `IA_PIPELINE_V2`, com rollout por usuário.
 - Grade de revisão: filtros (não classificadas, duplicadas, conciliadas), seleção múltipla, combobox de conta com busca e **"+ Nova conta" inline** (dialog que cria no plano de contas `empresas_contas`/`categorias` e já seleciona), edição de descrição/data e indicador "Salvo às 14:32".
 - Mobile: a grade vira cards com ações em bottom sheet.
 
-### 2.3 ERP PJ — lacunas para gerir uma pequena empresa
+### 2.3 ERP PJ — lacunas para gerir uma pequena empresa (somente modalidade PJ ME)
+> Modalidades: PF, PJ MEI (todo PJ existente) e PJ ME (novo, ERP). Rotas do ERP usam `requireErpPj` (`server/middleware/modalidade.middleware.ts`); regras em `shared/modalidade.ts`.
 - **Contas a receber** (hoje não existe): lançamentos futuros de receita com cliente, vencimento, baixa parcial/total e recorrência. Espelhar `pj/vencimentos` (a pagar).
 - **Cadastro de clientes/fornecedores** (`empresas_contatos`) vinculado aos lançamentos.
 - **Centros de custo** (`empresas_centros_custo`), opcional por lançamento.
