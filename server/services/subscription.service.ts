@@ -12,7 +12,10 @@
 import { getAsaasService, AsaasService, AsaasCreditCardData, AsaasCreditCardHolderInfo } from './asaas.service';
 import { getNotificationService, NotificationService } from './notification.service';
 import type { IStorage } from '../storage';
-import { filtrarPlanosPorTipo } from '../storage';
+import { resolverPlanoDoUsuario } from './resolver-plano';
+import { rotuloModalidade } from '../../shared/modalidade';
+import { db } from '../db';
+import { sql } from 'drizzle-orm';
 import type {
   User,
   SubscriptionPlan,
@@ -286,27 +289,9 @@ export class SubscriptionService {
     if (!tipoPessoa) {
       throw new Error('Defina se o usuário é Pessoa Física ou Jurídica antes de gerar a cobrança.');
     }
-    const candidatos = filtrarPlanosPorTipo(plans, tipoPessoa);
-    if (!candidatos.length) {
-      const rotulo = tipoPessoa === 'juridica' ? 'Pessoa Jurídica' : 'Pessoa Física';
-      throw new Error(`Nenhum plano ativo para ${rotulo}. Cadastre um plano desse tipo em Pagamentos.`);
-    }
-    // Padrão do tipo = plano mais barato (ex.: PJ 79,90). O admin pode FORÇAR outro
-    // plano por usuário (plano_forcado_id) — ex.: PJ "com consultoria" (200).
-    let plan = candidatos[0];
-    const forcadoId = (user as any).plano_forcado_id;
-    if (forcadoId) {
-      const forcado = plans.find((p) => p.id === Number(forcadoId) && p.active);
-      if (forcado && ((forcado as any).tipoPessoa === tipoPessoa || (forcado as any).tipoPessoa == null)) {
-        plan = forcado;
-        console.log(`[Assinatura] user=${userId} usa plano forçado ${forcado.planCode} (R$ ${forcado.priceMonthly}).`);
-      } else {
-        console.warn(`[Assinatura] plano_forcado_id=${forcadoId} inválido para user=${userId} (tipo ${tipoPessoa}); usando padrão.`);
-      }
-    } else if (candidatos.length > 1) {
-      console.warn(
-        `[Assinatura] ${candidatos.length} planos ativos para tipo '${tipoPessoa}'; usando o mais barato (${candidatos[0].planCode}). Marque 'com consultoria' se quiser o outro.`,
-      );
+    const plan = resolverPlanoDoUsuario(user, plans);
+    if (!plan) {
+      throw new Error(`Nenhum plano ativo para ${rotuloModalidade(user as any)}. Cadastre um plano desse tipo em Pagamentos.`);
     }
 
     // Valor que a cobrança DEVE ter para o plano atual (respeita o override).
@@ -460,21 +445,12 @@ export class SubscriptionService {
     const user = await this.storage.getUserById(userId);
     if (!user) return { atualizado: false, motivo: 'Usuário não encontrado' };
 
-    const tipoPessoa = (user as any).tipo_pessoa as string | null | undefined;
     const ciclo = (((user as any).ciclo_assinatura || 'mensal') as 'mensal' | 'trimestral' | 'anual');
     const cfg = CICLO_ASAAS[ciclo] || CICLO_ASAAS.mensal;
 
     const plans = await this.storage.getActiveSubscriptionPlans();
-    const candidatos = filtrarPlanosPorTipo(plans, tipoPessoa);
-    if (!candidatos.length) return { atualizado: false, motivo: 'Sem plano ativo do tipo do usuário' };
-    let plan = candidatos[0];
-    const forcadoId = (user as any).plano_forcado_id;
-    if (forcadoId) {
-      const forcado = plans.find((p) => p.id === Number(forcadoId) && p.active);
-      if (forcado && ((forcado as any).tipoPessoa === tipoPessoa || (forcado as any).tipoPessoa == null)) {
-        plan = forcado;
-      }
-    }
+    const plan = resolverPlanoDoUsuario(user, plans);
+    if (!plan) return { atualizado: false, motivo: `Sem plano ativo para ${rotuloModalidade(user as any)}` };
     const valor = parseFloat(plan.priceMonthly.toString()) * cfg.meses;
 
     // Assinatura atual (ativa ou pendente) com id no Asaas.
@@ -497,6 +473,55 @@ export class SubscriptionService {
 
     console.log(`[Assinatura] Valor sincronizado no Asaas user=${userId} plano=${plan.planCode} valor=${valor}.`);
     return { atualizado: true, valor };
+  }
+
+  /**
+   * Usuários com assinatura ativa/pendente no Asaas afetados por um plano:
+   * os que já estão nele e os que passariam a usá-lo pela regra de modalidade
+   * (ex.: PJ ME quando o plano PJ ME é criado/reativado).
+   */
+  async assinantesAfetadosPeloPlano(planId: number): Promise<number[]> {
+    const plans = await this.storage.getActiveSubscriptionPlans();
+    const rows = (await db.execute(sql`
+      SELECT DISTINCT us.usuario_id
+      FROM user_subscriptions us
+      WHERE us.asaas_subscription_id IS NOT NULL
+        AND us.status IN ('active', 'pending')
+    `)) as any[];
+    const afetados: number[] = [];
+    for (const r of rows) {
+      const userId = Number(r.usuario_id);
+      const user = await this.storage.getUserById(userId);
+      if (!user) continue;
+      const todas = await this.storage.getAllSubscriptionsByUserId(userId);
+      const atual = todas.find((s) => s.asaasSubscriptionId && (s.status === 'active' || s.status === 'pending'));
+      const resolvido = resolverPlanoDoUsuario(user, plans);
+      if (Number(atual?.planId) === planId || resolvido?.id === planId) afetados.push(userId);
+    }
+    return afetados;
+  }
+
+  /**
+   * Admin mudou preço/escopo de um plano: reajusta no Asaas a recorrência e as
+   * cobranças em aberto de todos os assinantes afetados. Um erro não para os demais.
+   */
+  async sincronizarAssinantesDoPlano(
+    planId: number,
+  ): Promise<{ total: number; atualizados: number; falhas: { userId: number; motivo: string }[] }> {
+    const ids = await this.assinantesAfetadosPeloPlano(planId);
+    const falhas: { userId: number; motivo: string }[] = [];
+    let atualizados = 0;
+    for (const userId of ids) {
+      try {
+        const r = await this.sincronizarValorAssinatura(userId);
+        if (r.atualizado) atualizados++;
+        else if (r.motivo) falhas.push({ userId, motivo: r.motivo });
+      } catch (e: any) {
+        falhas.push({ userId, motivo: e?.response?.data?.errors?.[0]?.description || e?.message || 'erro no Asaas' });
+      }
+    }
+    console.log(`[Assinatura] Plano ${planId}: ${atualizados}/${ids.length} assinaturas reajustadas no Asaas, ${falhas.length} falha(s).`);
+    return { total: ids.length, atualizados, falhas };
   }
 
   /**

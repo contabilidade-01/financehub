@@ -104,16 +104,23 @@ const NAO_E_PAGAMENTO_FATURA_PF = sql`NOT EXISTS (
  *   2. Se não existe, valem os planos sem tipo (NULL = serve aos dois), que é
  *      o caso de quem ainda tem um plano único.
  */
-export function filtrarPlanosPorTipo<T extends { tipoPessoa?: string | null }>(
+export function filtrarPlanosPorTipo<T extends { tipoPessoa?: string | null; portePj?: string | null }>(
   planos: T[],
   tipoPessoa: string | null | undefined,
+  portePj?: string | null,
 ): T[] {
   // Sem tipo definido → tratar como PF (evita cliente antigo/nulo ficar sem plano
   // depois que o plano único NULL vira tipado). Ver plano de separação PF/PJ.
   const t = tipoPessoa || "fisica";
   const doTipo = planos.filter((p) => p.tipoPessoa === t);
-  if (doTipo.length > 0) return doTipo;
-  return planos.filter((p) => !p.tipoPessoa);
+  if (doTipo.length === 0) return planos.filter((p) => !p.tipoPessoa);
+  if (t !== "juridica") return doTipo;
+  // PJ: plano do porte (PJ ME / PJ MEI) vence; sem plano do porte, valem os
+  // planos PJ sem porte (porte_pj NULL). PJ antigo sem porte = MEI.
+  const porte = String(portePj || "").toLowerCase() === "me" ? "me" : "mei";
+  const doPorte = doTipo.filter((p) => p.portePj === porte);
+  if (doPorte.length > 0) return doPorte;
+  return doTipo.filter((p) => !p.portePj);
 }
 
 /**

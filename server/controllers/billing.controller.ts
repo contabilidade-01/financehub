@@ -220,7 +220,7 @@ export async function checkout(req: Request, res: Response) {
     if (validatedData.planId) {
       const usuario = await storage.getUserById(userId);
       const ativos = (await storage.getActiveSubscriptionPlans()).filter((p: any) => p.active !== false);
-      const permitidos = filtrarPlanosPorTipo(ativos, (usuario as any)?.tipo_pessoa);
+      const permitidos = filtrarPlanosPorTipo(ativos, (usuario as any)?.tipo_pessoa, (usuario as any)?.porte_pj);
       if (permitidos.length && !permitidos.some((p) => p.id === validatedData.planId)) {
         return res.status(400).json({
           error: "Plano indisponível para o seu tipo de cadastro (Pessoa Física / Jurídica).",
@@ -399,6 +399,7 @@ export async function validateExternalCheckoutToken(req: Request, res: Response)
     const activePlans = filtrarPlanosPorTipo(
       plans.filter((p) => p.active),
       (user as any).tipo_pessoa,
+      (user as any).porte_pj,
     );
 
     // Retornar dados do usuário (sem informações sensíveis) e planos
@@ -829,8 +830,8 @@ export async function getBillingMetrics(req: Request, res: Response) {
     // Cada cliente entra pelo preço do SEU tipo: contar todo mundo pelo plano
     // mais barato subestimava o MRR assim que PF e PJ passaram a ter preços
     // diferentes (a lista vem ordenada por preço).
-    const precoMensalDoTipo = (tipoPessoa?: string | null): number => {
-      const doTipo = filtrarPlanosPorTipo(ativos, tipoPessoa);
+    const precoMensalDoTipo = (tipoPessoa?: string | null, portePj?: string | null): number => {
+      const doTipo = filtrarPlanosPorTipo(ativos, tipoPessoa, portePj);
       const escolhido = doTipo[0] || ativos[0];
       return escolhido ? parseFloat(escolhido.priceMonthly.toString()) : 0;
     };
@@ -842,7 +843,7 @@ export async function getBillingMetrics(req: Request, res: Response) {
       !idsComAssinaturaAtiva.has(u.id)
     );
     const mrrManual = manuaisAtivos.reduce(
-      (sum: number, u: any) => sum + precoMensalDoTipo(u.tipo_pessoa),
+      (sum: number, u: any) => sum + precoMensalDoTipo(u.tipo_pessoa, u.porte_pj),
       0,
     );
     const mrr = mrrAsaas + mrrManual;

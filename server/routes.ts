@@ -382,6 +382,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireSuperAdmin,
     subscriptionPlanController.updatePlan
   );
+  app.get(
+    "/api/admin/subscription-plans/:id/assinantes",
+    combinedAuth,
+    checkImpersonation,
+    requireSuperAdmin,
+    subscriptionPlanController.getPlanSubscribers
+  );
   app.delete(
     "/api/admin/subscription-plans/:id",
     combinedAuth,

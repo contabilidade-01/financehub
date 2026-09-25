@@ -1510,7 +1510,7 @@ export async function definirConsultoria(req: Request, res: Response) {
     const user = await storage.getUserById(userId);
     if (!user) return res.status(404).json({ error: "Usuário não encontrado" });
     if (ativar && (user as any).tipo_pessoa !== "juridica") {
-      return res.status(400).json({ error: "Consultoria (R$ 200) é só para Pessoa Jurídica." });
+      return res.status(400).json({ error: "Consultoria é só para Pessoa Jurídica." });
     }
     let plano_forcado_id: number | null = null;
     if (ativar) {

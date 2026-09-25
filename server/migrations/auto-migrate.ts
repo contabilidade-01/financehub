@@ -1037,6 +1037,20 @@ const STEPS: Step[] = [
       `);
     },
   },
+  {
+    name: "plano PJ ME com preço próprio (subscription_plans.porte_pj)",
+    run: async () => {
+      await db.execute(sql`ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS porte_pj VARCHAR(10)`);
+      // Começa com o mesmo preço do PJ atual; o admin fixa o valor em Pagamentos.
+      await db.execute(sql`
+        INSERT INTO subscription_plans (plan_code, name, description, price_monthly, tipo_pessoa, porte_pj, features, active)
+        SELECT 'mensal_pj_me', 'Plano Mensal PJ ME', 'Assinatura mensal PJ ME (ERP)',
+               COALESCE((SELECT price_monthly FROM subscription_plans WHERE plan_code = 'mensal_pj' LIMIT 1), 79.90),
+               'juridica', 'me', '[]', true
+        WHERE NOT EXISTS (SELECT 1 FROM subscription_plans WHERE plan_code = 'mensal_pj_me')
+      `);
+    },
+  },
 ];
 
 export async function runAutoMigrations(): Promise<void> {

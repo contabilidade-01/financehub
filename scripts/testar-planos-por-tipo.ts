@@ -2,8 +2,9 @@
 // É a mesma função usada para LISTAR planos ao cliente e para ESCOLHER o plano
 // da cobrança — se ela errar, o cliente vê um preço e é cobrado outro.
 import { filtrarPlanosPorTipo } from "../server/storage";
+import { resolverPlanoDoUsuario } from "../server/services/resolver-plano";
 
-type Plano = { planCode: string; priceMonthly: string; tipoPessoa?: string | null };
+type Plano = { planCode: string; priceMonthly: string; tipoPessoa?: string | null; portePj?: string | null };
 
 // Ordenados por preço, como vêm do banco (orderBy priceMonthly).
 // Os valores são os reais do negócio: PF 39,90 e PJ 79,90.
@@ -31,9 +32,10 @@ const CASOS: Caso[] = [
   { nome: "PF tipado + genérico → PF ignora o genérico", planos: [GENERICO, PF], tipo: "fisica", esperado: ["pf"] },
   { nome: "PF tipado + genérico → PJ cai no genérico", planos: [GENERICO, PF], tipo: "juridica", esperado: ["basico"] },
 
-  // Sem tipo definido: nunca deve devolver plano tipado (o serviço recusa a cobrança).
-  { nome: "tipo indefinido → só genéricos", planos: [GENERICO, PF, PJ], tipo: null, esperado: ["basico"] },
-  { nome: "tipo indefinido e nenhum genérico → vazio", planos: [PF, PJ], tipo: null, esperado: [] },
+  // Sem tipo definido = PF (cliente antigo/nulo não fica sem plano; ver filtrarPlanosPorTipo).
+  // O checkout ainda recusa cobrar quem não tem tipo definido.
+  { nome: "tipo indefinido → tratado como PF", planos: [GENERICO, PF, PJ], tipo: null, esperado: ["pf"] },
+  { nome: "tipo indefinido sem plano PF → genérico", planos: [GENERICO, PJ], tipo: null, esperado: ["basico"] },
 
   // O serviço usa o primeiro: precisa ser o mais barato daquele tipo.
   {
@@ -48,6 +50,7 @@ const CASOS: Caso[] = [
 ];
 
 let falhas = 0;
+let extras = 0;
 console.log("caso".padEnd(58), "| esperado        | obtido");
 console.log("-".repeat(100));
 for (const c of CASOS) {
@@ -80,6 +83,40 @@ for (const p of PRECOS) {
   );
 }
 
-const total = CASOS.length + PRECOS.length;
+// --- Modalidade PJ MEI / PJ ME (preço do PJ ME fixado pelo admin) ---
+const PJ_ME: Plano = { planCode: "mensal_pj_me", priceMonthly: "129.90", tipoPessoa: "juridica", portePj: "me" };
+const CONSULT: Plano = { planCode: "mensal_pj_consultoria", priceMonthly: "200.00", tipoPessoa: "juridica" };
+const todos = [PF, PJ, PJ_ME, CONSULT].sort((a, b) => Number(a.priceMonthly) - Number(b.priceMonthly));
+const PORTES: { nome: string; tipo: string; porte: string | null; esperado: string[] }[] = [
+  { nome: "PJ ME → só o plano ME", tipo: "juridica", porte: "me", esperado: ["mensal_pj_me"] },
+  { nome: "PJ MEI → planos PJ sem porte", tipo: "juridica", porte: "mei", esperado: ["pj", "mensal_pj_consultoria"] },
+  { nome: "PJ legado (porte NULL) = MEI", tipo: "juridica", porte: null, esperado: ["pj", "mensal_pj_consultoria"] },
+  { nome: "PF ignora porte", tipo: "fisica", porte: "me", esperado: ["pf"] },
+];
+for (const c of PORTES) {
+  const obtido = filtrarPlanosPorTipo(todos, c.tipo, c.porte).map((p) => p.planCode);
+  const ok = JSON.stringify(obtido) === JSON.stringify(c.esperado);
+  if (!ok) falhas++;
+  console.log(`${ok ? "ok  " : "FALHA"} ${c.nome}`.padEnd(58), "|", JSON.stringify(c.esperado), "|", JSON.stringify(obtido));
+}
+eq2("PJ ME sem plano ME → cai no PJ genérico", filtrarPlanosPorTipo([PF, PJ, CONSULT], "juridica", "me").map((p) => p.planCode), ["pj", "mensal_pj_consultoria"]);
+
+// resolverPlanoDoUsuario: mesma regra de checkout, renovação e reajuste no Asaas
+const comId = todos.map((p, i) => ({ ...p, id: i + 1, active: true }));
+const idDe = (code: string) => comId.find((p) => p.planCode === code)!.id;
+eq2("resolver: PJ ME → mensal_pj_me", resolverPlanoDoUsuario({ tipo_pessoa: "juridica", porte_pj: "me" }, comId)?.planCode, "mensal_pj_me");
+eq2("resolver: PJ MEI → pj (mais barato)", resolverPlanoDoUsuario({ tipo_pessoa: "juridica", porte_pj: "mei" }, comId)?.planCode, "pj");
+eq2("resolver: consultoria forçada vale para MEI", resolverPlanoDoUsuario({ tipo_pessoa: "juridica", porte_pj: "mei", plano_forcado_id: idDe("mensal_pj_consultoria") }, comId)?.planCode, "mensal_pj_consultoria");
+eq2("resolver: consultoria forçada vale para ME", resolverPlanoDoUsuario({ tipo_pessoa: "juridica", porte_pj: "me", plano_forcado_id: idDe("mensal_pj_consultoria") }, comId)?.planCode, "mensal_pj_consultoria");
+eq2("resolver: forçado de outro tipo é ignorado", resolverPlanoDoUsuario({ tipo_pessoa: "fisica", plano_forcado_id: idDe("mensal_pj_me") }, comId)?.planCode, "pf");
+
+function eq2(nome: string, obtido: unknown, esperado: unknown) {
+  extras++;
+  const ok = JSON.stringify(obtido) === JSON.stringify(esperado);
+  if (!ok) falhas++;
+  console.log(`${ok ? "ok  " : "FALHA"} ${nome}`.padEnd(58), "|", JSON.stringify(esperado), "|", JSON.stringify(obtido));
+}
+
+const total = CASOS.length + PRECOS.length + PORTES.length + extras;
 console.log(`\n${total - falhas}/${total} passaram`);
 process.exit(falhas === 0 ? 0 : 1);

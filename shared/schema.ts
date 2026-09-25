@@ -464,6 +464,8 @@ export const subscriptionPlans = pgTable("subscription_plans", {
   // A quem o plano se destina: 'fisica' (PF) | 'juridica' (PJ) | NULL = serve aos dois.
   // Permite preço por tipo; NULL preserva o comportamento de quem já tem plano único.
   tipoPessoa: varchar("tipo_pessoa", { length: 20 }),
+  // Porte (só PJ): 'mei' | 'me' | NULL = qualquer porte. Ex.: plano PJ ME com preço próprio.
+  portePj: varchar("porte_pj", { length: 10 }),
   features: text("features").notNull(), // JSON string com array de features
   maxTransactions: integer("max_transactions").default(0), // 0 = ilimitado
   maxWallets: integer("max_wallets").default(0), // 0 = ilimitado

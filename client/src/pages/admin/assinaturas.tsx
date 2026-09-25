@@ -56,6 +56,22 @@ export default function AdminAssinaturas() {
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["/api/admin/assinaturas"] });
 
+  // Preços vêm dos planos (editáveis em Pagamentos), não de valores fixos.
+  const { data: planos = [] } = useQuery<any[]>({
+    queryKey: ["/api/admin/subscription-plans"],
+    queryFn: () => apiRequest("/api/admin/subscription-plans"),
+  });
+  const fmt = (v?: string | number | null) =>
+    v == null ? "—" : Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const precoConsultoria = fmt(planos.find((p) => p.planCode === "mensal_pj_consultoria")?.priceMonthly);
+  const precoBase = (a?: { porte_pj?: string | null } | null) => {
+    const ativos = planos.filter((p) => p.active && p.tipoPessoa === "juridica");
+    const porte = a?.porte_pj === "me" ? "me" : "mei";
+    const doPorte = ativos.filter((p) => p.portePj === porte);
+    const lista = doPorte.length ? doPorte : ativos.filter((p) => !p.portePj);
+    return fmt(lista.sort((x, y) => Number(x.priceMonthly) - Number(y.priceMonthly))[0]?.priceMonthly);
+  };
+
   const definirMut = useMutation({
     mutationFn: ({ id, data }: { id: number; data: any }) => apiRequest(`/api/admin/assinaturas/${id}/definir`, { method: "POST", data }),
     onSuccess: () => { invalidate(); setDefinindo(null); toast({ title: "Assinatura definida" }); },
@@ -73,9 +89,10 @@ export default function AdminAssinaturas() {
   });
   const consultoriaMut = useMutation({
     mutationFn: ({ id, ativar }: { id: number; ativar: boolean }) => apiRequest(`/api/admin/assinaturas/${id}/consultoria`, { method: "POST", data: { ativar } }),
-    onSuccess: (r: any) => {
+    onSuccess: (r: any, vars) => {
       invalidate();
-      const base = r?.com_consultoria ? "Marcado: R$ 200,00 (com consultoria)" : "Voltou ao padrão: R$ 79,90";
+      const alvo = lista.find((x) => x.id === vars.id);
+      const base = r?.com_consultoria ? `Marcado: R$ ${precoConsultoria} (com consultoria)` : `Voltou ao padrão: R$ ${precoBase(alvo)}`;
       const desc = r?.asaas?.atualizado
         ? "Valor já sincronizado no Asaas (recorrência e cobrança em aberto)."
         : (r?.asaas?.motivo || "Vale na próxima cobrança/renovação.");
@@ -165,10 +182,10 @@ export default function AdminAssinaturas() {
                       type="button"
                       onClick={() => consultoriaMut.mutate({ id: a.id, ativar: !a.com_consultoria })}
                       disabled={consultoriaMut.isPending}
-                      title="Alternar cobrança: Base (R$ 79,90) ↔ Com consultoria (R$ 200,00)"
+                      title={`Alternar cobrança: Base (R$ ${precoBase(a)}) ↔ Com consultoria (R$ ${precoConsultoria})`}
                       className={`text-[11px] rounded-full px-2.5 py-1 border transition-colors ${a.com_consultoria ? "bg-violet-500/15 text-violet-600 border-violet-500/30" : "bg-muted text-muted-foreground border-transparent hover:bg-muted/70"}`}
                     >
-                      {a.com_consultoria ? "Consultoria R$ 200,00" : "Base R$ 79,90"}
+                      {a.com_consultoria ? `Consultoria R$ ${precoConsultoria}` : `Base R$ ${precoBase(a)}`}
                     </button>
                   )}
                   <div className="flex items-center gap-1">
@@ -214,13 +231,14 @@ export default function AdminAssinaturas() {
                 <strong>Cobrança no Asaas:</strong> envia nome, e-mail e telefone que já temos e abre a página do Asaas. O cliente só completa o que faltar (CPF/cartão/Pix). O acesso libera sozinho quando o pagamento confirmar. Ciclo: <strong>{form.ciclo}</strong>.
               </div>
               {definindo?.tipo_pessoa === "juridica" && (() => {
-                const comConsult = lista.find((a) => a.id === definindo.id)?.com_consultoria ?? false;
+                const atualDef = lista.find((a) => a.id === definindo.id);
+                const comConsult = atualDef?.com_consultoria ?? false;
                 return (
                   <div className="flex flex-wrap items-center justify-between gap-2 rounded border bg-background px-2 py-1.5">
                     <span className="text-xs">
                       Valor que será cobrado:{" "}
                       <strong className={comConsult ? "text-violet-600" : ""}>
-                        {comConsult ? "Consultoria — R$ 200,00" : "Base — R$ 79,90"}
+                        {comConsult ? `Consultoria — R$ ${precoConsultoria}` : `Base — R$ ${precoBase(atualDef)}`}
                       </strong>
                     </span>
                     <Button
@@ -229,7 +247,7 @@ export default function AdminAssinaturas() {
                       disabled={consultoriaMut.isPending}
                       onClick={() => consultoriaMut.mutate({ id: definindo.id, ativar: !comConsult })}
                     >
-                      {comConsult ? "Mudar para Base (79,90)" : "Cobrar Consultoria (200,00)"}
+                      {comConsult ? `Mudar para Base (${precoBase(atualDef)})` : `Cobrar Consultoria (${precoConsultoria})`}
                     </Button>
                   </div>
                 );
