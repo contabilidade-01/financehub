@@ -77,19 +77,25 @@ export function novaExpiracao(
 }
 
 /**
- * Vencimento da 1ª cobrança. Quem ainda está na degustação e paga antes do fim
- * não perde os dias restantes: a mensalidade começa quando a degustação termina.
+ * Vencimento da 1ª cobrança = ÚLTIMO DIA DA VIGÊNCIA atual (regra do negócio).
+ *  - Degustação rodando: vence no dia em que ela termina (pagar antes não perde dias).
+ *  - Vigência definida pelo admin ("ativa" manual): vence no fim dela; o acesso
+ *    gravado inclui a tolerância, então a vigência é o acesso − tolerância.
+ *  - Sem vigência futura (expirou, sem data): vence hoje.
+ * Cobrança paga em até 3 dias depois do vencimento mantém o acesso (tolerância).
  */
 export function vencimentoPrimeiraCobranca(
   hojeISO: string,
   user: { status_assinatura?: string | null; data_expiracao_assinatura?: Date | string | null },
 ): string {
-  if (user.status_assinatura !== "degustacao" || !user.data_expiracao_assinatura) return hojeISO;
-  const fim = diaSP(user.data_expiracao_assinatura);
-  if (!fim || fim <= hojeISO) return hojeISO;
-  // Proteção: degustação é de 15 dias; data absurda não empurra a cobrança.
-  const limite = somarDiasISO(hojeISO, 31);
-  return fim > limite ? hojeISO : fim;
+  if (!user.data_expiracao_assinatura) return hojeISO;
+  let fim = diaSP(user.data_expiracao_assinatura);
+  if (!fim) return hojeISO;
+  const status = String(user.status_assinatura || "");
+  if (status === "ativa" || status === "vencida") fim = somarDiasISO(fim, -TOLERANCIA_DIAS);
+  if (fim <= hojeISO) return hojeISO;
+  // Proteção: data absurda (mais de 1 ano) não empurra a cobrança.
+  return fim > somarDiasISO(hojeISO, 366) ? hojeISO : fim;
 }
 
 /**

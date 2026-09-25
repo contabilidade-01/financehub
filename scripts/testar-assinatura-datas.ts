@@ -61,6 +61,14 @@ igual("degustação expirada → hoje",
   vencimentoPrimeiraCobranca("2026-09-25", { status_assinatura: "degustacao_expirada", data_expiracao_assinatura: "2026-09-20T12:00:00Z" }), "2026-09-25");
 igual("data absurda → hoje",
   vencimentoPrimeiraCobranca("2026-09-25", { status_assinatura: "degustacao", data_expiracao_assinatura: "2027-09-30T12:00:00Z" }), "2026-09-25");
+igual("degustação estendida até 21/10 → 1ª cobrança vence 21/10",
+  vencimentoPrimeiraCobranca("2026-09-21", { status_assinatura: "degustacao", data_expiracao_assinatura: "2026-10-21T15:00:00Z" }), "2026-10-21");
+igual("degustação termina 21/09, link gerado 21/09 → vence 21/09 (não 21/10)",
+  vencimentoPrimeiraCobranca("2026-09-21", { status_assinatura: "degustacao", data_expiracao_assinatura: "2026-09-21T20:00:00Z" }), "2026-09-21");
+igual("vigência manual (ativa) até 21/10 + tolerância → vence 21/10",
+  vencimentoPrimeiraCobranca("2026-09-25", { status_assinatura: "ativa", data_expiracao_assinatura: fimDoPeriodoPago("2026-09-21", 1) }), "2026-10-21");
+igual("sem data → hoje",
+  vencimentoPrimeiraCobranca("2026-09-25", { status_assinatura: "sem_assinatura", data_expiracao_assinatura: null }), "2026-09-25");
 
 console.log("Vencimento prorrogado no painel do Asaas (caso Rafael)");
 {

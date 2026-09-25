@@ -119,6 +119,8 @@ eq2("link: marcada OVERDUE no Asaas gera nova", podeReaproveitarCobranca({ valor
 eq2("link: valor diferente gera nova", podeReaproveitarCobranca({ valor: 79.9, vencimento: "2026-09-30" }, 200, hojeT), false);
 eq2("link: local sem vencimento conhecido gera nova", podeReaproveitarCobranca({ valor: 200, vencimento: null, status: "pending" }, 200, hojeT), false);
 eq2("link: Date do banco no futuro reaproveita", podeReaproveitarCobranca({ valor: "200.00", vencimento: new Date("2026-09-28T00:00:00Z"), status: "pending" }, 200, hojeT), true);
+eq2("link: vencimento 21/10 para vigência que acaba 21/09 gera nova", podeReaproveitarCobranca({ valor: 200, vencimento: "2026-10-21", status: "PENDING" }, 200, "2026-09-21", "2026-09-21"), false);
+eq2("link: vencimento no fim da vigência reaproveita", podeReaproveitarCobranca({ valor: 200, vencimento: "2026-09-21", status: "PENDING" }, 200, "2026-09-21", "2026-09-21"), true);
 
 function eq2(nome: string, obtido: unknown, esperado: unknown) {
   extras++;

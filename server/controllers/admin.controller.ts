@@ -1492,18 +1492,50 @@ export async function getAssinaturas(req: Request, res: Response) {
 export async function definirAssinatura(req: Request, res: Response) {
   try {
     const userId = parseInt(req.params.id);
-    const { ciclo, inicio } = req.body || {};
+    const { ciclo, inicio, ajustarAsaas } = req.body || {};
     const meses = MESES_CICLO[ciclo];
     if (!meses) return res.status(400).json({ error: "ciclo inválido (mensal | trimestral | anual)" });
     const user = await storage.getUserById(userId);
     if (!user) return res.status(404).json({ error: "Usuário não encontrado" });
-    const base = typeof inicio === "string" && /^\d{4}-\d{2}-\d{2}/.test(inicio) ? new Date(inicio) : new Date();
-    const venc = addMeses(base, meses);
+    const { fimDoPeriodoPago, proximoVencimento, fimDoCicloPago } = await import("../services/assinatura-datas");
+    const { diaSP } = await import("../../shared/datas-sp");
+    const inicioISO = typeof inicio === "string" && /^\d{4}-\d{2}-\d{2}/.test(inicio) ? inicio.slice(0, 10) : (diaSP(new Date()) as string);
+    // Mesma regra das cobranças: vigência = início + ciclo; acesso até o fim do
+    // dia da vigência + 3 dias de tolerância.
+    const vigencia = proximoVencimento(inicioISO, meses);
+    const venc = fimDoPeriodoPago(inicioISO, meses);
     const updated = await storage.updateUser(userId, {
       ciclo_assinatura: ciclo, data_expiracao_assinatura: venc, ativo: true,
       status_assinatura: "ativa", subscriptionActive: true,
     } as any);
-    return res.json(updated);
+
+    // Assinatura no Asaas: "Próxima cobrança" local e (se pedido) a próxima
+    // cobrança do Asaas passam a ser o fim da vigência.
+    let asaas: { ajustado: boolean; motivo?: string } = { ajustado: false };
+    const sub = await storage.getActiveSubscriptionByUserId(userId);
+    if (sub) {
+      await storage.updateUserSubscription(sub.id, { currentPeriodEnd: fimDoCicloPago(inicioISO, meses) } as any);
+      if (ajustarAsaas !== false && sub.asaasSubscriptionId) {
+        try {
+          const { getAsaasService } = await import("../services/asaas.service");
+          const svc = await getAsaasService();
+          const atual = await svc.getSubscription(sub.asaasSubscriptionId);
+          if (String((atual as any)?.nextDueDate || "").slice(0, 10) === vigencia) {
+            asaas = { ajustado: true, motivo: "Já estava nessa data." };
+          } else {
+            await svc.updateSubscription(sub.asaasSubscriptionId, { nextDueDate: vigencia } as any);
+            asaas = { ajustado: true };
+          }
+        } catch (e: any) {
+          asaas = { ajustado: false, motivo: e?.response?.data?.errors?.[0]?.description || e?.message || "Falha no Asaas" };
+        }
+      } else if (!sub.asaasSubscriptionId) {
+        asaas = { ajustado: false, motivo: "Cliente sem assinatura no Asaas." };
+      }
+    } else {
+      asaas = { ajustado: false, motivo: "Cliente sem assinatura no Asaas." };
+    }
+    return res.json({ ...updated, vigencia, acesso_ate: venc, asaas });
   } catch (err) {
     console.error("definirAssinatura:", err);
     return res.status(500).json({ error: "Erro ao definir assinatura" });

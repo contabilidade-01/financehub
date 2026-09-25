@@ -58,7 +58,7 @@ export default function AdminAssinaturas() {
   const queryClient = useQueryClient();
   const [filtro, setFiltro] = useState<string>("todos");
   const [definindo, setDefinindo] = useState<Assinatura | null>(null);
-  const [form, setForm] = useState({ ciclo: "mensal", inicio: hoje() });
+  const [form, setForm] = useState({ ciclo: "mensal", inicio: hoje(), ajustarAsaas: true });
   const [linkCobranca, setLinkCobranca] = useState<string>("");
 
   const { data: lista = [], isLoading } = useQuery<Assinatura[]>({
@@ -86,7 +86,15 @@ export default function AdminAssinaturas() {
 
   const definirMut = useMutation({
     mutationFn: ({ id, data }: { id: number; data: any }) => apiRequest(`/api/admin/assinaturas/${id}/definir`, { method: "POST", data }),
-    onSuccess: () => { invalidate(); setDefinindo(null); toast({ title: "Assinatura definida" }); },
+    onSuccess: (r: any) => {
+      invalidate();
+      setDefinindo(null);
+      const br = (iso?: string) => (iso ? String(iso).slice(0, 10).split("-").reverse().join("/") : "—");
+      const asaasTxt = r?.asaas?.ajustado
+        ? `Próxima cobrança no Asaas: ${br(r.vigencia)}.`
+        : r?.asaas?.motivo ? `Asaas não ajustado: ${r.asaas.motivo}` : "";
+      toast({ title: `Vigência até ${br(r?.vigencia)}`, description: `Acesso até ${new Date(r?.acesso_ate).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })} (3 dias de tolerância). ${asaasTxt}` });
+    },
     onError: (err: any) => toast({ title: "Erro", description: err?.error || err?.message || "Falha", variant: "destructive" }),
   });
   const renovarMut = useMutation({
@@ -96,7 +104,11 @@ export default function AdminAssinaturas() {
   });
   const linkMut = useMutation({
     mutationFn: ({ id, ciclo }: { id: number; ciclo: string }) => apiRequest(`/api/admin/assinaturas/${id}/gerar-link`, { method: "POST", data: { ciclo } }),
-    onSuccess: (r: any) => { setLinkCobranca(r?.url || ""); toast({ title: "Link gerado", description: "Copie e envie ao cliente." }); },
+    onSuccess: (r: any) => {
+      setLinkCobranca(r?.url || "");
+      const venc = r?.vencimento ? String(r.vencimento).slice(0, 10).split("-").reverse().join("/") : null;
+      toast({ title: "Link gerado", description: `${venc ? `1ª cobrança vence em ${venc} (fim da vigência atual). ` : ""}Copie e envie ao cliente.` });
+    },
     onError: (err: any) => toast({ title: "Erro", description: err?.error || err?.message || "Falha ao gerar link", variant: "destructive" }),
   });
   const sincronizarMut = useMutation({
@@ -133,7 +145,7 @@ export default function AdminAssinaturas() {
 
   const filtrada = filtro === "todos" ? lista : lista.filter((a) => a.situacao === filtro);
 
-  const openDefinir = (a: Assinatura) => { setDefinindo(a); setForm({ ciclo: a.ciclo_assinatura || "mensal", inicio: hoje() }); setLinkCobranca(""); };
+  const openDefinir = (a: Assinatura) => { setDefinindo(a); setForm({ ciclo: a.ciclo_assinatura || "mensal", inicio: hoje(), ajustarAsaas: true }); setLinkCobranca(""); };
   const cicloMeses = CICLOS.find((c) => c.value === form.ciclo)?.meses ?? 1;
 
   return (
@@ -254,8 +266,12 @@ export default function AdminAssinaturas() {
               </div>
             </div>
             <div className="text-sm text-muted-foreground">
-              Vencimento calculado: <strong className="text-foreground">{addMesesISO(form.inicio, cicloMeses)}</strong> ({cicloMeses} {cicloMeses === 1 ? "mês" : "meses"}).
+              Vigência até <strong className="text-foreground">{addMesesISO(form.inicio, cicloMeses)}</strong> ({cicloMeses} {cicloMeses === 1 ? "mês" : "meses"}) — é o vencimento da próxima cobrança. Acesso segue por mais 3 dias de tolerância.
             </div>
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" className="mt-1" checked={form.ajustarAsaas} onChange={(e) => setForm({ ...form, ajustarAsaas: e.target.checked })} />
+              <span>Ajustar a próxima cobrança no Asaas para <strong>{addMesesISO(form.inicio, cicloMeses)}</strong> <span className="text-muted-foreground">(se o cliente tiver assinatura lá)</span></span>
+            </label>
 
             {/* Cobrança automática (Asaas) — gera link para o cliente pagar */}
             <div className="rounded-md border p-3 space-y-2 bg-muted/30">
@@ -297,7 +313,7 @@ export default function AdminAssinaturas() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDefinindo(null)}>Cancelar</Button>
-            <Button onClick={() => definindo && definirMut.mutate({ id: definindo.id, data: { ciclo: form.ciclo, inicio: form.inicio } })} disabled={definirMut.isPending}>
+            <Button onClick={() => definindo && definirMut.mutate({ id: definindo.id, data: { ciclo: form.ciclo, inicio: form.inicio, ajustarAsaas: form.ajustarAsaas } })} disabled={definirMut.isPending}>
               {definirMut.isPending ? "Salvando…" : "Ativar manual"}
             </Button>
           </DialogFooter>
