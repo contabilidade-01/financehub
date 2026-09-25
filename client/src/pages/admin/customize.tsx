@@ -3569,7 +3569,7 @@ export default function CustomizePage() {
         setIsSessionConnected(false);
         setConnectedSessionInfo(null);
       }}>
-        <DialogContent className="w-[400px] max-h-[80vh] flex flex-col p-0 border border-gray-200 dark:border-gray-700 shadow-lg bg-white dark:bg-gray-900">
+        <DialogContent className="w-full sm:w-[400px] max-h-[80vh] flex flex-col p-0 border border-gray-200 dark:border-gray-700 shadow-lg bg-white dark:bg-gray-900">
           {/* Header simples */}
           <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
             <h2 className="text-lg font-medium text-center text-gray-900 dark:text-white">

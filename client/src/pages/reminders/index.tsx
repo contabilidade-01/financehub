@@ -16,7 +16,6 @@ import Loading from '@/components/shared/Loading';
 import { Reminder } from '@shared/schema';
 import { PlusIcon, CalendarIcon, Bell, CheckCircle, X } from 'lucide-react';
 import { motion } from 'framer-motion';
-import '../categories/category-modal.css';
 import { useTranslation } from '@/contexts/LocalizationContext';
 import { getMonthNames, getDayNames, getDayNamesLong } from '@/utils/localization';
 

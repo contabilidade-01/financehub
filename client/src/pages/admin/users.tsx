@@ -1119,24 +1119,24 @@ export default function AdminUsers() {
 
       {/* Modal de Edição com CSS Exclusivo */}
       {isEditModalOpen && (
-        <div className="admin-edit-modal-overlay">
-          <div className="admin-edit-modal-container">
-      <div className="admin-edit-modal-header">
-        <div className="admin-edit-modal-title">
-          <Edit className="admin-edit-modal-icon" />
+        <div className="admin-user-modal-overlay">
+          <div className="admin-user-modal-container">
+      <div className="admin-user-modal-header">
+        <div className="admin-user-modal-title">
+          <Edit className="admin-user-modal-icon" />
           <span>{t("admin.users.edit_modal.title", "Editar Usuário")}</span>
         </div>
         <button 
           onClick={() => setIsEditModalOpen(false)}
-          className="admin-edit-modal-close"
+          className="admin-user-modal-close"
         >
                 ×
               </button>
             </div>
             
-      <div className="admin-edit-modal-content">
-        <div className="admin-edit-form-group">
-          <label className="admin-edit-form-label">
+      <div className="admin-user-modal-content">
+        <div className="admin-user-form-group">
+          <label className="admin-user-form-label">
             {t("admin.users.edit_modal.fields.full_name.label", "Nome Completo")}
           </label>
           <input
@@ -1144,12 +1144,12 @@ export default function AdminUsers() {
             value={editForm.nome}
             onChange={(e) => setEditForm(prev => ({ ...prev, nome: e.target.value }))}
             placeholder={t("admin.users.edit_modal.fields.full_name.placeholder", "Digite o nome completo")}
-            className="admin-edit-form-input"
+            className="admin-user-form-input"
           />
         </div>
         
-        <div className="admin-edit-form-group">
-          <label className="admin-edit-form-label">
+        <div className="admin-user-form-group">
+          <label className="admin-user-form-label">
             {t("admin.users.edit_modal.fields.email.label", "Email")}
           </label>
           <input
@@ -1157,7 +1157,7 @@ export default function AdminUsers() {
             value={editForm.email}
             onChange={(e) => setEditForm(prev => ({ ...prev, email: e.target.value }))}
             placeholder={t("admin.users.edit_modal.fields.email.placeholder", "usuario@exemplo.com")}
-            className="admin-edit-form-input"
+            className="admin-user-form-input"
           />
           {editForm.email?.endsWith("@tel.local") && (
             <div className="text-xs text-amber-500 mt-1">
@@ -1169,14 +1169,14 @@ export default function AdminUsers() {
           )}
         </div>
         
-        <div className="admin-edit-form-group">
-          <label className="admin-edit-form-label">
+        <div className="admin-user-form-group">
+          <label className="admin-user-form-label">
             {t("admin.users.edit_modal.fields.role.label", "Tipo de Usuário")}
           </label>
           <select 
             value={editForm.tipo_usuario}
             onChange={(e) => setEditForm(prev => ({ ...prev, tipo_usuario: e.target.value as "usuario" | "admin" | "super_admin" }))}
-            className="admin-edit-form-select"
+            className="admin-user-form-select"
           >
             <option value="usuario">{t("admin.users.roles.user", "Usuário Padrão")}</option>
             <option value="admin">{t("admin.users.roles.admin", "Administrador")}</option>
@@ -1184,14 +1184,14 @@ export default function AdminUsers() {
           </select>
         </div>
 
-        <div className="admin-edit-form-group">
-          <label className="admin-edit-form-label">
+        <div className="admin-user-form-group">
+          <label className="admin-user-form-label">
             {t("admin.users.edit_modal.fields.person_type.label", "Tipo de Pessoa")}
           </label>
           <select
             value={modalidadeDe(editForm)}
             onChange={(e) => setEditForm(prev => ({ ...prev, ...camposDaModalidade(e.target.value as Modalidade) }))}
-            className="admin-edit-form-select"
+            className="admin-user-form-select"
           >
             <option value="pf">{t("admin.users.person_type.pf", "Pessoa Física (PF)")}</option>
             <option value="pj_mei">{t("admin.users.person_type.pj_mei", "PJ MEI")}</option>
@@ -1199,21 +1199,21 @@ export default function AdminUsers() {
           </select>
         </div>
 
-        <div className="admin-edit-form-group">
-          <div className="admin-edit-switch-container">
+        <div className="admin-user-form-group">
+          <div className="admin-user-switch-container">
             <Switch
               checked={editForm.ativo}
               onCheckedChange={(checked) => setEditForm(prev => ({ ...prev, ativo: checked }))}
-              className="admin-edit-switch"
+              className="admin-user-switch"
             />
-            <label className="admin-edit-form-label">
+            <label className="admin-user-form-label">
               {t("admin.users.edit_modal.fields.active.label", "Usuário Ativo")}
             </label>
           </div>
         </div>
 
-        <div className="admin-edit-form-group">
-          <label className="admin-edit-form-label">
+        <div className="admin-user-form-group">
+          <label className="admin-user-form-label">
             {t("admin.users.edit_modal.fields.password.label", "Nova Senha (deixe em branco para não alterar)")}
           </label>
           <input
@@ -1221,27 +1221,27 @@ export default function AdminUsers() {
             value={editForm.nova_senha}
             onChange={(e) => setEditForm(prev => ({ ...prev, nova_senha: e.target.value }))}
             placeholder={t("admin.users.edit_modal.fields.password.placeholder", "Digite a nova senha")}
-            className="admin-edit-form-input"
+            className="admin-user-form-input"
           />
         </div>
 
-        <div className="admin-edit-form-group">
-          <label className="admin-edit-form-label">
+        <div className="admin-user-form-group">
+          <label className="admin-user-form-label">
             {t("admin.users.edit_modal.fields.subscription_expiration.label", "Data de Expiração da Assinatura")}
           </label>
           <input
             type="date"
             value={editForm.data_expiracao_assinatura}
             onChange={(e) => setEditForm(prev => ({ ...prev, data_expiracao_assinatura: e.target.value }))}
-            className="admin-edit-form-input"
+            className="admin-user-form-input"
           />
           <div className="text-xs text-gray-400 mt-1">
             {t("admin.users.edit_modal.fields.subscription_expiration.hint", "Deixe em branco para assinatura ilimitada")}
           </div>
         </div>
         
-        <div className="admin-edit-form-group">
-          <label className="admin-edit-form-label">
+        <div className="admin-user-form-group">
+          <label className="admin-user-form-label">
             {t("admin.users.edit_modal.fields.phone.label", "Telefone")}
           </label>
           <PhoneInput
@@ -1260,17 +1260,17 @@ export default function AdminUsers() {
           {editPhoneError && <div style={{ color: 'red', fontSize: 12 }}>{editPhoneError}</div>}
         </div>
         
-        <div className="admin-edit-modal-actions">
+        <div className="admin-user-modal-actions">
           <button 
             onClick={() => setIsEditModalOpen(false)}
-            className="admin-edit-btn-secondary"
+            className="admin-user-btn-secondary"
           >
             {t("common.cancel", "Cancelar")}
           </button>
           <button 
             onClick={handleUpdateUser}
             disabled={updateUserMutation.isPending}
-            className="admin-edit-btn-primary"
+            className="admin-user-btn-primary"
           >
             {updateUserMutation.isPending
               ? t("admin.users.edit_modal.actions.saving", "Atualizando...")

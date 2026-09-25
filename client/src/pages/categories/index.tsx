@@ -19,7 +19,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { ChevronDown, Check, X } from "lucide-react";
-import "./category-modal.css";
 import {
   DropdownMenu,
   DropdownMenuContent,
