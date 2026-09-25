@@ -81,6 +81,24 @@ for (const [d, tipo, esp] of descricoes) eq(`descrição "${d}" (${tipo})`, suge
 const comCustom = [...cats, { id: 999, nome: "Filhos", tipo: "Despesa", descricao: "Fralda, brinquedo, babá" }];
 eq("categoria do cliente pela descrição", sugerirCategoriaPorDescricao("fralda pampers", comCustom, "Despesa")?.categoria.nome, "Filhos");
 
+// Categorias globais (cadastro pela web): sem "Restaurante / Delivery" etc. → mais próxima
+const GLOBAIS = ["Alimentação", "Doações", "Dízimos e Ofertas", "Educação", "Freelance", "Impostos", "Investimentos", "Lazer",
+  "Moradia", "Outros", "Presentes", "Reembolso", "Salário", "Saúde", "Serviços", "Transporte", "Vestuário"]
+  .map((nome, i) => ({ id: 500 + i, nome, tipo: ["Freelance", "Investimentos", "Presentes", "Reembolso", "Salário"].includes(nome) ? "Receita" : "Despesa" }));
+GLOBAIS.push({ id: 600, nome: "Outros", tipo: "Receita" });
+const globais: [string, string, string | undefined][] = [
+  ["Compra no débito - iFood", "Despesa", "Alimentação"],
+  ["netflix", "Despesa", "Lazer"],
+  ["unimed", "Despesa", "Saúde"],
+  ["conta de luz", "Despesa", "Moradia"],
+  ["uber", "Despesa", "Transporte"],
+  ["freela site", "Receita", "Freelance"],
+  ["ração do cachorro", "Despesa", "Outros"],
+];
+for (const [d, tipo, esp] of globais) eq(`globais: "${d}"`, sugerirCategoriaPorDescricao(d, GLOBAIS, tipo)?.categoria.nome, esp);
+eq("globais: LLM 'Restaurante' → Alimentação", casarCategoriaPorNome("Restaurante", GLOBAIS, "Despesa")?.nome, "Alimentação");
+eq("globais: LLM 'Farmácia' → Saúde", casarCategoriaPorNome("Farmácia", GLOBAIS, "Despesa")?.nome, "Saúde");
+
 // Memória por palavras inteiras
 eq("chave de memória", chaveMemoria("Uber pro trabalho 25,00"), "uber trabalho");
 eq("chave casa descrição maior", chaveCasa("uber", "uber pro aeroporto"), true);

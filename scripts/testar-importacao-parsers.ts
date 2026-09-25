@@ -167,5 +167,18 @@ CHARSET:1252
   eq("sem cabeçalho: valor x saldo", m.map((x) => x.valor), [-150.3, 5000]);
 }
 
-console.log(`\n${total - falhas}/${total} cenários OK`);
-if (falhas) process.exit(1);
+// ---------------- Código da conta criada na tela de importação (PJ) ----------------
+(async () => {
+  const { proximoCodigoConta } = await import("../server/services/importacao/importacao.service");
+  const plano = [
+    { codigo: "1.01", tipo: "Receita" }, { codigo: "1.02", tipo: "Receita" },
+    { codigo: "3.01", tipo: "Despesa" }, { codigo: "3.02", tipo: "Despesa" }, { codigo: "3.03", tipo: "Despesa" },
+    { codigo: "4.01", tipo: "Despesa" },
+  ];
+  eq("código: receita no grupo 1", proximoCodigoConta(plano, "Receita"), "1.03");
+  eq("código: despesa no grupo mais usado", proximoCodigoConta(plano, "Despesa"), "3.04");
+  eq("código: filha de 3.03", proximoCodigoConta(plano, "Despesa", "3.03"), "3.03.01");
+  eq("código: plano vazio", proximoCodigoConta([], "Despesa"), "3.01");
+  console.log(`\n${total - falhas}/${total} cenários OK`);
+  if (falhas) process.exit(1);
+})();

@@ -1584,6 +1584,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const simularWaCtrl = await import("./controllers/simular-whatsapp.controller");
   app.post("/api/admin/simular-whatsapp", combinedAuth, checkImpersonation, requireSuperAdmin, simularWaCtrl.simularWhatsapp);
+  // Importação de extratos (PF e PJ) — sessão persistente com autosave.
+  const importacaoCtrl = await import("./controllers/importacao.controller");
+  const uploadExtrato = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+    fileFilter: (_req, file, cb) => {
+      if (/\.(ofx|qfx|csv|txt|xlsx|xls|xlsm|ods)$/i.test(file.originalname || "")) return cb(null, true);
+      cb(new Error("Formato não suportado. Envie OFX, CSV ou Excel."));
+    },
+  });
+  // Atrás da flag importacao_extrato_v2 (super admin sempre acessa).
+  const { flagAtiva, FLAG_IMPORTACAO_EXTRATO_V2 } = await import("./services/feature-flags.service");
+  const exigeImportacaoV2 = async (req: Request, res: Response, next: NextFunction) => {
+    const u = req.user as any;
+    if (u?.tipo_usuario === "super_admin" || (req as any).originalUser?.tipo_usuario === "super_admin") return next();
+    if (await flagAtiva(FLAG_IMPORTACAO_EXTRATO_V2, u?.id)) return next();
+    return res.status(404).json({ error: "Recurso não disponível." });
+  };
+  app.use("/api/importacoes", combinedAuth, checkImpersonation, exigeImportacaoV2);
+  app.post("/api/importacoes", combinedAuth, checkImpersonation, (req, res, next) =>
+    uploadExtrato.single("arquivo")(req, res, (err: any) =>
+      err ? res.status(400).json({ error: err.code === "LIMIT_FILE_SIZE" ? "Arquivo maior que 10 MB." : err.message }) : next(),
+    ), importacaoCtrl.criar);
+  app.get("/api/importacoes", combinedAuth, checkImpersonation, importacaoCtrl.listar);
+  app.get("/api/importacoes/:id", combinedAuth, checkImpersonation, importacaoCtrl.detalhar);
+  app.put("/api/importacoes/:id/mapeamento", combinedAuth, checkImpersonation, importacaoCtrl.mapeamento);
+  app.put("/api/importacoes/:id/conta", combinedAuth, checkImpersonation, importacaoCtrl.conta);
+  app.patch("/api/importacoes/:id/linhas", combinedAuth, checkImpersonation, importacaoCtrl.linhas);
+  app.post("/api/importacoes/:id/regra", combinedAuth, checkImpersonation, importacaoCtrl.regra);
+  app.post("/api/importacoes/:id/sugerir", combinedAuth, checkImpersonation, importacaoCtrl.sugerir);
+  app.post("/api/importacoes/:id/categorias", combinedAuth, checkImpersonation, importacaoCtrl.categoria);
+  app.post("/api/importacoes/:id/confirmar", combinedAuth, checkImpersonation, importacaoCtrl.confirmar);
+  app.delete("/api/importacoes/:id", combinedAuth, checkImpersonation, importacaoCtrl.cancelar);
+
   const iaAuditoriaCtrl = await import("./controllers/ia-auditoria.controller");
   app.get("/api/admin/ia/eventos", combinedAuth, checkImpersonation, requireSuperAdmin, iaAuditoriaCtrl.listarEventosIa);
 

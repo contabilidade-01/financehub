@@ -81,11 +81,42 @@ const ALIAS_NOME: Record<string, string> = {
   outros: "__outros__", outras: "__outros__", diversos: "__outros__",
 };
 
+/**
+ * Quando o cliente não tem a categoria específica (ex.: usa as categorias
+ * globais, sem "Restaurante / Delivery"), cai na mais próxima que ele tem.
+ */
+const BASE_ALTERNATIVA: Record<string, string[]> = {
+  "restaurante delivery": ["alimentacao"],
+  "plano saude": ["saude"],
+  "energia agua gas": ["moradia"],
+  "internet telefone": ["moradia", "servicos"],
+  "assinaturas streaming": ["lazer entretenimento", "servicos"],
+  "cuidados pessoais": ["saude"],
+  "pets": ["__outros__"],
+  "seguros": ["servicos", "__outros__"],
+  "financiamentos parcelas fixas": ["moradia", "__outros__"],
+  "compras diversas": ["__outros__"],
+  "dizimos ofertas": ["doacoes"],
+  "freelance renda extra": ["servicos"],
+  "presentes recebidos": ["presentes"],
+  "vendas": ["__outros__"],
+};
+
 function mesmoTipo(c: CategoriaPf, tipo?: string | null) {
   return !tipo || c.tipo === tipo;
 }
 
 function acharPorBase(cats: CategoriaPf[], base: string, tipo?: string | null): CategoriaPf | undefined {
+  const direto = acharPorBaseExata(cats, base, tipo);
+  if (direto) return direto;
+  for (const alt of BASE_ALTERNATIVA[base] || []) {
+    const c = acharPorBaseExata(cats, alt, tipo);
+    if (c) return c;
+  }
+  return undefined;
+}
+
+function acharPorBaseExata(cats: CategoriaPf[], base: string, tipo?: string | null): CategoriaPf | undefined {
   if (base === "__outros__") {
     return cats.find((c) => mesmoTipo(c, tipo) && /^outr/.test(norm(c.nome))) || undefined;
   }

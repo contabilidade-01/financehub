@@ -13,6 +13,7 @@ import ConciliacaoPage from "@/pages/pj/conciliacao";
 import PjContasBancarias from "@/pages/pj/contas-bancarias";
 import MetasPage from "@/pages/metas";
 import ImportarLancamentosPj from "@/pages/pj/importar";
+import ImportarExtratoPage from "@/pages/importar-extrato";
 import PjReembolsos from "@/pages/pj/reembolsos";
 import PjFormasPagamento from "@/pages/pj/formas-pagamento";
 import PjVencimentos from "@/pages/pj/vencimentos";
@@ -96,6 +97,8 @@ export default function PjRouter() {
         return <ConciliacaoPage empresaId={empresaAtiva} />;
       case "importar":
         return <ImportarLancamentosPj empresaId={empresaAtiva} />;
+      case "importar-extrato":
+        return <ImportarExtratoPage escopo="pj" empresaId={empresaAtiva} />;
       case "reembolsos":
         return <PjReembolsos empresaId={empresaAtiva} />;
       case "metas":

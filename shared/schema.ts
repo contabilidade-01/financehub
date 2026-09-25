@@ -122,6 +122,8 @@ export const transactions = pgTable("transacoes", {
   fatura_id: integer("fatura_id"),
   competencia: varchar("competencia", { length: 7 }),
   movimenta_caixa: boolean("movimenta_caixa").notNull().default(true),
+  // Chave do extrato bancário (FITID/hash) — dedup de importação.
+  fitid: varchar("fitid", { length: 120 }),
 });
 
 // API Tokens table
@@ -823,6 +825,9 @@ export const empresasTransacoes = pgTable("empresas_transacoes", {
   itens_agrupados: integer("itens_agrupados"),
   // Legado: formas PIX/débito… O meio atual é conta_bancaria_id | cartao_id.
   empresa_forma_pagamento_id: integer("empresa_forma_pagamento_id"),
+  // Conciliação bancária (colunas criadas no auto-migrate; agora no Drizzle).
+  conciliado: boolean("conciliado").notNull().default(false),
+  fitid: varchar("fitid", { length: 120 }),
 });
 
 // Formas de pagamento PJ (não-cartão). Cartões ficam em empresas_cartoes.

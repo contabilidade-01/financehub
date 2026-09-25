@@ -1089,6 +1089,67 @@ const STEPS: Step[] = [
       await db.execute(sql`ALTER TABLE ingestion_events ADD COLUMN IF NOT EXISTS message_id VARCHAR(128)`);
     },
   },
+  {
+    name: "importação unificada: sessões persistentes (importacoes / importacao_linhas)",
+    run: async () => {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS importacoes (
+          id                    SERIAL PRIMARY KEY,
+          usuario_id            INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+          escopo                VARCHAR(2) NOT NULL,             -- 'pf' | 'pj'
+          empresa_id            INTEGER REFERENCES empresas(id) ON DELETE CASCADE,
+          conta_bancaria_id     INTEGER REFERENCES contas_bancarias(id) ON DELETE SET NULL,
+          arquivo_nome          VARCHAR(255),
+          formato               VARCHAR(10) NOT NULL,
+          hash_arquivo          VARCHAR(64),
+          cabecalho             JSONB,
+          linhas_brutas         JSONB,                           -- CSV/XLSX: p/ remapear colunas
+          mapeamento            JSONB,
+          conta_arquivo         JSONB,                           -- OFX: banco/agência/conta
+          saldo_final_informado NUMERIC(14,2),
+          data_saldo            DATE,
+          periodo_de            DATE,
+          periodo_ate           DATE,
+          status                VARCHAR(15) NOT NULL DEFAULT 'rascunho', -- rascunho | concluida | cancelada
+          sugestao_status       VARCHAR(15),                     -- processando | concluida | erro
+          sugestao_progresso    INTEGER,
+          resultado             JSONB,
+          criado_em             TIMESTAMPTZ NOT NULL DEFAULT now(),
+          atualizado_em         TIMESTAMPTZ NOT NULL DEFAULT now(),
+          concluido_em          TIMESTAMPTZ
+        )
+      `);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_importacoes_usuario ON importacoes(usuario_id, status)`);
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS importacao_linhas (
+          id                     SERIAL PRIMARY KEY,
+          importacao_id          INTEGER NOT NULL REFERENCES importacoes(id) ON DELETE CASCADE,
+          ordem                  INTEGER NOT NULL,
+          data                   DATE NOT NULL,
+          descricao              VARCHAR(255) NOT NULL,
+          valor                  NUMERIC(14,2) NOT NULL,          -- com sinal: + entrada, - saída
+          documento              VARCHAR(80),
+          chave                  VARCHAR(120) NOT NULL,           -- FITID ou hash (dedup)
+          status                 VARCHAR(12) NOT NULL DEFAULT 'pendente', -- pendente | conciliar | duplicada | ignorar | importada
+          categoria_id           INTEGER,                         -- PF: categorias.id | PJ: empresas_contas.id
+          sugestao_categoria_id  INTEGER,
+          sugestao_origem        VARCHAR(30),
+          transacao_existente_id INTEGER,                         -- conciliar com lançamento já existente
+          candidatos             JSONB,
+          transacao_criada_id    INTEGER,
+          centro_custo_id        INTEGER,
+          contato_id             INTEGER,
+          observacao             VARCHAR(255),
+          atualizado_em          TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_import_linhas ON importacao_linhas(importacao_id, ordem)`);
+      // Chave do extrato gravada no lançamento: dedup entre importações (PF e PJ).
+      await db.execute(sql`ALTER TABLE transacoes ADD COLUMN IF NOT EXISTS fitid VARCHAR(120)`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_transacoes_conta_fitid ON transacoes(conta_bancaria_id, fitid) WHERE fitid IS NOT NULL`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_emp_tx_conta_fitid ON empresas_transacoes(conta_bancaria_id, fitid) WHERE fitid IS NOT NULL`);
+    },
+  },
 ];
 
 export async function runAutoMigrations(): Promise<void> {

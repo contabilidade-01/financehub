@@ -38,6 +38,7 @@ import { useTheme } from "next-themes";
 import { useTranslation } from "@/contexts/LocalizationContext";
 import { useSystemConfig } from "@/contexts/SystemConfigContext";
 import { rotuloModalidade } from "@shared/modalidade";
+import { FLAG_IMPORTACAO_EXTRATO_V2 } from "@/hooks/use-flag";
 
 interface MenuItem {
   icon: React.ReactNode;
@@ -113,6 +114,8 @@ function Sidebar() {
       return res.json();
     },
   });
+  const temImportacaoV2 =
+    isDirectAdmin || !!(flagsData?.flags as Record<string, boolean> | undefined)?.[FLAG_IMPORTACAO_EXTRATO_V2];
   const temOrquestrador =
     isDirectAdmin || !!(flagsData?.flags as Record<string, boolean> | undefined)?.orquestrador_deepseek;
 
@@ -130,6 +133,7 @@ function Sidebar() {
       { icon: <CalendarDays className="mr-3 h-4 w-4" />, text: 'Mensalidades', path: "/mensalidades" },
       { icon: <TrendingUp className="mr-3 h-4 w-4" />, text: 'Vencimentos', path: "/contas-pagar" },
       { icon: <HandCoins className="mr-3 h-4 w-4" />, text: 'A Receber', path: "/reembolsos" },
+      ...(temImportacaoV2 ? [{ icon: <FileUp className="mr-3 h-4 w-4" />, text: 'Importar extrato', path: "/importar-extrato" }] : []),
       { icon: <FileUp className="mr-3 h-4 w-4" />, text: 'Importar Lançamentos', path: "/importar" },
       { icon: <Building2 className="mr-3 h-4 w-4" />, text: 'Metas e Sonhos', path: "/metas" },
       { icon: <BarChart3 className="mr-3 h-4 w-4" />, text: t('navigation.reports', 'Relatórios'), path: "/reports" },

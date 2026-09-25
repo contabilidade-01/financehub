@@ -76,6 +76,7 @@ const ContasCartoesPage = lazy(() => import("@/pages/contas-cartoes"));
 const CartoesCreditoPage = lazy(() => import("@/pages/cartoes-credito"));
 const MensalidadesPage = lazy(() => import("@/pages/mensalidades"));
 const ImportarLancamentos = lazy(() => import("@/pages/importar"));
+const ImportarExtrato = lazy(() => import("@/pages/importar-extrato"));
 const FluxoProjetadoPF = lazy(() => import("@/pages/fluxo-projetado"));
 const ReembolsosPage = lazy(() => import("@/pages/reembolsos"));
 const VendasPF = lazy(() => import("@/pages/vendas/pf"));
@@ -257,6 +258,11 @@ function Router() {
             <Route path="/importar">
               <MainLayout>
                 <ImportarLancamentos />
+              </MainLayout>
+            </Route>
+            <Route path="/importar-extrato">
+              <MainLayout>
+                <ImportarExtrato />
               </MainLayout>
             </Route>
             <Route path="/subscription/cancel">
