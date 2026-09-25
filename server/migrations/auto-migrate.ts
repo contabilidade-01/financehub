@@ -1026,6 +1026,17 @@ const STEPS: Step[] = [
       `);
     },
   },
+  {
+    name: "modalidade PJ MEI / PJ ME (usuarios.porte_pj)",
+    run: async () => {
+      // Aditivo: PJ existentes passam a ser PJ MEI; PJ ME é a nova modalidade (ERP).
+      await db.execute(sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS porte_pj VARCHAR(10)`);
+      await db.execute(sql`
+        UPDATE usuarios SET porte_pj = 'mei'
+        WHERE tipo_pessoa = 'juridica' AND porte_pj IS NULL
+      `);
+    },
+  },
 ];
 
 export async function runAutoMigrations(): Promise<void> {

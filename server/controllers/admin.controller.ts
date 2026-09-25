@@ -11,6 +11,7 @@ import { getSubscriptionService } from "../services/subscription.service";
 import { generateRandomPassword } from "../utils/password-generator";
 import { uazapiService } from "../services/uazapi.service";
 import { gerarLinkDefinirSenha } from "./password-reset.controller";
+import { normalizarPorte } from "../../shared/modalidade";
 
 /**
  * @swagger
@@ -1042,6 +1043,12 @@ export async function updateUser(req: Request, res: Response) {
     if (body.ativo !== undefined) updateData.ativo = Boolean(body.ativo);
     if (body.tipo_usuario !== undefined) updateData.tipo_usuario = body.tipo_usuario;
     if (body.tipo_pessoa !== undefined) updateData.tipo_pessoa = body.tipo_pessoa;
+    if (body.porte_pj !== undefined || body.tipo_pessoa !== undefined) {
+      const tipo = body.tipo_pessoa ?? undefined;
+      if (tipo === "fisica") updateData.porte_pj = null;
+      else if (body.porte_pj !== undefined) updateData.porte_pj = normalizarPorte(body.porte_pj);
+      else if (tipo === "juridica") updateData.porte_pj = "mei";
+    }
 
     // E-mail: normaliza e valida unicidade (necessário p/ recuperação de senha)
     if (body.email !== undefined) {
@@ -1454,6 +1461,7 @@ export async function getAssinaturas(req: Request, res: Response) {
         return {
           id: u.id, nome: u.nome, telefone: u.telefone, email: u.email,
           tipo_pessoa: (u as any).tipo_pessoa || "fisica",
+          porte_pj: (u as any).porte_pj || null,
           ativo: u.ativo, status_assinatura: u.status_assinatura,
           ciclo_assinatura: (u as any).ciclo_assinatura || null,
           data_expiracao_assinatura: u.data_expiracao_assinatura,

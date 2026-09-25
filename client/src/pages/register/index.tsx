@@ -17,6 +17,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { InsertUser } from "@shared/schema";
+import { camposDaModalidade, modalidadeDeParametros, type Modalidade } from "@shared/modalidade";
+import { ModalidadeSelector } from "@/components/shared/ModalidadeSelector";
 import { useTheme } from "next-themes";
 import { useTranslation } from "@/contexts/LocalizationContext";
 import { useSystemConfig } from "@/contexts/SystemConfigContext";
@@ -80,7 +82,10 @@ export default function Register() {
   const tipoParam = typeof window !== "undefined"
     ? new URLSearchParams(window.location.search).get("tipo")
     : null;
-  const tipoPessoa: "fisica" | "juridica" = tipoParam === "juridica" ? "juridica" : "fisica";
+  const [modalidade, setModalidade] = useState<Modalidade>(() => {
+    const q = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+    return modalidadeDeParametros({ tipo: tipoParam, porte: q?.get("porte"), modalidade: q?.get("modalidade") });
+  });
 
   // Schema de validação com localização
   const registerSchema = z.object({
@@ -157,7 +162,7 @@ export default function Register() {
       }
       await apiRequest("/api/auth/register", {
         method: "POST",
-        data: { ...userData, telefone, tipo_pessoa: tipoPessoa }
+        data: { ...userData, telefone, ...camposDaModalidade(modalidade) }
       });
       toast({
         title: t('register.success_title', 'Conta criada com sucesso'),
@@ -202,15 +207,15 @@ export default function Register() {
             <CardDescription>
               {t('register.description', 'Preencha os dados abaixo para criar sua conta')}
             </CardDescription>
-            {tipoPessoa === "juridica" && (
-              <div className="mt-2 inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
-                <i className="ri-building-2-line"></i> Cadastro Pessoa Jurídica (PJ)
-              </div>
-            )}
+
           </CardHeader>
           <CardContent>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <div className="space-y-2">
+                  <span className="text-sm font-medium">{t('register.modality_label', 'Modalidade do cadastro')}</span>
+                  <ModalidadeSelector value={modalidade} onChange={setModalidade} />
+                </div>
                 <FormField
                   control={form.control}
                   name="nome"

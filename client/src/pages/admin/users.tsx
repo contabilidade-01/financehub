@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useTheme } from "next-themes";
 import { useLocalization, useTranslation } from "@/contexts/LocalizationContext";
+import { camposDaModalidade, modalidadeDe, rotuloModalidade, type Modalidade } from "@shared/modalidade";
 
 interface UserWithStats extends User {
   transactionCount: number;
@@ -37,6 +38,7 @@ interface UpdateUserForm {
   ativo: boolean;
   tipo_usuario: "usuario" | "admin" | "super_admin";
   tipo_pessoa?: "fisica" | "juridica";
+  porte_pj?: "mei" | "me" | null;
   nova_senha?: string;
   data_expiracao_assinatura?: string;
   telefone?: string;
@@ -325,6 +327,7 @@ export default function AdminUsers() {
       ativo: user.ativo,
       tipo_usuario: user.tipo_usuario as "usuario" | "admin" | "super_admin",
       tipo_pessoa: ((user as any).tipo_pessoa as "fisica" | "juridica") || "fisica",
+      porte_pj: (user as any).porte_pj || null,
       nova_senha: "",
       data_expiracao_assinatura: user.data_expiracao_assinatura 
         ? new Date(user.data_expiracao_assinatura).toISOString().split('T')[0] 
@@ -396,6 +399,7 @@ export default function AdminUsers() {
       ativo: editForm.ativo,
       tipo_usuario: editForm.tipo_usuario,
       tipo_pessoa: editForm.tipo_pessoa || "fisica",
+      porte_pj: editForm.tipo_pessoa === "juridica" ? editForm.porte_pj || "mei" : null,
       data_expiracao_assinatura: editForm.data_expiracao_assinatura || "",
       telefone: telefoneLimpo,
     };
@@ -518,7 +522,7 @@ export default function AdminUsers() {
 
   const getPessoaBadge = (user: any) => (
     (user as any).tipo_pessoa === 'juridica'
-      ? <Badge variant="outline" className="border-indigo-400 text-indigo-600">PJ</Badge>
+      ? <Badge variant="outline" className="border-indigo-400 text-indigo-600">{rotuloModalidade(user, true)}</Badge>
       : <Badge variant="outline" className="text-muted-foreground">PF</Badge>
   );
 
@@ -1185,12 +1189,13 @@ export default function AdminUsers() {
             {t("admin.users.edit_modal.fields.person_type.label", "Tipo de Pessoa")}
           </label>
           <select
-            value={editForm.tipo_pessoa || "fisica"}
-            onChange={(e) => setEditForm(prev => ({ ...prev, tipo_pessoa: e.target.value as "fisica" | "juridica" }))}
+            value={modalidadeDe(editForm)}
+            onChange={(e) => setEditForm(prev => ({ ...prev, ...camposDaModalidade(e.target.value as Modalidade) }))}
             className="admin-edit-form-select"
           >
-            <option value="fisica">{t("admin.users.person_type.pf", "Pessoa Física (PF)")}</option>
-            <option value="juridica">{t("admin.users.person_type.pj", "Pessoa Jurídica (PJ)")}</option>
+            <option value="pf">{t("admin.users.person_type.pf", "Pessoa Física (PF)")}</option>
+            <option value="pj_mei">{t("admin.users.person_type.pj_mei", "PJ MEI")}</option>
+            <option value="pj_me">{t("admin.users.person_type.pj_me", "PJ ME (ERP)")}</option>
           </select>
         </div>
 

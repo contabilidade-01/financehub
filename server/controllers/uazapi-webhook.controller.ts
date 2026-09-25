@@ -16,6 +16,7 @@ import {
 } from "../services/mailer";
 import bcrypt from "bcryptjs";
 import { autenticarWebhookUazapi } from "../utils/uazapi-webhook-auth";
+import { camposDaModalidade, detectarModalidadeTexto, ROTULO_MODALIDADE, type Modalidade } from "../../shared/modalidade";
 
 /**
  * UazAPI Webhook Controller — substitui o N8N.
@@ -70,12 +71,8 @@ const ehNegativo = (text: string) => {
   const t = norm(text);
   return /\b(nao|não|depois|agora nao|agora não|negativo|dispensa)\b/.test(t) || t === "n" || t === "2";
 };
-const detectarTipoPessoa = (text: string): "fisica" | "juridica" | null => {
-  const t = norm(text);
-  if (/\b(pj|2|empresa|empresarial|juridica|negocio|cnpj|comercio)\b/.test(t)) return "juridica";
-  if (/\b(pf|1|pessoal|pessoa fisica|fisica|particular|eu mesmo|minhas financas)\b/.test(t)) return "fisica";
-  return null;
-};
+// PF / PJ MEI / PJ ME (ver shared/modalidade.ts)
+const detectarModalidade = (text: string): Modalidade | null => detectarModalidadeTexto(text);
 const dataTrialFim = () => new Date(Date.now() + TRIAL_DIAS * 24 * 60 * 60 * 1000);
 const fmtData = (d: Date) => d.toLocaleDateString("pt-BR");
 const primeiro = (nome?: string | null) => (nome || "").split(" ")[0] || "";
@@ -115,13 +112,13 @@ const msgEmailEmUso = () =>
 const msgOferta = (nome?: string | null) =>
   `Olá ${primeiro(nome)}! 👋 Posso liberar *${TRIAL_DIAS} dias grátis* no *${SYSTEM_NAME}* para você testar tudo — é só responder *SIM* que eu ativo agora mesmo. 😊`;
 const msgPerguntaTipo = (nome?: string | null) =>
-  `Que ótimo, ${primeiro(nome)}! 🎉\n\nÉ para suas finanças *pessoais* ou da sua *empresa*?\n\nResponda:\n*1* — Pessoal (PF)\n*2* — Empresa (PJ)`;
+  `Que ótimo, ${primeiro(nome)}! 🎉\n\nÉ para suas finanças *pessoais* ou da sua *empresa*?\n\nResponda:\n*1* — Pessoal (PF)\n*2* — Empresa MEI (PJ MEI)\n*3* — Microempresa (PJ ME)`;
 const msgAtivadoPF = (nome: string | null | undefined, fim: Date) =>
   `Prontinho, ${primeiro(nome)}! ✅ Sua degustação de *${TRIAL_DIAS} dias* está ativa até *${fmtData(fim)}*.\n\nPode começar agora: me manda suas receitas e despesas por aqui que eu registro tudo. 📊`;
 const msgAtivadoPJ = (nome: string | null | undefined, fim: Date) =>
   `Prontinho, ${primeiro(nome)}! ✅ Sua degustação *empresarial* de *${TRIAL_DIAS} dias* está ativa até *${fmtData(fim)}*.\n\nJá preparei o ambiente da sua empresa. Pode começar: me manda as entradas e saídas por aqui. 📊`;
 const msgNudge = () => `Sem problema! Quando quiser testar os *${TRIAL_DIAS} dias grátis*, é só mandar *SIM*. 😉`;
-const msgReperguntaTipo = () => `Só pra eu configurar certinho: responda *1* para *Pessoal (PF)* ou *2* para *Empresa (PJ)*.`;
+const msgReperguntaTipo = () => `Só pra eu configurar certinho: responda *1* para *Pessoal (PF)*, *2* para *PJ MEI* ou *3* para *PJ ME* (microempresa).`;
 const msgExpirado = (nome?: string | null) =>
   `Oi ${primeiro(nome)}! Seus *${TRIAL_DIAS} dias* de degustação chegaram ao fim. 🙌\n\nGostou? Nossa equipe vai entrar em contato para te ajudar a continuar. Qualquer coisa, estou por aqui!`;
 const msgEmAnalise = (nome?: string | null) =>
@@ -292,16 +289,16 @@ async function tratarOnboarding(user: any, text: string, chatid: string, BaseUrl
 
   // 4) Aguardando PF/PJ
   if (ehAguardandoTipo(status)) {
-    const tipo = detectarTipoPessoa(text);
-    if (!tipo) {
+    const modalidade = detectarModalidade(text);
+    if (!modalidade) {
       await uazapiService.sendText(BaseUrl, token, chatid, msgReperguntaTipo());
       return true;
     }
     const fim = dataTrialFim();
-    if (tipo === "juridica") {
-      await storage.updateUser(user.id, { ativo: true, tipo_pessoa: "juridica", status_assinatura: "degustacao", data_expiracao_assinatura: fim } as any);
+    if (modalidade !== "pf") {
+      await storage.updateUser(user.id, { ativo: true, ...camposDaModalidade(modalidade), status_assinatura: "degustacao", data_expiracao_assinatura: fim } as any);
       await uazapiService.sendText(BaseUrl, token, chatid, msgAtivadoPJ(user.nome, fim));
-      await notificarAdmin(`🆕 Nova degustação PJ: ${user.nome} (${user.telefone}) id=${user.id} — expira ${fmtData(fim)}`);
+      await notificarAdmin(`🆕 Nova degustação ${ROTULO_MODALIDADE[modalidade]}: ${user.nome} (${user.telefone}) id=${user.id} — expira ${fmtData(fim)}`);
 
       await storage.createWhatsAppOnboardingState({
         remoteJid: chatid,
@@ -312,7 +309,7 @@ async function tratarOnboarding(user: any, text: string, chatid: string, BaseUrl
       });
       await uazapiService.sendText(BaseUrl, token, chatid, "Para configurar sua empresa e começar a registrar as finanças PJ, preciso de alguns dados. 🏢\n\nQual o seu *nome completo* (responsável pela empresa)?");
     } else {
-      await storage.updateUser(user.id, { ativo: true, tipo_pessoa: "fisica", status_assinatura: "degustacao", data_expiracao_assinatura: fim } as any);
+      await storage.updateUser(user.id, { ativo: true, tipo_pessoa: "fisica", porte_pj: null, status_assinatura: "degustacao", data_expiracao_assinatura: fim } as any);
       await uazapiService.sendText(BaseUrl, token, chatid, msgAtivadoPF(user.nome, fim));
       await notificarAdmin(`🆕 Nova degustação PF: ${user.nome} (${user.telefone}) id=${user.id} — expira ${fmtData(fim)}`);
     }

@@ -12,10 +12,11 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { useToast } from "@/hooks/use-toast";
 import { CalendarClock, RefreshCw, CheckCircle2 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { rotuloModalidade } from "@shared/modalidade";
 
 type Assinatura = {
   id: number; nome: string; telefone: string | null; email: string;
-  tipo_pessoa: "fisica" | "juridica"; ativo: boolean;
+  tipo_pessoa: "fisica" | "juridica"; porte_pj?: string | null; ativo: boolean;
   status_assinatura: string | null; ciclo_assinatura: string | null;
   data_expiracao_assinatura: string | null;
   situacao: string; dias_para_vencer: number | null;
@@ -143,7 +144,7 @@ export default function AdminAssinaturas() {
                   <div className="flex-1 min-w-[180px]">
                     <div className="font-medium flex items-center gap-2">
                       {a.nome}
-                      <Badge variant="outline" className="text-[10px]">{a.tipo_pessoa === "juridica" ? "PJ" : "PF"}</Badge>
+                      <Badge variant="outline" className="text-[10px]">{rotuloModalidade(a, true)}</Badge>
                     </div>
                     <div className="text-xs text-muted-foreground">{a.telefone || a.email}</div>
                   </div>

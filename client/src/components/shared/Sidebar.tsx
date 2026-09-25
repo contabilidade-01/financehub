@@ -37,6 +37,7 @@ import { ThemeToggleSimple } from "@/components/theme-toggle-simple";
 import { useTheme } from "next-themes";
 import { useTranslation } from "@/contexts/LocalizationContext";
 import { useSystemConfig } from "@/contexts/SystemConfigContext";
+import { rotuloModalidade } from "@shared/modalidade";
 
 interface MenuItem {
   icon: React.ReactNode;
@@ -141,7 +142,8 @@ function Sidebar() {
   // Seção principal PJ (pessoa jurídica) — vira o menu principal do usuário PJ,
   // sem duplicar Dashboard/Transações/Relatórios do PF.
   const secaoPJ: MenuGroup = {
-    label: t('navigation.sections.main', 'PRINCIPAL'),
+    // Mostra a modalidade (PJ MEI / PJ ME) no topo do menu empresarial.
+    label: rotuloModalidade(userData as any).toUpperCase(),
     items: [
       { icon: <LayoutDashboard className="mr-3 h-4 w-4" />, text: 'Dashboard', path: "/p/dashboard" },
       { icon: <PlusCircle className="mr-3 h-4 w-4" />, text: 'Transações', path: "/p/transacoes" },

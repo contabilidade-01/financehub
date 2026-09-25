@@ -16,6 +16,7 @@ import {
 } from "../services/mailer";
 import { notificarAdmin } from "../services/admin-notify";
 import { uazapiService } from "../services/uazapi.service";
+import { normalizarPorte } from "../../shared/modalidade";
 
 const GENERIC_FORGOT_MSG =
   "Se o e-mail estiver cadastrado, você receberá um link em instantes.";
@@ -227,6 +228,7 @@ export async function resetPassword(req: Request, res: Response) {
       telefone: z.string().optional(),
       email: z.string().optional(),
       tipo_pessoa: z.enum(["fisica", "juridica"]).optional(),
+      porte_pj: z.enum(["mei", "me"]).optional(),
       razao_social: z.string().optional(),
       nome_fantasia: z.string().optional(),
       cnpj: z.string().optional(),
@@ -317,6 +319,7 @@ export async function resetPassword(req: Request, res: Response) {
           telefone,
           email,
           tipo_pessoa: tipoPessoa,
+          porte_pj: tipoPessoa === "juridica" ? normalizarPorte(parsed.porte_pj) : null,
           ativo: true,
           status_assinatura: "degustacao",
           data_expiracao_assinatura: fim,

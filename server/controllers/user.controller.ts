@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import { randomUUID } from "crypto";
+import { normalizarPorte } from "../../shared/modalidade";
 import { storage } from "../storage";
 import { insertUserSchema, loginUserSchema } from "../../shared/schema";
 import { z } from "zod";
@@ -34,6 +35,8 @@ export async function register(req: Request, res: Response) {
       // PF/PJ: vem da página de vendas (?tipo). Default PF. Define qual plano
       // (39,90 PF / 79,90 PJ) o checkout vai oferecer e cobrar no Asaas.
       tipo_pessoa: z.enum(["fisica", "juridica"]).optional(),
+      // Porte da PJ: 'mei' (padrão) | 'me' (ERP completo). Ignorado em PF.
+      porte_pj: z.enum(["mei", "me"]).optional(),
     });
     const userData = registerSchema.parse(req.body);
     // Segurança: o JID de WhatsApp nunca vem do cliente. Placeholder único;
@@ -77,6 +80,7 @@ export async function register(req: Request, res: Response) {
       telefone: telefoneNum ? telefoneNum.toString() : undefined,
       tipo_pessoa: userData.tipo_pessoa || "fisica", // garante tipo p/ escolher o plano certo
       tipo_usuario: "normal", // segurança: papel nunca vem do body
+      porte_pj: userData.tipo_pessoa === "juridica" ? normalizarPorte(userData.porte_pj) : null,
     };
     const newUser = await storage.createUser(userDataToSave);
 

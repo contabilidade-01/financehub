@@ -19,6 +19,8 @@ export const users = pgTable("usuarios", {
   senha: varchar("senha", { length: 255 }).notNull(),
   tipo_usuario: varchar("tipo_usuario", { length: 50 }).notNull().default("normal"),
   tipo_pessoa: varchar("tipo_pessoa", { length: 20 }).notNull().default("fisica"), // 'fisica' (PF) | 'juridica' (PJ)
+  // Porte da PJ: 'mei' | 'me' (NULL em PF; PJ antigo sem valor = MEI). Ver shared/modalidade.ts
+  porte_pj: varchar("porte_pj", { length: 10 }),
   ativo: boolean("ativo").notNull().default(true),
   data_cadastro: timestamp("data_cadastro", { withTimezone: true }).default(sql`(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')`),
   ultimo_acesso: timestamp("ultimo_acesso", { withTimezone: true }),
