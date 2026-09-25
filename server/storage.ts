@@ -2988,47 +2988,65 @@ function normalizeChaveMem(s: string): string {
 export async function resolveMemoriaCategoria(
   userId: number,
   texto: string,
-): Promise<{ categoria_id: number; categoria_nome: string } | undefined> {
+): Promise<{ categoria_id: number; categoria_nome: string; origem: string; hits: number } | undefined> {
   const alvo = normalizeChaveMem(texto);
   if (!alvo) return undefined;
   try {
+    const { chaveCasa } = await import("./services/categorizar-pf");
     const rows = await db.execute(sql`
-      SELECT chave, valor FROM memoria_usuario
+      SELECT chave, valor, hits FROM memoria_usuario
       WHERE usuario_id = ${userId} AND tipo = 'merchant_categoria'
     `);
+    // Casa por palavras inteiras ("uber" casa "uber trabalho", mas não "uberlândia").
+    // Preferência: correção do cliente > mais palavras em comum > mais usada.
     let melhor: any;
+    let melhorPeso = -1;
     for (const r of rows as any[]) {
-      const k = normalizeChaveMem(r.chave);
-      if (k && (alvo.includes(k) || k.includes(alvo))) {
-        if (!melhor || k.length > normalizeChaveMem(melhor.chave).length) melhor = r;
-      }
+      if (!chaveCasa(String(r.chave || ""), alvo)) continue;
+      const v = typeof r.valor === "string" ? JSON.parse(r.valor) : r.valor;
+      const peso = (v?.origem === "correcao" ? 1000 : 0) + normalizeChaveMem(r.chave).length * 10 + Number(r.hits || 0);
+      if (peso > melhorPeso) { melhor = { ...r, v }; melhorPeso = peso; }
     }
-    if (!melhor) return undefined;
-    const v = typeof melhor.valor === "string" ? JSON.parse(melhor.valor) : melhor.valor;
-    if (!v?.categoria_id) return undefined;
-    return { categoria_id: Number(v.categoria_id), categoria_nome: v.categoria_nome };
+    if (!melhor?.v?.categoria_id) return undefined;
+    return {
+      categoria_id: Number(melhor.v.categoria_id),
+      categoria_nome: melhor.v.categoria_nome,
+      origem: melhor.v.origem || "ia",
+      hits: Number(melhor.hits || 0),
+    };
   } catch (err: any) {
     console.error("[Memória] falha ao resolver:", err?.message);
     return undefined;
   }
 }
 
+/**
+ * origem 'correcao' = o cliente corrigiu a categoria (vale mais que qualquer palpite).
+ * Um palpite da IA nunca sobrescreve uma correção do cliente.
+ */
 export async function aprenderMemoriaCategoria(
   userId: number,
   chave: string,
   categoriaId: number,
   categoriaNome: string,
+  origem: "ia" | "correcao" = "ia",
 ): Promise<void> {
-  const chaveNorm = normalizeChaveMem(chave);
+  const { chaveMemoria } = await import("./services/categorizar-pf");
+  const chaveNorm = normalizeChaveMem(chaveMemoria(chave) || chave);
   if (!chaveNorm) return;
   try {
-    const valor = JSON.stringify({ categoria_id: categoriaId, categoria_nome: categoriaNome });
+    const valor = JSON.stringify({ categoria_id: categoriaId, categoria_nome: categoriaNome, origem });
     await db.execute(sql`
       INSERT INTO memoria_usuario (usuario_id, tipo, chave, valor)
       VALUES (${userId}, 'merchant_categoria', ${chaveNorm}, ${valor}::jsonb)
       ON CONFLICT (usuario_id, tipo, chave)
-      DO UPDATE SET valor = ${valor}::jsonb, hits = memoria_usuario.hits + 1,
-                    updated_at = (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')
+      DO UPDATE SET
+        valor = CASE
+          WHEN memoria_usuario.valor->>'origem' = 'correcao' AND ${origem} <> 'correcao' THEN memoria_usuario.valor
+          ELSE ${valor}::jsonb
+        END,
+        hits = memoria_usuario.hits + 1,
+        updated_at = (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')
     `);
   } catch (err: any) {
     console.error("[Memória] falha ao aprender:", err?.message);
@@ -3050,7 +3068,8 @@ function ehFormaGenerica(nome: string): boolean {
 export async function resolveOuCriaFormaPagamento(
   userId: number,
   nome: string,
-): Promise<{ id: number; nome: string; criado: boolean; incompleto: boolean; faltando: string[] }> {
+  opts: { criarCartao?: boolean } = {},
+): Promise<{ id: number; nome: string; criado: boolean; incompleto: boolean; faltando: string[]; naoEncontrado?: boolean }> {
   const norm = (s: string) => (s || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const alvo = norm(nome);
   const rows = await db.execute(sql`
@@ -3092,6 +3111,11 @@ export async function resolveOuCriaFormaPagamento(
   if (match) {
     const a = analisar(match);
     return { id: match.id, nome: match.nome, criado: false, ...a };
+  }
+  // IA (WhatsApp): nome de cartão desconhecido NÃO vira cartão novo sozinho —
+  // o chamador pergunta ao cliente (evita cartões fantasmas por erro de digitação/áudio).
+  if (opts.criarCartao === false && !ehFormaGenerica(nome)) {
+    return { id: 0, nome, criado: false, incompleto: false, faltando: [], naoEncontrado: true };
   }
   try {
     // Cartão nominal: dias padrão para já aparecer em Contas e Cartões / gerar fatura.

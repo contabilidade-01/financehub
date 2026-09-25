@@ -4,11 +4,12 @@ import { buscarTransacoesPorFiltro, buscarEmpresaTransacoesPorFiltro, empresaTra
 import { FINANCIAL_AGENT_SYSTEM_PROMPT, buildDynamicContext } from "../prompts/financial-agent";
 import { insertTransactionSchema } from "../../shared/schema";
 import { withRetry } from "../utils/ai-errors";
+import { casarCategoriaPorNome, sugerirCategoriaPorDescricao, chaveMemoria, type CategoriaPf } from "./categorizar-pf";
 import { reconciliarLancamento, trechoDoLancamento, segmentarLancamentos, hojeSP, contextoDataParaPrompt } from "./nlp-br";
 import { resolverContaPj } from "./classificar-conta-pj";
 import { atualizarTransacaoEmpresa, baixarTransacaoEmpresa } from "./empresa-transacao.service";
 import { listarCartoes as listarCartoesPj, criarCartao as criarCartaoPj, listarFaturas as listarFaturasPj, getSaldoCartaoEmpresa } from "./fatura-pj.service";
-import { sugerirNomeConta } from "./confirmacao-usuario";
+import { sugerirNomeConta, interpretarConfirmacao } from "./confirmacao-usuario";
 import {
   pareceLancamentoSemMeio,
   registrarPendenteMeio,
@@ -125,11 +126,18 @@ REGRA DE QUALIDADE (leia primeiro): se ${type === "image" ? "a imagem" : "o docu
 ILEGIVEL: <motivo curto> (ex.: "ILEGIVEL: foto muito escura, não dá pra ler os valores")
 Não invente itens nem valores quando não tiver certeza.
 
-Se estiver legível, liste os itens neste formato (um por linha):
-Comprei DESCRICAO DO ITEM 1 por VALOR
-Comprei DESCRICAO DO ITEM 2 por VALOR
+Primeiro identifique a DIREÇÃO do dinheiro para o dono do WhatsApp:
+- SAIDA: cupom/nota fiscal de compra, boleto pago, comprovante de Pix/TED ENVIADO ("Pix enviado", "Transferência realizada", "Pagamento efetuado").
+- ENTRADA: comprovante de Pix/TED RECEBIDO ("Pix recebido", "Você recebeu", "Crédito em conta"), depósito, estorno, reembolso.
+- INDEFINIDA: quando não dá para saber quem pagou a quem.
 
-E, quando houver na imagem/documento, acrescente ao final (só o que existir):
+Se estiver legível, responda neste formato (só as linhas que existirem):
+Direção: SAIDA | ENTRADA | INDEFINIDA
+Tipo de documento: cupom fiscal | nota fiscal | comprovante pix | comprovante transferência | boleto | extrato | outro
+Pagador: NOME
+Recebedor: NOME
+Item: DESCRICAO DO ITEM 1 | VALOR
+Item: DESCRICAO DO ITEM 2 | VALOR
 Total: VALOR
 Data: AAAA-MM-DD
 Estabelecimento: NOME
@@ -165,7 +173,7 @@ Os números de valor devem usar notação decimal americana (ponto como separado
 interface ToolContext {
   userId: number;
   walletId: number;
-  categories: { id: number; nome: string; tipo: string }[];
+  categories: { id: number; nome: string; tipo: string; descricao?: string | null }[];
   tipoPessoa?: string;
   empresaAtiva?: { id: number; nome: string; cnpj: string | null; segmento?: string | null } | null;
   // true quando a mensagem veio de imagem/áudio/documento (extração automática).
@@ -1251,7 +1259,8 @@ function buildTools(ctx?: ToolContext) {
     if (ctx?.tipoPessoa === "juridica") {
       return [];
     }
-    return todas;
+    // PF não recebe ferramentas de empresa: lista menor = menos confusão do modelo.
+    return todas.filter((t) => !/empresa/.test(t.function.name));
   }
   return todas.filter((t) => TOOLS_PJ.has(t.function.name));
 }
@@ -1316,41 +1325,49 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           !formaInformada ||
           /^(dinheiro|caixinha|em dinheiro|à vista|a vista|esp[ée]cie|em esp[ée]cie|em m[ãa]os|cash)$/i.test(formaInformada);
 
-        // Resolver categoria pelo nome (case-insensitive), preferindo o tipo.
-        const nomeBusca = (args.categoria || "").toLowerCase();
-        const cat = ctx.categories.find(
-          (c) => c.nome.toLowerCase() === nomeBusca && c.tipo === tipo
-        ) || ctx.categories.find(
-          (c) => c.nome.toLowerCase() === nomeBusca
-        );
-
-        // F4.2 — Memória: se o modelo não casou categoria, tenta o que o
-        // usuário já ensinou (comerciante/descrição → categoria).
+        // Fase 1 — ordem de decisão da categoria:
+        //  1) correção que o cliente já fez para este comerciante (memória 'correcao');
+        //  2) nome do LLM casado com a categoria real (sinônimos/sem acento: "Farmácia" → "Saúde");
+        //  3) memória de uso (palpites anteriores confirmados pelo uso);
+        //  4) consenso global; 5) palavras-chave da descrição; 6) "Outras".
+        const catsTipo = ctx.categories as CategoriaPf[];
+        const mem = args.descricao ? await resolveMemoriaCategoria(ctx.userId, args.descricao) : undefined;
+        const memCat = mem ? catsTipo.find((c) => c.id === mem.categoria_id && c.tipo === tipo) : undefined;
+        let cat: CategoriaPf | undefined;
+        let origemCategoria = "";
+        if (memCat && mem?.origem === "correcao") {
+          cat = memCat; origemCategoria = "correcao";
+        }
+        if (!cat) {
+          const c = casarCategoriaPorNome(args.categoria, catsTipo, tipo);
+          // "Outras" do LLM não vence uma pista melhor (memória/palavra-chave).
+          if (c && !/^outr/i.test(c.nome)) { cat = c; origemCategoria = "llm"; }
+        }
+        if (!cat && memCat) { cat = memCat; origemCategoria = "memoria"; }
         let categoriaId = cat?.id;
         let categoriaNome = cat?.nome;
-        if (!categoriaId && args.descricao) {
-          const mem = await resolveMemoriaCategoria(ctx.userId, args.descricao);
-          if (mem) {
-            categoriaId = mem.categoria_id;
-            categoriaNome = mem.categoria_nome;
-          }
-        }
-        // Cérebro coletivo (global agregado): usa o consenso da multidão quando
-        // o modelo e a memória pessoal não resolveram.
+        // Cérebro coletivo (global agregado).
         if (!categoriaId && args.descricao) {
           const g = await resolveMemoriaGlobal("pf", args.descricao);
           if (g) {
-            const gc = ctx.categories.find(c => c.nome.toLowerCase() === g.categoria_nome.toLowerCase() && c.tipo === tipo)
-              || ctx.categories.find(c => c.nome.toLowerCase() === g.categoria_nome.toLowerCase());
-            if (gc) { categoriaId = gc.id; categoriaNome = gc.nome; }
+            const gc = casarCategoriaPorNome(g.categoria_nome, catsTipo, tipo);
+            if (gc) { categoriaId = gc.id; categoriaNome = gc.nome; origemCategoria = "global"; }
           }
+        }
+        if (!categoriaId) {
+          const sug = sugerirCategoriaPorDescricao(`${args.descricao || ""} ${ctx.origemMidia ? "" : ctx.userMessage || ""}`, catsTipo, tipo);
+          if (sug) { categoriaId = sug.categoria.id; categoriaNome = sug.categoria.nome; origemCategoria = `palavra:${sug.termo}`; }
+        }
+        if (!categoriaId) {
+          const c = casarCategoriaPorNome(args.categoria, catsTipo, tipo);
+          if (c) { categoriaId = c.id; categoriaNome = c.nome; origemCategoria = "llm-outras"; }
         }
         // Fallbacks: "Outros" do tipo → qualquer do tipo → qualquer categoria.
         if (!categoriaId) {
           const fb = ctx.categories.find(c => /outr/i.test(c.nome) && c.tipo === tipo)
             || ctx.categories.find(c => c.tipo === tipo)
             || ctx.categories[0];
-          if (fb) { categoriaId = fb.id; categoriaNome = categoriaNome || fb.nome; }
+          if (fb) { categoriaId = fb.id; categoriaNome = categoriaNome || fb.nome; origemCategoria = "fallback"; }
         }
         // Defensivo: usuário sem categorias (plano de contas não criado) —
         // cria uma "Outros" na hora, para o lançamento nunca falhar por isso.
@@ -1377,7 +1394,13 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         let formaPagNome: string | undefined;
         let cartaoIncompleto: any = undefined;
         if (!ehCaixinha && formaInformada) {
-          const fp = await resolveOuCriaFormaPagamento(ctx.userId, formaInformada);
+          const fp = await resolveOuCriaFormaPagamento(ctx.userId, formaInformada, { criarCartao: false });
+          if (fp.naoEncontrado) {
+            return JSON.stringify({
+              precisa_meio: true,
+              mensagem: `Não encontrei a forma de pagamento/cartão "${formaInformada}" no cadastro. Pergunte se é um cartão novo (para cadastrar com limite, fechamento e vencimento) ou qual das formas cadastradas foi usada. NÃO grave ainda.`,
+            });
+          }
           if (fp.id) { formaPagId = fp.id; formaPagNome = fp.nome; }
           if (fp.incompleto) cartaoIncompleto = { nome: fp.nome, faltando: fp.faltando };
         }
@@ -1417,9 +1440,10 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
 
         try {
           const result = await storage.createTransaction(txData as any);
-          // F4.2 — Aprender: se o modelo deu categoria real (não fallback).
-          if (cat && args.descricao) {
-            await aprenderMemoriaCategoria(ctx.userId, args.descricao, cat.id, cat.nome);
+          console.log(`[AI Agent] categoria "${categoriaNome}" via ${origemCategoria || "?"} para "${args.descricao}" (user ${ctx.userId})`);
+          // Aprende palpites bons (não fallback) sem sobrescrever correções do cliente.
+          if (args.descricao && categoriaId && origemCategoria && origemCategoria !== "fallback" && origemCategoria !== "correcao") {
+            await aprenderMemoriaCategoria(ctx.userId, args.descricao, categoriaId, categoriaNome || "", "ia");
           }
           // Aviso na hora: status do orçamento da categoria (se houver limite).
           const orcamento = tipo === "Despesa"
@@ -1439,15 +1463,30 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         if (args.valor) updateData.valor = args.valor;
         if (args.tipo) updateData.tipo = args.tipo;
         if (args.data_transacao) updateData.data_transacao = args.data_transacao;
+        let catCorrigida: CategoriaPf | undefined;
         if (args.categoria) {
-          const cat = ctx.categories.find(c => c.nome.toLowerCase() === args.categoria.toLowerCase());
-          if (cat) updateData.categoria_id = cat.id;
+          catCorrigida = casarCategoriaPorNome(args.categoria, ctx.categories as CategoriaPf[]);
+          if (!catCorrigida) {
+            // Antes: ignorava em silêncio e respondia "atualizado".
+            return JSON.stringify({
+              success: false,
+              error: `Categoria "${args.categoria}" não existe.`,
+              categorias_disponiveis: ctx.categories.map((c) => c.nome),
+              mensagem: "Mostre as categorias disponíveis e pergunte qual usar.",
+            });
+          }
+          updateData.categoria_id = catCorrigida.id;
         }
 
         // Isolamento: só edita transação da própria carteira.
         const doDono = await transacaoPertenceAoWallet(args.id_transacao, ctx.walletId);
         if (!doDono) return JSON.stringify({ success: false, error: "Transação não encontrada nas suas transações." });
+        const antes = catCorrigida ? await storage.getTransactionById(args.id_transacao) : undefined;
         const result = await storage.updateTransaction(args.id_transacao, updateData);
+        // Correção do cliente vira regra: próximos lançamentos iguais já vêm certos.
+        if (result && catCorrigida && antes?.descricao) {
+          await aprenderMemoriaCategoria(ctx.userId, String(antes.descricao), catCorrigida.id, catCorrigida.nome, "correcao");
+        }
         return JSON.stringify({ success: !!result, transaction: result });
       }
 
@@ -1512,6 +1551,16 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           return JSON.stringify({ error: "Nenhuma transação encontrada com os filtros fornecidos." });
         }
 
+        // Fase 1 — trava no código (não só no prompt): só exclui quando a
+        // mensagem ATUAL do cliente é uma confirmação ("sim", "pode", "confirmo").
+        if (interpretarConfirmacao(ctx.userMessage || "") !== "sim") {
+          return JSON.stringify({
+            precisa_confirmacao: true,
+            mensagem: `Encontrei ${transacoesFiltradas.length} lançamento(s). Mostre a lista ao usuário e pergunte se confirma a exclusão. NÃO diga que excluiu.`,
+            transacoes: transacoesFiltradas.slice(0, 10).map(t => ({ id: t.id, descricao: t.descricao, valor: t.valor, data: t.data_transacao })),
+          });
+        }
+
         for (const transacao of transacoesFiltradas) {
           await softDeleteTransacao(transacao.id, ctx.walletId, ctx.userId);
         }
@@ -1531,6 +1580,12 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       }
 
       case "excluir_todas": {
+        if (interpretarConfirmacao(ctx.userMessage || "") !== "sim") {
+          return JSON.stringify({
+            precisa_confirmacao: true,
+            mensagem: "Pergunte ao usuário se ele confirma apagar TODAS as transações (vão para a lixeira por 30 dias). NÃO diga que excluiu.",
+          });
+        }
         const n = await softDeleteTodasTransacoes(ctx.walletId, ctx.userId);
         return JSON.stringify({ success: true, excluidas: n, recuperavel: true, msg: `${n} transação(ões) movidas para a lixeira (recuperáveis por 30 dias).` });
       }
@@ -2181,7 +2236,13 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         let formaNome: string | undefined;
         let cartaoIncompletoP: any = undefined;
         if (args.forma_pagamento) {
-          const fp = await resolveOuCriaFormaPagamento(ctx.userId, args.forma_pagamento);
+          const fp = await resolveOuCriaFormaPagamento(ctx.userId, args.forma_pagamento, { criarCartao: false });
+          if (fp.naoEncontrado) {
+            return JSON.stringify({
+              precisa_meio: true,
+              mensagem: `Não encontrei o cartão "${args.forma_pagamento}". Pergunte se é um cartão novo (para cadastrar) ou qual cartão cadastrado foi usado. NÃO grave ainda.`,
+            });
+          }
           formaId = fp.id || null;
           formaNome = fp.nome;
           if (fp.incompleto) cartaoIncompletoP = { nome: fp.nome, faltando: fp.faltando };
@@ -2437,12 +2498,28 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           descricao: `${args.descricao || ""} ${trechoItem}`,
           segmento: ctx.empresaAtiva?.segmento || (empresa as any).segmento,
         });
+        // Palpite fraco (segmento / "Outras"): usa o que o cliente já ensinou
+        // (correções pelo WhatsApp e escolhas na conciliação bancária).
+        let contaFinal = conta;
+        if (conta && (motivo === "segmento" || motivo === "outras") && args.descricao) {
+          try {
+            const { resolveMemoriaContaPJ } = await import("../storage");
+            const memPj = await resolveMemoriaContaPJ(ctx.userId, chaveMemoria(String(args.descricao)) || String(args.descricao));
+            const cMem = memPj ? contas.find((c: any) => c.id === memPj.conta_contabil_id && c.tipo === tipo) : undefined;
+            if (cMem) {
+              console.log(`[Classificação PJ] memória: "${args.descricao}" → ${cMem.codigo} (antes ${conta.codigo}, ${motivo})`);
+              contaFinal = cMem;
+            }
+          } catch { /* segue com a classificação por regras */ }
+        }
         if (ignorouInformada) {
           console.log(`[Classificação PJ] palpite '${args.conta}' descartado (motivo=${motivo}) para "${args.descricao}" → ${conta?.codigo}`);
         }
         if (!conta) {
           return JSON.stringify({ error: `A empresa não tem uma conta do tipo ${tipo} no plano de contas. Peça ao usuário para escolher uma conta.` });
         }
+        const contaUsada = contaFinal ?? conta;
+        const usouOutrasFinal = usouOutras && contaUsada.id === conta.id;
 
         const dataISO = recPj.data;
         let meio;
@@ -2463,7 +2540,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
 
         const criada = await storage.createEmpresaTransacao({
           empresa_id: empresa.id,
-          categoria_id: conta.id,
+          categoria_id: contaUsada.id,
           descricao: args.descricao || "Lançamento",
           valor: recPj.valor,
           tipo,
@@ -2479,11 +2556,11 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           metodo_pagamento: meio.metodo_pagamento || resolvido.rotulo,
         } as any);
         const orcamento = tipo === "Despesa"
-          ? await getStatusOrcamentoContaPJ(empresa.id, conta.id)
+          ? await getStatusOrcamentoContaPJ(empresa.id, contaUsada.id)
           : null;
         const empresaNome = empresa.nome_fantasia || empresa.razao_social;
         let pendente_criar_conta: any = null;
-        if (usouOutras) {
+        if (usouOutrasFinal) {
           const nomeSugerido = sugerirNomeConta(
             String(args.descricao || ""),
             ctx.userMessage,
@@ -2511,13 +2588,13 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         return JSON.stringify({
           success: true, id: criada.id, empresa: empresaNome,
           descricao: args.descricao || "Lançamento",
-          conta: `${conta.codigo} — ${conta.nome}`, valor: args.valor, tipo, data: dataISO,
+          conta: `${contaUsada.codigo} — ${contaUsada.nome}`, valor: recPj.valor, tipo, data: dataISO,
           pago_com: resolvido.rotulo,
           meio: meio.isCartao ? "cartao" : "conta_bancaria",
           aviso_meio: resolvido.aviso || undefined,
-          usou_outras: usouOutras,
+          usou_outras: usouOutrasFinal,
           pendente_criar_conta,
-          dica: usouOutras
+          dica: usouOutrasFinal
             ? `Lancei em Outras. OFEREÇA criar a conta *${pendente_criar_conta.nome_sugerido}* e mover o lançamento. Quando o usuário confirmar (sim/pode/ok/claro/fechou/cria...), chame 'criar_conta_e_mover_empresa' com id_transacao=${criada.id} e nome=${pendente_criar_conta.nome_sugerido} — NÃO peça confirmação de novo. Se recusar (não/deixa/cancela), não crie.`
             : (resolvido.aviso
               ? resolvido.aviso
@@ -2898,6 +2975,13 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         // Mesmas validações da tela (serviço compartilhado com o controller).
         const r = await atualizarTransacaoEmpresa(empresa.id, args.id_transacao, ctx.userId, dados);
         if (!r.ok) return JSON.stringify({ success: false, error: r.error });
+        // Correção de conta vira regra para os próximos lançamentos com essa descrição.
+        if (dados.categoria_id && r.anterior?.descricao && Number(r.anterior.categoria_id) !== Number(dados.categoria_id)) {
+          try {
+            const { aprenderMemoriaContaPJ } = await import("../storage");
+            await aprenderMemoriaContaPJ(ctx.userId, chaveMemoria(String(r.anterior.descricao)) || String(r.anterior.descricao), dados.categoria_id);
+          } catch { /* aprendizado é best-effort */ }
+        }
         return JSON.stringify({
           success: true,
           alterado: dados,
@@ -3219,7 +3303,7 @@ async function callChatCompletion(
   opts?: { llm?: "openai" | "deepseek" },
 ): Promise<any> {
   const llm = opts?.llm || "openai";
-  const payload = { messages, tools, tool_choice: "auto" as const, temperature: 0.3 };
+  const payload = { messages, tools, tool_choice: "auto" as const, temperature: 0.1 };
 
   if (llm === "deepseek") {
     const { deepseekChatCompletions } = await import("./deepseek.service");
@@ -3261,7 +3345,7 @@ async function callChatCompletion(
     return await withRetry(
       () => axios.post(
         fbUrl,
-        { messages: cleanMessages, tools, tool_choice: "auto", temperature: 0.3, model: fbModel },
+        { messages: cleanMessages, tools, tool_choice: "auto", temperature: 0.1, model: fbModel },
         { headers: { Authorization: `Bearer ${fbKey}`, "Content-Type": "application/json" }, timeout: 60000 },
       ),
       { provider: isGroq ? "groq-fallback" : "ai-fallback" },
@@ -3502,6 +3586,8 @@ Se for ambíguo → pergunte só sim ou não.
 
 ## ⚠️ CONTEÚDO EXTRAÍDO DE MÍDIA (foto/áudio/documento) — CONFIRME ANTES DE GRAVAR
 - Esta mensagem foi extraída automaticamente de uma mídia e PODE conter erros de leitura/transcrição.
+- "Direção: ENTRADA" = Receita (Pix/TED recebido, estorno). "Direção: SAIDA" = Despesa. "INDEFINIDA" → pergunte se foi entrada ou saída.
+- Comprovante de Pix/transferência vira UM lançamento pelo Total (Pagador/Recebedor ajudam na descrição). Cupom de mercado: UM lançamento pelo Total.
 - NÃO registre lançamento(s) agora. Primeiro RESUMA o que entendeu: descrição, categoria provável, data e VALOR (e o total, se houver vários itens).
 - Termine perguntando: "Confirma o lançamento? Responda *SIM* para registrar, ou me diga o que corrigir."
 - Só use as ferramentas de lançamento (insere_transacao / lancar_empresa) DEPOIS que o usuário confirmar (ex.: responder "sim", "pode lançar", "confirmo") numa próxima mensagem.
@@ -3513,8 +3599,8 @@ Se for ambíguo → pergunte só sim ou não.
     ? ""
     : `
 
-## Categorias Disponíveis
-${ctx.categories.map(c => `- ${c.nome} (${c.tipo})`).join("\n")}`;
+## Categorias Disponíveis (use EXATAMENTE um destes nomes)
+${ctx.categories.map(c => `- ${c.nome} (${c.tipo})${c.descricao ? `: ${String(c.descricao).replace(/\s*(DESPESA|RECEITA) (FIXA|VARIÁVEL)\.?/gi, "").slice(0, 90)}` : ""}`).join("\n")}`;
 
   const regrasInterpretacao = `
 
@@ -3597,7 +3683,20 @@ ${contextoDataParaPrompt()}
     // Executar cada tool call
     for (const toolCall of assistantMessage.tool_calls) {
       const fnName = toolCall.function.name;
-      const fnArgs = JSON.parse(toolCall.function.arguments || "{}");
+      // JSON malformado do modelo não pode derrubar a rodada (escritas anteriores
+      // já gravadas + "erro inesperado" → cliente reenvia → duplicata).
+      let fnArgs: any;
+      try {
+        fnArgs = JSON.parse(toolCall.function.arguments || "{}");
+      } catch {
+        console.warn(`[AI Agent] argumentos inválidos em ${fnName}:`, String(toolCall.function.arguments).slice(0, 200));
+        messages.push({
+          role: "tool",
+          tool_call_id: toolCall.id,
+          content: JSON.stringify({ error: "Argumentos inválidos (JSON malformado). Chame a ferramenta novamente com JSON válido." }),
+        });
+        continue;
+      }
 
       console.log(`[AI Agent] Tool call: ${fnName}(${JSON.stringify(fnArgs)})`);
       // Mapeamento de aliases para evitar erros de "function not defined"

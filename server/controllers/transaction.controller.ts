@@ -6,6 +6,7 @@ import { db } from "../db";
 import { sql } from "drizzle-orm";
 import { broadcastNotification } from "../websocket";
 import { formatCurrency } from "../utils";
+import { aprenderMemoriaCategoria } from "../storage";
 
 // Get all transactions for current user
 export async function getTransactions(req: Request, res: Response) {
@@ -494,6 +495,23 @@ export async function updateTransaction(req: Request, res: Response) {
     // Update transaction
     try {
       const updatedTransaction = await storage.updateTransaction(transactionId, transactionData);
+      // Fase 1 (IA): quando o cliente troca a categoria pela tela, a IA aprende
+      // para os próximos lançamentos com a mesma descrição (WhatsApp).
+      if (
+        updatedTransaction &&
+        (transactionData as any).categoria_id &&
+        Number((transactionData as any).categoria_id) !== Number((transaction as any)?.categoria_id) &&
+        (updatedTransaction as any).descricao
+      ) {
+        try {
+          const cat = await storage.getCategoryById(Number((transactionData as any).categoria_id));
+          if (cat) {
+            await aprenderMemoriaCategoria(userId, String((updatedTransaction as any).descricao), cat.id, cat.nome, "correcao");
+          }
+        } catch (e: any) {
+          console.warn("[Memória] não aprendeu correção:", e?.message);
+        }
+      }
       if (!updatedTransaction) {
         const errorResponse = { error: "Transação não encontrada ou não foi possível atualizar" };
         console.log('\n=== TRANSACTION UPDATE - UPDATE FAILED ===');
