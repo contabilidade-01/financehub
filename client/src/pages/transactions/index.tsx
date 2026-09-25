@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useNovoLancamento } from "@/lib/novo-lancamento";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Transaction, TransactionStatus, TransactionType, Category, PaymentMethod } from "@shared/schema";
 import { TransactionForm } from "@/components/shared/TransactionForm";
@@ -731,6 +732,11 @@ export default function Transactions() {
   const { t } = useTranslation();
   const [isTransactionFormOpen, setIsTransactionFormOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  // Atalho "+ Novo" da barra inferior (mobile).
+  useNovoLancamento(() => {
+    setEditingTransaction(null);
+    setIsTransactionFormOpen(true);
+  });
   const [deletingTransaction, setDeletingTransaction] = useState<Transaction | null>(null);
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");

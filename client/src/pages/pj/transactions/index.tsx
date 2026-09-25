@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNovoLancamento } from "@/lib/novo-lancamento";
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -357,6 +358,12 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
   const { toast } = useToast();
   const [showForm, setShowForm] = useState(false);
   const [editando, setEditando] = useState<EmpresaTransacaoWithDetails | null>(null);
+  // Atalho "+ Novo" da barra inferior (mobile).
+  useNovoLancamento(() => {
+    setEditando(null);
+    setShowForm(true);
+    window.scrollTo({ top: 0 });
+  });
   const [trocandoConta, setTrocandoConta] = useState<number | null>(null);
 
   // Filtros (client-side, sobre a lista completa já carregada)

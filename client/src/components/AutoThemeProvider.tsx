@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { ReactNode, useEffect } from 'react';
 import { useAutoTheme } from '@/hooks/use-auto-theme';
 
 interface AutoThemeProviderProps {
@@ -12,7 +12,13 @@ interface AutoThemeProviderProps {
  * tokens padrão de index.css. Não bloqueia a primeira renderização.
  */
 export function AutoThemeProvider({ children }: AutoThemeProviderProps) {
-  const { themeLoadError } = useAutoTheme();
+  const { themeLoadError, currentMode } = useAutoTheme();
+
+  // Cor da barra do navegador / status bar (PWA) acompanha o tema.
+  useEffect(() => {
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', currentMode === 'dark' ? '#0b1220' : '#ffffff');
+  }, [currentMode]);
 
   if (themeLoadError) {
     console.error('Erro no carregamento do tema:', themeLoadError);

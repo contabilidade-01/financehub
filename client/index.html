@@ -5,8 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Khesef - Gestão Financeira</title>
     <meta name="description" content="Khesef - Gestão financeira pessoal e empresarial. Acompanhe receitas, despesas, contas e relatórios em um só lugar." />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#0b1220" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#ffffff" />
     <meta name="color-scheme" content="light dark" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -19,12 +18,17 @@
     <meta property="og:url" content="https://app.controledinheiro.com.br" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <script>
       // Aplica o tema salvo antes do primeiro paint (evita flash). Padrão: claro.
       (function () {
         try {
           var t = localStorage.getItem('theme');
-          if (t === 'dark') document.documentElement.classList.add('dark');
+          if (t === 'dark') {
+            document.documentElement.classList.add('dark');
+            var m = document.querySelector('meta[name="theme-color"]');
+            if (m) m.setAttribute('content', '#0b1220');
+          }
           else document.documentElement.classList.add('light');
         } catch (e) {
           document.documentElement.classList.add('light');

@@ -60,8 +60,9 @@ export default function WalletSummary({ isWalletLoading, isSummaryLoading, walle
             </span>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 md:gap-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:gap-4">
             <StatCard
+              className="col-span-2 sm:col-span-1"
               icon={WalletIcon}
               tone="primary"
               label={t('wallet.period_balance', 'Saldo do período')}

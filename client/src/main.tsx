@@ -10,3 +10,12 @@ createRoot(document.getElementById("root")!).render(
     <App />
   </ThemeProvider>
 );
+
+// PWA: service worker só em produção (cacheia apenas /assets e ícones; nunca /api).
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {
+      /* sem SW o app funciona normalmente */
+    });
+  });
+}

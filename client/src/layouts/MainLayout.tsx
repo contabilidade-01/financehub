@@ -1,5 +1,6 @@
 import { ReactNode, useState, type CSSProperties } from "react";
 import Sidebar from "@/components/shared/Sidebar";
+import { BottomNav } from "@/components/shared/BottomNav";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { User } from "@shared/schema";
@@ -36,12 +37,14 @@ export default function MainLayout({ children }: MainLayoutProps) {
 
       <Sidebar mobileOpen={mobileMenuOpen} onMobileOpenChange={setMobileMenuOpen} />
 
-      <main className="min-w-0 px-4 py-4 sm:px-6 sm:py-6 lg:ml-64 lg:px-8">
+      {/* pb no mobile reserva espaço para a barra inferior + área segura */}
+      <main className="min-w-0 px-4 pt-4 pb-[calc(var(--mobile-nav-h)+env(safe-area-inset-bottom)+1rem)] sm:px-6 sm:pt-6 lg:ml-64 lg:px-8 lg:pb-8">
         <div className="mx-auto w-full max-w-7xl">
           <ExpiringSoonBanner />
           {children}
         </div>
       </main>
+      <BottomNav onOpenMenu={() => setMobileMenuOpen(true)} menuOpen={mobileMenuOpen} />
       <GuidedTourModal />
     </div>
   );
