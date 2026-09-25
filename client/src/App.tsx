@@ -14,6 +14,7 @@ import { LocalizationProvider } from "@/contexts/LocalizationContext";
 import { SystemConfigProvider, useSystemConfig } from "@/contexts/SystemConfigContext";
 import { updateAllMetadata } from "@/utils/update-metadata";
 import { useEffect, lazy, Suspense } from "react";
+import { ConfirmProvider } from "@/components/shared/ConfirmDialog";
 
 interface SetupStatus {
   setupMode: boolean;
@@ -379,9 +380,11 @@ function App() {
           <SystemConfigProvider>
             <NotificationsProvider>
               <AutoThemeProvider showLoadingIndicator={true}>
-                <ImpersonationBanner />
-                <Toaster />
-                <Router />
+                <ConfirmProvider>
+                  <ImpersonationBanner />
+                  <Toaster />
+                  <Router />
+                </ConfirmProvider>
               </AutoThemeProvider>
             </NotificationsProvider>
           </SystemConfigProvider>

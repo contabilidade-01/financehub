@@ -398,9 +398,9 @@ export default function PjFaturas({ empresaId }: { empresaId: number }) {
                 {conc && (
                   <div className="text-xs space-y-2">
                     <div className="flex flex-wrap gap-3">
-                      <span className="text-income">✅ {conc.conciliados_qtd} casado(s)</span>
-                      <span className="text-amber-600">⚠ {conc.extrato_sem_par.length} no extrato sem lançamento</span>
-                      <span className="text-blue-600">ℹ {conc.compras_sem_par.length} lançado(s) fora do extrato</span>
+                      <span className="text-income">{conc.conciliados_qtd} casado(s)</span>
+                      <span className="text-warning">{conc.extrato_sem_par.length} no extrato sem lançamento</span>
+                      <span className="text-muted-foreground">{conc.compras_sem_par.length} lançado(s) fora do extrato</span>
                     </div>
                     <div className="flex flex-wrap gap-3 text-muted-foreground">
                       <span>Extrato: <strong>{money(conc.total_extrato)}</strong></span>

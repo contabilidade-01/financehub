@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useConfirm } from "@/components/shared/ConfirmDialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -114,6 +115,7 @@ export default function ContasCartoesPage() {
   });
 
   const contasAtivas = useMemo(() => contas.filter((c) => c.ativo !== false), [contas]);
+  const confirmar = useConfirm();
 
   const invalidate = () => {
     qc.invalidateQueries({ predicate: (q) => String(q.queryKey[0] || "").startsWith("/api/contas") });
@@ -265,8 +267,8 @@ export default function ContasCartoesPage() {
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => {
-                            if (confirm("Remover esta conta?")) deleteConta.mutate(c.id);
+                          onClick={async () => {
+                            if (await confirmar({ title: "Remover esta conta?", confirmText: "Remover", destructive: true })) deleteConta.mutate(c.id);
                           }}
                         >
                           <Trash2 className="h-4 w-4" />

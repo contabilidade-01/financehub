@@ -1,3 +1,4 @@
+import { useToast } from "@/hooks/use-toast";
 import { useState, useMemo, useCallback } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { motion } from "framer-motion";
@@ -79,6 +80,7 @@ const MONTH_ALIAS_MAP: Record<string, string> = {
 
 export default function ReportsPage() {
   const { t } = useTranslation();
+  const { toast } = useToast();
   const { locale } = useLocalization();
   const [period, setPeriod] = useState("month");
   const normalizedLocale = useMemo(
@@ -306,7 +308,7 @@ export default function ReportsPage() {
     const filteredTransactions = getFilteredTransactions();
     
     if (!filteredTransactions || filteredTransactions.length === 0) {
-      alert(t('reports.no_transactions_to_export', 'Não há transações para exportar neste período.'));
+      toast({ title: t('reports.no_transactions_to_export', 'Não há transações para exportar neste período.') });
       return;
     }
     

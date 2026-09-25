@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useConfirm } from "@/components/shared/ConfirmDialog";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -62,6 +63,7 @@ export default function PaymentMethodsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { t } = useTranslation();
+  const confirmar = useConfirm();
 
   const formSchema = createFormSchema(t);
 
@@ -197,7 +199,7 @@ export default function PaymentMethodsPage() {
     setIsDialogOpen(true);
   };
 
-  const handleDelete = (method: PaymentMethod) => {
+  const handleDelete = async (method: PaymentMethod) => {
     if (method.global) {
       toast({
         title: "Não é possível deletar",
@@ -207,7 +209,7 @@ export default function PaymentMethodsPage() {
       return;
     }
 
-    if (confirm("Tem certeza que deseja deletar esta forma de pagamento?")) {
+    if (await confirmar({ title: "Excluir esta forma de pagamento?", confirmText: "Excluir", destructive: true })) {
       deleteMutation.mutate(method.id);
     }
   };
@@ -364,7 +366,7 @@ export default function PaymentMethodsPage() {
 
                 {/* Campos de Cartão de Crédito */}
                 <div className="border-t pt-4 mt-4">
-                  <p className="text-sm font-medium text-muted-foreground mb-3">💳 Dados do Cartão (opcional)</p>
+                  <p className="text-sm font-medium text-muted-foreground mb-3">Dados do cartão (opcional)</p>
                   <div className="grid grid-cols-2 gap-4">
                     <FormField
                       control={form.control}

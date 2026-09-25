@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useConfirm } from "@/components/shared/ConfirmDialog";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -86,6 +87,7 @@ export default function ContasBancarias({ empresaId }: { empresaId: number }) {
   });
   const [detalhe, setDetalhe] = useState<{ id: number; nome: string } | null>(null);
   const [lancando, setLancando] = useState(false);
+  const confirmar = useConfirm();
   const [lancForm, setLancForm] = useState({
     tipo: "Despesa",
     categoria_id: "",
@@ -385,8 +387,8 @@ export default function ContasBancarias({ empresaId }: { empresaId: number }) {
                     variant="outline"
                     size="sm"
                     className="text-destructive hover:bg-destructive/10"
-                    onClick={() => {
-                      if (confirm("Remover esta conta?")) deleteMutation.mutate(conta.id);
+                    onClick={async () => {
+                      if (await confirmar({ title: "Remover esta conta?", confirmText: "Remover", destructive: true })) deleteMutation.mutate(conta.id);
                     }}
                   >
                     <Trash2 className="h-4 w-4" />

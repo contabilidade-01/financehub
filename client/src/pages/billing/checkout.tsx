@@ -272,7 +272,7 @@ export default function CheckoutPage({
                 </AlertDescription>
               </Alert>
               <div className="text-sm text-muted-foreground">
-                ⏱️ Aguardando até 30 segundos pela confirmação...
+                Aguardando até 30 segundos pela confirmação...
               </div>
             </div>
           </CardContent>

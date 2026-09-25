@@ -130,13 +130,13 @@ export function useWebSocket() {
       
       // Personalizar mensagens baseado no tipo de evento
       if (eventType === 'transaction.created') {
-        title = '✨ Nova Transação';
+        title = 'Nova transação';
         description = `Transação criada: ${notification.message}`;
       } else if (eventType === 'transaction.updated') {
-        title = '📝 Transação Atualizada';
+        title = 'Transação atualizada';
         description = `Transação modificada: ${notification.message}`;
       } else if (eventType === 'transaction.deleted') {
-        title = '🗑️ Transação Excluída';
+        title = 'Transação excluída';
         description = `Transação removida: ${notification.message}`;
       }
 

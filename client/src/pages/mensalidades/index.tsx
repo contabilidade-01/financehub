@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useConfirm } from "@/components/shared/ConfirmDialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -79,6 +80,7 @@ export default function MensalidadesPage({ empresaId }: { empresaId?: number }) 
 
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(freshForm());
+  const confirmar = useConfirm();
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: [urlLista] });
@@ -213,7 +215,7 @@ export default function MensalidadesPage({ empresaId }: { empresaId?: number }) 
                     variant="ghost"
                     size="icon"
                     title="Excluir"
-                    onClick={() => { if (confirm(`Excluir a mensalidade "${m.descricao}"? Os lançamentos já gerados permanecem.`)) excluir.mutate(m.id); }}
+                    onClick={async () => { if (await confirmar({ title: `Excluir a mensalidade "${m.descricao}"?`, description: "Os lançamentos já gerados permanecem.", confirmText: "Excluir", destructive: true })) excluir.mutate(m.id); }}
                   >
                     <Trash2 className="h-4 w-4 text-expense" />
                   </Button>

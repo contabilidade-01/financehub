@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useConfirm } from "@/components/shared/ConfirmDialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -280,6 +281,7 @@ export default function CartoesCreditoPage() {
     queryKey: ["/api/categories"],
   });
   const categoriasDespesa = useMemo(() => categorias.filter((c) => c.tipo === "Despesa"), [categorias]);
+  const confirmar = useConfirm();
 
   const criarLancamento = useMutation({
     mutationFn: (data: any) => apiRequest("/api/transactions", { method: "POST", data }),
@@ -523,7 +525,7 @@ export default function CartoesCreditoPage() {
                     type="button"
                     className="text-muted-foreground hover:text-red-500 p-1"
                     title="Remover cartão"
-                    onClick={(e) => { e.stopPropagation(); if (confirm("Remover este cartão?")) excluirCartao.mutate(c.id); }}
+                    onClick={async (e) => { e.stopPropagation(); if (await confirmar({ title: "Remover este cartão?", confirmText: "Remover", destructive: true })) excluirCartao.mutate(c.id); }}
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -538,7 +540,7 @@ export default function CartoesCreditoPage() {
                 </p>
                 {semDias && (
                   <p className="text-xs text-amber-600 mt-1">
-                    ⚠️ defina fechamento/vencimento para as faturas saírem certas
+                    Defina fechamento/vencimento para as faturas saírem certas
                   </p>
                 )}
                 <p className="text-xs text-muted-foreground mt-3">Limite</p>
@@ -592,9 +594,9 @@ export default function CartoesCreditoPage() {
                 size="sm"
                 variant="outline"
                 disabled={!cardId || recalcularFaturas.isPending}
-                onClick={() => {
+                onClick={async () => {
                   if (!cardId) return;
-                  if (confirm("Recalcular as faturas deste cartão usando os dias de fechamento/vencimento atuais? Faturas pagas não são alteradas.")) {
+                  if (await confirmar({ title: "Recalcular as faturas deste cartão?", description: "Usa os dias de fechamento/vencimento atuais. Faturas pagas não são alteradas.", confirmText: "Recalcular" })) {
                     recalcularFaturas.mutate(cardId);
                   }
                 }}
@@ -806,8 +808,8 @@ export default function CartoesCreditoPage() {
                                   type="button"
                                   className="text-muted-foreground hover:text-red-500 transition-colors"
                                   title="Excluir lançamento"
-                                  onClick={() => {
-                                    if (confirm("Excluir este lançamento?")) excluirLancamento.mutate(l.id);
+                                  onClick={async () => {
+                                    if (await confirmar({ title: "Excluir este lançamento?", confirmText: "Excluir", destructive: true })) excluirLancamento.mutate(l.id);
                                   }}
                                 >
                                   <Trash2 className="h-4 w-4" />
@@ -883,8 +885,8 @@ export default function CartoesCreditoPage() {
                       type="button"
                       className="text-muted-foreground hover:text-red-500 transition-colors"
                       title="Excluir lançamento"
-                      onClick={() => {
-                        if (confirm("Excluir este lançamento?")) excluirLancamento.mutate(l.id);
+                      onClick={async () => {
+                        if (await confirmar({ title: "Excluir este lançamento?", confirmText: "Excluir", destructive: true })) excluirLancamento.mutate(l.id);
                       }}
                     >
                       <Trash2 className="h-4 w-4" />

@@ -960,7 +960,7 @@ export function WhatsAppChatModal({
                     }}
                     className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
                   >
-                    🔍 Testar API com Configurações do Banco
+                    Testar API com configurações do banco
                   </button>
                   <p className="text-xs mt-2 text-muted-foreground">Clique e veja o console (F12)</p>
                 </div>

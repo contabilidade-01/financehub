@@ -117,16 +117,14 @@ export default function BillingSuccessPage() {
         >
           {isConfirmed ? (
             <>
-              <div className="absolute inset-0 bg-green-400 rounded-full blur-2xl opacity-30 animate-pulse"></div>
-              <div className="relative inline-flex items-center justify-center w-24 h-24 rounded-full bg-success shadow-2xl">
-                <CheckCircle className="h-16 w-16 text-white" strokeWidth={2.5} />
+              <div className="relative inline-flex items-center justify-center w-16 h-16 rounded-full bg-success/10 text-success">
+                <CheckCircle className="h-8 w-8" />
               </div>
             </>
           ) : (
             <>
-              <div className="absolute inset-0 bg-yellow-400 rounded-full blur-2xl opacity-30 animate-pulse"></div>
-              <div className="relative inline-flex items-center justify-center w-24 h-24 rounded-full bg-warning shadow-2xl">
-                <Clock className="h-16 w-16 text-white" strokeWidth={2.5} />
+              <div className="relative inline-flex items-center justify-center w-16 h-16 rounded-full bg-warning/10 text-warning">
+                <Clock className="h-8 w-8" />
               </div>
             </>
           )}
@@ -139,7 +137,7 @@ export default function BillingSuccessPage() {
         >
           {isConfirmed ? (
             <>
-              <h1 className="text-5xl font-bold mb-3 text-foreground">
+              <h1 className="text-3xl font-semibold tracking-tight mb-3 text-foreground">
                 Muito Obrigado!
               </h1>
               <p className="text-2xl text-muted-foreground mb-2">
@@ -152,7 +150,7 @@ export default function BillingSuccessPage() {
             </>
           ) : (
             <>
-              <h1 className="text-5xl font-bold mb-3 text-foreground">
+              <h1 className="text-3xl font-semibold tracking-tight mb-3 text-foreground">
                 Pagamento em Processamento
               </h1>
               <p className="text-2xl text-muted-foreground mb-2">
@@ -349,8 +347,8 @@ export default function BillingSuccessPage() {
                 <div>
                   <p className="text-xs text-muted-foreground">Status do Pagamento</p>
                   <p className="font-semibold">
-                    {payment.status === 'confirmed' ? '✅ Confirmado' :
-                     payment.status === 'pending' ? '⏳ Pendente' : '🔄 Processando'}
+                    {payment.status === 'confirmed' ? 'Confirmado' :
+                     payment.status === 'pending' ? 'Pendente' : 'Processando'}
                   </p>
                 </div>
               </div>

@@ -555,8 +555,8 @@ export default function PaymentSettingsPage() {
               {/* Tabs for Request/Response */}
               <Tabs defaultValue="request" className="w-full">
                 <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="request">📤 Request</TabsTrigger>
-                  <TabsTrigger value="response">📥 Response</TabsTrigger>
+                  <TabsTrigger value="request">Request</TabsTrigger>
+                  <TabsTrigger value="response">Response</TabsTrigger>
                 </TabsList>
 
                 {/* Request Tab */}

@@ -202,7 +202,7 @@ export function CreditCardForm({ onCardChange, onValidChange }: CreditCardFormPr
         <Alert className="bg-yellow-500/10 border-yellow-500/30">
           <AlertCircle className="h-4 w-4 text-yellow-600" />
           <AlertDescription>
-            <p className="font-semibold text-yellow-600 dark:text-yellow-400 mb-2">🧪 Modo de Teste (Sandbox Asaas)</p>
+            <p className="font-semibold text-yellow-600 dark:text-yellow-400 mb-2">Modo de teste (sandbox Asaas)</p>
             <p className="text-sm text-yellow-700 dark:text-yellow-300 mb-2">
               <strong>Cartão de teste:</strong> <code className="bg-yellow-500/20 px-2 py-0.5 rounded font-mono">5162 3060 2717 6633</code>
             </p>

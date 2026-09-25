@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useConfirm } from "@/components/shared/ConfirmDialog";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { User } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -131,6 +132,7 @@ export default function AdminUsers() {
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const confirmar = useConfirm();
 
   // Buscar usuários
   const { data: users = [], isLoading } = useQuery<UserWithStats[]>({
@@ -413,8 +415,8 @@ export default function AdminUsers() {
     });
   };
 
-  const handleDeleteUser = (id: number) => {
-    if (confirm(t("admin.users.confirm.deactivate", "Tem certeza que deseja desativar este usuário?"))) {
+  const handleDeleteUser = async (id: number) => {
+    if (await confirmar({ title: t("admin.users.confirm.deactivate", "Tem certeza que deseja desativar este usuário?"), confirmText: "Desativar", destructive: true })) {
       deleteUserMutation.mutate(id);
     }
   };

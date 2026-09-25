@@ -447,7 +447,7 @@ export default function DatabasePage() {
               </ul>
               
               <div className="bg-muted p-4 rounded-lg">
-                <p className="text-sm font-medium mb-2">{t("admin.database.download.notice.title", "⚠️ Importante:")}</p>
+                <p className="text-sm font-medium mb-2">{t("admin.database.download.notice.title", "Importante:")}</p>
                 <p className="text-sm text-muted-foreground">
                   {t("admin.database.download.notice.description", "Este arquivo contém apenas a estrutura do banco. Para migrar dados, use a funcionalidade de migration disponível no sistema.")}
                 </p>

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useConfirm } from "@/components/shared/ConfirmDialog";
 import { Button } from '@/components/ui/button';
 import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -728,7 +729,7 @@ function NotificationTestingCard() {
               variant="secondary"
               size="sm"
             >
-              🔧 Teste Widget
+              Testar widget
             </Button>
           </div>
         </div>
@@ -938,6 +939,7 @@ export default function CustomizePage() {
   const [pairingPhoneNumber, setPairingPhoneNumber] = useState('');
   const [pairingCodeSent, setPairingCodeSent] = useState(false);
   const [pairingCode, setPairingCode] = useState('');
+  const confirmar = useConfirm();
   const [isSessionConnected, setIsSessionConnected] = useState<boolean>(false);
   const [connectedSessionInfo, setConnectedSessionInfo] = useState<any>(null);
   const [isRefreshingQR, setIsRefreshingQR] = useState<boolean>(false);
@@ -1357,7 +1359,7 @@ export default function CustomizePage() {
   };
 
   const deleteSession = async (sessionName: string) => {
-    if (!confirm(`Tem certeza que deseja deletar a sessão "${sessionName}"? Esta ação não pode ser desfeita.`)) {
+    if (!(await confirmar({ title: `Excluir a sessão "${sessionName}"?`, description: "Esta ação não pode ser desfeita.", confirmText: "Excluir", destructive: true }))) {
       return;
     }
 
@@ -1441,7 +1443,7 @@ export default function CustomizePage() {
           }
           
           toast({ 
-            title: '✅ WhatsApp conectado!', 
+            title: 'WhatsApp conectado', 
             description: 'Sua sessão foi conectada com sucesso e já está ativa.' 
           });
           
@@ -1631,7 +1633,7 @@ export default function CustomizePage() {
         }
         
         toast({ 
-          title: '✅ WhatsApp conectado!', 
+          title: 'WhatsApp conectado', 
           description: 'Sua sessão foi conectada com sucesso e já está ativa.' 
         });
         
@@ -1960,7 +1962,7 @@ export default function CustomizePage() {
         
         if (successfulEndpoints > 0) {
           toast({
-            title: '✅ Endpoints de QR Code funcionais encontrados!',
+            title: 'Endpoints de QR Code funcionais encontrados',
             description: `${successfulEndpoints}/${totalEndpoints} endpoints funcionaram`,
           });
           
@@ -1968,7 +1970,7 @@ export default function CustomizePage() {
           console.log('🔍 Resultados do teste de QR Code:', data);
         } else {
           toast({
-            title: '❌ Nenhum endpoint de QR Code funcionou',
+            title: 'Nenhum endpoint de QR Code funcionou',
             description: 'Verifique a configuração do WAHA',
             variant: 'destructive'
           });
@@ -2757,8 +2759,8 @@ export default function CustomizePage() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => {
-                              if (confirm('Regenerar hash do webhook? Isso criará uma nova URL e invalidará a atual.')) {
+                            onClick={async () => {
+                              if (await confirmar({ title: 'Regenerar hash do webhook?', description: 'Isso criará uma nova URL e invalidará a atual.', confirmText: 'Regenerar' })) {
                                 setWahaConfig(prev => ({ ...prev, regenerate_webhook_hash: true }))
                                 saveWahaConfig()
                               }
@@ -2766,7 +2768,7 @@ export default function CustomizePage() {
                             className="px-3 py-2 bg-amber-600 text-white rounded-md hover:bg-amber-700 text-sm"
                             title="Regenerar hash de segurança"
                           >
-                            🔄
+                            <RefreshCw className="h-4 w-4" aria-hidden="true" /><span className="sr-only">Regenerar</span>
                           </button>
                         </div>
                         <div className="text-xs text-muted-foreground mt-1 space-y-1">
@@ -3807,7 +3809,7 @@ export default function CustomizePage() {
                 </div>
                 <div className="bg-green-50 dark:bg-green-950/20 p-3 rounded-lg">
                   <p className="text-sm text-income">
-                    📱 Código enviado para: <strong>{pairingPhoneNumber}</strong>
+                    Código enviado para: <strong>{pairingPhoneNumber}</strong>
                   </p>
                   <p className="text-xs text-income mt-1">
                     Verifique suas mensagens no WhatsApp

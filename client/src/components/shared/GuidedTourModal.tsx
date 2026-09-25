@@ -21,29 +21,29 @@ export function GuidedTourModal() {
 
   const steps = [
     {
-      title: "Bem-vindo ao Khesef! 🚀",
-      description: "Sua plataforma completa para gestão financeira pessoal e empresarial (PJ). Vamos fazer um tour rápido de 1 minuto para você aproveitar ao máximo.",
-      icon: <Sparkles className="w-12 h-12 text-primary animate-pulse" />
+      title: "Bem-vindo ao Khesef",
+      description: "Gestão financeira pessoal e empresarial (PJ) em um só lugar. Veja em um minuto os principais recursos.",
+      icon: <Sparkles className="h-6 w-6" />
     },
     {
-      title: "Controle Total e Carteiras 💳",
+      title: "Contas e carteiras",
       description: "Gerencie suas contas, adicione transações manuais ou importe extratos. Tenha a visão clara do seu fluxo de caixa e saldo em tempo real.",
-      icon: <Wallet className="w-12 h-12 text-blue-500" />
+      icon: <Wallet className="h-6 w-6" />
     },
     {
-      title: "Inteligência Artificial no WhatsApp 🤖",
+      title: "Lançamentos pelo WhatsApp",
       description: "Envie áudios ou mensagens no WhatsApp para registrar gastos na hora ('gastei 50 no mercado') ou simular metas ('em quanto tempo consigo 100k guardando 5k/mês?').",
-      icon: <MessageSquare className="w-12 h-12 text-income" />
+      icon: <MessageSquare className="h-6 w-6" />
     },
     {
-      title: "Relatórios e DRE Gerencial 📊",
+      title: "Relatórios e DRE gerencial",
       description: "Acompanhe gráficos de despesas por categoria, DRE para empresas (PJ) e planeje suas metas financeiras com facilidade.",
-      icon: <PieChart className="w-12 h-12 text-purple-500" />
+      icon: <PieChart className="h-6 w-6" />
     },
     {
-      title: "Tudo pronto para começar! ✅",
+      title: "Tudo pronto para começar",
       description: "Você já pode explorar todas as funcionalidades. Se precisar de ajuda, o assistente virtual está sempre disponível.",
-      icon: <CheckCircle2 className="w-12 h-12 text-income" />
+      icon: <CheckCircle2 className="h-6 w-6" />
     }
   ];
 
@@ -52,11 +52,11 @@ export function GuidedTourModal() {
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
       <DialogContent className="sm:max-w-md text-center p-6">
-        <div className="flex justify-center mb-4 mt-2">
+        <div className="mx-auto mb-2 mt-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
           {current.icon}
         </div>
         <DialogHeader>
-          <DialogTitle className="text-xl font-bold">{current.title}</DialogTitle>
+          <DialogTitle className="text-lg font-semibold">{current.title}</DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground mt-2">
             {current.description}
           </DialogDescription>
@@ -66,8 +66,8 @@ export function GuidedTourModal() {
           {steps.map((_, i) => (
             <div
               key={i}
-              className={`h-2 rounded-full transition-all duration-300 ${
-                i === step ? "w-8 bg-primary" : "w-2 bg-muted"
+              className={`h-1.5 rounded-full transition-all duration-300 ${
+                i === step ? "w-6 bg-primary" : "w-1.5 bg-border"
               }`}
             />
           ))}
@@ -89,8 +89,8 @@ export function GuidedTourModal() {
               Próximo <ArrowRight className="w-4 h-4 ml-1" />
             </Button>
           ) : (
-            <Button onClick={handleClose} className="bg-primary text-primary-foreground">
-              Começar Agora!
+            <Button onClick={handleClose}>
+              Começar
             </Button>
           )}
         </DialogFooter>

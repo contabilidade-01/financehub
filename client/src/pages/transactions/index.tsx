@@ -1116,7 +1116,7 @@ export default function Transactions() {
               variant="outline"
               className="text-xs"
             >
-              🧪 Teste
+              Teste
             </Button>
             )}
           </div>

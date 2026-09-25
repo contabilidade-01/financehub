@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useConfirm } from "@/components/shared/ConfirmDialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -98,6 +99,7 @@ export default function ContasPagarPage() {
     queryKey: ["/api/contas"],
   });
   const contasAtivas = useMemo(() => contas.filter((c) => c.ativo !== false), [contas]);
+  const confirmar = useConfirm();
 
   const faturas = data?.faturas ?? [];
   const boletos = data?.boletos ?? [];
@@ -326,8 +328,8 @@ export default function ContasPagarPage() {
                                   size="sm"
                                   variant="outline"
                                   disabled={reabrirFatura.isPending}
-                                  onClick={() => {
-                                    if (confirm(`Reabrir a fatura de ${f.cartao_nome} (${f.competencia})? Ela volta para 'Em aberto' e o pagamento é desfeito.`))
+                                  onClick={async () => {
+                                    if (await confirmar({ title: `Reabrir a fatura de ${f.cartao_nome} (${f.competencia})?`, description: "Ela volta para 'Em aberto' e o pagamento é desfeito.", confirmText: "Reabrir" }))
                                       reabrirFatura.mutate(f.id);
                                   }}
                                 >

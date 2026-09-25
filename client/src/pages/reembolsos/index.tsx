@@ -72,7 +72,7 @@ export default function ReembolsosPage() {
     mutationFn: (id: number) => apiRequest(`/api/reembolsos/${id}/receber`, { method: "PUT" }),
     onSuccess: () => {
       invalidate();
-      toast({ title: "Reembolso marcado como recebido! ✅" });
+      toast({ title: "Reembolso marcado como recebido" });
     },
     onError: (error: any) =>
       toast({ title: "Erro", description: error?.message || error?.error, variant: "destructive" }),
@@ -83,7 +83,7 @@ export default function ReembolsosPage() {
     onSuccess: (r: any) => {
       invalidate();
       setSel(new Set());
-      toast({ title: `${r?.recebidos ?? 0} reembolso(s) baixado(s) em Transações ✅` });
+      toast({ title: `${r?.recebidos ?? 0} reembolso(s) baixado(s) em Transações` });
     },
     onError: (error: any) =>
       toast({ title: "Erro", description: error?.message || error?.error, variant: "destructive" }),
