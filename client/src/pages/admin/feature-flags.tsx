@@ -149,7 +149,7 @@ export default function FeatureFlagsPage() {
   return (
     <div className="space-y-6 p-4 md:p-6 max-w-5xl mx-auto">
       <div>
-        <h1 className="text-2xl font-semibold flex items-center gap-2">
+        <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
           <Flag className="h-6 w-6" /> Feature flags
         </h1>
         <p className="text-muted-foreground text-sm mt-1">

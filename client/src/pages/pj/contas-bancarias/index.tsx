@@ -227,7 +227,7 @@ export default function ContasBancarias({ empresaId }: { empresaId: number }) {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Contas bancárias</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Contas bancárias</h1>
           <p className="text-sm text-muted-foreground">
             Saldo e extrato de cada conta e da Caixinha
           </p>

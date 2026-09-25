@@ -43,7 +43,7 @@ export default function PjDRE({ empresaId }: { empresaId: number }) {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">DRE Simplificada</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">DRE Simplificada</h1>
       <p className="text-sm text-muted-foreground">
         Período: {dre.periodo.de} a {dre.periodo.ate}
       </p>

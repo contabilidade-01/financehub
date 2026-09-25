@@ -380,7 +380,7 @@ export default function SettingsPage() {
 
   return (
     <div className="container py-10">
-      <h1 className="text-3xl font-bold mb-6">{t('settings.title', 'Configurações')}</h1>
+      <h1 className="text-2xl font-semibold tracking-tight mb-6">{t('settings.title', 'Configurações')}</h1>
       
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className="mb-6">

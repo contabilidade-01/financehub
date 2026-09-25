@@ -10,7 +10,7 @@ import { Wallet, CreditCard } from "lucide-react";
 export default function PjFormasPagamento({ empresaId }: { empresaId: number }) {
   return (
     <div className="space-y-4 max-w-xl">
-      <h1 className="text-2xl font-bold">Formas de pagamento</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Formas de pagamento</h1>
       <Card>
         <CardContent className="pt-6 space-y-4">
           <p className="text-sm text-muted-foreground">

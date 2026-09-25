@@ -107,7 +107,7 @@ export default function Dashboard() {
       <header className="mb-8">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between">
           <div className="mb-4 md:mb-0">
-            <h1 className="text-2xl md:text-3xl font-bold mb-1">{t('dashboard.title', 'Dashboard Financeiro')}</h1>
+            <h1 className="text-2xl font-semibold tracking-tight mb-1">{t('dashboard.title', 'Dashboard Financeiro')}</h1>
             <p className="text-muted-foreground">{t('dashboard.subtitle', 'Acompanhe e gerencie suas finanças')}</p>
           </div>
           <div className="flex space-x-3">

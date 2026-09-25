@@ -365,7 +365,7 @@
 
   /* Cabeçalho que acompanha a rolagem dentro de modais longos. */
   .modal-header-sticky {
-    @apply sticky top-0 z-10 flex min-h-14 items-center justify-center bg-background py-1;
+    @apply sticky -top-6 z-10 flex min-h-14 items-center bg-background py-1;
   }
 
   .modal-close-btn {

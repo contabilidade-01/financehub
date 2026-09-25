@@ -2084,7 +2084,7 @@ export default function CustomizePage() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold mb-6">{t('admin.customize.title', 'Personalização do Sistema')}</h1>
+      <h1 className="text-2xl font-semibold tracking-tight mb-6">{t('admin.customize.title', 'Personalização do Sistema')}</h1>
       
       <div className="flex gap-6">
         {/* Sidebar */}

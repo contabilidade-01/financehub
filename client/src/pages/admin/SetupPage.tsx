@@ -80,7 +80,7 @@ export default function SetupPage() {
       <div className="p-6">
         <div className="flex items-center gap-3 mb-6">
           <Database className="h-6 w-6" />
-          <h1 className="text-2xl font-bold">Setup do Sistema</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Setup do Sistema</h1>
           <Badge variant="secondary">Super Admin</Badge>
         </div>
         <div className="flex items-center gap-2 text-muted-foreground">
@@ -96,7 +96,7 @@ export default function SetupPage() {
       <div className="p-6">
         <div className="flex items-center gap-3 mb-6">
           <Database className="h-6 w-6" />
-          <h1 className="text-2xl font-bold">Setup do Sistema</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Setup do Sistema</h1>
           <Badge variant="secondary">Super Admin</Badge>
         </div>
         <Alert variant="destructive">
@@ -114,7 +114,7 @@ export default function SetupPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Database className="h-6 w-6" />
-          <h1 className="text-2xl font-bold">Setup do Sistema</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Setup do Sistema</h1>
           <Badge variant="secondary">
             <Shield className="h-3 w-3 mr-1" />
             Super Admin

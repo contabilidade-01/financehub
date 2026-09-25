@@ -194,7 +194,7 @@ export default function ContasCartoesPage() {
     <div className="space-y-8">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Contas</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Contas</h1>
           <p className="text-muted-foreground">
             Suas contas correntes e meios de pagamento · toque no saldo para ver os lançamentos.
             Cartões de crédito ficam em <b>Cartões de Crédito</b>.

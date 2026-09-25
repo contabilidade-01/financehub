@@ -435,7 +435,7 @@ export default function Categories() {
             transition={{ duration: 0.3 }}
             className="mb-4 md:mb-0"
           >
-            <h1 className="text-2xl md:text-3xl font-bold mb-1">{t('categories.title', 'Categorias')}</h1>
+            <h1 className="text-2xl font-semibold tracking-tight mb-1">{t('categories.title', 'Categorias')}</h1>
             <p className="text-muted-foreground">{t('categories.subtitle', 'Organize suas receitas e despesas')}</p>
           </motion.div>
           <motion.div

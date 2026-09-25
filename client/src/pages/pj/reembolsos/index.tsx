@@ -155,7 +155,7 @@ export default function PjReembolsos({ empresaId }: { empresaId: number }) {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
+          <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
             <HandCoins className="h-6 w-6" /> Reembolsos a Receber
           </h1>
           <p className="text-muted-foreground text-sm">

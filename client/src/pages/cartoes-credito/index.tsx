@@ -466,7 +466,7 @@ export default function CartoesCreditoPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
+          <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
             <CreditCard className="h-7 w-7" /> Cartões de Crédito
           </h1>
           <p className="text-muted-foreground">
@@ -742,7 +742,63 @@ export default function CartoesCreditoPage() {
                     </div>
                   )}
                 </div>
-                <div className="mt-2 overflow-x-auto">
+                {/* Mobile: lista em cards */}
+                <ul className="mt-2 divide-y divide-border/50 md:hidden">
+                  {compras.length === 0 ? (
+                    <li className="py-6 text-center text-sm text-muted-foreground">Nenhum lançamento nesta fatura.</li>
+                  ) : (
+                    compras.map((l) => (
+                      <li key={l.id} className={`flex items-start gap-3 py-3 ${sel.has(l.id) ? "bg-primary/5" : ""}`}>
+                        <input
+                          type="checkbox"
+                          className="mt-1 h-4 w-4"
+                          checked={sel.has(l.id)}
+                          onChange={() => toggleSel(l.id)}
+                          aria-label={`Selecionar ${l.descricao}`}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium leading-snug">{l.descricao}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {dataBR(l.data_transacao)}
+                            {rotuloParcela(l) ? ` · ${rotuloParcela(l)}` : ""}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 flex-col items-end gap-1">
+                          <span className="text-sm font-semibold tabular-nums">{money(Number(l.valor) || 0)}</span>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground"
+                              title="Mover para outro cartão/competência"
+                              aria-label="Mover lançamento"
+                              onClick={() => abrirMover([{ id: l.id, descricao: l.descricao }])}
+                            >
+                              <ArrowLeftRight className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                              title="Excluir lançamento"
+                              aria-label="Excluir lançamento"
+                              onClick={async () => {
+                                if (await confirmar({ title: "Excluir este lançamento?", confirmText: "Excluir", destructive: true })) excluirLancamento.mutate(l.id);
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </li>
+                    ))
+                  )}
+                </ul>
+
+                {/* md+: tabela */}
+                <div className="mt-2 hidden overflow-x-auto md:block">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="text-xs text-muted-foreground border-b border-border">

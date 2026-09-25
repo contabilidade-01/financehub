@@ -18,7 +18,7 @@ export default function InvoicesPage() {
 
   return (
     <div className="container max-w-6xl mx-auto py-8">
-      <h1 className="text-3xl font-bold mb-6">Faturas</h1>
+      <h1 className="text-2xl font-semibold tracking-tight mb-6">Faturas</h1>
 
       <Card>
         <CardHeader>

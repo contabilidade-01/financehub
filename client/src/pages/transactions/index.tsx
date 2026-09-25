@@ -54,6 +54,7 @@ import {
   RotateCcw,
   FileSpreadsheet,
   CalendarDays,
+  SlidersHorizontal,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -732,6 +733,8 @@ export default function Transactions() {
   const { t } = useTranslation();
   const [isTransactionFormOpen, setIsTransactionFormOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  // Filtros recolhidos no mobile (a busca continua sempre visível).
+  const [filtrosAbertos, setFiltrosAbertos] = useState(false);
   // Atalho "+ Novo" da barra inferior (mobile).
   useNovoLancamento(() => {
     setEditingTransaction(null);
@@ -1061,7 +1064,7 @@ export default function Transactions() {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between">
           <div className="mb-4 md:mb-0">
             <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-2xl md:text-3xl font-bold mb-1">{t('transactions.title', 'Transações')}</h1>
+              <h1 className="text-2xl font-semibold tracking-tight mb-1">{t('transactions.title', 'Transações')}</h1>
               {/* Indicador de conexão WebSocket */}
               <div className="flex items-center gap-2">
                 <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'} animate-pulse`}></div>
@@ -1086,7 +1089,7 @@ export default function Transactions() {
             )}
             <p className="text-muted-foreground">{t('transactions.subtitle', 'Gerencie suas transações financeiras')}</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={handleRestaurarUltima} title="Restaura a última exclusão (lixeira)">
               <RotateCcw className="mr-2 h-4 w-4" />
               Restaurar última
@@ -1130,7 +1133,7 @@ export default function Transactions() {
       </header>
 
       <div className={`border bg-card rounded-lg bg-card`}>
-        <div className={`p-5 text-foreground`}>
+        <div className="p-4 text-foreground md:p-5">
           <div className="flex flex-col md:flex-row gap-4 mb-6 md:items-end">
             <div className="flex-1">
               <label className="text-sm font-medium text-muted-foreground block mb-1">
@@ -1140,10 +1143,20 @@ export default function Transactions() {
                 placeholder={t('transactions.filters.search_placeholder', 'Buscar transações...')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-dark-purple/10 h-10"
+                className="h-10"
               />
+              <Button
+                type="button"
+                variant="outline"
+                className="mt-3 w-full md:hidden"
+                onClick={() => setFiltrosAbertos((v) => !v)}
+                aria-expanded={filtrosAbertos}
+              >
+                <SlidersHorizontal className="h-4 w-4" />
+                {filtrosAbertos ? "Ocultar filtros" : "Filtros"}
+              </Button>
             </div>
-            <div className="flex flex-wrap gap-4">
+            <div className={`${filtrosAbertos ? "flex" : "hidden"} md:flex flex-wrap gap-4`}>
               <TypeFilterDropdown
                 value={typeFilter}
                 onChange={setTypeFilter}
@@ -1183,7 +1196,7 @@ export default function Transactions() {
                   placeholder="0"
                   value={valorMin}
                   onChange={(e) => setValorMin(e.target.value)}
-                  className="h-10 w-[110px] bg-dark-purple/10"
+                  className="h-10 w-[110px]"
                 />
               </div>
               <div className="flex flex-col gap-1">
@@ -1195,7 +1208,7 @@ export default function Transactions() {
                   placeholder="∞"
                   value={valorMax}
                   onChange={(e) => setValorMax(e.target.value)}
-                  className="h-10 w-[110px] bg-dark-purple/10"
+                  className="h-10 w-[110px]"
                 />
               </div>
 
@@ -1218,7 +1231,7 @@ export default function Transactions() {
                       setOrdenacao("data_desc");
                       setSel(new Set());
                     }}
-                    className="bg-dark-purple/10"
+                    
                   >
                     {t('transactions.filters.clear_filters', 'Limpar Filtros')}
                   </Button>
@@ -1231,11 +1244,11 @@ export default function Transactions() {
             <div className="flex flex-wrap items-end gap-4 mb-6">
               <div className="flex flex-col gap-1">
                 <label className="text-sm font-medium text-muted-foreground">{t('transactions.filters.date_from', 'De')}</label>
-                <Input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="h-10 w-[170px] bg-dark-purple/10" />
+                <Input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="h-10 w-[170px]" />
               </div>
               <div className="flex flex-col gap-1">
                 <label className="text-sm font-medium text-muted-foreground">{t('transactions.filters.date_to', 'Até')}</label>
-                <Input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="h-10 w-[170px] bg-dark-purple/10" />
+                <Input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="h-10 w-[170px]" />
               </div>
             </div>
           )}
@@ -1464,7 +1477,7 @@ export default function Transactions() {
                   className={`rounded-lg p-4 border bg-card border-border`}
                 >
                   <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center flex-1">
+                    <div className="flex min-w-0 flex-1 items-center">
                       <input
                         type="checkbox"
                         className="mr-2 mt-1 flex-shrink-0"
@@ -1472,7 +1485,7 @@ export default function Transactions() {
                         onChange={() => toggleSel(transaction.id)}
                         aria-label={`Selecionar ${transaction.descricao}`}
                       />
-                      <div className={`w-10 h-10 rounded-full ${transaction.tipo === TransactionType.INCOME ? 'bg-green-500/20' : 'bg-red-500/20'} flex items-center justify-center mr-3 flex-shrink-0`}>
+                      <div className={`w-9 h-9 rounded-full ${transaction.tipo === TransactionType.INCOME ? "bg-income/10" : "bg-expense/10"} flex items-center justify-center mr-3 flex-shrink-0`}>
                         {transaction.tipo === TransactionType.INCOME ? (
                           <ArrowUpIcon className="h-5 w-5 text-income" />
                         ) : (
@@ -1494,7 +1507,7 @@ export default function Transactions() {
                         <div className={`text-sm text-muted-foreground`}>{getPaymentMethodDisplay(transaction)}</div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1 ml-2">
+                    <div className="ml-2 flex shrink-0 items-center gap-1">
                       {(transaction.status === TransactionStatus.PENDING ||
                         transaction.status === TransactionStatus.SCHEDULED) && (
                         <Button size="sm" variant="ghost" onClick={() => handlePagar(transaction.id)}>
@@ -1549,74 +1562,38 @@ export default function Transactions() {
         </div>
       </div>
 
-      <AnimatePresence>
-        {isTransactionFormOpen && (
-          <>
-            {/* Overlay */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.3 }}
-              className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
-              onClick={() => setIsTransactionFormOpen(false)}
+      {/* Formulário de lançamento: Radix Dialog (Esc, foco preso, rolagem travada; painel inferior no mobile) */}
+      <Dialog open={isTransactionFormOpen} onOpenChange={setIsTransactionFormOpen}>
+        <DialogContent className="max-w-[600px]" aria-describedby={undefined}>
+          <DialogTitle className="sr-only">
+            {editingTransaction ? t('transactions.edit_transaction', 'Editar transação') : t('transactions.new_transaction', 'Nova Transação')}
+          </DialogTitle>
+          <button
+            type="button"
+            onClick={() => setIsTransactionFormOpen(false)}
+            className="absolute right-2 top-2 z-20 inline-flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <X className="h-5 w-5" />
+            <span className="sr-only">{t('common.close', 'Fechar')}</span>
+          </button>
+            <TransactionForm 
+              transaction={editingTransaction}
+              onSuccess={() => {
+                setIsTransactionFormOpen(false);
+                refetch();
+                queryClient.invalidateQueries({ queryKey: ["/api/wallet/current"] });
+                queryClient.invalidateQueries({ queryKey: ["/api/dashboard/summary"] });
+                queryClient.invalidateQueries({ queryKey: ["/api/payment-methods/totals"] });
+                toast({
+                  title: editingTransaction ? t('transactions.transaction_updated', 'Transação atualizada') : t('transactions.transaction_created', 'Transação criada'),
+                  description: editingTransaction 
+                    ? t('transactions.update_success', 'A transação foi atualizada com sucesso.') 
+                    : t('transactions.create_success', 'A transação foi criada com sucesso.'),
+                });
+              }}
             />
-            
-            {/* Modal */}
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-              <motion.div
-                initial={{ 
-                  opacity: 0, 
-                  scale: 0.8,
-                  y: 50
-                }}
-                animate={{ 
-                  opacity: 1, 
-                  scale: 1,
-                  y: 0
-                }}
-                exit={{ 
-                  opacity: 0, 
-                  scale: 0.8,
-                  y: 50
-                }}
-                transition={{ 
-                  type: "spring",
-                  damping: 25,
-                  stiffness: 300,
-                  duration: 0.3
-                }}
-                className={`bg-card border border-border w-full max-w-[600px] max-h-[90vh] overflow-y-auto rounded-lg p-6 relative`}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <button
-                  onClick={() => setIsTransactionFormOpen(false)}
-                  className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 z-10"
-                >
-                  <X className="h-5 w-5" />
-                  <span className="sr-only">{t('common.close', 'Fechar')}</span>
-                </button>
-                <TransactionForm 
-                  transaction={editingTransaction}
-                  onSuccess={() => {
-                    setIsTransactionFormOpen(false);
-                    refetch();
-                    queryClient.invalidateQueries({ queryKey: ["/api/wallet/current"] });
-                    queryClient.invalidateQueries({ queryKey: ["/api/dashboard/summary"] });
-                    queryClient.invalidateQueries({ queryKey: ["/api/payment-methods/totals"] });
-                    toast({
-                      title: editingTransaction ? t('transactions.transaction_updated', 'Transação atualizada') : t('transactions.transaction_created', 'Transação criada'),
-                      description: editingTransaction 
-                        ? t('transactions.update_success', 'A transação foi atualizada com sucesso.') 
-                        : t('transactions.create_success', 'A transação foi criada com sucesso.'),
-                    });
-                  }}
-                />
-              </motion.div>
-            </div>
-          </>
-        )}
-      </AnimatePresence>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={!!deletingTransaction} onOpenChange={(open) => !open && setDeletingTransaction(null)}>
         <AlertDialogContent className="border bg-card">

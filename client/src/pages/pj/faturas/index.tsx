@@ -187,7 +187,7 @@ export default function PjFaturas({ empresaId }: { empresaId: number }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2"><CreditCard className="h-6 w-6" /> Faturas de Cartão</h1>
+          <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2"><CreditCard className="h-6 w-6" /> Faturas de Cartão</h1>
           <p className="text-sm text-muted-foreground">Total da fatura corrente · toque no valor para abrir as compras. Faturas por competência abaixo.</p>
         </div>
         <Button onClick={() => setNovoCartao(true)}><Plus className="h-4 w-4 mr-2" /> Novo cartão</Button>

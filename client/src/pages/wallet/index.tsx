@@ -87,7 +87,7 @@ export default function WalletPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
         >
-          <h1 className="text-2xl md:text-3xl font-bold mb-1">{t('wallet.page_title', 'Minha Carteira')}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight mb-1">{t('wallet.page_title', 'Minha Carteira')}</h1>
           <p className="text-muted-foreground">{t('wallet.page_description', 'Gerencie suas finanças em um só lugar')}</p>
         </motion.div>
       </div>

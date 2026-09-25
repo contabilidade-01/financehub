@@ -197,7 +197,7 @@ export default function DatabasePage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
+          <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
             <Database className="h-8 w-8" />
             {t("admin.database.title", "Gerenciamento do Banco de Dados")}
           </h1>

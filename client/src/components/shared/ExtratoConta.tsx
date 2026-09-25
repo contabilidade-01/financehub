@@ -130,7 +130,7 @@ export default function ExtratoConta({
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-background border-b text-xs text-muted-foreground">
             <tr>
-              <th className="text-left p-2 font-medium">Data</th>
+              <th className="text-left p-2 font-medium hidden sm:table-cell">Data</th>
               <th className="text-left p-2 font-medium">Histórico</th>
               <th className="text-left p-2 font-medium hidden sm:table-cell">Forma</th>
               <th className="text-right p-2 font-medium">Valor</th>
@@ -159,8 +159,9 @@ export default function ExtratoConta({
                 const saldoLinha = Number(l.saldo ?? 0);
                 return (
                   <tr key={l.id} className="border-b border-border/40">
-                    <td className="p-2 whitespace-nowrap align-top">{dataBR(l.data_transacao)}</td>
+                    <td className="p-2 whitespace-nowrap align-top tabular-nums hidden sm:table-cell">{dataBR(l.data_transacao)}</td>
                     <td className="p-2 align-top min-w-0">
+                      <span className="block text-xs text-muted-foreground tabular-nums sm:hidden">{dataBR(l.data_transacao)}</span>
                       <span className="font-medium">{l.descricao}{parcela}</span>
                       {cat && (
                         <span className="block text-xs text-muted-foreground truncate">{cat.slice(3)}</span>
@@ -170,7 +171,7 @@ export default function ExtratoConta({
                       {l.forma || "—"}
                     </td>
                     <td
-                      className={`p-2 text-right align-top font-medium whitespace-nowrap ${
+                      className={`p-2 text-right align-top font-medium whitespace-nowrap tabular-nums ${
                         signed < 0 ? "text-expense" : "text-income"
                       }`}
                     >
@@ -178,7 +179,7 @@ export default function ExtratoConta({
                       {money(Math.abs(signed))}
                     </td>
                     <td
-                      className={`p-2 text-right align-top whitespace-nowrap ${
+                      className={`p-2 text-right align-top whitespace-nowrap tabular-nums ${
                         saldoLinha < 0 ? "text-expense" : ""
                       }`}
                     >

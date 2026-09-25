@@ -138,7 +138,7 @@ export default function MaintenancePage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold flex items-center gap-2">
+        <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
           <Wrench className="h-8 w-8" />
           Ferramentas de Manutenção
         </h1>

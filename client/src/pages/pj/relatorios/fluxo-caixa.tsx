@@ -77,7 +77,7 @@ const model = useMemo(() => (data ? buildModel(data, empresaData) : null), [data
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="space-y-1">
-          <h1 className="text-2xl font-bold">Fluxo de Caixa Gerencial</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Fluxo de Caixa Gerencial</h1>
           <p className="text-sm text-muted-foreground">Contas nas linhas, meses nas colunas · linhas azuis são calculadas.</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">

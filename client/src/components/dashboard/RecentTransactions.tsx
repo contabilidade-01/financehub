@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -129,6 +130,27 @@ export default function RecentTransactions({ isLoading, transactions, onRefetch 
     }
   };
   
+  // Menu de ações (editar / excluir) — Radix DropdownMenu: teclado, Esc e foco corretos.
+  const renderAcoes = (transaction: Transaction) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={t('transactions.table.actions', 'Ações')}>
+          <MoreVertical className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-40">
+        <DropdownMenuItem onSelect={() => setEditingTransaction(transaction)}>
+          <Pencil className="h-4 w-4" />
+          <span>{t('transactions.edit_transaction', 'Editar')}</span>
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => setDeletingTransaction(transaction)} className="text-destructive focus:text-destructive">
+          <Trash2 className="h-4 w-4" />
+          <span>{t('transactions.delete_transaction', 'Excluir')}</span>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
   return (
     <motion.section
       initial={{ opacity: 0, y: 20 }}
@@ -136,9 +158,9 @@ export default function RecentTransactions({ isLoading, transactions, onRefetch 
       transition={{ duration: 0.4, delay: 0.2 }}
     >
       <Card className={` rounded-lg bg-card`}>
-        <CardContent className={`p-5 text-foreground`}>
+        <CardContent className="p-4 text-foreground md:p-5">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
-            <h2 className="text-xl mb-3 md:mb-0">{t('dashboard.recent_transactions.title', 'Transações Recentes')}</h2>
+            <h2 className="text-base font-semibold mb-3 md:mb-0">{t('dashboard.recent_transactions.title', 'Transações Recentes')}</h2>
             <div className="flex flex-wrap gap-2">
               <Button 
                 size="sm"
@@ -151,7 +173,7 @@ export default function RecentTransactions({ isLoading, transactions, onRefetch 
               <Button 
                 size="sm"
                 variant="outline"
-                className={transactionFilter === "income" ? "bg-green-500/20 text-income" : "text-muted-foreground hover:text-green-400"}
+                className={transactionFilter === "income" ? "border-income/40 bg-income/10 text-income hover:bg-income/15 hover:text-income" : "text-muted-foreground"}
                 onClick={() => setTransactionFilter("income")}
               >
                 <ArrowUpIcon className="h-4 w-4 mr-1" />
@@ -160,7 +182,7 @@ export default function RecentTransactions({ isLoading, transactions, onRefetch 
               <Button 
                 size="sm"
                 variant="outline"
-                className={transactionFilter === "expense" ? "bg-red-500/20 text-expense" : "text-muted-foreground hover:text-red-400"}
+                className={transactionFilter === "expense" ? "border-expense/40 bg-expense/10 text-expense hover:bg-expense/15 hover:text-expense" : "text-muted-foreground"}
                 onClick={() => setTransactionFilter("expense")}
               >
                 <ArrowDownIcon className="h-4 w-4 mr-1" />
@@ -169,8 +191,53 @@ export default function RecentTransactions({ isLoading, transactions, onRefetch 
             </div>
           </div>
           
-          <div className="overflow-x-auto">
-            <table className={`w-full min-w-[640px] bg-card`}>
+          {/* Mobile: lista compacta */}
+          <ul className="divide-y md:hidden">
+            {isLoading ? (
+              Array(4).fill(0).map((_, index) => (
+                <li key={index} className="flex items-center gap-3 py-3">
+                  <Skeleton className="h-8 w-8 rounded-full" />
+                  <div className="flex-1">
+                    <Skeleton className="mb-1 h-4 w-32" />
+                    <Skeleton className="h-3 w-20" />
+                  </div>
+                  <Skeleton className="h-4 w-16" />
+                </li>
+              ))
+            ) : filteredTransactions?.length === 0 ? (
+              <li className="py-6 text-center text-sm text-muted-foreground">
+                {t('transactions.table.no_transactions', 'Nenhuma transação encontrada')}
+              </li>
+            ) : (
+              filteredTransactions?.map((transaction) => (
+                <li key={transaction.id} className="flex items-center gap-3 py-3">
+                  <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${transaction.tipo === TransactionType.INCOME ? "bg-income/10" : "bg-expense/10"}`}>
+                    {transaction.tipo === TransactionType.INCOME ? (
+                      <ArrowUpIcon className="h-4 w-4 text-income" />
+                    ) : (
+                      <ArrowDownIcon className="h-4 w-4 text-expense" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{transaction.descricao}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {formatDate(transaction.data_transacao)}
+                      {transaction.metodo_pagamento ? ` · ${transaction.metodo_pagamento}` : ""}
+                    </p>
+                  </div>
+                  <span className={`shrink-0 text-sm font-medium tabular-nums ${transaction.tipo === TransactionType.INCOME ? "text-income" : "text-expense"}`}>
+                    {transaction.tipo === TransactionType.INCOME ? '+ ' : '− '}
+                    {formatCurrency(Number(transaction.valor))}
+                  </span>
+                  <div className="-mr-2 shrink-0">{renderAcoes(transaction)}</div>
+                </li>
+              ))
+            )}
+          </ul>
+
+          {/* md+: tabela */}
+          <div className="hidden overflow-x-auto md:block">
+            <table className="w-full">
               <thead>
                 <tr>
                   <th className={`text-left pb-4 text-xs font-label text-muted-foreground`}>{t('transactions.table.description', 'DESCRIÇÃO')}</th>
@@ -209,7 +276,7 @@ export default function RecentTransactions({ isLoading, transactions, onRefetch 
                   </tr>
                 ) : (
                   filteredTransactions?.map((transaction) => (
-                    <tr key={transaction.id} className={`transition-colors cursor-pointer border-t border-border hover:bg-primary/10` }>
+                    <tr key={transaction.id} className="border-t border-border transition-colors hover:bg-muted/40">
                       <td className="py-4 pr-4">
                         <div className="flex items-center">
                           <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${transaction.tipo === TransactionType.INCOME
@@ -245,53 +312,7 @@ export default function RecentTransactions({ isLoading, transactions, onRefetch 
                         {getStatusDisplay(transaction.status)}
                       </td>
                       <td className="py-4 whitespace-nowrap text-right">
-                        <div className="relative">
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setOpenMenuId(openMenuId === transaction.id ? null : transaction.id);
-                            }}
-                          >
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                          
-                          {openMenuId === transaction.id && (
-                            <>
-                              <div 
-                                className="fixed inset-0 z-40" 
-                                onClick={() => setOpenMenuId(null)}
-                              />
-                              <div 
-                                className="absolute right-0 top-full mt-1 w-40 bg-muted border border-border rounded-md shadow-lg z-50"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <button
-                                  onClick={() => {
-                                    setEditingTransaction(transaction);
-                                    setOpenMenuId(null);
-                                  }}
-                                  className="flex items-center w-full px-3 py-2 text-sm text-white hover:bg-slate-700 rounded-t-md"
-                                >
-                                  <Pencil className="mr-2 h-4 w-4" />
-                                  <span>{t('transactions.edit_transaction', 'Editar')}</span>
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setDeletingTransaction(transaction);
-                                    setOpenMenuId(null);
-                                  }}
-                                  className="flex items-center w-full px-3 py-2 text-sm text-expense hover:bg-slate-700 rounded-b-md"
-                                >
-                                  <Trash2 className="mr-2 h-4 w-4" />
-                                  <span>{t('transactions.delete_transaction', 'Excluir')}</span>
-                                </button>
-                              </div>
-                            </>
-                          )}
-                        </div>
+                        {renderAcoes(transaction)}
                       </td>
                     </tr>
                   ))
@@ -304,7 +325,6 @@ export default function RecentTransactions({ isLoading, transactions, onRefetch 
             <Button 
               variant="outline" 
               onClick={() => navigate("/transactions")}
-              className="bg-dark-purple/20 hover:bg-dark-purple/40 text-primary hover:text-white"
             >
               <span>{t('dashboard.recent_transactions.view_more', 'Ver mais transações')}</span>
               <ArrowRightIcon className="ml-2 h-4 w-4" />

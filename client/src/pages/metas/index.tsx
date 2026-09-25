@@ -195,7 +195,7 @@ export default function MetasPage({ variant = "pf", empresaId }: { variant?: Var
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">{copy.titulo}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{copy.titulo}</h1>
           <p className="text-muted-foreground">{copy.subtitulo}</p>
         </div>
         <Button onClick={() => setShowForm(!showForm)}>

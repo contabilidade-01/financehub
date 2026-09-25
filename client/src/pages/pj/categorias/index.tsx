@@ -105,7 +105,7 @@ export default function PjCategorias({ empresaId }: { empresaId: number }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Plano de Contas</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Plano de Contas</h1>
         <Button onClick={() => setShowForm(!showForm)} size="sm">
           <Plus className="h-4 w-4 mr-1" /> Nova Conta
         </Button>
@@ -149,6 +149,56 @@ export default function PjCategorias({ empresaId }: { empresaId: number }) {
 
       <Card>
         <CardContent className="p-0">
+          {/* Mobile: cards */}
+          <div className="divide-y md:hidden">
+            {isLoading ? (
+              <p className="p-4 text-center text-sm text-muted-foreground">Carregando...</p>
+            ) : contas.length === 0 ? (
+              <p className="p-4 text-center text-sm text-muted-foreground">Nenhuma conta cadastrada.</p>
+            ) : (
+              contas.map((c) => (
+                <div key={c.id} className="space-y-2 p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-medium leading-snug">
+                        <span className="mr-1.5 font-mono text-xs text-muted-foreground">{c.codigo}</span>
+                        {c.nome}
+                      </p>
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        <Badge variant={c.tipo === 'Receita' ? 'default' : 'destructive'} className="text-xs">{c.tipo}</Badge>
+                        <Badge variant="outline" className="text-xs">{classLabel[c.classificacao] ?? c.classificacao}</Badge>
+                      </div>
+                    </div>
+                    <Button variant="ghost" size="icon" className="-mr-2 shrink-0" aria-label="Excluir conta" onClick={() => deleteMut.mutate(c.id)}>
+                      <Trash2 className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Select
+                      value={(c as any).grupo_gerencial || "auto"}
+                      onValueChange={(v) => updateMut.mutate({ id: c.id, data: { grupo_gerencial: v === "auto" ? null : v } })}
+                    >
+                      <SelectTrigger className="h-9 flex-1 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {GRUPOS.map((g) => <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4"
+                        checked={(c as any).is_cmv === true}
+                        onChange={(e) => updateMut.mutate({ id: c.id, data: { is_cmv: e.target.checked } })}
+                      /> CMV
+                    </label>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* md+: tabela */}
+          <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/50">
               <tr>
@@ -168,7 +218,7 @@ export default function PjCategorias({ empresaId }: { empresaId: number }) {
               ) : (
                 contas.map((c) => (
                   <tr key={c.id} className="border-b hover:bg-muted/30">
-                    <td className="p-3 font-mono">{c.codigo}</td>
+                    <td className="p-3 font-mono tabular-nums">{c.codigo}</td>
                     <td className="p-3">{c.nome}</td>
                     <td className="p-3 text-center">
                       <Badge variant={c.tipo === 'Receita' ? 'default' : 'destructive'} className="text-xs">
@@ -209,6 +259,7 @@ export default function PjCategorias({ empresaId }: { empresaId: number }) {
               )}
             </tbody>
           </table>
+          </div>
         </CardContent>
       </Card>
     </div>

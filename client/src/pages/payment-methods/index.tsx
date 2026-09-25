@@ -281,7 +281,7 @@ export default function PaymentMethodsPage() {
     <div>
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-bold">{t('payment_methods.title', 'Formas de Pagamento')}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{t('payment_methods.title', 'Formas de Pagamento')}</h1>
           <p className="text-muted-foreground">
             {t('payment_methods.subtitle', 'Gerencie suas formas de pagamento personalizadas')}
           </p>

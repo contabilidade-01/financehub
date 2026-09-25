@@ -175,7 +175,7 @@ export default function FluxoProjetadoView({ endpoint, titulo, subtitulo, habili
     const somaMes = data.meses.map((_, i) => linhas.reduce((s, l) => s + l.valores[i], 0));
     return (
       <tr key={`g-${nome}`} className="bg-muted/60 border-b">
-        <td className="sticky left-0 z-10 bg-muted/60 p-2 text-xs font-label">{nome}</td>
+        <td className="sticky left-0 z-10 bg-muted p-2 text-xs font-label">{nome}</td>
         {somaMes.map((v, i) => (
           <td key={i} className="p-2 text-right font-numeric text-xs font-semibold">{fmtCurto(v)}</td>
         ))}
@@ -238,7 +238,7 @@ export default function FluxoProjetadoView({ endpoint, titulo, subtitulo, habili
           <table className="w-full border-collapse text-sm">
             <thead>
               <tr className="border-b bg-muted/40">
-                <th className="sticky left-0 z-20 bg-muted/40 p-2 text-left text-xs font-label min-w-[220px]">Conta</th>
+                <th className="sticky left-0 z-20 bg-muted p-2 text-left text-xs font-label min-w-[140px] sm:min-w-[220px]">Conta</th>
                 {data.meses.map((m) => (
                   <th
                     key={m.mes}
@@ -284,7 +284,7 @@ export default function FluxoProjetadoView({ endpoint, titulo, subtitulo, habili
               )}
 
               <tr className="bg-muted/60 font-bold">
-                <td className="sticky left-0 z-10 bg-muted/60 p-2 text-sm">Saldo acumulado</td>
+                <td className="sticky left-0 z-10 bg-muted p-2 text-sm">Saldo acumulado</td>
                 {saldos.map((v, i) => (
                   <td key={i} className={`p-2 text-right font-numeric text-sm ${v >= 0 ? "text-income" : "text-expense"}`}>
                     {fmtCurto(v)}

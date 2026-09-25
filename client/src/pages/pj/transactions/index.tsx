@@ -353,6 +353,14 @@ function TransacaoForm({
   );
 }
 
+/** "2026-09-20" → "20/09/2026" (mantém o valor original se vier em outro formato). */
+function dataCurta(d: string | Date | null | undefined): string {
+  if (!d) return "";
+  const str = typeof d === "string" ? d : d.toISOString().slice(0, 10);
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(str);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : str;
+}
+
 export default function PjTransactions({ empresaId }: { empresaId: number }) {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -590,11 +598,55 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
     setFAte("");
   };
 
+  // Ações de cada lançamento (usadas na tabela e nos cards do mobile).
+  const renderAcoes = (t: EmpresaTransacaoWithDetails) => (
+    <>
+      {t.status === "Pendente" && (
+        <Button
+          variant="ghost"
+          size="icon"
+          title="Dar baixa (efetivar)"
+          onClick={() => pagarMut.mutate(t.id)}
+          disabled={pagarMut.isPending}
+        >
+          <CheckCircle2 className="h-4 w-4 text-income" />
+        </Button>
+      )}
+      {t.status === "Efetivada" && (
+        <Button
+          variant="ghost"
+          size="icon"
+          title="Reabrir (voltar a pendente)"
+          onClick={() => reabrirMut.mutate(t.id)}
+          disabled={reabrirMut.isPending}
+        >
+          <RotateCcw className="h-4 w-4 text-muted-foreground" />
+        </Button>
+      )}
+      <Button
+        variant="ghost"
+        size="icon"
+        title="Editar lançamento"
+        onClick={() => setEditando(t)}
+      >
+        <Edit2 className="h-4 w-4 text-muted-foreground" />
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
+        title="Excluir"
+        onClick={() => deleteMut.mutate(t.id)}
+      >
+        <Trash2 className="h-4 w-4 text-muted-foreground" />
+      </Button>
+    </>
+  );
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Transações PJ</h1>
-        <div className="flex gap-2">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-2xl font-semibold tracking-tight">Transações PJ</h1>
+        <div className="flex flex-wrap gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -721,7 +773,55 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
 
       <Card>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
+          {/* Mobile: lista em cards */}
+          <div className="divide-y md:hidden">
+            {isLoading ? (
+              <p className="p-4 text-center text-sm text-muted-foreground">Carregando...</p>
+            ) : filtradas.length === 0 ? (
+              <p className="p-4 text-center text-sm text-muted-foreground">
+                {transacoes.length === 0 ? "Nenhuma transação ainda." : "Nenhum lançamento com esses filtros."}
+              </p>
+            ) : (
+              filtradas.map((t) => {
+                const sb = stBadgePj(t.status || "Efetivada");
+                return (
+                  <div key={t.id} className="space-y-2 p-4" data-testid={`pj-transacao-card-${t.id}`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-medium leading-snug">{t.descricao}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {dataCurta(t.data_transacao)} · {rotuloFormaPj(t, bancos, cartoes)}
+                        </p>
+                      </div>
+                      <span className={`shrink-0 font-semibold tabular-nums ${t.tipo === 'Receita' ? 'text-income' : 'text-expense'}`}>
+                        {t.tipo === 'Receita' ? '+' : '−'} {fmt(t.valor)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {t.categoria_codigo} — {t.categoria_nome}
+                    </p>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className={`px-2 py-0.5 rounded-md text-xs ${sb.c}`}>{sb.t}</span>
+                        {(t as any).reembolso_pessoal && (
+                          <Badge variant="secondary" className="text-xs">Reembolso recebido</Badge>
+                        )}
+                        {(t as any).parcela_num && (t as any).parcela_total && (t as any).parcela_total > 1 && (
+                          <Badge variant="secondary" className="text-xs">
+                            {(t as any).parcela_num}/{(t as any).parcela_total}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="-mr-2 flex items-center">{renderAcoes(t)}</div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* md+: tabela */}
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-sm">
               <thead className="border-b bg-muted/50">
                 <tr>
@@ -749,7 +849,7 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
                     const sb = stBadgePj(t.status || "Efetivada");
                     return (
                     <tr key={t.id} className="border-b hover:bg-muted/30">
-                      <td className="p-3 whitespace-nowrap">{t.data_transacao}</td>
+                      <td className="p-3 whitespace-nowrap tabular-nums">{dataCurta(t.data_transacao)}</td>
                       <td className="p-3">
                         {t.descricao}
                         {(t as any).reembolso_pessoal && (
@@ -792,7 +892,7 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
                           </button>
                         )}
                       </td>
-                      <td className={`p-3 text-right font-medium ${t.tipo === 'Receita' ? 'text-income' : 'text-expense'}`}>
+                      <td className={`p-3 text-right font-medium tabular-nums whitespace-nowrap ${t.tipo === 'Receita' ? 'text-income' : 'text-expense'}`}>
                         {fmt(t.valor)}
                       </td>
                       <td className="p-3 text-center">
@@ -804,44 +904,7 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
                         <span className={`px-2 py-1 rounded-lg text-xs ${sb.c}`}>{sb.t}</span>
                       </td>
                       <td className="p-3 text-center whitespace-nowrap">
-                        {t.status === "Pendente" && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            title="Dar baixa (efetivar)"
-                            onClick={() => pagarMut.mutate(t.id)}
-                            disabled={pagarMut.isPending}
-                          >
-                            <CheckCircle2 className="h-4 w-4 text-income" />
-                          </Button>
-                        )}
-                        {t.status === "Efetivada" && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            title="Reabrir (voltar a pendente)"
-                            onClick={() => reabrirMut.mutate(t.id)}
-                            disabled={reabrirMut.isPending}
-                          >
-                            <RotateCcw className="h-4 w-4 text-muted-foreground" />
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="Editar lançamento"
-                          onClick={() => setEditando(t)}
-                        >
-                          <Edit2 className="h-4 w-4 text-muted-foreground" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="Excluir"
-                          onClick={() => deleteMut.mutate(t.id)}
-                        >
-                          <Trash2 className="h-4 w-4 text-muted-foreground" />
-                        </Button>
+                        {renderAcoes(t)}
                       </td>
                     </tr>
                     );
