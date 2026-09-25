@@ -35,10 +35,10 @@ import { useTranslation } from "@/contexts/LocalizationContext";
 import { translateCategoryType, translateCategoryName } from "@/utils/localization";
 
 const createCategorySchema = (t: (key: string, fallback: string) => string) => z.object({
-  nome: z.string().min(1, t('categories.form.name_required', 'Name is required')),
-  tipo: z.string().min(1, t('categories.form.type_required', 'Type is required')),
-  cor: z.string().min(1, t('categories.form.color_required', 'Color is required')),
-  icone: z.string().min(1, t('categories.form.icon_required', 'Icon is required')),
+  nome: z.string().min(1, t('categories.form.name_required', 'Informe o nome')),
+  tipo: z.string().min(1, t('categories.form.type_required', 'Selecione o tipo')),
+  cor: z.string().min(1, t('categories.form.color_required', 'Selecione a cor')),
+  icone: z.string().min(1, t('categories.form.icon_required', 'Selecione o ícone')),
 });
 
 type CategoryFormValues = z.infer<ReturnType<typeof createCategorySchema>>;
@@ -297,7 +297,7 @@ export default function Categories() {
     defaultValues: {
       nome: "",
       tipo: TransactionType.EXPENSE,
-      cor: "#6C63FF",
+      cor: "#216283",
       icone: "tag",
     },
   });
@@ -369,7 +369,7 @@ export default function Categories() {
     form.reset({
       nome: category.nome,
       tipo: category.tipo,
-      cor: category.cor || "#6C63FF",
+      cor: category.cor || "#64748B",
       icone: category.icone || "tag",
     });
     setIsDialogOpen(true);
@@ -380,7 +380,7 @@ export default function Categories() {
     form.reset({
       nome: "",
       tipo: TransactionType.EXPENSE,
-      cor: "#6C63FF",
+      cor: "#216283",
       icone: "tag",
     });
     setIsDialogOpen(true);
@@ -390,19 +390,19 @@ export default function Categories() {
   const icons = [
     { value: "home", label: t('categories.icons.home', 'Casa') },
     { value: "car", label: t('categories.icons.car', 'Carro') },
-    { value: "food", label: t('categories.icons.food', 'Food') },
-    { value: "health", label: t('categories.icons.health', 'Health') },
-    { value: "school", label: t('categories.icons.school', 'Education') },
-    { value: "entertainment", label: t('categories.icons.entertainment', 'Entertainment') },
+    { value: "food", label: t('categories.icons.food', 'Alimentação') },
+    { value: "health", label: t('categories.icons.health', 'Saúde') },
+    { value: "school", label: t('categories.icons.school', 'Educação') },
+    { value: "entertainment", label: t('categories.icons.entertainment', 'Lazer') },
     { value: "clothing", label: t('categories.icons.clothing', 'Roupas') },
     { value: "services", label: t('categories.icons.services', 'Serviços') },
-    { value: "salary", label: t('categories.icons.salary', 'Salary') },
+    { value: "salary", label: t('categories.icons.salary', 'Salário') },
     { value: "freelance", label: t('categories.icons.freelance', 'Freelance') },
-    { value: "investments", label: t('categories.icons.investments', 'Investments') },
+    { value: "investments", label: t('categories.icons.investments', 'Investimentos') },
     { value: "gift", label: t('categories.icons.gift', 'Presente') },
     { value: "refund", label: t('categories.icons.refund', 'Reembolso') },
-    { value: "misc-income", label: t('categories.icons.misc_income', 'Other Income') },
-    { value: "misc-expense", label: t('categories.icons.misc_expense', 'Other Expenses') },
+    { value: "misc-income", label: t('categories.icons.misc_income', 'Outras receitas') },
+    { value: "misc-expense", label: t('categories.icons.misc_expense', 'Outras despesas') },
     { value: "tag", label: t('categories.icons.tag', 'Tag') }
   ];
 
@@ -417,8 +417,10 @@ export default function Categories() {
     { value: "#1ABC9C", label: t('categories.colors.turquoise', 'Turquesa') },
     { value: "#34495E", label: t('categories.colors.dark_blue', 'Azul Escuro') },
     { value: "#95A5A6", label: t('categories.colors.gray', 'Cinza') },
-    { value: "#6C63FF", label: t('categories.colors.purple', 'Roxo') + " (Primário)" },
-    { value: "#00FF9D", label: t('categories.colors.green', 'Verde') + " Neon (Secundário)" }
+    { value: "#216283", label: t('categories.colors.dark_blue', 'Azul Escuro') + " (Primário)" },
+    // Cores usadas por categorias antigas — mantidas para a edição exibir o valor salvo.
+    { value: "#6C63FF", label: t('categories.colors.purple', 'Roxo') + " (antigo)" },
+    { value: "#00FF9D", label: t('categories.colors.green', 'Verde') + " (antigo)" },
   ];
 
   const getIconComponent = (iconName: string) => {
@@ -461,21 +463,21 @@ export default function Categories() {
           <div className="flex flex-col md:flex-row gap-4 mb-6">
             <div className="flex-1">
               <Input
-                placeholder={t('placeholders.search_categories', 'Search categories...')}
+                placeholder={t('placeholders.search_categories', 'Buscar categorias...')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-dark-purple/10"
+
               />
             </div>
             <div>
               <select 
                 value={typeFilter} 
                 onChange={(e) => setTypeFilter(e.target.value)}
-                className="w-[140px] bg-dark-purple/10 h-10 rounded-md border border-input px-3 py-2 text-sm"
+                className="w-[140px] h-10 rounded-md border border-input px-3 py-2 text-sm"
               >
-                <option value="all">{t('common.all', 'All')}</option>
-                <option value={TransactionType.INCOME}>{t('common.income', 'Income')}</option>
-                <option value={TransactionType.EXPENSE}>{t('common.expenses', 'Expenses')}</option>
+                <option value="all">{t('common.all', 'Todas')}</option>
+                <option value={TransactionType.INCOME}>{t('common.income', 'Receita')}</option>
+                <option value={TransactionType.EXPENSE}>{t('common.expenses', 'Despesa')}</option>
               </select>
             </div>
           </div>
@@ -497,7 +499,7 @@ export default function Categories() {
                   <div className="flex items-center">
                     <div
                       className="w-10 h-10 rounded-lg flex items-center justify-center mr-4"
-                      style={{ backgroundColor: category.cor || "#6C63FF" }}
+                      style={{ backgroundColor: category.cor || "#64748B" }}
                     >
                       {category.icone ? (
                         getIconComponent(category.icone)

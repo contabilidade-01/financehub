@@ -66,7 +66,7 @@ export function DataTable<TData, TValue>({
               onChange={(event) =>
                 table.getColumn(searchColumn)?.setFilterValue(event.target.value)
               }
-              className="pl-8 bg-dark-purple/10"
+              className="pl-8"
             />
           </div>
         </div>
@@ -126,7 +126,7 @@ export function DataTable<TData, TValue>({
             size="sm"
             onClick={() => table.previousPage()}
             disabled={!table.getCanPreviousPage()}
-            className="bg-dark-purple/10"
+           
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
@@ -139,7 +139,7 @@ export function DataTable<TData, TValue>({
             size="sm"
             onClick={() => table.nextPage()}
             disabled={!table.getCanNextPage()}
-            className="bg-dark-purple/10"
+           
           >
             <ChevronRight className="h-4 w-4" />
           </Button>

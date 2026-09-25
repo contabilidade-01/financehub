@@ -498,7 +498,7 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
                           <div className="flex items-center">
                             <div
                               className="w-3 h-3 rounded-full mr-2"
-                              style={{ backgroundColor: selectedCategory.cor || "#6C63FF" }}
+                              style={{ backgroundColor: selectedCategory.cor || "#64748B" }}
                             />
                             {translateCategoryName(selectedCategory.nome, t)}
                           </div>
@@ -540,7 +540,7 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
                                 <div className="flex items-center">
                                   <div
                                     className="w-3 h-3 rounded-full mr-2"
-                                    style={{ backgroundColor: category.cor || "#6C63FF" }}
+                                    style={{ backgroundColor: category.cor || "#64748B" }}
                                   />
                                   {translateCategoryName(category.nome, t)}
                                 </div>

@@ -74,7 +74,7 @@ export default function CategorySummary({ isLoading, categories }: CategorySumma
                 >
                   <div 
                     className="w-10 h-10 rounded-lg flex items-center justify-center mr-4"
-                    style={{ backgroundColor: category.color || "#6C63FF" }}
+                    style={{ backgroundColor: category.color || "#64748B" }}
                   >
                     {category.icon ? getIconComponent(category.icon) : <CategoryIcon className="text-white" />}
                   </div>
@@ -88,7 +88,7 @@ export default function CategorySummary({ isLoading, categories }: CategorySumma
                         className="h-full rounded-full transition-all duration-500"
                         style={{ 
                           width: `${category.percentage}%`,
-                          backgroundColor: category.color || "#6C63FF"
+                          backgroundColor: category.color || "#64748B"
                         }}
                       ></div>
                     </div>
