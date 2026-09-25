@@ -1,6 +1,6 @@
 import { useAuth } from "@/hooks/use-auth";
+import { diasAteSP } from "../../../shared/datas-sp";
 
-const MS_DIA = 1000 * 60 * 60 * 24;
 const AVISO_VENCIMENTO_DIAS = 7;
 
 export function useSubscriptionStatus() {
@@ -13,11 +13,9 @@ export function useSubscriptionStatus() {
 
   const expirationDate = user?.data_expiracao_assinatura || null;
 
-  const daysRemaining = ((): number | null => {
-    if (!expirationDate) return null;
-    const ms = new Date(expirationDate).getTime() - Date.now();
-    return Math.ceil(ms / MS_DIA);
-  })();
+  // Dias de calendário em São Paulo: vencer hoje às 20h é "hoje", não "amanhã".
+  // (O corte de acesso abaixo continua pelo horário exato.)
+  const daysRemaining = diasAteSP(expirationDate);
 
   const isAdminUser = isAdmin();
 

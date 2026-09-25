@@ -12,6 +12,7 @@
  * Usa setInterval (sem dependência de node-cron).
  */
 
+import { dataBrSP, diasAteSP } from "../../shared/datas-sp";
 import { db } from "../db";
 import { sql } from "drizzle-orm";
 import { uazapiService } from "../services/uazapi.service";
@@ -233,8 +234,10 @@ async function checkUpcomingReminders(): Promise<void> {
   `);
 
   for (const row of rows as any[]) {
-    const dataFormatada = new Date(row.data_lembrete).toLocaleDateString("pt-BR");
-    const diasRestantes = Math.ceil((new Date(row.data_lembrete).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+    // data_lembrete é DATE: o driver pode trazer Date à meia-noite UTC — usa o dia do calendário.
+    const dia = row.data_lembrete instanceof Date ? row.data_lembrete.toISOString().slice(0, 10) : String(row.data_lembrete).slice(0, 10);
+    const dataFormatada = dataBrSP(dia);
+    const diasRestantes = diasAteSP(dia) ?? 0;
     const urgencia = diasRestantes <= 1 ? "🚨" : "🔔";
 
     const msg = `${urgencia} *Lembrete*\n\n*${row.titulo}*\n${row.descricao ? row.descricao + "\n" : ""}🗓 Vence em: ${dataFormatada} (${diasRestantes <= 0 ? "HOJE" : `${diasRestantes} dia(s)`})`;

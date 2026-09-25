@@ -31,7 +31,8 @@ export function ExpiredSubscriptionOverlay({ expirationDate }: ExpiredSubscripti
 
   const formattedDate = expirationDate
     ? new Date(expirationDate).toLocaleDateString(
-        locale ? locale.replace(/([a-z]{2})-([a-z]{2})/, (_, lang, region) => `${lang}-${region.toUpperCase()}`) : 'pt-BR'
+        locale ? locale.replace(/([a-z]{2})-([a-z]{2})/, (_, lang, region) => `${lang}-${region.toUpperCase()}`) : 'pt-BR',
+        { timeZone: 'America/Sao_Paulo' }, // data do vencimento no calendário de São Paulo
       )
     : null;
 

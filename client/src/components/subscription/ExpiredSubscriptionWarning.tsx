@@ -1,3 +1,4 @@
+import { dataBrSP } from "@shared/datas-sp";
 import { Lock, AlertTriangle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -18,7 +19,7 @@ export function ExpiredSubscriptionWarning({ expirationDate, className = "" }: E
           <p>Assinatura Expirada - Acesso Restrito</p>
           {expirationDate && (
             <p className="text-sm">
-              Expirou em: {new Date(expirationDate).toLocaleDateString('pt-BR')}
+              Expirou em: {dataBrSP(expirationDate)}
             </p>
           )}
         </div>

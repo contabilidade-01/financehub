@@ -1,3 +1,4 @@
+import { dataBrSP } from "@shared/datas-sp";
 import { useState } from 'react';
 import { useSubscription, useCancelSubscription } from '@/hooks/use-subscription';
 import { useSubscriptionStatus } from '@/hooks/use-subscription-status';
@@ -99,7 +100,7 @@ export default function BillingSettingsPage() {
     // Sem assinatura PAGA (Asaas). Mas o usuário pode estar em degustação/
     // carência com acesso válido — nesse caso a mensagem é positiva, não "sem
     // assinatura". Fonte única: hasActiveAccess (data_expiracao no futuro).
-    const vencFmt = expirationDate ? new Date(expirationDate).toLocaleDateString('pt-BR') : null;
+    const vencFmt = dataBrSP(expirationDate);
     const diasTxt =
       daysRemaining == null
         ? null
@@ -153,7 +154,7 @@ export default function BillingSettingsPage() {
           <div>
             <p className="text-sm text-muted-foreground">Próxima cobrança</p>
             <p className="text-lg">
-              {new Date(data.subscription?.currentPeriodEnd || '').toLocaleDateString('pt-BR')}
+              {dataBrSP(data.subscription?.currentPeriodEnd)}
               {daysRemaining != null && daysRemaining >= 0 && (
                 <span className="ml-2 text-sm font-normal text-muted-foreground">
                   ({daysRemaining === 0 ? "vence hoje" : daysRemaining === 1 ? "falta 1 dia" : `faltam ${daysRemaining} dias`})
@@ -212,7 +213,7 @@ export default function BillingSettingsPage() {
           <CardDescription>
             A cobrança para de renovar. Você continua com acesso até{" "}
             {expirationDate
-              ? new Date(expirationDate).toLocaleDateString("pt-BR")
+              ? dataBrSP(expirationDate)
               : "o fim do período já pago"}
             .
           </CardDescription>
@@ -228,7 +229,7 @@ export default function BillingSettingsPage() {
                 <DialogDescription>
                   A assinatura não será renovada. Você mantém o acesso até{" "}
                   {expirationDate
-                    ? new Date(expirationDate).toLocaleDateString("pt-BR")
+                    ? dataBrSP(expirationDate)
                     : "o fim do ciclo já pago"}
                   .
                 </DialogDescription>

@@ -3,11 +3,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useSubscriptionStatus } from "@/hooks/use-subscription-status";
 import { useLocation } from "wouter";
-
-function formatDate(iso: string | null | undefined) {
-  if (!iso) return null;
-  return new Date(iso).toLocaleDateString("pt-BR");
-}
+import { dataBrSP } from "@shared/datas-sp";
 
 export function ExpiringSoonBanner() {
   const { showExpiringSoonBanner, daysRemaining, expirationDate, isTrial } = useSubscriptionStatus();
@@ -18,7 +14,7 @@ export function ExpiringSoonBanner() {
     return null;
   }
 
-  const dataFmt = formatDate(expirationDate);
+  const dataFmt = dataBrSP(expirationDate);
   const n = daysRemaining ?? 0;
   const quando =
     n <= 0 ? "hoje" : n === 1 ? "amanhã" : `em ${n} dias`;
