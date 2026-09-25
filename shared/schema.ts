@@ -828,6 +828,9 @@ export const empresasTransacoes = pgTable("empresas_transacoes", {
   // Conciliação bancária (colunas criadas no auto-migrate; agora no Drizzle).
   conciliado: boolean("conciliado").notNull().default(false),
   fitid: varchar("fitid", { length: 120 }),
+  // ERP (PJ ME): cliente/fornecedor e centro de custo do lançamento.
+  contato_id: integer("contato_id"),
+  centro_custo_id: integer("centro_custo_id"),
 });
 
 // Formas de pagamento PJ (não-cartão). Cartões ficam em empresas_cartoes.

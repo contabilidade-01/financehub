@@ -484,9 +484,25 @@ export async function atualizarLinhas(
       if (!STATUS_EDITAVEIS.has(String(a.status))) throw new ErroImportacao("Status inválido.");
       sets.push(sql`status = ${a.status}`);
     }
-    if (a.transacao_existente_id !== undefined) sets.push(sql`transacao_existente_id = ${a.transacao_existente_id}`);
-    if (a.centro_custo_id !== undefined) sets.push(sql`centro_custo_id = ${a.centro_custo_id}`);
-    if (a.contato_id !== undefined) sets.push(sql`contato_id = ${a.contato_id}`);
+    if (a.transacao_existente_id !== undefined) {
+      // Só um candidato que o próprio servidor propôs para esta linha.
+      if (a.transacao_existente_id !== null) {
+        const ok = (await db.execute(sql`
+          SELECT 1 FROM importacao_linhas
+          WHERE id = ${a.id} AND importacao_id = ${id}
+            AND candidatos @> ${JSON.stringify([{ id: Number(a.transacao_existente_id) }])}::jsonb
+        `)) as any[];
+        if (!ok[0]) throw new ErroImportacao("Lançamento para conciliar inválido.");
+      }
+      sets.push(sql`transacao_existente_id = ${a.transacao_existente_id}`);
+    }
+    if (a.centro_custo_id !== undefined || a.contato_id !== undefined) {
+      if (s.escopo !== "pj") throw new ErroImportacao("Cliente/fornecedor e centro de custo são do módulo PJ.");
+      const { validarVinculos } = await import("../erp/erp.service");
+      const v = await validarVinculos(s.empresa_id, { centro_custo_id: a.centro_custo_id, contato_id: a.contato_id });
+      if (a.centro_custo_id !== undefined) sets.push(sql`centro_custo_id = ${v.centro_custo_id}`);
+      if (a.contato_id !== undefined) sets.push(sql`contato_id = ${v.contato_id}`);
+    }
     if (a.observacao !== undefined) sets.push(sql`observacao = ${a.observacao ? String(a.observacao).slice(0, 255) : null}`);
     if (!sets.length) continue;
     const r = (await db.execute(sql`
@@ -619,9 +635,10 @@ export async function confirmar(id: number, usuarioId: number, opts: { semCatego
         ? ((await tx.execute(sql`
             INSERT INTO empresas_transacoes
               (empresa_id, categoria_id, descricao, valor, tipo, data_transacao, data_pagamento, status, origem,
-               movimenta_caixa, conta_bancaria_id, conciliado, fitid, metodo_pagamento)
+               movimenta_caixa, conta_bancaria_id, conciliado, fitid, metodo_pagamento, contato_id, centro_custo_id)
             VALUES (${s.empresa_id}, ${categoriaId}, ${l.descricao}, ${Math.abs(valor).toFixed(2)}, ${tipo}, ${data}, ${data},
-                    'Efetivada', 'importacao', true, ${s.conta_bancaria_id}, true, ${l.chave}, 'Extrato bancário')
+                    'Efetivada', 'importacao', true, ${s.conta_bancaria_id}, true, ${l.chave}, 'Extrato bancário',
+                    ${l.contato_id ?? null}, ${l.centro_custo_id ?? null})
             RETURNING id
           `)) as any[])
         : ((await tx.execute(sql`

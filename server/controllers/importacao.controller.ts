@@ -1,9 +1,10 @@
 import { Request, Response } from "express";
 import * as svc from "../services/importacao/importacao.service";
+import { ErroErp } from "../services/erp/erp.service";
 
 /** Resposta padrão de erro: ErroImportacao vira 4xx com a mensagem; o resto é 500 genérico. */
 function falha(res: Response, err: any) {
-  if (err instanceof svc.ErroImportacao) return res.status(err.status).json({ error: err.message });
+  if (err instanceof svc.ErroImportacao || err instanceof ErroErp) return res.status(err.status).json({ error: err.message });
   console.error("[Importação] erro:", err?.message || err);
   return res.status(500).json({ error: "Erro ao processar a importação." });
 }

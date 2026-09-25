@@ -37,7 +37,7 @@ import { ThemeToggleSimple } from "@/components/theme-toggle-simple";
 import { useTheme } from "next-themes";
 import { useTranslation } from "@/contexts/LocalizationContext";
 import { useSystemConfig } from "@/contexts/SystemConfigContext";
-import { rotuloModalidade } from "@shared/modalidade";
+import { rotuloModalidade, temErpPj } from "@shared/modalidade";
 import { FLAG_IMPORTACAO_EXTRATO_V2 } from "@/hooks/use-flag";
 
 interface MenuItem {
@@ -168,6 +168,17 @@ function Sidebar() {
   // PJ vê só o ambiente PJ; PF vê só o PF. Sem itens repetidos.
   const userMenuItems: MenuGroup[] = [
     isPJ ? secaoPJ : secaoPF,
+    // Gestão (ERP) — só modalidade PJ ME.
+    ...(temErpPj(userData as any) ? [{
+      label: 'GESTÃO',
+      items: [
+        { icon: <HandCoins className="mr-3 h-4 w-4" />, text: 'Contas a receber', path: "/p/contas-receber" },
+        { icon: <BarChart3 className="mr-3 h-4 w-4" />, text: 'DRE gerencial', path: "/p/dre-gerencial" },
+        { icon: <Users className="mr-3 h-4 w-4" />, text: 'Clientes e fornecedores', path: "/p/clientes-fornecedores" },
+        { icon: <Target className="mr-3 h-4 w-4" />, text: 'Centros de custo', path: "/p/centros-custo" },
+        ...(temImportacaoV2 ? [{ icon: <FileUp className="mr-3 h-4 w-4" />, text: 'Importar extrato', path: "/p/importar-extrato" }] : []),
+      ],
+    }] : []),
     {
       label: t('navigation.sections.settings', 'CONFIGURAÇÕES'),
       items: [

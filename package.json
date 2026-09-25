@@ -49,7 +49,8 @@
     "test:modalidade": "tsx scripts/testar-modalidade.ts",
     "test:nlp-br": "tsx scripts/testar-nlp-br.ts",
     "test:classificacao-pf": "tsx scripts/testar-classificacao-pf.ts",
-    "test:importacao-parsers": "tsx scripts/testar-importacao-parsers.ts"
+    "test:importacao-parsers": "tsx scripts/testar-importacao-parsers.ts",
+    "test:erp": "tsx scripts/testar-erp.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

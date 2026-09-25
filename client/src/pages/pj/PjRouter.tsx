@@ -14,6 +14,10 @@ import PjContasBancarias from "@/pages/pj/contas-bancarias";
 import MetasPage from "@/pages/metas";
 import ImportarLancamentosPj from "@/pages/pj/importar";
 import ImportarExtratoPage from "@/pages/importar-extrato";
+import ContatosPage from "@/pages/pj/erp/contatos";
+import CentrosCustoPage from "@/pages/pj/erp/centros-custo";
+import ContasReceberPage from "@/pages/pj/erp/contas-receber";
+import DreGerencialPage from "@/pages/pj/erp/dre";
 import PjReembolsos from "@/pages/pj/reembolsos";
 import PjFormasPagamento from "@/pages/pj/formas-pagamento";
 import PjVencimentos from "@/pages/pj/vencimentos";
@@ -97,6 +101,15 @@ export default function PjRouter() {
         return <ConciliacaoPage empresaId={empresaAtiva} />;
       case "importar":
         return <ImportarLancamentosPj empresaId={empresaAtiva} />;
+      // ERP (PJ ME) — cada página mostra o convite quando a modalidade é MEI.
+      case "clientes-fornecedores":
+        return <ContatosPage empresaId={empresaAtiva} />;
+      case "centros-custo":
+        return <CentrosCustoPage empresaId={empresaAtiva} />;
+      case "contas-receber":
+        return <ContasReceberPage empresaId={empresaAtiva} />;
+      case "dre-gerencial":
+        return <DreGerencialPage empresaId={empresaAtiva} />;
       case "importar-extrato":
         return <ImportarExtratoPage escopo="pj" empresaId={empresaAtiva} />;
       case "reembolsos":

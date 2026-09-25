@@ -1584,6 +1584,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const simularWaCtrl = await import("./controllers/simular-whatsapp.controller");
   app.post("/api/admin/simular-whatsapp", combinedAuth, checkImpersonation, requireSuperAdmin, simularWaCtrl.simularWhatsapp);
+  // ERP (somente modalidade PJ ME): cadastros, contas a receber e DRE gerencial.
+  const erpCtrl = await import("./controllers/erp.controller");
+  const { requireErpPj } = await import("./middleware/modalidade.middleware");
+  const erpAuth = [combinedAuth, checkImpersonation, requireErpPj];
+  app.get("/api/empresas/:id/erp/contatos", ...erpAuth, erpCtrl.listarContatos);
+  app.post("/api/empresas/:id/erp/contatos", ...erpAuth, erpCtrl.criarContato);
+  app.put("/api/empresas/:id/erp/contatos/:cid", ...erpAuth, erpCtrl.atualizarContato);
+  app.delete("/api/empresas/:id/erp/contatos/:cid", ...erpAuth, erpCtrl.removerContato);
+  app.get("/api/empresas/:id/erp/centros-custo", ...erpAuth, erpCtrl.listarCentros);
+  app.post("/api/empresas/:id/erp/centros-custo", ...erpAuth, erpCtrl.criarCentro);
+  app.put("/api/empresas/:id/erp/centros-custo/:cid", ...erpAuth, erpCtrl.atualizarCentro);
+  app.delete("/api/empresas/:id/erp/centros-custo/:cid", ...erpAuth, erpCtrl.removerCentro);
+  app.get("/api/empresas/:id/erp/receber", ...erpAuth, erpCtrl.listarReceber);
+  app.post("/api/empresas/:id/erp/receber", ...erpAuth, erpCtrl.criarReceber);
+  app.post("/api/empresas/:id/erp/receber/:tid/baixa", ...erpAuth, erpCtrl.receber);
+  app.get("/api/empresas/:id/erp/dre", ...erpAuth, erpCtrl.dre);
+  app.post("/api/empresas/:id/erp/contas-plano", ...erpAuth, erpCtrl.criarContaPlano);
+
   // Importação de extratos (PF e PJ) — sessão persistente com autosave.
   const importacaoCtrl = await import("./controllers/importacao.controller");
   const uploadExtrato = multer({

@@ -1150,6 +1150,41 @@ const STEPS: Step[] = [
       await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_emp_tx_conta_fitid ON empresas_transacoes(conta_bancaria_id, fitid) WHERE fitid IS NOT NULL`);
     },
   },
+  {
+    name: "ERP PJ ME: clientes/fornecedores, centros de custo e vínculos no lançamento",
+    run: async () => {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS empresas_contatos (
+          id          SERIAL PRIMARY KEY,
+          empresa_id  INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+          tipo        VARCHAR(12) NOT NULL DEFAULT 'cliente',   -- cliente | fornecedor | ambos
+          nome        VARCHAR(200) NOT NULL,
+          documento   VARCHAR(20),                              -- CPF/CNPJ só dígitos
+          email       VARCHAR(200),
+          telefone    VARCHAR(30),
+          observacao  TEXT,
+          ativo       BOOLEAN NOT NULL DEFAULT true,
+          criado_em   TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_emp_contatos ON empresas_contatos(empresa_id, ativo)`);
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS empresas_centros_custo (
+          id          SERIAL PRIMARY KEY,
+          empresa_id  INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+          nome        VARCHAR(120) NOT NULL,
+          codigo      VARCHAR(20),
+          ativo       BOOLEAN NOT NULL DEFAULT true,
+          criado_em   TIMESTAMPTZ NOT NULL DEFAULT now(),
+          UNIQUE (empresa_id, nome)
+        )
+      `);
+      await db.execute(sql`ALTER TABLE empresas_transacoes ADD COLUMN IF NOT EXISTS contato_id INTEGER REFERENCES empresas_contatos(id) ON DELETE SET NULL`);
+      await db.execute(sql`ALTER TABLE empresas_transacoes ADD COLUMN IF NOT EXISTS centro_custo_id INTEGER REFERENCES empresas_centros_custo(id) ON DELETE SET NULL`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_emp_tx_contato ON empresas_transacoes(contato_id) WHERE contato_id IS NOT NULL`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_emp_tx_centro ON empresas_transacoes(centro_custo_id) WHERE centro_custo_id IS NOT NULL`);
+    },
+  },
 ];
 
 export async function runAutoMigrations(): Promise<void> {
