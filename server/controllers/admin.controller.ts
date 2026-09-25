@@ -1581,6 +1581,19 @@ export async function gerarLinkCobranca(req: Request, res: Response) {
   }
 }
 
+// POST /api/admin/assinaturas/:id/sincronizar-asaas — confere no Asaas e libera quem pagou
+export async function sincronizarAssinaturaAsaas(req: Request, res: Response) {
+  try {
+    const userId = parseInt(req.params.id);
+    if (!Number.isFinite(userId)) return res.status(400).json({ error: "id inválido" });
+    const r = await getSubscriptionService(storage).sincronizarPagamentosAsaas(userId);
+    return res.json(r);
+  } catch (err: any) {
+    console.error("sincronizarAssinaturaAsaas:", err);
+    return res.status(500).json({ error: err?.response?.data?.errors?.[0]?.description || err?.message || "Falha ao consultar o Asaas" });
+  }
+}
+
 // GET /api/admin/export/users-csv — Exportar usuários em formato CSV
 export async function exportUsersCsv(req: Request, res: Response) {
   try {

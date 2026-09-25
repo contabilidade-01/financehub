@@ -68,8 +68,11 @@ export async function handleAsaasWebhook(req: Request, res: Response) {
       return res.status(200).json({ message: "Evento já processado" });
     }
 
-    // 3. Salvar webhook no banco (log)
-    const webhookRecord = await storage.createAsaasWebhook({
+    // 3. Salvar webhook no banco (log). Reenvio de um evento que falhou antes
+    // reaproveita o registro: inserir de novo batia na chave única e TODA
+    // reentrega do Asaas morria com 500 — o pagamento nunca era processado
+    // (e o Asaas pausa a fila depois de várias falhas).
+    const webhookRecord = existingWebhook ?? await storage.createAsaasWebhook({
       eventType: event,
       asaasEventId: payment.id + '-' + event,
       payload: JSON.stringify(req.body),

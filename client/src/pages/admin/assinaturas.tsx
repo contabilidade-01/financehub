@@ -87,6 +87,18 @@ export default function AdminAssinaturas() {
     onSuccess: (r: any) => { setLinkCobranca(r?.url || ""); toast({ title: "Link gerado", description: "Copie e envie ao cliente." }); },
     onError: (err: any) => toast({ title: "Erro", description: err?.error || err?.message || "Falha ao gerar link", variant: "destructive" }),
   });
+  const sincronizarMut = useMutation({
+    mutationFn: (id: number) => apiRequest(`/api/admin/assinaturas/${id}/sincronizar-asaas`, { method: "POST", data: {} }),
+    onSuccess: (r: any) => {
+      invalidate();
+      if (r?.ativado) {
+        toast({ title: "Pagamento reconhecido", description: `Acesso liberado até ${r.acessoAte ? new Date(r.acessoAte).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "—"}.` });
+      } else {
+        toast({ title: "Nada a liberar", description: r?.motivo || (r?.pagos ? "Os pagamentos do Asaas já estão refletidos." : "Nenhum pagamento confirmado no Asaas.") });
+      }
+    },
+    onError: (err: any) => toast({ title: "Erro", description: err?.error || err?.message || "Falha ao consultar o Asaas", variant: "destructive" }),
+  });
   const consultoriaMut = useMutation({
     mutationFn: ({ id, ativar }: { id: number; ativar: boolean }) => apiRequest(`/api/admin/assinaturas/${id}/consultoria`, { method: "POST", data: { ativar } }),
     onSuccess: (r: any, vars) => {
@@ -189,6 +201,9 @@ export default function AdminAssinaturas() {
                     </button>
                   )}
                   <div className="flex items-center gap-1">
+                    <Button size="sm" variant="outline" title="Confere no Asaas se o cliente pagou e libera o acesso" onClick={() => sincronizarMut.mutate(a.id)} disabled={sincronizarMut.isPending}>
+                      <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Conferir pagamento
+                    </Button>
                     <Button size="sm" variant="outline" onClick={() => renovarMut.mutate(a.id)} disabled={!a.ciclo_assinatura || renovarMut.isPending}>
                       <RefreshCw className="h-3.5 w-3.5 mr-1" /> Renovar
                     </Button>

@@ -558,6 +558,81 @@ export class SubscriptionService {
   }
 
   /**
+   * Confere no Asaas (fonte da verdade) se o cliente pagou alguma cobrança que
+   * o sistema ainda não reconheceu — webhook perdido, fila pausada, token
+   * errado — e libera o acesso. Idempotente: só age quando o pagamento
+   * estende o acesso atual ou o usuário ainda não está como 'ativa'.
+   */
+  async sincronizarPagamentosAsaas(userId: number): Promise<{
+    ativado: boolean;
+    pagos: number;
+    acessoAte?: Date;
+    motivo?: string;
+  }> {
+    const user = await this.storage.getUserById(userId);
+    if (!user) return { ativado: false, pagos: 0, motivo: 'Usuário não encontrado' };
+    const cliente = await this.storage.getAsaasCustomerByUserId(userId);
+    if (!cliente?.asaasCustomerId) return { ativado: false, pagos: 0, motivo: 'Cliente sem cadastro no Asaas' };
+
+    const asaas = await this.getAsaas();
+    const lista = await asaas.getCustomerPayments(cliente.asaasCustomerId, { limit: 50 });
+    const PAGO = ['RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH', 'DUNNING_RECEIVED'];
+    const pagos = (lista.data || [])
+      .filter((p: any) => PAGO.includes(String(p.status || '').toUpperCase()) && p.dueDate)
+      .sort((a: any, b: any) => String(a.dueDate).localeCompare(String(b.dueDate)));
+    if (!pagos.length) return { ativado: false, pagos: 0, motivo: 'Nenhum pagamento confirmado no Asaas' };
+
+    const subs = await this.storage.getAllSubscriptionsByUserId(userId);
+    const ciclo = ((user as any).ciclo_assinatura as string) || 'mensal';
+    const meses = CICLO_ASAAS[ciclo]?.meses || 1;
+    let acessoAte: Date | undefined;
+    let ativado = false;
+
+    for (const p of pagos as any[]) {
+      const localSub =
+        subs.find((x) => x.asaasSubscriptionId && x.asaasSubscriptionId === p.subscription) ||
+        [...subs].sort((a, b) => b.id - a.id)[0];
+      if (!localSub) continue;
+
+      let local = await this.storage.getPaymentTransactionByAsaasId(p.id);
+      if (!local) {
+        local = await this.storage.createPaymentTransaction({
+          usuarioId: userId,
+          subscriptionId: localSub.id,
+          asaasPaymentId: p.id,
+          asaasInvoiceUrl: p.invoiceUrl,
+          amount: String(p.value ?? '0'),
+          status: 'confirmed',
+          paymentMethod: String(p.billingType || 'undefined').toLowerCase(),
+          dueDate: p.dueDate,
+          confirmedDate: new Date(),
+          description: p.description || 'Cobrança Asaas (sincronizada)',
+          metadata: JSON.stringify(p),
+        } as any);
+      } else if (local.status !== 'confirmed') {
+        await this.storage.updatePaymentTransaction(local.id, { status: 'confirmed', confirmedDate: new Date() } as any);
+      }
+
+      // Já refletido? (ativa e com acesso até, pelo menos, o período desta cobrança)
+      const atual = await this.storage.getUserById(userId);
+      const alvo = fimDoPeriodoPago(String(p.dueDate).slice(0, 10), meses);
+      const expAtual = (atual as any)?.data_expiracao_assinatura ? new Date((atual as any).data_expiracao_assinatura) : null;
+      if ((atual as any)?.status_assinatura === 'ativa' && expAtual && expAtual >= alvo) {
+        acessoAte = expAtual;
+        continue;
+      }
+      acessoAte = await this.activateUserSubscription(userId, localSub.id, String(p.dueDate).slice(0, 10));
+      ativado = true;
+      try {
+        const { avisarPagamentoConfirmado } = await import('./lembretes-cobranca');
+        await avisarPagamentoConfirmado((await this.storage.getUserById(userId)) as any, p.id, Number(p.value), acessoAte);
+      } catch { /* aviso é best-effort */ }
+      console.log(`[Assinatura] Pagamento ${p.id} (venc. ${p.dueDate}) reconhecido pela sincronização — user ${userId} até ${acessoAte.toISOString()}`);
+    }
+    return { ativado, pagos: pagos.length, acessoAte };
+  }
+
+  /**
    * Ativar assinatura do usuário (após confirmação de pagamento)
    */
   async activateUserSubscription(userId: number, subscriptionId: number, vencimento?: string | null): Promise<Date> {

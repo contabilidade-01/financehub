@@ -479,6 +479,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     checkImpersonation,
     billingController.createRenewLink
   );
+  // "Já paguei": o próprio cliente pede para conferir o pagamento no Asaas.
+  app.post(
+    "/api/billing/conferir-pagamento",
+    combinedAuth,
+    checkImpersonation,
+    billingController.conferirPagamento
+  );
   app.get(
     "/api/billing/subscription",
     combinedAuth,
@@ -657,6 +664,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/admin/assinaturas/:id/consultoria", combinedAuth, checkImpersonation, requireSuperAdmin, adminController.definirConsultoria);
   app.post("/api/admin/assinaturas/:id/renovar", combinedAuth, checkImpersonation, requireSuperAdmin, adminController.renovarAssinatura);
   app.post("/api/admin/assinaturas/:id/gerar-link", combinedAuth, checkImpersonation, requireSuperAdmin, adminController.gerarLinkCobranca);
+  app.post("/api/admin/assinaturas/:id/sincronizar-asaas", combinedAuth, checkImpersonation, requireSuperAdmin, adminController.sincronizarAssinaturaAsaas);
   // Exportação CSV de relatórios administrativos
   app.get("/api/admin/export/users-csv", combinedAuth, checkImpersonation, requireSuperAdmin, adminController.exportUsersCsv);
   app.get("/api/admin/export/transactions-csv", combinedAuth, checkImpersonation, requireSuperAdmin, adminController.exportTransactionsCsv);

@@ -271,6 +271,13 @@ app.use((req, res, next) => {
     console.error("[Mensalidades] Falha ao carregar job de mensalidades:", err.message);
   });
 
+  // Assinaturas: confere no Asaas a cada 30min quem pagou e não foi liberado (cobre webhook perdido)
+  import("./jobs/asaas-sync.job").then(({ initializeAsaasSync }) => {
+    initializeAsaasSync();
+  }).catch(err => {
+    console.error("[AsaasSync] Falha ao carregar job de sincronização:", err.message);
+  });
+
   // Recebimentos Cora: confere cobranças em aberto a cada 30min (cobre webhook perdido)
   import("./jobs/cora-sync.job").then(({ initializeCoraSync }) => {
     initializeCoraSync();

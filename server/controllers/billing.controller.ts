@@ -433,6 +433,26 @@ export async function validateExternalCheckoutToken(req: Request, res: Response)
  * Mesma ação do admin "Gerar link de cobrança", para o usuário logado.
  * Abre a página do Asaas com os dados que já temos.
  */
+/** "Já paguei": confere no Asaas e libera o acesso se o pagamento já caiu. */
+const ultimaConferencia = new Map<number, number>();
+export async function conferirPagamento(req: Request, res: Response) {
+  try {
+    const user = (req as any).user;
+    if (!user) return res.status(401).json({ error: "Usuário não autenticado" });
+    // Uma consulta ao Asaas a cada 20s por usuário (botão clicado várias vezes).
+    const agora = Date.now();
+    if (agora - (ultimaConferencia.get(user.id) || 0) < 20_000) {
+      return res.status(429).json({ error: "Aguarde alguns segundos e tente de novo." });
+    }
+    ultimaConferencia.set(user.id, agora);
+    const r = await getSubscriptionService(storage).sincronizarPagamentosAsaas(user.id);
+    return res.json(r);
+  } catch (err: any) {
+    console.error("conferirPagamento:", err);
+    return res.status(500).json({ error: "Não consegui consultar o pagamento agora. Tente em instantes." });
+  }
+}
+
 export async function createRenewLink(req: Request, res: Response) {
   try {
     const user = (req as any).user;
