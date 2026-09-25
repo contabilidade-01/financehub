@@ -141,6 +141,7 @@ export function useNavigation() {
           label: "GESTÃO",
           items: [
             { icon: HandCoins, text: "Contas a receber", path: "/p/contas-receber" },
+            { icon: Receipt, text: "Contas a pagar", path: "/p/contas-pagar" },
             { icon: PieChart, text: "DRE gerencial", path: "/p/dre-gerencial" },
             { icon: ArrowRightLeft, text: "Transferências", path: "/p/transferencias" },
             ...itemImportarExtrato("/p/importar-extrato"),

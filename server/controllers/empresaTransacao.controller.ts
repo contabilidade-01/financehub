@@ -515,3 +515,22 @@ export const listarVencimentosPj = async (req: Request, res: Response) => {
     return res.status(500).json({ error: "Erro interno." });
   }
 };
+
+// POST /api/empresas/:id/transacoes/baixar-lote { ids, conta_bancaria_id, data_pagamento }
+// Baixa em lote das contas a pagar em Vencimentos (PJ MEI e ME): tudo ou nada.
+export const baixarLoteEmpresaTransacao = async (req: Request, res: Response) => {
+  try {
+    const empresaId = parseInt(req.params.id);
+    if (isNaN(empresaId)) return res.status(400).json({ error: "ID inválido." });
+    const empresa = await resolveEmpresa(empresaId, req.user!.id, res);
+    if (!empresa) return;
+    const { baixarTitulos } = await import("../services/erp/titulos.service");
+    const ids: unknown[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
+    const r = await baixarTitulos(empresaId, ids.map((id) => ({ id: Number(id) })), req.body || {});
+    return res.json(r);
+  } catch (err: any) {
+    if (err?.status && err.status < 500) return res.status(err.status).json({ error: err.message, falhas: err.falhas });
+    console.error("baixarLoteEmpresaTransacao:", err);
+    return res.status(500).json({ error: "Erro interno." });
+  }
+};

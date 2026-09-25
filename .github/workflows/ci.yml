@@ -59,6 +59,7 @@ jobs:
           npm run test:importacao-parsers
           npm run test:erp
           npm run test:plano-contas
+          npm run test:titulos
           npm run flags:auditar
 
       - name: Baterias com lógica pura / scripts

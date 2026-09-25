@@ -15,8 +15,9 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { CheckCircle2, CreditCard, FileText } from "lucide-react";
-import type { EmpresaConta } from "@shared/schema";
+import { CheckCircle2, CreditCard, FileText, X } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ContaPlanoCombobox, usePlanoContasPj } from "@/components/shared/ContaPlanoCombobox";
 
 type ContaBanc = { id: number; banco: string; nome?: string | null; ativo?: boolean };
 
@@ -85,7 +86,8 @@ export default function PjVencimentos({ empresaId }: { empresaId: number }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const mes = limitesMesAtual();
-  const [tab, setTab] = useState<"aberta" | "paga">("aberta");
+  const [tab, setTabBase] = useState<"aberta" | "paga">("aberta");
+  const setTab = (t: "aberta" | "paga") => { setTabBase(t); setSel(new Set()); };
   const [de, setDe] = useState(mes.de);
   const [ate, setAte] = useState(mes.ate);
   const [contaBancPorFatura, setContaBancPorFatura] = useState<Record<number, string>>({});
@@ -109,12 +111,12 @@ export default function PjVencimentos({ empresaId }: { empresaId: number }) {
   });
   const bancosAtivos = useMemo(() => bancos.filter((c) => c.ativo !== false), [bancos]);
 
-  const { data: contas = [] } = useQuery<EmpresaConta[]>({
-    queryKey: [`${base}/contas`],
-    enabled: !!empresaId,
-  });
-  const contasDespesa = useMemo(() => contas.filter((c) => c.tipo === "Despesa"), [contas]);
+  const plano = usePlanoContasPj(empresaId);
+  const contasDespesa = useMemo(() => plano.contas.filter((c) => c.tipo === "Despesa"), [plano.contas]);
   const confirmar = useConfirm();
+  // Baixa em lote das contas a pagar selecionadas.
+  const [sel, setSel] = useState<Set<number>>(new Set());
+  const [lote, setLote] = useState({ conta_bancaria_id: "", data_pagamento: iso(new Date()) });
 
   const faturas = data?.faturas ?? [];
   const boletos = data?.boletos ?? [];
@@ -162,6 +164,25 @@ export default function PjVencimentos({ empresaId }: { empresaId: number }) {
       toast({ title: "Erro", description: e?.message || e?.error, variant: "destructive" }),
   });
 
+  const baixarLote = useMutation({
+    mutationFn: () =>
+      apiRequest(`${base}/transacoes/baixar-lote`, {
+        method: "POST",
+        data: {
+          ids: [...sel],
+          conta_bancaria_id: Number(lote.conta_bancaria_id || bancosAtivos[0]?.id),
+          data_pagamento: lote.data_pagamento,
+        },
+      }),
+    onSuccess: (r: any) => {
+      setSel(new Set());
+      invalidate();
+      toast({ title: `${r?.baixados ?? sel.size} lançamento(s) baixado(s)` });
+    },
+    onError: (e: any) =>
+      toast({ title: "Não foi possível baixar", description: e?.message || e?.error, variant: "destructive" }),
+  });
+
   const reabrirFatura = useMutation({
     mutationFn: (id: number) => apiRequest(`${base}/faturas/${id}/reabrir`, { method: "POST" }),
     onSuccess: () => {
@@ -185,7 +206,7 @@ export default function PjVencimentos({ empresaId }: { empresaId: number }) {
   const rotuloBanco = (b: ContaBanc) => b.nome || b.banco;
 
   return (
-    <div className="space-y-6">
+    <div className={`space-y-6 ${sel.size ? "pb-28 md:pb-20" : ""}`}>
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Vencimentos</h1>
@@ -281,23 +302,17 @@ export default function PjVencimentos({ empresaId }: { empresaId: number }) {
                             </span>
                             {tab === "aberta" && (
                               <>
-                                <Select
-                                  value={contabId}
-                                  onValueChange={(v) =>
-                                    setContaContabPorFatura((p) => ({ ...p, [f.id]: v }))
-                                  }
-                                >
-                                  <SelectTrigger className="w-[180px] h-9">
-                                    <SelectValue placeholder="Classificação" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {contasDespesa.map((c) => (
-                                      <SelectItem key={c.id} value={String(c.id)}>
-                                        {c.codigo} — {c.nome}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                                <ContaPlanoCombobox
+                                  categorias={contasDespesa}
+                                  grupos={plano.grupos}
+                                  tipo="Despesa"
+                                  valor={contabId ? Number(contabId) : null}
+                                  onChange={(v) => setContaContabPorFatura((p) => ({ ...p, [f.id]: v ? String(v) : "" }))}
+                                  onCriar={plano.criarConta}
+                                  escopo="pj"
+                                  placeholder="Classificação"
+                                  className="w-[220px]"
+                                />
                                 <Select
                                   value={bancId}
                                   onValueChange={(v) =>
@@ -375,6 +390,15 @@ export default function PjVencimentos({ empresaId }: { empresaId: number }) {
                           key={b.id}
                           className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-border/60 px-3 py-3"
                         >
+                          <div className="flex min-w-0 items-start gap-3">
+                            {tab === "aberta" && (
+                              <Checkbox
+                                className="mt-1"
+                                checked={sel.has(b.id)}
+                                onCheckedChange={() => setSel((s) => { const n = new Set(s); n.has(b.id) ? n.delete(b.id) : n.add(b.id); return n; })}
+                                aria-label={`Selecionar ${b.descricao}`}
+                              />
+                            )}
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="font-medium truncate">{b.descricao}</span>
@@ -390,6 +414,7 @@ export default function PjVencimentos({ empresaId }: { empresaId: number }) {
                               {b.categoria ? ` · ${b.categoria}` : ""}
                               {b.forma_pagamento ? ` · ${b.forma_pagamento}` : ""}
                             </p>
+                          </div>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="font-numeric font-semibold">
@@ -426,6 +451,28 @@ export default function PjVencimentos({ empresaId }: { empresaId: number }) {
           )}
         </TabsContent>
       </Tabs>
+
+      {tab === "aberta" && sel.size > 0 && (
+        <div className="fixed inset-x-0 bottom-16 z-30 px-3 md:bottom-4 md:left-auto md:right-6 md:px-0">
+          <div className="mx-auto flex max-w-2xl flex-wrap items-center gap-2 rounded-lg border bg-background p-3 shadow-lg">
+            <div className="min-w-0 flex-1 text-sm">
+              <span className="font-medium">{sel.size} selecionado(s)</span>
+              <span className="ml-2 tabular-nums text-muted-foreground">
+                {money(boletos.filter((b) => sel.has(b.id)).reduce((s, b) => s + (Number(b.valor) || 0), 0))}
+              </span>
+            </div>
+            <Select value={lote.conta_bancaria_id || (bancosAtivos[0] ? String(bancosAtivos[0].id) : "")} onValueChange={(v) => setLote({ ...lote, conta_bancaria_id: v })}>
+              <SelectTrigger className="h-9 w-[150px]" aria-label="Pagar com"><SelectValue placeholder="Pagar com..." /></SelectTrigger>
+              <SelectContent>{bancosAtivos.map((b) => <SelectItem key={b.id} value={String(b.id)}>{rotuloBanco(b)}</SelectItem>)}</SelectContent>
+            </Select>
+            <Input type="date" className="h-9 w-[150px]" value={lote.data_pagamento} onChange={(e) => setLote({ ...lote, data_pagamento: e.target.value })} aria-label="Data do pagamento" />
+            <Button size="sm" disabled={baixarLote.isPending || !bancosAtivos.length} onClick={() => baixarLote.mutate()}>
+              <CheckCircle2 className="mr-1 h-4 w-4" />Baixar
+            </Button>
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setSel(new Set())} aria-label="Limpar seleção"><X className="h-4 w-4" /></Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

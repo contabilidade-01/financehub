@@ -6,8 +6,7 @@
 import { db } from "../../db";
 import { sql } from "drizzle-orm";
 import { storage } from "../../storage";
-import { baixarTransacaoEmpresa } from "../empresa-transacao.service";
-import { hojeSP, somarDias } from "../nlp-br";
+import { hojeSP } from "../nlp-br";
 
 export class ErroErp extends Error {
   constructor(message: string, public status = 400) {
@@ -210,84 +209,8 @@ export async function criarContaPlano(empresaId: number, b: any) {
 }
 
 // ----------------------------------------------------------------------------
-// Contas a receber
+// Parcelas (usadas por contas a pagar/receber em titulos.service)
 // ----------------------------------------------------------------------------
-
-export async function listarReceber(empresaId: number, f: { status?: string; de?: string; ate?: string; contato_id?: number | null }) {
-  const status = f.status === "recebido" ? "Efetivada" : f.status === "todos" ? "" : "Pendente";
-  const iso = (s?: string) => (s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null);
-  const linhas = (await db.execute(sql`
-    SELECT t.id, t.descricao, t.valor, t.status, t.data_transacao, t.data_vencimento, t.data_pagamento,
-           t.parcela_num, t.parcela_total, t.conta_bancaria_id, t.contato_id, t.centro_custo_id, t.categoria_id,
-           ec.codigo AS conta_codigo, ec.nome AS conta_nome, c.nome AS contato_nome, cc.nome AS centro_nome,
-           COALESCE(cb.nome, cb.banco) AS conta_bancaria_nome
-    FROM empresas_transacoes t
-    LEFT JOIN empresas_contas ec ON ec.id = t.categoria_id
-    LEFT JOIN empresas_contatos c ON c.id = t.contato_id
-    LEFT JOIN empresas_centros_custo cc ON cc.id = t.centro_custo_id
-    LEFT JOIN contas_bancarias cb ON cb.id = t.conta_bancaria_id
-    WHERE t.empresa_id = ${empresaId}
-      AND t.tipo = 'Receita'
-      AND COALESCE(t.reembolso_pessoal, false) = false
-      AND (${status} = '' OR t.status = ${status})
-      AND (${iso(f.de)}::date IS NULL OR COALESCE(t.data_vencimento, t.data_transacao) >= ${iso(f.de)}::date)
-      AND (${iso(f.ate)}::date IS NULL OR COALESCE(t.data_vencimento, t.data_transacao) <= ${iso(f.ate)}::date)
-      AND (${f.contato_id ?? null}::int IS NULL OR t.contato_id = ${f.contato_id ?? null})
-    ORDER BY COALESCE(t.data_vencimento, t.data_transacao) ASC, t.id
-    LIMIT 1000
-  `)) as any[];
-  const hoje = hojeSP();
-  const em7 = somarDias(hoje, 7);
-  const resumo = { total_aberto: 0, vencido: 0, vence_7_dias: 0, recebido_periodo: 0 };
-  for (const l of linhas) {
-    const v = Number(l.valor);
-    const venc = String(l.data_vencimento || l.data_transacao).slice(0, 10);
-    if (l.status === "Pendente") {
-      resumo.total_aberto += v;
-      if (venc < hoje) resumo.vencido += v;
-      else if (venc <= em7) resumo.vence_7_dias += v;
-    } else resumo.recebido_periodo += v;
-  }
-  for (const k of Object.keys(resumo) as (keyof typeof resumo)[]) resumo[k] = Math.round(resumo[k] * 100) / 100;
-  return { linhas, resumo, hoje };
-}
-
-export async function criarReceber(empresaId: number, b: any) {
-  const descricao = texto(b.descricao, 255);
-  if (!descricao) throw new ErroErp("Informe a descrição.");
-  const valorTotal = Number(String(b.valor ?? "").replace(",", "."));
-  if (!(valorTotal > 0) || valorTotal > 99_999_999) throw new ErroErp("Informe um valor válido.");
-  const venc = String(b.data_vencimento || "");
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(venc)) throw new ErroErp("Informe a data de vencimento.");
-  const parcelas = Math.min(60, Math.max(1, Math.trunc(Number(b.parcelas) || 1)));
-  const v = await validarVinculos(empresaId, b);
-  if (!v.categoria_id) throw new ErroErp("Escolha a conta de receita do plano de contas.");
-  const conta = (await db.execute(sql`SELECT tipo FROM empresas_contas WHERE id = ${v.categoria_id}`)) as any[];
-  if (conta[0]?.tipo !== "Receita") throw new ErroErp("A conta escolhida precisa ser de receita.");
-  const competencia = /^\d{4}-\d{2}-\d{2}$/.test(String(b.data_competencia || "")) ? String(b.data_competencia) : hojeSP();
-
-  const valores = dividirParcelas(valorTotal, parcelas);
-  const grupo = parcelas > 1 ? `rec-${Date.now().toString(36)}` : null;
-  return db.transaction(async (tx: any) => {
-    const criados: any[] = [];
-    for (let i = 0; i < parcelas; i++) {
-      const valor = valores[i];
-      const vencParcela = vencimentoDaParcela(venc, i);
-      const r = (await tx.execute(sql`
-        INSERT INTO empresas_transacoes
-          (empresa_id, categoria_id, descricao, valor, tipo, data_transacao, data_vencimento, status, origem,
-           movimenta_caixa, conta_bancaria_id, contato_id, centro_custo_id, compra_grupo, parcela_num, parcela_total)
-        VALUES (${empresaId}, ${v.categoria_id}, ${parcelas > 1 ? `${descricao} (${i + 1}/${parcelas})` : descricao},
-                ${valor.toFixed(2)}, 'Receita', ${competencia}, ${vencParcela}, 'Pendente', 'manual',
-                false, ${v.conta_bancaria_id}, ${v.contato_id}, ${v.centro_custo_id}, ${grupo},
-                ${parcelas > 1 ? i + 1 : null}, ${parcelas > 1 ? parcelas : null})
-        RETURNING id, descricao, valor, data_vencimento
-      `)) as any[];
-      criados.push(r[0]);
-    }
-    return { criados };
-  });
-}
 
 /** Divide o total em N parcelas; o arredondamento fica na última (soma sempre bate). */
 export function dividirParcelas(total: number, n: number): number[] {
@@ -302,22 +225,6 @@ export function vencimentoDaParcela(primeiro: string, i: number): string {
   const ultimoDia = new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth() + 1, 0)).getUTCDate();
   dt.setUTCDate(Math.min(d, ultimoDia));
   return dt.toISOString().slice(0, 10);
-}
-
-/** Recebimento (baixa): define a conta bancária que recebeu e marca como efetivada. */
-export async function receber(empresaId: number, usuarioId: number, transacaoId: number, b: any) {
-  const v = await validarVinculos(empresaId, { conta_bancaria_id: b.conta_bancaria_id });
-  if (!v.conta_bancaria_id) throw new ErroErp("Escolha a conta bancária que recebeu.");
-  const t = (await db.execute(sql`
-    SELECT id, tipo, status FROM empresas_transacoes WHERE id = ${transacaoId} AND empresa_id = ${empresaId} LIMIT 1
-  `)) as any[];
-  if (!t[0]) throw new ErroErp("Lançamento não encontrado", 404);
-  if (t[0].tipo !== "Receita") throw new ErroErp("Este lançamento não é uma conta a receber.");
-  if (t[0].status !== "Pendente") throw new ErroErp("Este lançamento já foi recebido.", 409);
-  await db.execute(sql`UPDATE empresas_transacoes SET conta_bancaria_id = ${v.conta_bancaria_id} WHERE id = ${transacaoId}`);
-  const r = await baixarTransacaoEmpresa(empresaId, transacaoId, usuarioId, b.data_pagamento || hojeSP());
-  if (!r.ok) throw new ErroErp(r.error || "Não foi possível dar baixa.", r.status || 400);
-  return { ok: true };
 }
 
 // ----------------------------------------------------------------------------

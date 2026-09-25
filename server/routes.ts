@@ -1493,6 +1493,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/empresas/:id/transacoes/:transacaoId", combinedAuth, empresaTransacaoCtrl.getEmpresaTransacao);
   app.put("/api/empresas/:id/transacoes/:transacaoId", combinedAuth, empresaTransacaoCtrl.updateEmpresaTransacao);
   app.put("/api/empresas/:id/transacoes/:transacaoId/pagar", combinedAuth, empresaTransacaoCtrl.pagarEmpresaTransacao);
+  app.post("/api/empresas/:id/transacoes/baixar-lote", combinedAuth, empresaTransacaoCtrl.baixarLoteEmpresaTransacao);
   app.put("/api/empresas/:id/transacoes/:transacaoId/reabrir", combinedAuth, empresaTransacaoCtrl.reabrirEmpresaTransacao);
   app.delete("/api/empresas/:id/transacoes/:transacaoId", combinedAuth, empresaTransacaoCtrl.deleteEmpresaTransacao);
 
@@ -1600,6 +1601,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/empresas/:id/erp/receber", ...erpAuth, erpCtrl.listarReceber);
   app.post("/api/empresas/:id/erp/receber", ...erpAuth, erpCtrl.criarReceber);
   app.post("/api/empresas/:id/erp/receber/:tid/baixa", ...erpAuth, erpCtrl.receber);
+  app.get("/api/empresas/:id/erp/pagar", ...erpAuth, erpCtrl.listarPagar);
+  app.post("/api/empresas/:id/erp/pagar", ...erpAuth, erpCtrl.criarPagar);
+  app.post("/api/empresas/:id/erp/baixas", ...erpAuth, erpCtrl.baixar);
+  app.post("/api/empresas/:id/erp/estornos", ...erpAuth, erpCtrl.estornar);
   app.get("/api/empresas/:id/erp/dre", ...erpAuth, erpCtrl.dre);
   app.post("/api/empresas/:id/erp/contas-plano", ...erpAuth, erpCtrl.criarContaPlano);
   app.get("/api/empresas/:id/erp/transferencias", ...erpAuth, erpCtrl.listarTransferencias);

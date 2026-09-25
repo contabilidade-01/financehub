@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import * as erp from "../services/erp/erp.service";
+import * as titulos from "../services/erp/titulos.service";
 
 /** Rotas do ERP (PJ ME). requireErpPj já garantiu a modalidade; aqui, a empresa do usuário. */
 function falha(res: Response, err: any) {
@@ -44,25 +45,61 @@ export async function removerCentro(req: Request, res: Response) {
   try { const e = await empresa(req); res.json(await erp.removerCentro(e.id, Number(req.params.cid))); } catch (err) { falha(res, err); }
 }
 
-export async function listarReceber(req: Request, res: Response) {
-  try {
-    const e = await empresa(req);
-    res.json(await erp.listarReceber(e.id, {
-      status: String(req.query.status || "aberto"),
-      de: req.query.de as string | undefined,
-      ate: req.query.ate as string | undefined,
-      contato_id: num(req.query.contato_id),
-    }));
-  } catch (err) { falha(res, err); }
+function filtrosTitulos(q: Request["query"]): titulos.FiltrosTitulos {
+  const n = (v: unknown) => (v === undefined || v === "" ? null : Number(v));
+  const valor = (v: unknown) => (v === undefined || v === "" ? null : titulos.dinheiro(v));
+  return {
+    status: String(q.status || "aberto"),
+    de: q.de as string | undefined,
+    ate: q.ate as string | undefined,
+    pago_de: q.pago_de as string | undefined,
+    pago_ate: q.pago_ate as string | undefined,
+    contato_id: n(q.contato_id),
+    categoria_id: n(q.categoria_id),
+    centro_custo_id: n(q.centro_custo_id),
+    conta_bancaria_id: n(q.conta_bancaria_id),
+    q: q.q as string | undefined,
+    valor_min: valor(q.valor_min),
+    valor_max: valor(q.valor_max),
+  };
 }
-export async function criarReceber(req: Request, res: Response) {
-  try { const e = await empresa(req); res.status(201).json(await erp.criarReceber(e.id, req.body || {})); } catch (err) { falha(res, err); }
+
+// Contas a receber (Receita) e a pagar (Despesa): mesma regra, lados opostos.
+export const listarReceber = (req: Request, res: Response) => listarTitulos(req, res, "Receita");
+export const listarPagar = (req: Request, res: Response) => listarTitulos(req, res, "Despesa");
+export const criarReceber = (req: Request, res: Response) => criarTitulo(req, res, "Receita");
+export const criarPagar = (req: Request, res: Response) => criarTitulo(req, res, "Despesa");
+
+async function listarTitulos(req: Request, res: Response, tipo: titulos.TipoTitulo) {
+  try { const e = await empresa(req); res.json(await titulos.listarTitulos(e.id, tipo, filtrosTitulos(req.query))); } catch (err) { falha(res, err); }
 }
+async function criarTitulo(req: Request, res: Response, tipo: titulos.TipoTitulo) {
+  try { const e = await empresa(req); res.status(201).json(await titulos.criarTitulo(e.id, tipo, req.body || {})); } catch (err) { falha(res, err); }
+}
+
+/** Baixa individual (compatível com a rota antiga de recebimento). */
 export async function receber(req: Request, res: Response) {
   try {
     const e = await empresa(req);
-    res.json(await erp.receber(e.id, (req.user as any).id, Number(req.params.tid), req.body || {}));
+    const b = req.body || {};
+    res.json(await titulos.baixarTitulos(e.id, [{ id: Number(req.params.tid), valor_pago: b.valor_pago }], b));
   } catch (err) { falha(res, err); }
+}
+
+/** Baixa em lote: { itens: [{ id, valor_pago? }], data_pagamento, conta_bancaria_id }. */
+export async function baixar(req: Request, res: Response) {
+  try {
+    const e = await empresa(req);
+    const b = req.body || {};
+    res.json(await titulos.baixarTitulos(e.id, Array.isArray(b.itens) ? b.itens : [], b));
+  } catch (err: any) {
+    if (err?.falhas) return res.status(err.status || 400).json({ error: err.message, falhas: err.falhas });
+    falha(res, err);
+  }
+}
+
+export async function estornar(req: Request, res: Response) {
+  try { const e = await empresa(req); res.json(await titulos.estornarTitulos(e.id, (req.body || {}).ids)); } catch (err) { falha(res, err); }
 }
 
 export async function dre(req: Request, res: Response) {
