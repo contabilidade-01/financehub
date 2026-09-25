@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { storage } from "../storage";
+import { contaBloqueadaPeloAdmin } from "../utils/usuario-ativo";
 
 /**
  * Middleware para autenticação via API Key
@@ -35,6 +36,9 @@ export async function apiKeyAuth(req: Request, res: Response, next: NextFunction
     
     if (!user) {
       return res.status(401).json({ error: "Usuário associado ao token não encontrado" });
+    }
+    if (contaBloqueadaPeloAdmin(user)) {
+      return res.status(401).json({ error: "Conta desativada" });
     }
     
     // Adicionar usuário e token à requisição

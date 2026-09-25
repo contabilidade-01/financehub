@@ -5,7 +5,7 @@ import { storage, listIngestionEvents, jaConsentiuLgpd, registrarConsentimentoLg
 import { auth } from "./middleware/auth.middleware";
 import { apiKeyAuth } from "./middleware/apiKey.middleware";
 import { combinedAuth } from "./middleware/combinedAuth.middleware";
-import { authLimiter, forgotPasswordLimiter, resetPasswordLimiter } from "./middleware/security.middleware";
+import { authLimiter, forgotPasswordLimiter, resetPasswordLimiter, sensitiveLimiter } from "./middleware/security.middleware";
 import * as passwordResetController from "./controllers/password-reset.controller";
 import {
   checkImpersonation,
@@ -51,7 +51,8 @@ const upload = multer({
       } else if (file.fieldname === 'logo_dark') {
         cb(null, file.mimetype === 'image/svg+xml' ? 'logo-dark.svg' : 'logo-dark.png');
       } else {
-        cb(null, file.originalname);
+        // Nunca usar o nome enviado pelo cliente (path traversal).
+        cb(new Error('Campo de upload inválido'), '');
       }
     }
   }),
@@ -179,7 +180,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // User routes
   app.get("/api/users/profile", combinedAuth, checkImpersonation, userController.getProfile);
   app.put("/api/users/profile", auth, checkImpersonation, userController.updateProfile);
-  app.put("/api/users/password", auth, checkImpersonation, userController.updatePassword);
+  app.put("/api/users/password", sensitiveLimiter, auth, checkImpersonation, userController.updatePassword);
 
   // Wallet routes
   app.get(
@@ -304,7 +305,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/tokens/:id", auth, checkImpersonation, apiTokenController.getApiToken);
   app.put("/api/tokens/:id", auth, checkImpersonation, apiTokenController.updateApiToken);
   app.delete("/api/tokens/:id", auth, checkImpersonation, apiTokenController.deleteApiToken);
-  app.post("/api/tokens/:id/rotate", auth, checkImpersonation, apiTokenController.rotateApiToken);
+  app.post("/api/tokens/:id/rotate", sensitiveLimiter, auth, checkImpersonation, apiTokenController.rotateApiToken);
 
   // API Guide (documentação pública de uso da API)
   app.get("/api/api-guide", apiGuideController.getApiGuide);
@@ -442,8 +443,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/billing/environment", billingController.getAsaasEnvironment);
 
   // Rota pública para validar token de checkout externo
-  app.get("/api/billing/checkout/validate", billingController.validateExternalCheckoutToken);
-  app.get("/api/billing/checkout/validate/:token", billingController.validateExternalCheckoutToken);
+  app.get("/api/billing/checkout/validate", sensitiveLimiter, billingController.validateExternalCheckoutToken);
+  app.get("/api/billing/checkout/validate/:token", sensitiveLimiter, billingController.validateExternalCheckoutToken);
 
   // Checkout com suporte tanto para usuários autenticados quanto para checkout externo (com token)
   app.post(
@@ -763,6 +764,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   ]), async (req, res) => {
     if (!req.files || (Object.keys(req.files).length === 0)) {
       return res.status(400).json({ error: 'Nenhum arquivo enviado' });
+    }
+    // SVG é servido no mesmo domínio: recusa script/handlers (XSS armazenado).
+    const arquivos = Object.values(req.files as Record<string, Express.Multer.File[]>).flat();
+    for (const f of arquivos) {
+      if (f.mimetype !== 'image/svg+xml') continue;
+      const conteudo = fs.readFileSync(f.path, 'utf8');
+      if (/<script|\bon[a-z]+\s*=|javascript:|<foreignObject|<iframe|<embed|<object/i.test(conteudo)) {
+        fs.unlinkSync(f.path);
+        return res.status(400).json({ error: 'SVG com conteúdo ativo (script/eventos) não é permitido. Envie PNG ou SVG simples.' });
+      }
     }
     // Apenas upload, não salva nada no banco
     res.json({ success: true });

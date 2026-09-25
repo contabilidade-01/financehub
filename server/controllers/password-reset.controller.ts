@@ -221,9 +221,9 @@ export async function resetPassword(req: Request, res: Response) {
   try {
     const schema = z.object({
       token: z.string().min(32, "Token inválido"),
-      novaSenha: z.string().min(6, "A nova senha deve ter pelo menos 6 caracteres").optional(),
-      nova_senha: z.string().min(6, "A nova senha deve ter pelo menos 6 caracteres").optional(),
-      password: z.string().min(6, "A nova senha deve ter pelo menos 6 caracteres").optional(),
+      novaSenha: z.string().min(8, "A nova senha deve ter pelo menos 8 caracteres").optional(),
+      nova_senha: z.string().min(8, "A nova senha deve ter pelo menos 8 caracteres").optional(),
+      password: z.string().min(8, "A nova senha deve ter pelo menos 8 caracteres").optional(),
       nome: z.string().min(2, "Informe o nome completo").optional(),
       telefone: z.string().optional(),
       email: z.string().optional(),

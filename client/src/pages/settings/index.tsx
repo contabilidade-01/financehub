@@ -53,7 +53,7 @@ const createPasswordSchema = (t: (key: string, fallback: string) => string) =>
   z
     .object({
       senha_atual: z.string().min(6, t('settings.validation.current_password_required', 'A senha atual é obrigatória')),
-      nova_senha: z.string().min(6, t('settings.validation.new_password_min', 'A nova senha deve ter pelo menos 6 caracteres')),
+      nova_senha: z.string().min(8, t('settings.validation.new_password_min_8', 'A nova senha deve ter pelo menos 8 caracteres')),
       confirmar_senha: z.string().min(6, t('settings.validation.confirm_password_required', 'Confirme a nova senha')),
     })
     .refine((data) => data.nova_senha === data.confirmar_senha, {
@@ -512,7 +512,7 @@ export default function SettingsPage() {
                           />
                         </FormControl>
                         <FormDescription>
-                          {t('settings.password_min_length', 'Deve ter pelo menos 6 caracteres')}
+                          {t('settings.password_min_length_8', 'Deve ter pelo menos 8 caracteres')}
                         </FormDescription>
                         <FormMessage />
                       </FormItem>

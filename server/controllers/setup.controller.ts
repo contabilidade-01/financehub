@@ -10,6 +10,7 @@ import {
   apiTokens
 } from "../../shared/schema.js";
 import bcrypt from "bcryptjs";
+import { hashApiToken, mascararApiToken } from '../utils/api-token-hash';
 
 interface SetupData {
   databaseUrl: string;
@@ -180,7 +181,7 @@ export async function runSetup(req: Request, res: Response) {
 
       // 3. Criar usuário superadmin
       console.log('👤 Criando usuário superadmin...');
-      const hashedPassword = await bcrypt.hash(adminPassword, 10);
+      const hashedPassword = await bcrypt.hash(adminPassword, 12);
       
       const [adminUser] = await db.insert(users).values({
         nome: adminName,
@@ -256,7 +257,8 @@ export async function runSetup(req: Request, res: Response) {
       const apiToken = generateApiToken();
       await db.insert(apiTokens).values({
         usuario_id: adminUser.id,
-        token: apiToken,
+        token: hashApiToken(apiToken),
+        token_hint: mascararApiToken(apiToken),
         nome: 'Token Principal',
         descricao: 'Token API principal criado automaticamente',
         ativo: true
@@ -319,7 +321,7 @@ export async function createAdmin(req: Request, res: Response) {
           message: 'Já existe um usuário com este email.'
         });
       }
-      const hashedPassword = await bcrypt.hash(adminPassword, 10);
+      const hashedPassword = await bcrypt.hash(adminPassword, 12);
       const inserted = await client`INSERT INTO usuarios (nome, email, senha, tipo_usuario, ativo, remoteJid) VALUES (${adminName}, ${adminEmail}, ${hashedPassword}, 'superadmin', true, '') RETURNING id`;
       await client.end();
       res.json({

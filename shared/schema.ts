@@ -128,7 +128,9 @@ export const transactions = pgTable("transacoes", {
 export const apiTokens = pgTable("api_tokens", {
   id: serial("id").primaryKey(),
   usuario_id: integer("usuario_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  // Guarda "sha256:<hex>" (nunca o token em texto puro). Ver server/utils/api-token-hash.ts
   token: varchar("token", { length: 255 }).notNull().unique(),
+  token_hint: varchar("token_hint", { length: 40 }), // exibição: "fin_ab12cd...9f3e"
   nome: varchar("nome", { length: 100 }).notNull(),
   descricao: text("descricao"),
   data_criacao: timestamp("data_criacao", { withTimezone: true }).default(sql`(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')`),

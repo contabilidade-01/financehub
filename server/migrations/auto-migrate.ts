@@ -1051,6 +1051,19 @@ const STEPS: Step[] = [
       `);
     },
   },
+  {
+    name: "tokens de API só com hash (api_tokens.token_hint + sha256)",
+    run: async () => {
+      await db.execute(sql`ALTER TABLE api_tokens ADD COLUMN IF NOT EXISTS token_hint VARCHAR(40)`);
+      // Idempotente: só converte o que ainda está em texto puro.
+      await db.execute(sql`
+        UPDATE api_tokens
+        SET token_hint = left(token, 10) || '...' || right(token, 4),
+            token = 'sha256:' || encode(sha256(convert_to(token, 'UTF8')), 'hex')
+        WHERE token NOT LIKE 'sha256:%'
+      `);
+    },
+  },
 ];
 
 export async function runAutoMigrations(): Promise<void> {

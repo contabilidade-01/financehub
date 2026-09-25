@@ -56,7 +56,7 @@ const createResetSchema = (
   const senha = z.object({
     nova_senha: z
       .string()
-      .min(6, t("reset.validation.password_min", "A senha deve ter pelo menos 6 caracteres")),
+      .min(8, t("reset.validation.password_min_8", "A senha deve ter pelo menos 8 caracteres")),
     confirmar_senha: z.string().min(1, t("reset.validation.confirm_required", "Confirme a senha")),
   });
   const base = cadastroPendente
@@ -224,7 +224,7 @@ function ResetFormCard({ token, info }: { token: string; info: TokenInfo }) {
                     "reset.signup_description",
                     "Confirme seus dados e defina a senha de acesso. Nome e WhatsApp já vieram da conversa."
                   )
-                : t("reset.description", "Escolha uma senha com pelo menos 6 caracteres.")}
+                : t("reset.description_8", "Escolha uma senha com pelo menos 8 caracteres.")}
             </CardDescription>
           </CardHeader>
           <CardContent>

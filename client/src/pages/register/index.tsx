@@ -91,7 +91,7 @@ export default function Register() {
   const registerSchema = z.object({
     nome: z.string().min(2, t('validation.name_min_length', 'Nome deve ter pelo menos 2 caracteres')),
     email: z.string().email(t('validation.email_invalid', 'Email inválido')),
-    senha: z.string().min(6, t('validation.password_min_length', 'A senha deve ter pelo menos 6 caracteres')),
+    senha: z.string().min(8, t('validation.password_min_length_8', 'A senha deve ter pelo menos 8 caracteres')),
     confirmarSenha: z.string().min(6, t('validation.confirm_password', 'Confirme sua senha')),
     telefone: z.string().min(12, t('validation.phone_required', 'Telefone obrigatório')),
     remoteJid: z.string(),

@@ -63,6 +63,34 @@ check(resolverArquivoSeguro(base, 123 as any) === null, "bloqueia não-string");
   delete process.env.UAZAPI_WEBHOOK_SECRET;
   check(autenticarWebhookUazapi(req({ token: "qualquer" })) === null, "sem token configurado, rejeita tudo");
 
+  // ---- Tokens de API só com hash ----
+  const { hashApiToken, mascararApiToken, exibicaoApiToken } = await import("../server/utils/api-token-hash");
+  const tk = "fin_" + "a".repeat(60) + "beef";
+  check(hashApiToken(tk).startsWith("sha256:") && hashApiToken(tk) === hashApiToken(tk), "hash de token determinístico");
+  check(!hashApiToken(tk).includes(tk), "hash não contém o token");
+  check(mascararApiToken(tk) === "fin_aaaaaa...beef", "máscara do token");
+  check(exibicaoApiToken({ token: hashApiToken(tk) }) === "...", "nunca exibe o hash");
+
+  // ---- Conta desligada pelo admin x assinatura vencida ----
+  const { contaBloqueadaPeloAdmin } = await import("../server/utils/usuario-ativo");
+  const futuro = new Date(Date.now() + 86400000);
+  const passado = new Date(Date.now() - 86400000);
+  check(contaBloqueadaPeloAdmin({ ativo: false, data_expiracao_assinatura: futuro }) === true, "desligado pelo admin bloqueia");
+  check(contaBloqueadaPeloAdmin({ ativo: false, data_expiracao_assinatura: passado }) === false, "vencido entra para pagar");
+  check(contaBloqueadaPeloAdmin({ ativo: false, status_assinatura: "degustacao_expirada" }) === false, "degustação expirada entra para pagar");
+  check(contaBloqueadaPeloAdmin({ ativo: true }) === false, "ativo entra");
+
+  // ---- Bloqueio de login por conta ----
+  const { loginBloqueado, registrarFalhaLogin, registrarSucessoLogin } = await import("../server/utils/login-lockout");
+  const t0 = Date.now();
+  for (let i = 0; i < 9; i++) registrarFalhaLogin("X@y.com", t0);
+  check(loginBloqueado("x@y.com", t0) === 0, "9 erros ainda não bloqueia");
+  registrarFalhaLogin("x@y.com", t0);
+  check(loginBloqueado("x@y.com", t0) === 15, "10º erro bloqueia 15 min (e-mail sem diferenciar maiúsculas)");
+  check(loginBloqueado("x@y.com", t0 + 16 * 60000) === 0, "bloqueio expira");
+  registrarFalhaLogin("z@y.com", t0); registrarSucessoLogin("z@y.com");
+  check(loginBloqueado("z@y.com", t0) === 0, "sucesso zera contagem");
+
   if (falhas) {
     console.error(`\n${falhas} falha(s)`);
     process.exit(1);

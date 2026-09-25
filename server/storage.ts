@@ -78,6 +78,7 @@ import {
   type MetaComProgresso
 } from "../shared/schema";
 import { eq, and, or, desc, gte, lte, isNull, count, sum, sql, ne } from "drizzle-orm";
+import { hashApiToken, mascararApiToken } from "./utils/api-token-hash";
 
 // Pagar a fatura do cartão é QUITAÇÃO DE DÍVIDA, não despesa nova: a compra já
 // entrou por competência no dia em que foi feita. Sem excluir o pagamento, o
@@ -370,7 +371,7 @@ export class DbStorage implements IStorage {
   
   async createUser(userData: InsertUser): Promise<User> {
     // Hash password
-    const hashedPassword = await bcrypt.hash(userData.senha, 10);
+    const hashedPassword = await bcrypt.hash(userData.senha, 12);
     const result = await db.insert(users).values({
       ...userData,
       senha: hashedPassword,
@@ -400,7 +401,7 @@ export class DbStorage implements IStorage {
   }
   
   async updatePassword(id: number, newPassword: string): Promise<boolean> {
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
     
     const result = await db.update(users)
       .set({ senha: hashedPassword })
@@ -980,28 +981,30 @@ export class DbStorage implements IStorage {
   async getApiTokenByToken(token: string): Promise<ApiToken | undefined> {
     const result = await db.select()
       .from(apiTokens)
-      .where(eq(apiTokens.token, token))
+      .where(eq(apiTokens.token, hashApiToken(token)))
       .limit(1);
     
     return result[0];
   }
   
+  /** Retorna o registro com `token` em texto puro — única vez em que ele existe. */
   async createApiToken(userId: number, tokenData: InsertApiToken): Promise<ApiToken> {
     // Gerar um token aleatório e seguro
     const token = this.generateApiToken();
     
-    // Salvar dados do token
+    // Salvar só o hash + uma dica para exibição
     const result = await db.insert(apiTokens)
       .values({
         ...tokenData,
         usuario_id: userId,
-        token: token,
+        token: hashApiToken(token),
+        token_hint: mascararApiToken(token),
         data_criacao: new Date(),
         ativo: true
-      })
+      } as any)
       .returning();
     
-    return result[0];
+    return { ...result[0], token };
   }
   
   async updateApiToken(id: number, tokenData: UpdateApiToken): Promise<ApiToken | undefined> {

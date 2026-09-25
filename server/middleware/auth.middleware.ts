@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { storage } from "../storage";
 import { User as SchemaUser } from "../../shared/schema";
+import { contaBloqueadaPeloAdmin } from "../utils/usuario-ativo";
 
 // Estende o Express.User (que o @types/passport declara vazio) para ter os
 // campos reais do usuário do schema. Assim req.user.id/tipo_pessoa/etc passam a
@@ -51,6 +52,12 @@ export async function auth(req: Request, res: Response, next: NextFunction) {
       return res.status(401).json({ error: "Usuário não encontrado" });
     }
     
+    // Conta desligada pelo admin perde o acesso na hora (não só no próximo login).
+    if (contaBloqueadaPeloAdmin(user)) {
+      req.session.destroy(() => {});
+      return res.status(401).json({ error: "Conta desativada" });
+    }
+
     // Adicionar o usuário à requisição
     req.user = user;
     

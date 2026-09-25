@@ -522,7 +522,7 @@ export async function updateUserStatus(req: Request, res: Response) {
         const newPassword = generateRandomPassword(8);
         
         // Atualizar a senha do usuário
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        const hashedPassword = await bcrypt.hash(newPassword, 12);
         await storage.updateUser(updatedUser.id, { senha: hashedPassword });
         
         console.log(`Nova senha gerada para o usuário ${updatedUser.nome} (valor não registrado em log).`);
@@ -1166,7 +1166,7 @@ export async function updateUser(req: Request, res: Response) {
     // Alteração de senha (se informada)
     if (novaSenha) {
       console.log("Atualizando senha do usuário...");
-      const hashedPassword = await bcrypt.hash(novaSenha, 10);
+      const hashedPassword = await bcrypt.hash(novaSenha, 12);
       await storage.updateUser(userId, { senha: hashedPassword });
       console.log("Senha atualizada com sucesso");
     }
@@ -1184,7 +1184,7 @@ export async function updateUser(req: Request, res: Response) {
         let accessPassword = novaSenha || null;
         if (!accessPassword) {
           accessPassword = generateRandomPassword(8);
-          const hashedPassword = await bcrypt.hash(accessPassword, 10);
+          const hashedPassword = await bcrypt.hash(accessPassword, 12);
           await storage.updateUser(updatedUser.id, { senha: hashedPassword });
           console.log(`Nova senha gerada para o usuário ${updatedUser.nome} (valor não registrado em log).`);
         }

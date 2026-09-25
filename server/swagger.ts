@@ -1,5 +1,7 @@
 import swaggerUi from 'swagger-ui-express';
-import { Express, Request, Response } from 'express';
+import { Express, Request, Response, NextFunction } from 'express';
+import { combinedAuth } from './middleware/combinedAuth.middleware';
+import { requireSuperAdmin } from './middleware/adminAuth.middleware';
 
 // Documentação COMPLETA com TODAS as APIs do sistema
 const swaggerDocument = {
@@ -2291,11 +2293,22 @@ const swaggerDocument = {
 };
 
 export function setupSwagger(app: Express) {
+  // Em produção, a documentação da API (mapa completo de rotas) é só para super admin.
+  const protegerDocs =
+    process.env.NODE_ENV === 'production' || process.env.DOCS_PUBLICAS === 'false'
+      ? [combinedAuth, requireSuperAdmin]
+      : [];
+  // O Swagger UI usa script inline: libera a CSP apenas nesta rota.
+  const semCsp = (_req: Request, res: Response, next: NextFunction) => {
+    res.removeHeader('Content-Security-Policy');
+    next();
+  };
+
   // Rota para a documentação Swagger
-  app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+  app.use('/docs', ...protegerDocs, semCsp, swaggerUi.serve, swaggerUi.setup(swaggerDocument));
   
   // Rota para o JSON do Swagger
-  app.get('/docs.json', (req: Request, res: Response) => {
+  app.get('/docs.json', ...protegerDocs, (req: Request, res: Response) => {
     res.setHeader('Content-Type', 'application/json');
     res.send(swaggerDocument);
   });

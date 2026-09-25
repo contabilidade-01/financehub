@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { storage } from "../storage";
 import { insertApiTokenSchema, updateApiTokenSchema } from "../../shared/schema";
 import bcrypt from 'bcryptjs';
+import { exibicaoApiToken, hashApiToken, mascararApiToken } from '../utils/api-token-hash';
 
 /**
  * Obter todos os tokens de API do usuário atual
@@ -17,7 +18,7 @@ export async function getApiTokens(req: Request, res: Response) {
     // Não retorna o token completo, apenas uma versão parcial para exibição
     const safeTokens = tokens.map(token => ({
       ...token,
-      token: token.token.substring(0, 10) + "..." + token.token.substring(token.token.length - 4)
+      token: exibicaoApiToken(token as any)
     }));
     
     return res.json(safeTokens);
@@ -55,7 +56,7 @@ export async function getApiToken(req: Request, res: Response) {
     // Não retorna o token completo por segurança
     const safeToken = {
       ...token,
-      token: token.token.substring(0, 10) + "..." + token.token.substring(token.token.length - 4)
+      token: exibicaoApiToken(token as any)
     };
     
     return res.json(safeToken);
@@ -138,7 +139,7 @@ export async function updateApiToken(req: Request, res: Response) {
     
     const safeToken = {
       ...updatedToken,
-      token: updatedToken.token.substring(0, 10) + "..." + updatedToken.token.substring(updatedToken.token.length - 4)
+      token: exibicaoApiToken(updatedToken as any)
     };
     
     return res.json(safeToken);
@@ -248,7 +249,7 @@ export async function rotateApiToken(req: Request, res: Response) {
     }
     // Gerar novo token seguro
     const newToken = storage["generateApiToken"]();
-    await storage.updateApiToken(id, { token: newToken } as any);
+    await storage.updateApiToken(id, { token: hashApiToken(newToken), token_hint: mascararApiToken(newToken) } as any);
     return res.status(200).json({ token: newToken });
   } catch (error) {
     console.error("Erro ao rotacionar MasterToken:", error);
