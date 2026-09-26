@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { AdminAtencaoHoje } from "@/components/admin/AdminAtencaoHoje";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -253,6 +254,9 @@ export default function AdminDashboard() {
         </p>
       </div>
 
+      {/* O que precisa de ação hoje + atalhos */}
+      <AdminAtencaoHoje />
+
       {/* Métricas Principais */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <Card className={`border bg-card bg-card border border-border`}>
@@ -265,7 +269,7 @@ export default function AdminDashboard() {
           <CardContent>
             <div className={`text-2xl font-bold text-foreground`}>{stats?.totalUsers || 0}</div>
             <p className="text-xs text-income mt-1">
-              +{Math.round(((stats?.totalUsers || 0) / 5) * 100)}% {t("admin.dashboard.metrics.total_users.growth_suffix", "crescimento")}
+              {t("admin.dashboard.metrics.total_users.subtitle", "cadastros na plataforma")}
             </p>
           </CardContent>
         </Card>

@@ -40,6 +40,10 @@ import {
   Layers,
   ArrowRightLeft,
   PieChart,
+  Database,
+  Globe,
+  Percent,
+  UserCog,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useTranslation } from "@/contexts/LocalizationContext";
@@ -220,19 +224,81 @@ export function useNavigation() {
     },
   ];
 
-  let groups: NavGroup[] = shouldShowAdminItems ? [...userGroups, ...adminGroups] : userGroups;
+  // Console do super admin: só o que é preciso para administrar o sistema,
+  // agrupado por área. As telas de finanças pessoais e "Minha Assinatura" não
+  // fazem sentido aqui (para ver como o cliente, use "Acessar como" em Usuários).
+  // Ao personificar, o usuário da sessão é o cliente e o menu volta a ser o dele.
+  const consoleAdmin = isDirectAdmin && !isImpersonating;
+  const consoleGroups: NavGroup[] = [
+    {
+      label: "VISÃO GERAL",
+      items: [{ icon: Shield, text: "Painel", path: "/admin" }],
+    },
+    {
+      label: "CLIENTES",
+      items: [
+        { icon: Users, text: "Usuários", path: "/admin/users" },
+        { icon: CalendarCheck, text: "Assinaturas e vencimentos", path: "/admin/assinaturas" },
+        { icon: ShieldCheck, text: "Consentimentos LGPD", path: "/admin/lgpd" },
+      ],
+    },
+    {
+      label: "COBRANÇA",
+      items: [
+        { icon: BarChart3, text: "Painel de pagamentos", path: "/admin/billing" },
+        { icon: Search, text: "Buscar pagamentos", path: "/admin/payments" },
+        { icon: Percent, text: "Asaas, multa e juros", path: "/admin/payment-settings" },
+      ],
+    },
+    {
+      label: "WHATSAPP E IA",
+      items: [
+        { icon: MessageSquare, text: "Simulador WhatsApp", path: "/admin/simular-whatsapp" },
+        { icon: FileSearch, text: "Auditoria da IA", path: "/admin/ia-auditoria" },
+        orquestradorItem,
+      ],
+    },
+    {
+      label: "PRODUTO",
+      items: [
+        { icon: Flag, text: "Feature flags", path: "/admin/feature-flags" },
+        { icon: Palette, text: "Marca e aparência", path: "/admin/customize" },
+        { icon: Globe, text: "Idiomas", path: "/admin/language-settings" },
+      ],
+    },
+    {
+      label: "SISTEMA",
+      items: [
+        { icon: Database, text: "Banco de dados e backup", path: "/admin/database" },
+        { icon: Wrench, text: "Manutenção", path: "/admin/maintenance" },
+      ],
+    },
+    {
+      label: "MINHA CONTA",
+      items: [{ icon: UserCog, text: "Perfil e senha", path: "/settings" }],
+    },
+  ];
+
+  let groups: NavGroup[] = consoleAdmin
+    ? consoleGroups
+    : shouldShowAdminItems
+      ? [...userGroups, ...adminGroups]
+      : userGroups;
   if (temOrquestrador && !shouldShowAdminItems) {
     groups = [...groups, { label: "IA", items: [orquestradorItem] }];
   }
 
-  const primary: PrimaryRoutes = isPJ
-    ? { inicio: "/p/dashboard", lancamentos: "/p/transacoes", relatorios: "/p/relatorios" }
-    : { inicio: "/", lancamentos: "/transactions", relatorios: "/reports" };
+  const primary: PrimaryRoutes = consoleAdmin
+    ? { inicio: "/admin", lancamentos: "/admin/users", relatorios: "/admin/assinaturas" }
+    : isPJ
+      ? { inicio: "/p/dashboard", lancamentos: "/p/transacoes", relatorios: "/p/relatorios" }
+      : { inicio: "/", lancamentos: "/transactions", relatorios: "/reports" };
 
   return {
     groups,
     primary,
     isPJ,
+    consoleAdmin,
     user: userData,
     showAdminHeader: isDirectAdmin || isImpersonating,
   };

@@ -1,5 +1,5 @@
 import { useLocation } from "wouter";
-import { LayoutDashboard, ArrowLeftRight, Plus, BarChart3, Menu } from "lucide-react";
+import { LayoutDashboard, ArrowLeftRight, Plus, BarChart3, Menu, Users, CalendarCheck, Flag } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isPathActive, useNavigation } from "@/components/shared/navigation";
 import { pedirNovoLancamento } from "@/lib/novo-lancamento";
@@ -15,7 +15,7 @@ interface BottomNavProps {
  */
 export function BottomNav({ onOpenMenu, menuOpen }: BottomNavProps) {
   const [location, navigate] = useLocation();
-  const { primary } = useNavigation();
+  const { primary, consoleAdmin } = useNavigation();
 
   const itemClass = (active: boolean) =>
     cn(
@@ -23,6 +23,32 @@ export function BottomNav({ onOpenMenu, menuOpen }: BottomNavProps) {
       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
       active ? "text-primary" : "text-muted-foreground hover:text-foreground",
     );
+
+  // Console do super admin: atalhos de administração (sem "+ Novo lançamento").
+  if (consoleAdmin) {
+    const atalhos = [
+      { icon: LayoutDashboard, texto: "Painel", path: "/admin", ativo: location === "/admin" },
+      { icon: Users, texto: "Usuários", path: "/admin/users", ativo: isPathActive(location, "/admin/users") },
+      { icon: CalendarCheck, texto: "Assinaturas", path: "/admin/assinaturas", ativo: isPathActive(location, "/admin/assinaturas") },
+      { icon: Flag, texto: "Flags", path: "/admin/feature-flags", ativo: isPathActive(location, "/admin/feature-flags") },
+    ];
+    return (
+      <nav aria-label="Navegação rápida" className="fixed inset-x-0 bottom-0 z-40 border-t bg-background pb-safe lg:hidden">
+        <div className="mx-auto flex h-[var(--mobile-nav-h)] max-w-md items-stretch px-2">
+          {atalhos.map((a) => (
+            <button key={a.path} type="button" className={itemClass(a.ativo)} aria-current={a.ativo ? "page" : undefined} onClick={() => navigate(a.path)}>
+              <a.icon className="h-5 w-5" aria-hidden="true" />
+              <span>{a.texto}</span>
+            </button>
+          ))}
+          <button type="button" className={itemClass(!!menuOpen)} onClick={onOpenMenu} aria-haspopup="dialog" aria-expanded={!!menuOpen}>
+            <Menu className="h-5 w-5" aria-hidden="true" />
+            <span>Menu</span>
+          </button>
+        </div>
+      </nav>
+    );
+  }
 
   const inicioAtivo = isPathActive(location, primary.inicio);
   const lancAtivo = isPathActive(location, primary.lancamentos);

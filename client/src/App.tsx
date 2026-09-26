@@ -173,9 +173,11 @@ function Router() {
             )}
             
             <Route path="/">
-              {(userData as any)?.tipo_pessoa === 'juridica'
-                ? <Redirect to="/p/dashboard" />
-                : <MainLayout><Dashboard /></MainLayout>}
+              {(userData as any)?.tipo_usuario === 'super_admin' && !(userData as any)?.isImpersonating
+                ? <Redirect to="/admin" />
+                : (userData as any)?.tipo_pessoa === 'juridica'
+                  ? <Redirect to="/p/dashboard" />
+                  : <MainLayout><Dashboard /></MainLayout>}
             </Route>
             <Route path="/transactions">
               <MainLayout>

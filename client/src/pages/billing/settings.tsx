@@ -14,7 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 
 export default function BillingSettingsPage() {
   const { data, isLoading } = useSubscription();
-  const { hasActiveAccess, expirationDate, daysRemaining, isTrial } = useSubscriptionStatus();
+  const { hasActiveAccess, expirationDate, daysRemaining, isTrial, isAdmin } = useSubscriptionStatus();
   // CARTÃO NO SITE — descomente para religar
   // const updateCard = useUpdateCard();
   const cancelSub = useCancelSubscription();
@@ -87,6 +87,28 @@ export default function BillingSettingsPage() {
       });
     }
   };
+
+  // Conta de administração não tem assinatura (a data "até 2099" é só a
+  // liberação interna). Aponta para onde se administram as assinaturas.
+  if (isAdmin) {
+    return (
+      <div className="container max-w-4xl mx-auto py-8">
+        <Card>
+          <CardHeader>
+            <CardTitle>Conta de administrador</CardTitle>
+            <CardDescription>
+              Esta conta administra o sistema e não tem assinatura nem cobrança. As assinaturas dos clientes ficam em
+              Assinaturas e vencimentos; a configuração do Asaas, multa e juros, em Cobrança.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            <Button asChild><a href="/admin/assinaturas">Assinaturas e vencimentos</a></Button>
+            <Button variant="outline" asChild><a href="/admin/payment-settings">Asaas, multa e juros</a></Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
