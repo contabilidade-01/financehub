@@ -229,6 +229,11 @@ async function processWebhookEvent(eventType: string, paymentData: any, webhookI
       // Pagamento confirmado - ATIVAR ASSINATURA
       console.log(`[AsaasWebhook] Payment confirmed: ${paymentData.id}`);
 
+      // Já aplicado antes (CONFIRMED seguido de RECEIVED no cartão, reentrega do
+      // Asaas, ou reconhecido pela conferência): não recalcula — um ajuste feito
+      // depois pelo admin ("Definir") é respeitado.
+      const jaAplicado = payment.status === 'confirmed';
+
       await storage.updatePaymentTransaction(payment.id, {
         status: 'confirmed',
         confirmedDate: new Date(),
@@ -236,7 +241,7 @@ async function processWebhookEvent(eventType: string, paymentData: any, webhookI
       });
 
       // Ativar assinatura do usuário
-      if (payment.subscriptionId) {
+      if (payment.subscriptionId && !jaAplicado) {
         // O ciclo é o do vencimento ORIGINAL da cobrança (se foi prorrogada no
         // painel do Asaas, continua sendo a fatura daquele ciclo).
         const { vencimentoDoCiclo } = await import('../services/assinatura-datas');
