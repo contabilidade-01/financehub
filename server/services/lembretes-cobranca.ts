@@ -92,6 +92,30 @@ export function textoCobranca(
   }
 }
 
+/** Link para assinar / pagar (login com e-mail e senha e cai na página de assinatura). */
+export function linkAssinar(): string {
+  const base = String(process.env.PUBLIC_APP_URL || process.env.BASE_URL || "https://app.controledinheiro.com.br").replace(/\/+$/, "");
+  return `${base}/subscription/renew`;
+}
+
+export function textoDegustacaoEncerrada(nome: string | null | undefined, link: string, dias = 15): string {
+  const oi = `Oi ${primeiroNome(nome)}!`.replace(" !", "!");
+  return (
+    `${oi} Seus *${dias} dias* de degustação chegaram ao fim. 🙌\n\n` +
+    `Para continuar usando, é só assinar por aqui (entre com seu e-mail e senha):\n${link}\n\n` +
+    `O acesso volta na hora, assim que o pagamento confirmar. Dúvidas? É só responder esta mensagem.`
+  );
+}
+
+export function textoAssinaturaVencida(nome: string | null | undefined, link: string): string {
+  const oi = `Oi ${primeiroNome(nome)}!`.replace(" !", "!");
+  return (
+    `${oi} Sua assinatura está com a mensalidade em aberto, por isso o acesso foi pausado.\n\n` +
+    `Para regularizar (Pix, boleto ou cartão):\n${link}\n\n` +
+    `O acesso volta na hora, assim que o pagamento confirmar. Se já pagou, pode ignorar: a baixa é automática.`
+  );
+}
+
 export function textoPagamentoConfirmado(nome: string, valor: number, acessoAte: Date | string): string {
   const oi = `Oi ${primeiroNome(nome)}!`.replace(" !", "!");
   return `${oi} ✅ Recebemos seu pagamento de *R$ ${money(valor)}*.\nSeu acesso está garantido até *${dataBrSP(acessoAte)}*. Obrigado!`;
@@ -206,7 +230,6 @@ export async function checkLembretesCobranca(
   const consultar = opts.consultarAsaas ?? statusNoAsaas;
   await garantirTabela();
   const resumo: ResumoLembretes = { degustacao: 0, cobrancas: 0, pulados_pagos: 0 };
-  const base = (process.env.BASE_URL || "https://app.controledinheiro.com.br").replace(/\/+$/, "");
 
   // 1) Degustação terminando. Quem já pagou (cobrança confirmada ou assinatura
   // ativa) não recebe — mesmo que o status ainda diga "degustacao".
@@ -231,7 +254,7 @@ export async function checkLembretesCobranca(
     const etapa = etapaDegustacao(diasAteSP(u.data_expiracao_assinatura, agora));
     if (!etapa) continue;
     const chave = `trial:${diaSP(u.data_expiracao_assinatura)}:${etapa}`;
-    const texto = textoDegustacao(etapa, u.nome, `${base}/subscription/renew`);
+    const texto = textoDegustacao(etapa, u.nome, linkAssinar());
     if (await enviarUmaVez(u.id, u.remotejid, chave, texto, enviar)) resumo.degustacao++;
   }
 

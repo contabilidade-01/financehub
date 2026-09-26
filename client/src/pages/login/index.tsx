@@ -100,7 +100,8 @@ export default function Login() {
       });
       
       // Redireciona e força recarregamento da página para atualizar o estado de autenticação
-      window.location.href = "/";
+      // Veio do link "assine por aqui" (WhatsApp): volta direto para a assinatura.
+      window.location.href = window.location.pathname.startsWith("/subscription/renew") ? "/subscription/renew" : "/";
     } catch (error: any) {
       console.error("Login error:", error);
       

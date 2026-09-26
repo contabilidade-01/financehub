@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { storage } from "../storage";
+import { textoDegustacaoEncerrada, textoAssinaturaVencida, linkAssinar } from "../services/lembretes-cobranca";
 import { seedPlanoContasPessoal, createIngestionEvent, getConversaRecente, appendConversa } from "../storage";
 import { uazapiService } from "../services/uazapi.service";
 import { WhatsAppOnboardingService } from "../services/whatsapp-onboarding.service";
@@ -150,8 +151,9 @@ const msgAtivadoPJ = (nome: string | null | undefined, fim: Date) =>
   `Prontinho, ${primeiro(nome)}! ✅ Sua degustação *empresarial* de *${TRIAL_DIAS} dias* está ativa até *${fmtData(fim)}*.\n\nJá preparei o ambiente da sua empresa. Pode começar: me manda as entradas e saídas por aqui. 📊`;
 const msgNudge = () => `Sem problema! Quando quiser testar os *${TRIAL_DIAS} dias grátis*, é só mandar *SIM*. 😉`;
 const msgReperguntaTipo = () => `Só pra eu configurar certinho: responda *1* para *Pessoal (PF)*, *2* para *PJ MEI* ou *3* para *PJ ME* (microempresa).`;
-const msgExpirado = (nome?: string | null) =>
-  `Oi ${primeiro(nome)}! Seus *${TRIAL_DIAS} dias* de degustação chegaram ao fim. 🙌\n\nGostou? Nossa equipe vai entrar em contato para te ajudar a continuar. Qualquer coisa, estou por aqui!`;
+// Degustação encerrada / assinatura vencida: já leva o link para assinar ou pagar.
+const msgExpirado = (nome?: string | null) => textoDegustacaoEncerrada(nome, linkAssinar(), TRIAL_DIAS);
+const msgAssinaturaVencida = (nome?: string | null) => textoAssinaturaVencida(nome, linkAssinar());
 const msgEmAnalise = (nome?: string | null) =>
   `Oi ${primeiro(nome)}! Sua conta está em análise no momento. Nossa equipe vai falar com você em breve para liberar o acesso. 😊`;
 
@@ -355,7 +357,13 @@ async function tratarOnboarding(user: any, text: string, chatid: string, BaseUrl
   const assinaturaVigente = !!user.ativo && vencMs > Date.now();
 
   if (!assinaturaVigente && (status === "degustacao_expirada" || !user.ativo)) {
-    await uazapiService.sendText(BaseUrl, token, chatid, msgEmAnalise(user.nome));
+    // Degustação acabou ou mensalidade venceu: manda o link para assinar/pagar.
+    // "Em análise" fica só para contas bloqueadas por outro motivo.
+    const texto =
+      status === "degustacao_expirada" ? msgExpirado(user.nome)
+      : status === "vencida" || status === "inativa" ? msgAssinaturaVencida(user.nome)
+      : msgEmAnalise(user.nome);
+    await uazapiService.sendText(BaseUrl, token, chatid, texto);
     return true;
   }
 

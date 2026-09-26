@@ -278,9 +278,8 @@ async function checkDegustacaoExpirada(): Promise<void> {
     try {
       await db.execute(sql`UPDATE usuarios SET ativo = false, status_assinatura = 'degustacao_expirada' WHERE id = ${u.id}`);
       if (u.remotejid && !String(u.remotejid).includes("@g.us")) {
-        const nome = String(u.nome || "").split(" ")[0];
-        await uazapiService.sendText(UAZAPI_BASE_URL, UAZAPI_TOKEN, u.remotejid,
-          `Oi ${nome}! Seus *15 dias* de degustação chegaram ao fim. 🙌\n\nNossa equipe vai entrar em contato para você continuar. Qualquer coisa, estou por aqui!`);
+        const { textoDegustacaoEncerrada, linkAssinar } = await import("../services/lembretes-cobranca");
+        await uazapiService.sendText(UAZAPI_BASE_URL, UAZAPI_TOKEN, u.remotejid, textoDegustacaoEncerrada(u.nome, linkAssinar()));
       }
       await notificarAdmin(`⏰ Degustação EXPIRADA — validar/contatar: ${u.nome} (${u.telefone || u.remotejid}) id=${u.id}`);
     } catch (err: any) {

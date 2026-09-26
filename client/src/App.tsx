@@ -158,6 +158,8 @@ function Router() {
         {!isAuthenticated ? (
           <>
             <Route path="/" component={Login} />
+            {/* Link do WhatsApp "assine por aqui": pede login e volta para a assinatura */}
+            <Route path="/subscription/renew" component={Login} />
             <Route path="/register" component={Register} />
             <Route path="/forgot-password" component={ForgotPassword} />
             <Route path="/reset-password" component={ResetPassword} />
