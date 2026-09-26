@@ -1666,6 +1666,52 @@ export async function aplicarEncargosCobranca(_req: Request, res: Response) {
   }
 }
 
+// Provedores de IA (fila com troca automática)
+export async function getProvedoresIa(_req: Request, res: Response) {
+  try {
+    const { painelProvedores } = await import("../services/ia-provedores");
+    return res.json(await painelProvedores());
+  } catch (err: any) {
+    console.error("getProvedoresIa:", err);
+    return res.status(500).json({ error: err?.message || "Erro ao ler provedores" });
+  }
+}
+
+export async function salvarProvedoresIa(req: Request, res: Response) {
+  try {
+    const { salvarConfig } = await import("../services/ia-provedores");
+    const ordem = Array.isArray(req.body?.ordem) ? req.body.ordem.map(String) : [];
+    const desligados = Array.isArray(req.body?.desligados) ? req.body.desligados.map(String) : [];
+    await salvarConfig(ordem, desligados);
+    return res.json({ ok: true });
+  } catch (err: any) {
+    return res.status(400).json({ error: err?.message || "Configuração inválida" });
+  }
+}
+
+export async function testarProvedorIa(req: Request, res: Response) {
+  try {
+    const { testarProvedor, ORDEM_PADRAO } = await import("../services/ia-provedores");
+    const p = String(req.params.provedor);
+    if (!ORDEM_PADRAO.includes(p as any)) return res.status(400).json({ error: "Provedor desconhecido" });
+    return res.json(await testarProvedor(p as any));
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || "Falha no teste" });
+  }
+}
+
+export async function reativarProvedorIa(req: Request, res: Response) {
+  try {
+    const { reativarProvedor, ORDEM_PADRAO } = await import("../services/ia-provedores");
+    const p = String(req.params.provedor);
+    if (!ORDEM_PADRAO.includes(p as any)) return res.status(400).json({ error: "Provedor desconhecido" });
+    await reativarProvedor(p as any);
+    return res.json({ ok: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || "Falha ao reativar" });
+  }
+}
+
 // GET /api/admin/export/users-csv — Exportar usuários em formato CSV
 export async function exportUsersCsv(req: Request, res: Response) {
   try {

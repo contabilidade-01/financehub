@@ -253,6 +253,7 @@ export function useNavigation() {
     {
       label: "WHATSAPP E IA",
       items: [
+        { icon: Bot, text: "Provedores de IA", path: "/admin/ia-provedores" },
         { icon: MessageSquare, text: "Simulador WhatsApp", path: "/admin/simular-whatsapp" },
         { icon: FileSearch, text: "Auditoria da IA", path: "/admin/ia-auditoria" },
         orquestradorItem,

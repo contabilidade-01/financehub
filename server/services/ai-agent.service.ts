@@ -3321,55 +3321,13 @@ async function callChatCompletion(
   tools: any[],
   opts?: { llm?: "openai" | "deepseek" },
 ): Promise<any> {
-  const llm = opts?.llm || "openai";
-  const payload = { messages, tools, tool_choice: "auto" as const, temperature: 0.1 };
-
-  if (llm === "deepseek") {
-    const { deepseekChatCompletions } = await import("./deepseek.service");
-    return await withRetry(
-      () => deepseekChatCompletions(payload),
-      { provider: "deepseek-orquestrador" },
-    );
-  }
-
-  const primaryKey = process.env.OPENAI_API_KEY;
-  const primaryModel = process.env.AI_MODEL || "gpt-4o-mini";
-
-  try {
-    if (!primaryKey) throw new Error("OPENAI_API_KEY não configurada");
-    return await withRetry(
-      () => axios.post(
-        "https://api.openai.com/v1/chat/completions",
-        { model: primaryModel, ...payload },
-        { headers: { Authorization: `Bearer ${primaryKey}`, "Content-Type": "application/json" }, timeout: 60000 },
-      ),
-      { provider: "openai-chat" },
-    );
-  } catch (primaryErr) {
-    const fbKey = process.env.AI_FALLBACK_API_KEY || process.env.GROQ_API_KEY;
-    if (!fbKey) throw primaryErr;
-    const isGroq = !process.env.AI_FALLBACK_API_KEY && !!process.env.GROQ_API_KEY;
-    const fbUrl = isGroq
-      ? "https://api.groq.com/openai/v1/chat/completions"
-      : (process.env.AI_FALLBACK_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "") + "/chat/completions";
-    const fbModel = isGroq ? "llama-3.3-70b-versatile" : (process.env.AI_MODEL_FALLBACK || "gpt-4o-mini");
-
-    console.warn(`[AI] modelo principal falhou — usando reserva (${fbModel} em ${fbUrl})`);
-
-    const cleanMessages = messages.map(m => {
-      const { annotations, ...rest } = m;
-      return rest;
-    });
-
-    return await withRetry(
-      () => axios.post(
-        fbUrl,
-        { messages: cleanMessages, tools, tool_choice: "auto", temperature: 0.1, model: fbModel },
-        { headers: { Authorization: `Bearer ${fbKey}`, "Content-Type": "application/json" }, timeout: 60000 },
-      ),
-      { provider: isGroq ? "groq-fallback" : "ai-fallback" },
-    );
-  }
+  // Fila de provedores (OpenAI → DeepSeek → Gemini…, ver ia-provedores.ts).
+  // O orquestrador prefere o DeepSeek; se ele falhar, a fila segue normal.
+  const { chatComFila } = await import("./ia-provedores");
+  return chatComFila(
+    { messages, tools, tool_choice: "auto", temperature: 0.1 },
+    { preferir: opts?.llm === "deepseek" ? "deepseek" : null, origem: opts?.llm === "deepseek" ? "orquestrador" : "agente" },
+  );
 }
 
 export type AgentLlm = "openai" | "deepseek";
@@ -3523,14 +3481,10 @@ export async function runAgent(
   opts?: { llm?: AgentLlm },
 ): Promise<string> {
   const llm: AgentLlm = opts?.llm || "openai";
-  if (llm === "openai" && !process.env.OPENAI_API_KEY) {
-    throw new Error("OPENAI_API_KEY não configurada");
-  }
-  if (llm === "deepseek") {
-    const { deepseekConfig } = await import("./deepseek.service");
-    if (!deepseekConfig().configured) {
-      throw new Error("DEEPSEEK_API_KEY não configurada — orquestrador indisponível");
-    }
+  // Basta um provedor na fila (OpenAI, DeepSeek, Gemini ou Groq).
+  const { algumProvedorConfigurado } = await import("./ia-provedores");
+  if (!algumProvedorConfigurado()) {
+    throw new Error("Nenhum provedor de IA configurado (OPENAI_API_KEY, DEEPSEEK_API_KEY ou GEMINI_API_KEY)");
   }
 
   // Disponibiliza o texto atual para os handlers (ex.: casar meta pelo contexto).

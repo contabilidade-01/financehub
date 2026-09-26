@@ -2,17 +2,23 @@ import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Sparkles, ArrowRight, CheckCircle2, MessageSquare, Wallet, PieChart, Shield } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
 
 export function GuidedTourModal() {
   const [isOpen, setIsOpen] = useState(false);
   const [step, setStep] = useState(0);
+  const { user } = useAuth();
+  // Tour é para o cliente; o console do super admin não mostra.
+  const consoleAdmin = (user as any)?.tipo_usuario === "super_admin" && !(user as any)?.isImpersonating;
 
   useEffect(() => {
-    const hasSeenTour = localStorage.getItem("financehub_guided_tour_seen");
+    if (!user || consoleAdmin) return;
+    let hasSeenTour: string | null = null;
+    try { hasSeenTour = localStorage.getItem("financehub_guided_tour_seen"); } catch { /* sem storage */ }
     if (!hasSeenTour) {
       setIsOpen(true);
     }
-  }, []);
+  }, [user, consoleAdmin]);
 
   const handleClose = () => {
     localStorage.setItem("financehub_guided_tour_seen", "true");

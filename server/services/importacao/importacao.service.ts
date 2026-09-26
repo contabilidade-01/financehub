@@ -13,6 +13,7 @@
  *     bancária. Qualquer erro desfaz tudo.
  */
 import { db } from "../../db";
+import { chatComFila } from "../ia-provedores";
 import { sql } from "drizzle-orm";
 import { createHash } from "crypto";
 import axios from "axios";
@@ -421,7 +422,8 @@ async function sugerirUma(s: any, cats: Cat[], descricao: string, tipo: string, 
 export async function iniciarSugestaoIa(id: number, usuarioId: number): Promise<{ iniciado: boolean; motivo?: string }> {
   const s = await obterSessao(id, usuarioId);
   exigirRascunho(s);
-  if (!process.env.OPENAI_API_KEY) return { iniciado: false, motivo: "IA não configurada no servidor." };
+  const { algumProvedorConfigurado } = await import("../ia-provedores");
+  if (!algumProvedorConfigurado()) return { iniciado: false, motivo: "IA não configurada no servidor." };
   if (s.sugestao_status === "processando") return { iniciado: false, motivo: "Já está em andamento." };
   await db.execute(sql`UPDATE importacoes SET sugestao_status = 'processando', sugestao_progresso = 0 WHERE id = ${id}`);
   void executarSugestaoIa(s).catch(async (err) => {
@@ -447,19 +449,10 @@ async function executarSugestaoIa(s: any) {
       `sempre do MESMO tipo (Receita/Despesa). Se não houver categoria adequada com segurança, use null.\n\n` +
       `Categorias (id | tipo | nome):\n${lista}\n\nLançamentos (id | tipo | descrição):\n${itens}\n\n` +
       `Responda só JSON: {"itens":[{"id":<id do lançamento>,"categoria_id":<id da categoria ou null>}]}`;
-    const resp = await withRetry(
-      () =>
-        axios.post(
-          "https://api.openai.com/v1/chat/completions",
-          {
-            model: process.env.AI_MODEL || "gpt-4o-mini",
-            messages: [{ role: "user", content: prompt }],
-            temperature: 0,
-            response_format: { type: "json_object" },
-          },
-          { headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` }, timeout: 60000 },
-        ),
-      { provider: "openai-importacao" },
+    // Fila de provedores (OpenAI → DeepSeek → Gemini…): sem crédito em um, segue no próximo.
+    const resp = await chatComFila(
+      { messages: [{ role: "user", content: prompt }], temperature: 0, response_format: { type: "json_object" } },
+      { origem: "importacao" },
     );
     let itensResp: { id: number; categoria_id: number | null }[] = [];
     try {

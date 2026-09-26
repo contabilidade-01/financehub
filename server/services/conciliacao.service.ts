@@ -57,17 +57,13 @@ async function classificarComIA(
   descricao: string,
   planoContas: { id: number; codigo: string; nome: string }[],
 ): Promise<number | null> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey || planoContas.length === 0) return null;
+  const { algumProvedorConfigurado, chatComFila } = await import("./ia-provedores");
+  if (!algumProvedorConfigurado() || planoContas.length === 0) return null;
   const lista = planoContas.map((c) => `${c.codigo} — ${c.nome}`).join("\n");
   const prompt = `Você é um contador. Classifique a descrição de um lançamento bancário em UMA conta do plano de contas abaixo. Responda SOMENTE com o código da conta (ex.: "3.1.1"), nada mais.\n\nPlano de contas:\n${lista}\n\nDescrição: "${descricao}"\nCódigo:`;
-  const resp = await withRetry(
-    () => axios.post(
-      "https://api.openai.com/v1/chat/completions",
-      { model: process.env.AI_MODEL || "gpt-4o-mini", messages: [{ role: "user", content: prompt }], temperature: 0 },
-      { headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, timeout: 30000 },
-    ),
-    { provider: "openai-classificacao" },
+  const resp = await chatComFila(
+    { messages: [{ role: "user", content: prompt }], temperature: 0 },
+    { origem: "conciliacao", timeoutMs: 30000 },
   );
   const texto = (resp.data?.choices?.[0]?.message?.content || "").trim();
   const codigo = (texto.match(/[\d.]+/) || [])[0];

@@ -1029,6 +1029,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/admin/system/settings/:key", combinedAuth, requireSuperAdmin, systemSettingsController.getSystemSetting);
 
   // Payment Settings endpoints (apenas superadmin)
+  app.get("/api/admin/ia/provedores", combinedAuth, requireSuperAdmin, adminController.getProvedoresIa);
+  app.put("/api/admin/ia/provedores", combinedAuth, requireSuperAdmin, adminController.salvarProvedoresIa);
+  app.post("/api/admin/ia/provedores/:provedor/testar", combinedAuth, requireSuperAdmin, adminController.testarProvedorIa);
+  app.post("/api/admin/ia/provedores/:provedor/reativar", combinedAuth, requireSuperAdmin, adminController.reativarProvedorIa);
   app.get("/api/admin/cobranca/encargos", combinedAuth, requireSuperAdmin, adminController.getEncargosCobranca);
   app.put("/api/admin/cobranca/encargos", combinedAuth, requireSuperAdmin, adminController.salvarEncargosCobranca);
   app.post("/api/admin/cobranca/encargos/aplicar", combinedAuth, requireSuperAdmin, adminController.aplicarEncargosCobranca);
