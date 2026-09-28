@@ -3,6 +3,7 @@ import WalletSummary from "@/components/dashboard/WalletSummary";
 import FinancialOverview from "@/components/dashboard/FinancialOverview";
 import CategorySummary from "@/components/dashboard/CategorySummary";
 import RecentTransactions from "@/components/dashboard/RecentTransactions";
+import { PrimeirosPassosCard } from "@/components/dashboard/PrimeirosPassosCard";
 import { TransactionForm } from "@/components/shared/TransactionForm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -159,7 +160,8 @@ export default function Dashboard() {
       </header>
       
       <div className="space-y-8">
-        <WalletSummary 
+        <PrimeirosPassosCard />
+        <WalletSummary
           isWalletLoading={isWalletLoading}
           isSummaryLoading={isSummaryLoading} 
           walletData={walletData} 

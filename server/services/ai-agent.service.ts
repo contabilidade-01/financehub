@@ -1433,6 +1433,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           tipo,
           data_transacao: rec.data,
           status: "Efetivada",
+          origem: "whatsapp",
         };
         if (formaPagId) txData.forma_pagamento_id = formaPagId;
 
@@ -1989,6 +1990,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           status: "Pendente",
           recorrente: args.recorrente || false,
           classificacao_despesa: args.recorrente ? "fixa" : "variavel",
+          origem: "whatsapp",
         };
 
         const result = await storage.createTransaction(txData as any);

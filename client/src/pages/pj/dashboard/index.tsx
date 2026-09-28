@@ -7,6 +7,7 @@ import { TrendingUp, TrendingDown, DollarSign, Target } from "lucide-react";
 import type { EmpresaResumo } from "@shared/schema";
 import PeriodoSelector from "@/components/shared/PeriodoSelector";
 import { Periodo, rangeDoPeriodo, rotuloPeriodo } from "@/lib/period";
+import { PrimeirosPassosCard } from "@/components/dashboard/PrimeirosPassosCard";
 
 /**
  * PJ Dashboard — visão de gestão financeira (Yampa-like).
@@ -110,6 +111,8 @@ export default function PjDashboard({ empresaId }: { empresaId: number }) {
         <h1 className="text-2xl font-semibold tracking-tight">Dashboard Empresarial</h1>
         <p className="text-sm text-muted-foreground capitalize">{periodoLabel}</p>
       </div>
+
+      <PrimeirosPassosCard />
 
       {filtros}
 
