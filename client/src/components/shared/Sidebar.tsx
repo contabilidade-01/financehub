@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
-import { LayoutDashboard, LogOut, Menu } from "lucide-react";
+import { HelpCircle, LayoutDashboard, LogOut, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import {
@@ -20,6 +20,7 @@ import { useTranslation } from "@/contexts/LocalizationContext";
 import { useSystemConfig } from "@/contexts/SystemConfigContext";
 import { cn, getInitials } from "@/lib/utils";
 import { isPathActive, useNavigation, type NavGroup } from "@/components/shared/navigation";
+import { openGuidedTour } from "@/lib/guided-tour-bus";
 
 /** Logo do sistema (upload do admin em /api/logo) com ícone de reserva. */
 function BrandLogo({ size = "md" }: { size?: "sm" | "md" }) {
@@ -139,6 +140,16 @@ function UserBlock({ onLogoutClick }: { onLogoutClick: () => void }) {
           <p className="truncate text-sm font-medium">{nome}</p>
           <p className="truncate text-xs text-muted-foreground">{user?.email || ""}</p>
         </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 shrink-0 text-muted-foreground"
+          title="Ver tour guiado novamente"
+          aria-label="Ver tour guiado novamente"
+          onClick={() => openGuidedTour("inicio")}
+        >
+          <HelpCircle className="h-4 w-4" />
+        </Button>
         <ThemeToggleSimple />
       </div>
       <Button variant="ghost" size="sm" className="mt-1 w-full justify-start text-muted-foreground" onClick={onLogoutClick}>

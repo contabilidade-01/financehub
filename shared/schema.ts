@@ -124,6 +124,9 @@ export const transactions = pgTable("transacoes", {
   movimenta_caixa: boolean("movimenta_caixa").notNull().default(true),
   // Chave do extrato bancário (FITID/hash) — dedup de importação.
   fitid: varchar("fitid", { length: 120 }),
+  // Origem do lançamento — espelha empresas_transacoes.origem: 'manual' | 'whatsapp' | 'importacao'.
+  // Usado, entre outras coisas, pelo checklist de onboarding para detectar o 1º lançamento via WhatsApp.
+  origem: varchar("origem", { length: 20 }).notNull().default("manual"),
 });
 
 // API Tokens table
@@ -1102,6 +1105,23 @@ export const whatsappOnboardingStates = pgTable("whatsapp_onboarding_states", {
 
 export type WhatsAppOnboardingState = typeof whatsappOnboardingStates.$inferSelect;
 export type InsertWhatsAppOnboardingState = typeof whatsappOnboardingStates.$inferInsert;
+
+// Sequência de mensagens de boas-vindas pelo WhatsApp (dias 0/1/3) — SEPARADA
+// do whatsappOnboardingStates acima (que é só o cadastro de empresa PJ via
+// WhatsApp). Aqui é o pipeline de mensagens proativas de "como usar o
+// produto", igual em espírito ao proactive-alerts.job.ts.
+export const onboardingWhatsappSequence = pgTable("onboarding_whatsapp_sequence", {
+  id: serial("id").primaryKey(),
+  usuarioId: integer("usuario_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  // 'dia0' | 'dia1' | 'dia3'
+  etapa: varchar("etapa", { length: 20 }).notNull(),
+  enviadoEm: timestamp("enviado_em", { withTimezone: true }).default(sql`(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')`),
+}, (table) => [
+  unique().on(table.usuarioId, table.etapa),
+]);
+
+export type OnboardingWhatsappSequence = typeof onboardingWhatsappSequence.$inferSelect;
+export type InsertOnboardingWhatsappSequence = typeof onboardingWhatsappSequence.$inferInsert;
 
 export const metasFinanceiras = pgTable("metas_financeiras", {
   id: serial("id").primaryKey(),

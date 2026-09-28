@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useConfirm } from "@/components/shared/ConfirmDialog";
 import { useToast } from "@/hooks/use-toast";
+import { HelpVideoButton } from "@/components/shared/HelpVideoButton";
 
 export interface Conexao {
   ambiente: "stage" | "producao";
@@ -169,12 +170,18 @@ export function ConexaoCora({ empresaId, bancos }: { empresaId: number; bancos: 
       )}
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">{atual ? "Dados da conexão" : "Conectar a conta Cora da empresa"}</CardTitle>
-          <CardDescription>
-            No app do Cora: Conta → Integrações via APIs → Integração Direta. Gere o Client ID e baixe o certificado e a chave privada.
-            Comece pelo ambiente de testes (stage); quando funcionar, troque para produção.
-          </CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between gap-2">
+          <div>
+            <CardTitle className="text-base">{atual ? "Dados da conexão" : "Conectar a conta Cora da empresa"}</CardTitle>
+            <CardDescription>
+              No app do Cora: Conta → Integrações via APIs → Integração Direta. Gere o Client ID e baixe o certificado e a chave privada.
+              Comece pelo ambiente de testes (stage); quando funcionar, troque para produção.
+            </CardDescription>
+          </div>
+          <HelpVideoButton
+            titulo="Como conectar a conta Cora"
+            descricao="Passo a passo rápido de onde gerar o Client ID, o certificado e a chave privada no app do Cora, e como colar aqui."
+          />
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5 sm:col-span-2">

@@ -1,4 +1,5 @@
 import { useToast } from "@/hooks/use-toast";
+import { ChapterHelpButton } from "@/components/shared/ChapterHelpButton";
 import { useState, useMemo, useCallback } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { motion } from "framer-motion";
@@ -523,7 +524,10 @@ export default function ReportsPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
         >
-          <h1 className="text-2xl font-semibold tracking-tight mb-1">{t('reports.title', 'Relatórios')}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-semibold tracking-tight mb-1">{t('reports.title', 'Relatórios')}</h1>
+            <ChapterHelpButton chapter="relatorios" />
+          </div>
           <p className="text-muted-foreground">{t('reports.subtitle', 'Análise detalhada das suas finanças')}</p>
         </motion.div>
         <div className="flex gap-2 mt-4 md:mt-0">

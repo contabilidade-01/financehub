@@ -1437,6 +1437,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/faturas/:id/reabrir", combinedAuth, checkImpersonation, contasCartoesCtrl.reabrirFatura);
   app.get("/api/vencimentos", combinedAuth, checkImpersonation, contasCartoesCtrl.listarVencimentos);
 
+  // Onboarding — checklist "Primeiros passos" (estado real, derivado dos dados)
+  const onboardingCtrl = await import("./controllers/onboarding.controller");
+  app.get("/api/onboarding/checklist", combinedAuth, checkImpersonation, onboardingCtrl.getChecklist);
+
   // Mensalidades (recorrências mensais) — PF e PJ (empresa_id na query/body)
   const mensalidadesCtrl = await import("./controllers/mensalidades.controller");
   app.get("/api/mensalidades", combinedAuth, checkImpersonation, mensalidadesCtrl.listar);

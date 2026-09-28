@@ -264,6 +264,13 @@ app.use((req, res, next) => {
     console.error("[Alerts] Falha ao carregar módulo de alertas:", err.message);
   });
 
+  // Inicializar sequência de boas-vindas via WhatsApp (dias 0/1/3) — roda a cada 1h
+  import("./jobs/onboarding-whatsapp.job").then(({ initializeOnboardingWhatsappSequence }) => {
+    initializeOnboardingWhatsappSequence();
+  }).catch(err => {
+    console.error("[OnboardingWhatsApp] Falha ao carregar módulo de boas-vindas:", err.message);
+  });
+
   // Inicializar geração de mensalidades (recorrências mensais) — roda a cada 6h
   import("./jobs/mensalidades.job").then(({ initializeMensalidades }) => {
     initializeMensalidades();

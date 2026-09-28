@@ -1434,6 +1434,27 @@ const STEPS: Step[] = [
       });
     },
   },
+  {
+    name: "onboarding: origem em transacoes + sequência de boas-vindas WhatsApp",
+    run: async () => {
+      // Espelha empresas_transacoes.origem — permite ao checklist de onboarding
+      // detectar o 1º lançamento PF feito pelo WhatsApp.
+      await db.execute(sql`ALTER TABLE transacoes ADD COLUMN IF NOT EXISTS origem VARCHAR(20) NOT NULL DEFAULT 'manual'`);
+
+      // Estado de envio da sequência de boas-vindas do WhatsApp (dias 0/1/3).
+      // Idempotente: 1 linha por (usuario_id, etapa) já enviada.
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS onboarding_whatsapp_sequence (
+          id          SERIAL PRIMARY KEY,
+          usuario_id  INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+          etapa       VARCHAR(20) NOT NULL,
+          enviado_em  TIMESTAMPTZ NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo'),
+          UNIQUE (usuario_id, etapa)
+        )
+      `);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_onboarding_whatsapp_seq_usuario ON onboarding_whatsapp_sequence(usuario_id)`);
+    },
+  },
 ];
 
 export async function runAutoMigrations(): Promise<void> {
