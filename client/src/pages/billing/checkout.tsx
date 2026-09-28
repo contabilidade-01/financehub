@@ -15,6 +15,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, ArrowLeft, ArrowRight, Check, Clock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useSystemConfig } from '@/contexts/SystemConfigContext';
+import { HelpVideoButton } from '@/components/shared/HelpVideoButton';
 
 interface CheckoutPageProps {
   externalMode?: boolean;
@@ -283,9 +284,15 @@ export default function CheckoutPage({
 
   return (
     <div className="container max-w-6xl mx-auto py-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold tracking-tight">Assinar {systemConfig.system_name}</h1>
-        <p className="text-muted-foreground">Complete seu cadastro e comece a usar</p>
+      <div className="mb-8 flex items-start justify-between gap-2">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Assinar {systemConfig.system_name}</h1>
+          <p className="text-muted-foreground">Complete seu cadastro e comece a usar</p>
+        </div>
+        <HelpVideoButton
+          titulo="Como funciona a assinatura"
+          descricao="Passo a passo rápido de como escolher o plano, preencher os dados e concluir o pagamento."
+        />
       </div>
 
       {/* Progress Steps */}
