@@ -18,6 +18,11 @@ interface PricingProps {
   onTrocarTipo: () => void;
 }
 
+// Preço de entrada quando o plano ainda não carregou da API — deve
+// acompanhar o valor real cadastrado em Admin > Planos de Assinatura.
+const PRECO_PADRAO_PF = 39.9;
+const PRECO_PADRAO_PJ_MEI = 79.9;
+
 export default function Pricing({
   tipo,
   plano,
@@ -33,7 +38,7 @@ export default function Pricing({
     <section className="px-4 py-14 sm:py-20" id="pricing">
       <div className="mx-auto max-w-lg">
         <div className="text-center mb-8">
-          <h2 className="text-2xl sm:text-3xl font-bold text-foreground">Assine o {isPJ ? "plano PJ" : "plano PF"}</h2>
+          <h2 className="text-2xl sm:text-3xl font-bold text-foreground">Assine o {isPJ ? "plano PJ MEI" : "plano PF"}</h2>
           <p className="mt-2 text-muted-foreground">15 dias grátis para testar, sem compromisso.</p>
         </div>
 
@@ -41,12 +46,12 @@ export default function Pricing({
           <CardHeader className="text-center">
             <div className="inline-flex items-center gap-1 self-center rounded-md bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
               {isPJ ? <Building2 className="h-4 w-4" aria-hidden="true" /> : <UserIcon className="h-4 w-4" aria-hidden="true" />}
-              {isPJ ? "Plano Pessoa Jurídica (PJ)" : "Plano Pessoa Física (PF)"}
+              {isPJ ? "Plano PJ MEI" : "Plano Pessoa Física (PF)"}
             </div>
             <div className="mt-4 flex items-end justify-center gap-1">
               <span className="text-2xl font-semibold">R$</span>
               <span className="text-5xl font-extrabold tracking-tight">
-                {isLoading ? "—" : formatBRL(plano?.priceMonthly ?? (isPJ ? 79.9 : 39.9))}
+                {isLoading ? "—" : formatBRL(plano?.priceMonthly ?? (isPJ ? PRECO_PADRAO_PJ_MEI : PRECO_PADRAO_PF))}
               </span>
               <span className="text-muted-foreground mb-1">/mês</span>
             </div>

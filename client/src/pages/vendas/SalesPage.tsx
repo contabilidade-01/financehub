@@ -37,8 +37,13 @@ export default function SalesPage({ tipo }: { tipo: Tipo }) {
   const { isAuthenticated } = useAuth();
   const { config: systemConfig } = useSystemConfig();
 
+  // A página de vendas de PJ é o autoatendimento do plano de entrada (PJ MEI);
+  // o plano PJ ME (ERP completo) e o PJ + Consultoria são venda assistida, não
+  // aparecem aqui. Pedimos a modalidade explicitamente para não depender da
+  // ordem em que os planos vêm da API.
+  const modalidade = tipo === "juridica" ? "pj_mei" : "pf";
   const { data: plans = [], isLoading } = useQuery<Plan[]>({
-    queryKey: [`/api/subscription-plans?tipo=${tipo}`],
+    queryKey: [`/api/subscription-plans?modalidade=${modalidade}`],
   });
 
   const plano = plans.find((p) => p.tipoPessoa === tipo) || plans[0];

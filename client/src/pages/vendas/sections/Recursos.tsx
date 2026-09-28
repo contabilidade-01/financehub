@@ -3,7 +3,6 @@ import {
   Tags,
   Target,
   BarChart3,
-  MessageCircle,
   Building2,
   FileText,
   Landmark,
@@ -41,9 +40,9 @@ const RECURSOS: Record<Tipo, Recurso[]> = {
       descricao: "Visão por categoria, período e forma de pagamento, sempre atualizada.",
     },
     {
-      icon: MessageCircle,
-      titulo: "Lançar por WhatsApp",
-      descricao: "Texto, áudio, foto do cupom ou PDF — a IA lança e categoriza para você.",
+      icon: FileText,
+      titulo: "Exportação de relatórios",
+      descricao: "Baixe suas transações em CSV quando precisar analisar ou guardar fora do sistema.",
     },
     {
       icon: Gift,
