@@ -17,6 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { CheckCircle2, CreditCard, FileText, X } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ChapterHelpButton } from "@/components/shared/ChapterHelpButton";
 import { ContaPlanoCombobox, usePlanoContasPj } from "@/components/shared/ContaPlanoCombobox";
 
 type ContaBanc = { id: number; banco: string; nome?: string | null; ativo?: boolean };
@@ -209,7 +210,10 @@ export default function PjVencimentos({ empresaId }: { empresaId: number }) {
     <div className={`space-y-6 ${sel.size ? "pb-28 md:pb-20" : ""}`}>
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Vencimentos</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-semibold tracking-tight">Vencimentos</h1>
+            <ChapterHelpButton chapter="outros-recursos" />
+          </div>
           <p className="text-muted-foreground">
             Faturas de cartão e contas a pagar (Pix, boleto, TED…) do período
           </p>

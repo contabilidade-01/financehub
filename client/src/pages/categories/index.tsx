@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { CategoryIcon } from "@/components/shared/CategoryIcon";
+import { ChapterHelpButton } from "@/components/shared/ChapterHelpButton";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Category, InsertCategory, TransactionType } from "@shared/schema";
@@ -437,7 +438,10 @@ export default function Categories() {
             transition={{ duration: 0.3 }}
             className="mb-4 md:mb-0"
           >
-            <h1 className="text-2xl font-semibold tracking-tight mb-1">{t('categories.title', 'Categorias')}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-semibold tracking-tight mb-1">{t('categories.title', 'Categorias')}</h1>
+              <ChapterHelpButton chapter="plano-contas" />
+            </div>
             <p className="text-muted-foreground">{t('categories.subtitle', 'Organize suas receitas e despesas')}</p>
           </motion.div>
           <motion.div

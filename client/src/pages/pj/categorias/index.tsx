@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { ChapterHelpButton } from "@/components/shared/ChapterHelpButton";
 import { useConfirm } from "@/components/shared/ConfirmDialog";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -247,6 +248,7 @@ export default function PjCategorias({ empresaId }: { empresaId: number }) {
         description="Grupos organizam e somam; os lançamentos vão sempre numa conta dentro de um grupo. O grupo define onde a conta entra na DRE, na margem de contribuição e no ponto de equilíbrio."
         actions={
           <>
+            <ChapterHelpButton chapter="plano-contas" />
             <Button variant="outline" onClick={() => setModeloAberto(true)}><Wand2 className="mr-2 h-4 w-4" />Completar com modelo</Button>
             <Button variant="outline" onClick={() => abrirNova(true)}><FolderPlus className="mr-2 h-4 w-4" />Novo grupo</Button>
             <Button onClick={() => abrirNova(false)}><Plus className="mr-2 h-4 w-4" />Nova conta</Button>

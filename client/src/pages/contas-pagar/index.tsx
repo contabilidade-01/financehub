@@ -16,6 +16,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { CheckCircle2, CreditCard, FileText } from "lucide-react";
+import { ChapterHelpButton } from "@/components/shared/ChapterHelpButton";
 
 type Conta = { id: number; nome: string; banco?: string; saldo?: number; ativo?: boolean };
 
@@ -183,7 +184,10 @@ export default function ContasPagarPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Vencimentos</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-semibold tracking-tight">Vencimentos</h1>
+            <ChapterHelpButton chapter="outros-recursos" />
+          </div>
           <p className="text-muted-foreground">Faturas de cartão e boletos/PIX do período</p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
