@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Allow: /assinar/
+Disallow: /api/
+Disallow: /admin
+Sitemap: https://controledinheiro.com.br/sitemap.xml
