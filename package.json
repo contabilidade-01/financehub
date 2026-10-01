@@ -14,7 +14,7 @@
     "start:migration": "tsx server/migration-inicial.ts",
     "start:copy-migration": "tsx server/migration-copy.ts",
     "brunostart": "npm install && npm audit fix && NODE_ENV=development tsx server/index.ts",
-    "check": "tsc",
+    "check": "tsc --noEmit",
     "db:push": "node scripts/db-push-confirm.cjs",
     "db:seed": "node scripts/seed-globals.cjs",
     "migrate:localization": "tsx migrate_localization.js",
