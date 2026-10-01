@@ -67,6 +67,18 @@ export interface ContaBancaria {
   agencia: string | null;
   numero: string | null;
   tipo: string;
+  cadastro_pendente?: boolean;
+}
+
+export interface CartaoCredito {
+  id: number;
+  nome: string;
+  bandeira: string | null;
+  ultimos_digitos: string | null;
+  dia_fechamento: number;
+  dia_vencimento: number;
+  limite: string | null;
+  cadastro_pendente?: boolean;
 }
 
 export interface Sessao {
@@ -74,11 +86,17 @@ export interface Sessao {
   escopo: Escopo;
   empresa_id: number | null;
   conta_bancaria_id: number | null;
+  /** 'conta' = extrato bancário · 'cartao' = fatura de cartão de crédito. */
+  destino: "conta" | "cartao";
+  cartao_id: number | null;
+  sinal_invertido: boolean;
+  /** Conta/cartão foi criado sozinho a partir do arquivo (cadastro pendente). */
+  destino_auto_criado: boolean;
   arquivo_nome: string;
   formato: "ofx" | "csv" | "xlsx";
   cabecalho: string[] | null;
   mapeamento: Mapeamento | null;
-  conta_arquivo: { bancoId: string | null; agencia: string | null; conta: string | null } | null;
+  conta_arquivo: { bancoId: string | null; agencia: string | null; conta: string | null; ehCartao?: boolean; org?: string | null } | null;
   saldo_final_informado: string | null;
   data_saldo: string | null;
   periodo_de: string | null;
@@ -86,7 +104,11 @@ export interface Sessao {
   status: "rascunho" | "concluida" | "cancelada";
   sugestao_status: "processando" | "concluida" | "erro" | null;
   sugestao_progresso: number | null;
-  resultado: { criados: number; conciliados: number; ignorados: number; duplicados: number } | null;
+  resultado: {
+    criados: number; conciliados: number; ignorados: number; duplicados: number;
+    destino?: "conta" | "cartao"; cartao_nome?: string; conta_nome?: string;
+    cadastro_pendente?: boolean; criado_automaticamente?: boolean;
+  } | null;
   atualizado_em: string;
   amostra_bruta: string[][] | null;
 }
@@ -111,6 +133,7 @@ export interface Detalhe {
   categorias: Categoria[];
   grupos: GrupoPlano[];
   contas_bancarias: ContaBancaria[];
+  cartoes: CartaoCredito[];
 }
 
 export interface Rascunho {
@@ -119,6 +142,7 @@ export interface Rascunho {
   formato: string;
   atualizado_em: string;
   conta_nome: string | null;
+  destino?: "conta" | "cartao";
   total_linhas: number;
   sem_categoria: number;
 }

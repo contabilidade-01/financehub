@@ -1174,6 +1174,19 @@ const STEPS: Step[] = [
     },
   },
   {
+    name: "importação de fatura de cartão + cadastro automático pendente (conta/cartão)",
+    run: async () => {
+      // Cadastros criados sozinhos pela importação ficam "pendentes" até o cliente completar.
+      await db.execute(sql`ALTER TABLE formas_pagamento ADD COLUMN IF NOT EXISTS cadastro_pendente BOOLEAN NOT NULL DEFAULT false`);
+      await db.execute(sql`ALTER TABLE contas_bancarias ADD COLUMN IF NOT EXISTS cadastro_pendente BOOLEAN NOT NULL DEFAULT false`);
+      await db.execute(sql`ALTER TABLE importacoes ADD COLUMN IF NOT EXISTS destino VARCHAR(6) NOT NULL DEFAULT 'conta'`);
+      await db.execute(sql`ALTER TABLE importacoes ADD COLUMN IF NOT EXISTS cartao_id INTEGER`);
+      await db.execute(sql`ALTER TABLE importacoes ADD COLUMN IF NOT EXISTS sinal_invertido BOOLEAN NOT NULL DEFAULT false`);
+      await db.execute(sql`ALTER TABLE importacoes ADD COLUMN IF NOT EXISTS destino_auto_criado BOOLEAN NOT NULL DEFAULT false`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_transacoes_cartao_fitid ON transacoes(forma_pagamento_id, fitid) WHERE fitid IS NOT NULL`);
+    },
+  },
+  {
     name: "ERP PJ ME: clientes/fornecedores, centros de custo e vínculos no lançamento",
     run: async () => {
       await db.execute(sql`

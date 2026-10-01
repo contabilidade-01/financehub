@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { SessaoImportacao } from "./SessaoImportacao";
 import { api, dataBr, type Escopo, type Rascunho } from "./api";
+import { CadastrosPendentesBanner } from "@/components/shared/CadastrosPendentesBanner";
 
 /**
  * Importação de extrato bancário (OFX, CSV, Excel) — PF e PJ.
@@ -21,6 +22,8 @@ export function ImportacaoExtrato({ escopo, empresaId }: { escopo: Escopo; empre
   });
   const [enviando, setEnviando] = useState(false);
   const [arrastando, setArrastando] = useState(false);
+  // CSV/Excel não dizem se é extrato ou fatura; o OFX é detectado pelo próprio arquivo.
+  const [destino, setDestino] = useState<"conta" | "cartao">("conta");
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Mantém a sessão aberta na URL (voltar/avançar do navegador e recarregar a página funcionam).
@@ -52,14 +55,23 @@ export function ImportacaoExtrato({ escopo, empresaId }: { escopo: Escopo; empre
     const form = new FormData();
     form.append("arquivo", arquivo);
     form.append("escopo", escopo);
+    form.append("destino", destino);
     if (empresaId) form.append("empresa_id", String(empresaId));
     setEnviando(true);
     try {
-      const r = await api<{ id: number; ja_importado_em: string | null; conta_reconhecida: boolean }>("/api/importacoes", { method: "POST", form });
+      const r = await api<{
+        id: number; destino: "conta" | "cartao"; ja_importado_em: string | null; conta_reconhecida: boolean;
+        criado_automaticamente: { tipo: "conta" | "cartao"; nome: string } | null;
+      }>("/api/importacoes", { method: "POST", form });
       if (r.ja_importado_em) {
         toast({ title: "Este arquivo já foi importado antes", description: `Em ${new Date(r.ja_importado_em).toLocaleDateString("pt-BR")}. Os lançamentos repetidos aparecem como “Já importado”.` });
+      } else if (r.criado_automaticamente) {
+        toast({
+          title: r.criado_automaticamente.tipo === "cartao" ? "Cartão criado automaticamente" : "Conta criada automaticamente",
+          description: `${r.criado_automaticamente.nome}. Você completa os dados depois.`,
+        });
       } else if (r.conta_reconhecida) {
-        toast({ title: "Conta bancária reconhecida pelo arquivo" });
+        toast({ title: r.destino === "cartao" ? "Cartão reconhecido pelo arquivo" : "Conta bancária reconhecida pelo arquivo" });
       }
       setSessaoId(r.id);
     } catch (e: any) {
@@ -68,7 +80,7 @@ export function ImportacaoExtrato({ escopo, empresaId }: { escopo: Escopo; empre
       setEnviando(false);
       if (inputRef.current) inputRef.current.value = "";
     }
-  }, [escopo, empresaId, toast]);
+  }, [escopo, empresaId, destino, toast]);
 
   if (sessaoId) {
     return <SessaoImportacao id={sessaoId} onVoltar={() => { setSessaoId(null); refetch(); }} />;
@@ -76,15 +88,28 @@ export function ImportacaoExtrato({ escopo, empresaId }: { escopo: Escopo; empre
 
   return (
     <div className="space-y-6">
+      {escopo === "pf" && <CadastrosPendentesBanner />}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Importar extrato bancário</CardTitle>
+          <CardTitle className="text-base">Importar extrato ou fatura</CardTitle>
           <CardDescription>
             OFX (recomendado), CSV ou Excel exportado do internet banking. Você revisa e classifica antes de qualquer lançamento
-            entrar no financeiro.
+            entrar no financeiro. Conta e cartão que ainda não existem são criados automaticamente; você completa os dados depois.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {escopo === "pf" && (
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-muted-foreground">O arquivo é:</span>
+              <Button type="button" size="sm" variant={destino === "conta" ? "default" : "outline"} onClick={() => setDestino("conta")}>
+                Extrato de conta
+              </Button>
+              <Button type="button" size="sm" variant={destino === "cartao" ? "default" : "outline"} onClick={() => setDestino("cartao")}>
+                Fatura de cartão
+              </Button>
+              <span className="text-xs text-muted-foreground">(OFX de cartão é reconhecido sozinho)</span>
+            </div>
+          )}
           <label
             onDragOver={(e) => { e.preventDefault(); setArrastando(true); }}
             onDragLeave={() => setArrastando(false)}
@@ -127,7 +152,7 @@ export function ImportacaoExtrato({ escopo, empresaId }: { escopo: Escopo; empre
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium">{r.arquivo_nome}</div>
                   <div className="text-xs text-muted-foreground">
-                    {r.total_linhas} lançamento(s){r.conta_nome ? ` · ${r.conta_nome}` : " · conta não definida"}
+                    {r.total_linhas} lançamento(s){r.conta_nome ? ` · ${r.conta_nome}` : r.destino === "cartao" ? " · cartão não definido" : " · conta não definida"}
                     {r.sem_categoria > 0 && ` · ${r.sem_categoria} sem categoria`}
                     {" · "}editado em {new Date(r.atualizado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
                   </div>

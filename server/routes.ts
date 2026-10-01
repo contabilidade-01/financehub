@@ -1426,6 +1426,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/contas/:id/lancamentos", combinedAuth, checkImpersonation, contasCartoesCtrl.lancamentosConta);
   app.put("/api/contas/:id", combinedAuth, checkImpersonation, contasCartoesCtrl.atualizarConta);
   app.delete("/api/contas/:id", combinedAuth, checkImpersonation, contasCartoesCtrl.excluirConta);
+  app.get("/api/cadastros-pendentes", combinedAuth, checkImpersonation, contasCartoesCtrl.cadastrosPendentes);
   app.get("/api/cartoes", combinedAuth, checkImpersonation, contasCartoesCtrl.listarCartoes);
   // Resumo compacto de faturas (para a IA do WhatsApp responder saldo de fatura). Antes de /:id.
   app.get("/api/cartoes/resumo", combinedAuth, checkImpersonation, contasCartoesCtrl.resumoFaturas);
@@ -1695,6 +1696,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/importacoes/:id", combinedAuth, checkImpersonation, importacaoCtrl.detalhar);
   app.put("/api/importacoes/:id/mapeamento", combinedAuth, checkImpersonation, importacaoCtrl.mapeamento);
   app.put("/api/importacoes/:id/conta", combinedAuth, checkImpersonation, importacaoCtrl.conta);
+  app.put("/api/importacoes/:id/cartao", combinedAuth, checkImpersonation, importacaoCtrl.cartao);
+  app.post("/api/importacoes/:id/inverter-sinal", combinedAuth, checkImpersonation, importacaoCtrl.sinal);
   app.patch("/api/importacoes/:id/linhas", combinedAuth, checkImpersonation, importacaoCtrl.linhas);
   app.post("/api/importacoes/:id/regra", combinedAuth, checkImpersonation, importacaoCtrl.regra);
   app.post("/api/importacoes/:id/sugerir", combinedAuth, checkImpersonation, importacaoCtrl.sugerir);

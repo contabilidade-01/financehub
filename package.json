@@ -50,6 +50,7 @@
     "test:nlp-br": "tsx scripts/testar-nlp-br.ts",
     "test:classificacao-pf": "tsx scripts/testar-classificacao-pf.ts",
     "test:importacao-parsers": "tsx scripts/testar-importacao-parsers.ts",
+    "test:importacao-cartao": "tsx scripts/testar-importacao-cartao.ts",
     "test:erp": "tsx scripts/testar-erp.ts",
     "test:plano-contas": "tsx scripts/testar-plano-contas-pj.ts",
     "test:titulos": "tsx scripts/testar-titulos.ts",

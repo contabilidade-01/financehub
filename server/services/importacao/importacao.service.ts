@@ -11,6 +11,11 @@
  *     memória/regras e IA em lote.
  *  4. confirmar: UMA transação no banco cria/concilia tudo, sempre com a conta
  *     bancária. Qualquer erro desfaz tudo.
+ *
+ * Fatura de cartão (PF): mesma sessão com destino = 'cartao'. O cartão (e a conta, no extrato)
+ * é criado automaticamente a partir do arquivo quando não existe, marcado como
+ * cadastro_pendente (dias de fechamento/vencimento provisórios). As compras entram na fatura
+ * do cartão (sem mexer no caixa); pagamentos e estornos da fatura vêm ignorados.
  */
 import { db } from "../../db";
 import { chatComFila } from "../ia-provedores";
@@ -20,6 +25,8 @@ import axios from "axios";
 import { storage, aprenderMemoriaCategoria, resolveMemoriaCategoria, aprenderMemoriaContaPJ, resolveMemoriaContaPJ } from "../../storage";
 import { withRetry } from "../../utils/ai-errors";
 import { resolverContaPj } from "../classificar-conta-pj";
+import { resolverFaturaPf } from "../fatura-pf.service";
+import { nomeContaAuto, nomeCartaoAuto, diasProvisorios, ehPagamentoFatura, deveInverterSinal, ultimos4 } from "./cadastro-automatico";
 import { sugerirCategoriaPorDescricao, chaveMemoria, type CategoriaPf } from "../categorizar-pf";
 import {
   lerArquivoExtrato,
@@ -57,12 +64,13 @@ export async function listarSessoes(usuarioId: number, filtros: { status?: strin
   return (await db.execute(sql`
     SELECT i.id, i.escopo, i.empresa_id, i.conta_bancaria_id, i.arquivo_nome, i.formato, i.status,
            i.criado_em, i.atualizado_em, i.concluido_em, i.resultado,
-           COALESCE(cb.nome, cb.banco) AS conta_nome,
+           COALESCE(cb.nome, cb.banco, fp.nome) AS conta_nome, i.destino,
            (SELECT count(*)::int FROM importacao_linhas l WHERE l.importacao_id = i.id) AS total_linhas,
            (SELECT count(*)::int FROM importacao_linhas l WHERE l.importacao_id = i.id
               AND l.status = 'pendente' AND l.categoria_id IS NULL) AS sem_categoria
     FROM importacoes i
     LEFT JOIN contas_bancarias cb ON cb.id = i.conta_bancaria_id
+    LEFT JOIN formas_pagamento fp ON fp.id = i.cartao_id
     WHERE i.usuario_id = ${usuarioId}
       AND i.status = ${status}
       AND (${filtros.escopo || ""} = '' OR i.escopo = ${filtros.escopo || ""})
@@ -119,6 +127,17 @@ export async function contasBancariasDoEscopo(s: { escopo: Escopo; usuario_id: n
   `)) as any[];
 }
 
+/** Cartões do usuário (formas_pagamento com fechamento e vencimento; nunca a forma global). */
+export async function cartoesDoUsuario(usuarioId: number): Promise<any[]> {
+  return (await db.execute(sql`
+    SELECT id, nome, bandeira, ultimos_digitos, dia_fechamento, dia_vencimento, limite, cadastro_pendente
+    FROM formas_pagamento
+    WHERE usuario_id = ${usuarioId} AND COALESCE(global, false) = false AND ativo = true
+      AND dia_fechamento IS NOT NULL AND dia_vencimento IS NOT NULL
+    ORDER BY nome
+  `)) as any[];
+}
+
 export async function detalharSessao(id: number, usuarioId: number) {
   const sessao = await obterSessao(id, usuarioId);
   const linhas = await linhasDaSessao(id);
@@ -134,6 +153,7 @@ export async function detalharSessao(id: number, usuarioId: number) {
           .map((c: any) => ({ id: c.id, codigo: c.codigo, nome: c.nome, tipo: c.tipo, classificacao: c.classificacao, grupo_gerencial: c.grupo_gerencial }))
       : [],
     contas_bancarias: await contasBancariasDoEscopo(sessao),
+    cartoes: sessao.escopo === "pf" ? await cartoesDoUsuario(usuarioId) : [],
   };
 }
 
@@ -157,7 +177,20 @@ function casarContaDoArquivo(contas: any[], conta: { conta?: string | null; agen
   return hits.find((c) => ag && soDigitos(c.agencia) === ag) || null;
 }
 
-async function gravarLinhas(importacaoId: number, movs: MovimentoBruto[]) {
+/** Cartão cadastrado cujos últimos 4 dígitos batem com o do arquivo (só se for único). */
+function casarCartaoDoArquivo(cartoes: any[], conta: { conta?: string | null } | null) {
+  const f = ultimos4(conta?.conta);
+  if (!f) return null;
+  const hits = cartoes.filter((c) => String(c.ultimos_digitos || "") === f);
+  return hits.length === 1 ? hits[0] : null;
+}
+
+/** Fatura de cartão só aceita compras: pagamentos da fatura e estornos vêm ignorados (o cliente pode reverter). */
+async function ignorarEntradasDoCartao(importacaoId: number) {
+  await db.execute(sql`UPDATE importacao_linhas SET status = 'ignorar' WHERE importacao_id = ${importacaoId} AND valor > 0 AND status = 'pendente'`);
+}
+
+async function gravarLinhas(importacaoId: number, movs: MovimentoBruto[], cartao = false) {
   await db.execute(sql`DELETE FROM importacao_linhas WHERE importacao_id = ${importacaoId}`);
   const chaves = chavesDedup(movs);
   const LOTE = 200;
@@ -171,6 +204,7 @@ async function gravarLinhas(importacaoId: number, movs: MovimentoBruto[]) {
       VALUES ${sql.join(valores, sql`, `)}
     `);
   }
+  if (cartao) await ignorarEntradasDoCartao(importacaoId);
 }
 
 export async function criarSessao(p: {
@@ -179,12 +213,18 @@ export async function criarSessao(p: {
   empresaId?: number | null;
   arquivoNome: string;
   buffer: Buffer;
+  /** CSV/planilha não diz se é extrato ou fatura; o OFX é detectado pelo arquivo. */
+  destino?: "conta" | "cartao";
 }) {
   if (p.escopo === "pj") {
     const emp = await storage.getEmpresaById(Number(p.empresaId));
     if (!emp || emp.usuario_id !== p.usuarioId) throw new ErroImportacao("Empresa não encontrada", 404);
   }
   const lido = lerArquivoExtrato(p.buffer, p.arquivoNome);
+  const destino: "conta" | "cartao" = lido.ofx?.conta?.ehCartao || p.destino === "cartao" ? "cartao" : "conta";
+  if (destino === "cartao" && p.escopo === "pj") {
+    throw new ErroImportacao("A importação de fatura de cartão está disponível para o módulo pessoal (PF). Para empresa, importe o extrato da conta.");
+  }
   const hash = createHash("sha256").update(p.buffer).digest("hex");
 
   // Mesmo arquivo já concluído neste escopo? avisa (não bloqueia: pode ser outra conta).
@@ -202,6 +242,9 @@ export async function criarSessao(p: {
     mapeamento = lido.tabela.mapeamento;
     if (lido.tabela.completo) movimentos = aplicarMapeamento(lido.tabela.linhas, mapeamento);
   }
+  // Fatura em CSV/planilha: compra costuma vir positiva; o sistema usa negativo = saída.
+  const sinalInvertido = destino === "cartao" && !lido.ofx && deveInverterSinal(movimentos.map((m) => m.valor));
+  if (sinalInvertido) movimentos = movimentos.map((m) => ({ ...m, valor: -m.valor }));
   if (lido.ofx && !movimentos.length) throw new ErroImportacao("Nenhum movimento encontrado no arquivo OFX.");
   if (lido.tabela && !lido.tabela.linhas.length) throw new ErroImportacao("A planilha está vazia.");
   if (lido.tabela && lido.tabela.linhas.length > 20000) throw new ErroImportacao("Arquivo muito grande (máximo de 20.000 linhas).");
@@ -212,7 +255,7 @@ export async function criarSessao(p: {
   const ins = (await db.execute(sql`
     INSERT INTO importacoes
       (usuario_id, escopo, empresa_id, arquivo_nome, formato, hash_arquivo, cabecalho, linhas_brutas, mapeamento,
-       conta_arquivo, saldo_final_informado, data_saldo, periodo_de, periodo_ate)
+       conta_arquivo, saldo_final_informado, data_saldo, periodo_de, periodo_ate, destino, sinal_invertido)
     VALUES
       (${p.usuarioId}, ${p.escopo}, ${p.escopo === "pj" ? p.empresaId : null}, ${p.arquivoNome.slice(0, 255)}, ${lido.formato}, ${hash},
        ${lido.tabela ? JSON.stringify(lido.tabela.cabecalho) : null}::jsonb,
@@ -220,15 +263,42 @@ export async function criarSessao(p: {
        ${mapeamento ? JSON.stringify(mapeamento) : null}::jsonb,
        ${lido.ofx ? JSON.stringify(lido.ofx.conta) : null}::jsonb,
        ${lido.ofx?.saldoFinal != null ? lido.ofx.saldoFinal.toFixed(2) : null},
-       ${lido.ofx?.dataSaldo ?? null}, ${lido.ofx?.periodoDe ?? null}, ${lido.ofx?.periodoAte ?? null})
+       ${lido.ofx?.dataSaldo ?? null}, ${lido.ofx?.periodoDe ?? null}, ${lido.ofx?.periodoAte ?? null}, ${destino}, ${sinalInvertido})
     RETURNING id
   `)) as any[];
   const id = Number(ins[0].id);
-  if (movimentos.length) await gravarLinhas(id, movimentos);
-  if (contaCasada) await definirConta(id, p.usuarioId, { contaBancariaId: contaCasada.id });
-  else if (movimentos.length) await sugerirClassificacao(id, p.usuarioId);
+  if (movimentos.length) await gravarLinhas(id, movimentos, destino === "cartao");
 
-  return { id, ja_importado_em: jaConcluido[0]?.concluido_em ?? null, conta_reconhecida: !!contaCasada };
+  let reconhecida = false;
+  let criadoAuto: { tipo: "conta" | "cartao"; nome: string } | null = null;
+  const dadosArq = lido.ofx?.conta || null;
+  if (destino === "cartao") {
+    const casado = casarCartaoDoArquivo(await cartoesDoUsuario(p.usuarioId), dadosArq);
+    if (casado) { await definirCartao(id, p.usuarioId, { cartaoId: casado.id }); reconhecida = true; }
+    else if (lido.ofx && movimentos.length) {
+      // Cartão novo: cria sozinho a partir do arquivo; o cliente completa fechamento/vencimento depois.
+      const r = await definirCartao(id, p.usuarioId, { auto: true });
+      criadoAuto = { tipo: "cartao", nome: r.nome };
+    } else if (movimentos.length) await sugerirClassificacao(id, p.usuarioId);
+  } else if (contaCasada) {
+    await definirConta(id, p.usuarioId, { contaBancariaId: contaCasada.id });
+    reconhecida = true;
+  } else if (lido.ofx && movimentos.length && soDigitos(dadosArq?.conta).length >= 3) {
+    // Conta nova: cria sozinha pelo banco/conta do OFX (nome e saldo inicial o cliente ajusta depois).
+    const auto = nomeContaAuto({ bancoId: dadosArq?.bancoId, org: dadosArq?.org, conta: dadosArq?.conta });
+    await definirConta(id, p.usuarioId, {
+      nova: { ...auto, agencia: dadosArq?.agencia || undefined, numero: dadosArq?.conta || undefined, tipo: "corrente" },
+      auto: true,
+    });
+    criadoAuto = { tipo: "conta", nome: auto.nome };
+  } else if (movimentos.length) await sugerirClassificacao(id, p.usuarioId);
+
+  return {
+    id, destino,
+    ja_importado_em: jaConcluido[0]?.concluido_em ?? null,
+    conta_reconhecida: reconhecida,
+    criado_automaticamente: criadoAuto,
+  };
 }
 
 // ----------------------------------------------------------------------------
@@ -242,11 +312,14 @@ export async function definirMapeamento(id: number, usuarioId: number, mapeament
   const campos: (keyof Mapeamento)[] = ["data", "descricao", "valor", "debito", "credito", "saldo", "documento", "natureza"];
   const limpo = Object.fromEntries(campos.map((k) => [k, Number.isInteger(mapeamento?.[k]) ? mapeamento[k] : -1])) as unknown as Mapeamento;
   if (!mapeamentoCompleto(limpo)) throw new ErroImportacao("Indique as colunas de data, descrição e valor (ou débito/crédito).");
-  const movs = aplicarMapeamento(s.linhas_brutas, limpo);
+  let movs = aplicarMapeamento(s.linhas_brutas, limpo);
   if (!movs.length) throw new ErroImportacao("Com esse mapeamento nenhuma linha tem data e valor válidos.");
-  await db.execute(sql`UPDATE importacoes SET mapeamento = ${JSON.stringify(limpo)}::jsonb, atualizado_em = now() WHERE id = ${id}`);
-  await gravarLinhas(id, movs);
-  if (s.conta_bancaria_id) await verificarDuplicadasEConciliacao(id, s);
+  const cartao = s.destino === "cartao";
+  const inverter = cartao && deveInverterSinal(movs.map((m) => m.valor));
+  if (inverter) movs = movs.map((m) => ({ ...m, valor: -m.valor }));
+  await db.execute(sql`UPDATE importacoes SET mapeamento = ${JSON.stringify(limpo)}::jsonb, sinal_invertido = ${inverter}, atualizado_em = now() WHERE id = ${id}`);
+  await gravarLinhas(id, movs, cartao);
+  if (s.conta_bancaria_id || s.cartao_id) await verificarDuplicadasEConciliacao(id, s);
   await sugerirClassificacao(id, usuarioId);
   return { linhas: movs.length };
 }
@@ -258,10 +331,11 @@ export async function definirMapeamento(id: number, usuarioId: number, mapeament
 export async function definirConta(
   id: number,
   usuarioId: number,
-  entrada: { contaBancariaId?: number; nova?: { nome?: string; banco?: string; agencia?: string; numero?: string; tipo?: string; saldo_inicial?: number } },
+  entrada: { contaBancariaId?: number; nova?: { nome?: string; banco?: string; agencia?: string; numero?: string; tipo?: string; saldo_inicial?: number }; auto?: boolean },
 ) {
   const s = await obterSessao(id, usuarioId);
   exigirRascunho(s);
+  if (s.destino === "cartao") throw new ErroImportacao("Esta importação é de fatura de cartão: escolha o cartão.");
   let contaId = Number(entrada.contaBancariaId) || null;
   if (contaId) {
     const contas = await contasBancariasDoEscopo(s);
@@ -271,22 +345,151 @@ export async function definirConta(
     const nome = String(n.nome || n.banco || "").trim();
     if (!nome) throw new ErroImportacao("Informe o nome da conta bancária.");
     const r = (await db.execute(sql`
-      INSERT INTO contas_bancarias (empresa_id, usuario_id, banco, nome, agencia, numero, tipo, saldo_inicial, ativo)
+      INSERT INTO contas_bancarias (empresa_id, usuario_id, banco, nome, agencia, numero, tipo, saldo_inicial, ativo, cadastro_pendente)
       VALUES (${s.escopo === "pj" ? s.empresa_id : null}, ${usuarioId}, ${String(n.banco || nome).slice(0, 120)}, ${nome.slice(0, 120)},
               ${n.agencia ? String(n.agencia).slice(0, 20) : null}, ${n.numero ? String(n.numero).slice(0, 30) : null},
               ${["corrente", "poupanca", "investimento", "caixa", "pagamento"].includes(String(n.tipo)) ? n.tipo : "corrente"},
-              ${(Number(n.saldo_inicial) || 0).toFixed(2)}, true)
+              ${(Number(n.saldo_inicial) || 0).toFixed(2)}, true, ${!!entrada.auto})
       RETURNING id
     `)) as any[];
     contaId = Number(r[0].id);
   } else {
     throw new ErroImportacao("Escolha uma conta bancária ou informe os dados da nova conta.");
   }
-  await db.execute(sql`UPDATE importacoes SET conta_bancaria_id = ${contaId}, atualizado_em = now() WHERE id = ${id}`);
+  // Trocou a conta que a própria importação criou? Descarta a criada (se ninguém a usa).
+  if (s.destino_auto_criado && s.conta_bancaria_id && Number(s.conta_bancaria_id) !== contaId) {
+    await db.execute(sql`
+      DELETE FROM contas_bancarias WHERE id = ${s.conta_bancaria_id} AND usuario_id = ${usuarioId} AND cadastro_pendente = true
+        AND NOT EXISTS (SELECT 1 FROM transacoes t WHERE t.conta_bancaria_id = ${s.conta_bancaria_id})
+        AND NOT EXISTS (SELECT 1 FROM empresas_transacoes t WHERE t.conta_bancaria_id = ${s.conta_bancaria_id})
+    `);
+  }
+  await db.execute(sql`
+    UPDATE importacoes SET conta_bancaria_id = ${contaId}, atualizado_em = now(),
+      destino_auto_criado = ${!!entrada.nova && !!entrada.auto}
+    WHERE id = ${id}
+  `);
   const atual = { ...s, conta_bancaria_id: contaId };
   await verificarDuplicadasEConciliacao(id, atual);
   await sugerirClassificacao(id, usuarioId);
   return { conta_bancaria_id: contaId };
+}
+
+// ----------------------------------------------------------------------------
+// 3b. Cartão de crédito: vincular ou criar (fatura)
+// ----------------------------------------------------------------------------
+
+export async function definirCartao(
+  id: number,
+  usuarioId: number,
+  entrada: {
+    cartaoId?: number;
+    nova?: { nome?: string; bandeira?: string; ultimos_digitos?: string; dia_fechamento?: number; dia_vencimento?: number; limite?: number };
+    auto?: boolean;
+  },
+): Promise<{ cartao_id: number; nome: string; pendente: boolean }> {
+  const s = await obterSessao(id, usuarioId);
+  exigirRascunho(s);
+  if (s.destino !== "cartao" || s.escopo !== "pf") throw new ErroImportacao("Esta importação não é de fatura de cartão.");
+  const cartoes = await cartoesDoUsuario(usuarioId);
+  let cartao: { id: number; nome: string; cadastro_pendente?: boolean } | undefined;
+  let criadoAgora = false;
+
+  if (entrada.cartaoId) {
+    cartao = cartoes.find((c) => Number(c.id) === Number(entrada.cartaoId));
+    if (!cartao) throw new ErroImportacao("Cartão não encontrado", 404);
+  } else if (entrada.auto || entrada.nova) {
+    const arq = s.conta_arquivo || {};
+    const auto = nomeCartaoAuto({ bancoId: arq.bancoId, org: arq.org, conta: arq.conta });
+    const n = entrada.nova || {};
+    const nome = String(n.nome || auto.nome).trim().slice(0, 120);
+    if (nome.length < 2) throw new ErroImportacao("Informe o nome do cartão.");
+    const fech = Number(n.dia_fechamento);
+    const venc = Number(n.dia_vencimento);
+    const informouDias = fech >= 1 && fech <= 31 && venc >= 1 && venc <= 31;
+    const prov = diasProvisorios(s.periodo_ate);
+    const diaF = informouDias ? fech : prov.fechamento;
+    const diaV = informouDias ? venc : prov.vencimento;
+    const pendente = !informouDias;
+    const limite = n.limite != null && Number.isFinite(Number(n.limite)) && Number(n.limite) > 0 ? Number(n.limite).toFixed(2) : null;
+    const digitos = String(n.ultimos_digitos || auto.ultimos_digitos || "").replace(/\D/g, "").slice(-4) || null;
+    const bandeira = (n.bandeira || auto.banco || "").trim().slice(0, 50) || null;
+
+    // Nome já usado por um cartão do usuário: reaproveita (sem sobrescrever dias reais).
+    const igual = (await db.execute(sql`
+      SELECT id, nome, dia_fechamento, dia_vencimento, cadastro_pendente FROM formas_pagamento
+      WHERE usuario_id = ${usuarioId} AND COALESCE(global, false) = false AND lower(nome) = lower(${nome}) LIMIT 1
+    `)) as any[];
+    if (igual[0] && igual[0].dia_fechamento != null && igual[0].dia_vencimento != null) {
+      cartao = igual[0];
+    } else if (igual[0]) {
+      await db.execute(sql`
+        UPDATE formas_pagamento SET dia_fechamento = ${diaF}, dia_vencimento = ${diaV}, cadastro_pendente = ${pendente}, ativo = true
+        WHERE id = ${igual[0].id}
+      `);
+      cartao = igual[0]; criadoAgora = true;
+    } else {
+      for (let tentativa = 1; tentativa <= 5 && !cartao; tentativa++) {
+        const nomeTent = tentativa === 1 ? nome : `${nome} (${tentativa})`;
+        try {
+          const r = (await db.execute(sql`
+            INSERT INTO formas_pagamento
+              (nome, descricao, icone, cor, usuario_id, global, ativo, limite, dia_fechamento, dia_vencimento, bandeira, ultimos_digitos, cadastro_pendente)
+            VALUES (${nomeTent}, 'Cartão', '💳', '#FF6B35', ${usuarioId}, false, true, ${limite}, ${diaF}, ${diaV}, ${bandeira}, ${digitos}, ${pendente})
+            RETURNING id, nome, cadastro_pendente
+          `)) as any[];
+          cartao = r[0]; criadoAgora = true;
+        } catch (e: any) {
+          const dup = e?.code === "23505" || /duplicate key|unique/i.test(String(e?.message));
+          if (!dup || tentativa === 5) throw e;
+        }
+      }
+    }
+  } else {
+    throw new ErroImportacao("Escolha um cartão ou informe os dados do novo cartão.");
+  }
+
+  // Trocou o cartão que a própria importação criou? Descarta o criado (se ninguém o usa).
+  if (s.destino_auto_criado && s.cartao_id && Number(s.cartao_id) !== Number(cartao!.id)) {
+    await db.execute(sql`
+      DELETE FROM formas_pagamento WHERE id = ${s.cartao_id} AND usuario_id = ${usuarioId} AND cadastro_pendente = true
+        AND NOT EXISTS (SELECT 1 FROM transacoes t WHERE t.forma_pagamento_id = ${s.cartao_id})
+    `);
+  }
+  await db.execute(sql`
+    UPDATE importacoes SET cartao_id = ${cartao!.id}, atualizado_em = now(), destino_auto_criado = ${criadoAgora && !!entrada.auto}
+    WHERE id = ${id}
+  `);
+  await verificarDuplicadasEConciliacao(id, { ...s, cartao_id: cartao!.id });
+  await sugerirClassificacao(id, usuarioId);
+  const pend = (await db.execute(sql`SELECT cadastro_pendente FROM formas_pagamento WHERE id = ${cartao!.id}`)) as any[];
+  return { cartao_id: Number(cartao!.id), nome: cartao!.nome, pendente: !!pend[0]?.cadastro_pendente };
+}
+
+/** Os sinais do arquivo vieram ao contrário (compra positiva/negativa): inverte as linhas ainda não importadas. */
+export async function inverterSinal(id: number, usuarioId: number) {
+  const s = await obterSessao(id, usuarioId);
+  exigirRascunho(s);
+  if (s.destino !== "cartao") throw new ErroImportacao("Só vale para fatura de cartão.");
+  const rows = (await db.execute(sql`SELECT id, data, descricao, valor, chave FROM importacao_linhas WHERE importacao_id = ${id} ORDER BY ordem`)) as any[];
+  const movs: MovimentoBruto[] = rows.map((r) => ({
+    data: String(r.data).slice(0, 10), descricao: r.descricao, valor: -Number(r.valor),
+    fitid: String(r.chave).startsWith("fitid:") ? String(r.chave).slice(6) : null,
+  }));
+  const chaves = chavesDedup(movs);
+  for (let i = 0; i < rows.length; i++) {
+    await db.execute(sql`
+      UPDATE importacao_linhas SET valor = ${movs[i].valor.toFixed(2)}, chave = ${chaves[i]},
+        status = 'pendente', categoria_id = NULL, sugestao_categoria_id = NULL, sugestao_origem = NULL,
+        transacao_existente_id = NULL, candidatos = NULL, atualizado_em = now()
+      WHERE id = ${rows[i].id} AND status <> 'importada'
+    `);
+  }
+  await db.execute(sql`UPDATE importacoes SET sinal_invertido = NOT sinal_invertido, atualizado_em = now() WHERE id = ${id}`);
+  await ignorarEntradasDoCartao(id);
+  if (s.cartao_id) await verificarDuplicadasEConciliacao(id, s);
+  await sugerirClassificacao(id, usuarioId);
+  return { invertido: true };
 }
 
 /**
@@ -296,6 +499,7 @@ export async function definirConta(
  * vários → lista para o cliente escolher.
  */
 async function verificarDuplicadasEConciliacao(id: number, s: any) {
+  if (s.destino === "cartao") return verificarCartao(id, s);
   const tabela = s.escopo === "pj" ? sql`empresas_transacoes` : sql`transacoes`;
   const walletId = s.escopo === "pf" ? (await storage.getWalletByUserId(s.usuario_id))?.id ?? -1 : null;
   const escopoTx = s.escopo === "pj" ? sql`t.empresa_id = ${s.empresa_id}` : sql`t.carteira_id = ${walletId}`;
@@ -356,6 +560,50 @@ async function verificarDuplicadasEConciliacao(id: number, s: any) {
         AND abs(t.valor::numeric) = ${Math.abs(v).toFixed(2)}
         AND COALESCE(t.data_vencimento, t.data_transacao) BETWEEN (${l.data}::date - 3) AND (${l.data}::date + 3)
       ORDER BY abs(COALESCE(t.data_vencimento, t.data_transacao) - ${l.data}::date), t.id
+      LIMIT 5
+    `)) as any[];
+    const livres = cands.filter((c) => !usados.has(Number(c.id)));
+    if (livres.length === 1) {
+      usados.add(Number(livres[0].id));
+      await db.execute(sql`
+        UPDATE importacao_linhas SET status = 'conciliar', transacao_existente_id = ${livres[0].id},
+          candidatos = ${JSON.stringify(livres)}::jsonb WHERE id = ${l.id}
+      `);
+    } else if (livres.length > 1) {
+      await db.execute(sql`UPDATE importacao_linhas SET candidatos = ${JSON.stringify(livres)}::jsonb WHERE id = ${l.id}`);
+    }
+  }
+}
+
+/**
+ * Fatura de cartão: duplicada = compra já importada neste cartão (mesma chave); conciliar = compra
+ * lançada à mão/planilha neste cartão (mesmo valor, ±3 dias, sem chave de extrato).
+ */
+async function verificarCartao(id: number, s: any) {
+  const walletId = (await storage.getWalletByUserId(s.usuario_id))?.id ?? -1;
+  await db.execute(sql`
+    UPDATE importacao_linhas SET status = 'pendente', transacao_existente_id = NULL, transferencia_id = NULL, candidatos = NULL
+    WHERE importacao_id = ${id} AND status IN ('duplicada', 'conciliar')
+  `);
+  await db.execute(sql`
+    UPDATE importacao_linhas l SET status = 'duplicada'
+    FROM transacoes t
+    WHERE l.importacao_id = ${id} AND l.status = 'pendente' AND t.carteira_id = ${walletId}
+      AND t.forma_pagamento_id = ${s.cartao_id} AND t.fitid = l.chave
+  `);
+  const pendentes = (await db.execute(sql`
+    SELECT id, data, valor FROM importacao_linhas WHERE importacao_id = ${id} AND status = 'pendente' AND valor < 0
+  `)) as any[];
+  const usados = new Set<number>();
+  for (const l of pendentes) {
+    const cands = (await db.execute(sql`
+      SELECT t.id, t.descricao, t.valor, t.data_transacao, t.status
+      FROM transacoes t
+      WHERE t.carteira_id = ${walletId} AND t.forma_pagamento_id = ${s.cartao_id}
+        AND t.fitid IS NULL AND t.tipo = 'Despesa'
+        AND abs(t.valor::numeric) = ${Math.abs(Number(l.valor)).toFixed(2)}
+        AND t.data_transacao BETWEEN (${l.data}::date - 3) AND (${l.data}::date + 3)
+      ORDER BY abs(t.data_transacao - ${l.data}::date), t.id
       LIMIT 5
     `)) as any[];
     const livres = cands.filter((c) => !usados.has(Number(c.id)));
@@ -622,9 +870,102 @@ export async function criarCategoriaInline(id: number, usuarioId: number, b: { n
 // 6. Confirmar (atômico)
 // ----------------------------------------------------------------------------
 
+/** Aprendizado (fora da transação: não pode desfazer a importação). */
+async function aprenderComImportacao(s: any, usuarioId: number, aCriar: any[], cats: Cat[]) {
+  for (const l of aCriar) {
+    if (!l.categoria_id || l.sugestao_origem === "memoria") continue;
+    const cat = cats.find((c) => c.id === Number(l.categoria_id));
+    if (!cat) continue;
+    const corrigiu = l.sugestao_categoria_id && Number(l.sugestao_categoria_id) !== Number(l.categoria_id);
+    try {
+      if (s.escopo === "pj") await aprenderMemoriaContaPJ(usuarioId, chaveMemoria(l.descricao) || l.descricao, cat.id, cat.nome);
+      else await aprenderMemoriaCategoria(usuarioId, l.descricao, cat.id, cat.nome, corrigiu || !l.sugestao_categoria_id ? "correcao" : "ia");
+    } catch { /* best-effort */ }
+  }
+}
+
+/** Confirma fatura de cartão: compras entram na fatura do cartão (sem caixa e sem conta), tudo ou nada. */
+async function confirmarCartao(s: any, usuarioId: number, opts: { semCategoria?: "bloquear" | "outras" }) {
+  if (!s.cartao_id) throw new ErroImportacao("Escolha ou crie o cartão antes de confirmar.");
+  const cartao = (await cartoesDoUsuario(usuarioId)).find((c) => Number(c.id) === Number(s.cartao_id));
+  if (!cartao) throw new ErroImportacao("Cartão não encontrado", 404);
+  const walletId = (await storage.getWalletByUserId(usuarioId))?.id;
+  if (!walletId) throw new ErroImportacao("Carteira do usuário não encontrada.");
+  const linhas = await linhasDaSessao(s.id);
+  const cats = await categoriasDoEscopo(s);
+  const aCriar = linhas.filter((l) => l.status === "pendente");
+  const aConciliar = linhas.filter((l) => l.status === "conciliar" && l.transacao_existente_id);
+  const entradas = aCriar.filter((l) => Number(l.valor) >= 0);
+  if (entradas.length) throw new ErroImportacao(`${entradas.length} lançamento(s) de crédito/estorno/pagamento não entram na fatura. Marque como "Ignorar".`, 422);
+  if (!aCriar.length && !aConciliar.length) throw new ErroImportacao("Não há lançamentos para importar.");
+  const semCat = aCriar.filter((l) => !l.categoria_id);
+  let outras: number | undefined;
+  if (semCat.length) {
+    if (opts.semCategoria !== "outras") {
+      throw new ErroImportacao(`${semCat.length} lançamento(s) sem categoria. Classifique ou escolha "Classificar restantes como Outras".`, 422);
+    }
+    const c = cats.find((x) => x.tipo === "Despesa" && /^outr/.test(normalizarBusca(x.nome))) || cats.find((x) => x.tipo === "Despesa");
+    outras = c?.id;
+  }
+  const catIds = new Set(cats.map((c) => c.id));
+  // Fatura de cada compra (cria a fatura da competência se ainda não existe).
+  const faturas = new Map<number, { id: number; competencia: string }>();
+  for (const l of aCriar) {
+    const r = await resolverFaturaPf(usuarioId, walletId, cartao, String(l.data).slice(0, 10));
+    faturas.set(Number(l.id), { id: r.fatura.id, competencia: r.competencia });
+  }
+
+  const resultado = await db.transaction(async (tx: any) => {
+    let criados = 0;
+    let conciliados = 0;
+    for (const l of aCriar) {
+      const categoriaId = l.categoria_id || outras;
+      if (!categoriaId || !catIds.has(Number(categoriaId))) throw new ErroImportacao(`Categoria inválida na linha "${l.descricao}".`);
+      const f = faturas.get(Number(l.id))!;
+      const r = (await tx.execute(sql`
+        INSERT INTO transacoes
+          (carteira_id, categoria_id, forma_pagamento_id, descricao, valor, tipo, data_transacao, status,
+           movimenta_caixa, conta_bancaria_id, fatura_id, competencia, fitid, metodo_pagamento, origem)
+        VALUES (${walletId}, ${categoriaId}, ${cartao.id}, ${l.descricao}, ${Math.abs(Number(l.valor)).toFixed(2)}, 'Despesa',
+                ${String(l.data).slice(0, 10)}, 'Pendente', false, NULL, ${f.id}, ${f.competencia}, ${l.chave}, ${cartao.nome}, 'importacao')
+        RETURNING id
+      `)) as any[];
+      await tx.execute(sql`UPDATE importacao_linhas SET status = 'importada', transacao_criada_id = ${r[0].id} WHERE id = ${l.id}`);
+      criados++;
+    }
+    for (const l of aConciliar) {
+      const upd = (await tx.execute(sql`
+        UPDATE transacoes SET fitid = ${l.chave}
+        WHERE id = ${l.transacao_existente_id} AND carteira_id = ${walletId} AND forma_pagamento_id = ${cartao.id} AND fitid IS NULL
+        RETURNING id
+      `)) as any[];
+      if (!upd.length) throw new ErroImportacao(`O lançamento a conciliar com "${l.descricao}" não está mais disponível. Revise a linha.`, 409);
+      await tx.execute(sql`UPDATE importacao_linhas SET status = 'importada', transacao_criada_id = ${l.transacao_existente_id} WHERE id = ${l.id}`);
+      conciliados++;
+    }
+    const res = {
+      criados, conciliados, transferencias: 0,
+      ignorados: linhas.filter((l) => l.status === "ignorar").length,
+      duplicados: linhas.filter((l) => l.status === "duplicada").length,
+      destino: "cartao", cartao_id: Number(cartao.id), cartao_nome: cartao.nome,
+      cadastro_pendente: !!cartao.cadastro_pendente,
+      criado_automaticamente: !!s.destino_auto_criado,
+    };
+    await tx.execute(sql`
+      UPDATE importacoes SET status = 'concluida', concluido_em = now(), atualizado_em = now(),
+        resultado = ${JSON.stringify(res)}::jsonb, linhas_brutas = NULL
+      WHERE id = ${s.id} AND status = 'rascunho'
+    `);
+    return res;
+  });
+  await aprenderComImportacao(s, usuarioId, aCriar, cats);
+  return resultado;
+}
+
 export async function confirmar(id: number, usuarioId: number, opts: { semCategoria?: "bloquear" | "outras" } = {}) {
   const s = await obterSessao(id, usuarioId);
   exigirRascunho(s);
+  if (s.destino === "cartao") return confirmarCartao(s, usuarioId, opts);
   if (!s.conta_bancaria_id) throw new ErroImportacao("Escolha ou crie a conta bancária antes de confirmar.");
   const linhas = await linhasDaSessao(id);
   const cats = await categoriasDoEscopo(s);
@@ -730,7 +1071,15 @@ export async function confirmar(id: number, usuarioId: number, opts: { semCatego
       await tx.execute(sql`UPDATE importacao_linhas SET status = 'importada' WHERE id = ${l.id}`);
       conciliados++;
     }
-    const res = { criados, conciliados, transferencias, ignorados: linhas.filter((l) => l.status === "ignorar").length, duplicados: linhas.filter((l) => l.status === "duplicada").length };
+    const contaInfo = (await tx.execute(sql`SELECT nome, banco, cadastro_pendente FROM contas_bancarias WHERE id = ${s.conta_bancaria_id}`)) as any[];
+    const res = {
+      criados, conciliados, transferencias,
+      ignorados: linhas.filter((l) => l.status === "ignorar").length,
+      duplicados: linhas.filter((l) => l.status === "duplicada").length,
+      destino: "conta", conta_nome: contaInfo[0]?.nome || contaInfo[0]?.banco || null,
+      cadastro_pendente: !!contaInfo[0]?.cadastro_pendente,
+      criado_automaticamente: !!s.destino_auto_criado,
+    };
     await tx.execute(sql`
       UPDATE importacoes SET status = 'concluida', concluido_em = now(), atualizado_em = now(),
         resultado = ${JSON.stringify(res)}::jsonb, linhas_brutas = NULL
@@ -739,17 +1088,7 @@ export async function confirmar(id: number, usuarioId: number, opts: { semCatego
     return res;
   });
 
-  // Aprendizado (fora da transação: não pode desfazer a importação).
-  for (const l of aCriar) {
-    if (!l.categoria_id || l.sugestao_origem === "memoria") continue;
-    const cat = cats.find((c) => c.id === Number(l.categoria_id));
-    if (!cat) continue;
-    const corrigiu = l.sugestao_categoria_id && Number(l.sugestao_categoria_id) !== Number(l.categoria_id);
-    try {
-      if (s.escopo === "pj") await aprenderMemoriaContaPJ(usuarioId, chaveMemoria(l.descricao) || l.descricao, cat.id, cat.nome);
-      else await aprenderMemoriaCategoria(usuarioId, l.descricao, cat.id, cat.nome, corrigiu || !l.sugestao_categoria_id ? "correcao" : "ia");
-    } catch { /* best-effort */ }
-  }
+  await aprenderComImportacao(s, usuarioId, aCriar, cats);
   return resultado;
 }
 
