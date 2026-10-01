@@ -224,6 +224,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     transactionController.restaurarLixeiraPf,
   );
   app.post(
+    "/api/transactions/excluir-lote",
+    combinedAuth,
+    checkImpersonation,
+    transactionController.excluirLotePf,
+  );
+  app.post(
     "/api/transactions/alterar-dia",
     combinedAuth,
     checkImpersonation,
@@ -1512,6 +1518,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/empresas/:id/transacoes/:transacaoId", combinedAuth, empresaTransacaoCtrl.getEmpresaTransacao);
   app.put("/api/empresas/:id/transacoes/:transacaoId", combinedAuth, empresaTransacaoCtrl.updateEmpresaTransacao);
   app.put("/api/empresas/:id/transacoes/:transacaoId/pagar", combinedAuth, empresaTransacaoCtrl.pagarEmpresaTransacao);
+  app.post("/api/empresas/:id/transacoes/excluir-lote", combinedAuth, empresaTransacaoCtrl.excluirLoteEmpresaTransacao);
   app.post("/api/empresas/:id/transacoes/baixar-lote", combinedAuth, empresaTransacaoCtrl.baixarLoteEmpresaTransacao);
   app.put("/api/empresas/:id/transacoes/:transacaoId/reabrir", combinedAuth, empresaTransacaoCtrl.reabrirEmpresaTransacao);
   app.delete("/api/empresas/:id/transacoes/:transacaoId", combinedAuth, empresaTransacaoCtrl.deleteEmpresaTransacao);

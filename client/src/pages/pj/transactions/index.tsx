@@ -7,6 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Plus, Trash2, Edit2, Search, X, CheckCircle2, RotateCcw, Undo2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
@@ -379,6 +383,8 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
   const [trocandoConta, setTrocandoConta] = useState<number | null>(null);
 
   // Filtros (client-side, sobre a lista completa já carregada)
+  const [sel, setSel] = useState<Set<number>>(new Set());
+  const [excluirLoteOpen, setExcluirLoteOpen] = useState(false);
   const [busca, setBusca] = useState("");
   const [fTipo, setFTipo] = useState("todos");
   const [fConta, setFConta] = useState("todas");
@@ -472,6 +478,30 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
     },
   });
 
+  const excluirLoteMut = useMutation({
+    mutationFn: async (ids: number[]) => {
+      const res = await fetch(`/api/empresas/${empresaId}/transacoes/excluir-lote`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Erro ao excluir");
+      return data;
+    },
+    onSuccess: (r) => {
+      invalidar();
+      setExcluirLoteOpen(false);
+      setSel(new Set());
+      toast({
+        title: `${r.excluidas ?? 0} transação(ões) excluída(s)`,
+        description: "Foram para a lixeira. Você pode desfazer por 30 dias.",
+        action: <ToastAction altText="Desfazer" onClick={() => restaurarMut.mutate()}>Desfazer</ToastAction>,
+      });
+    },
+    onError: (err: any) => toast({ title: "Erro ao excluir", description: err.message, variant: "destructive" }),
+  });
+
   const restaurarMut = useMutation({
     mutationFn: async () => {
       const res = await fetch(`/api/empresas/${empresaId}/lixeira/restaurar`, { method: "POST" });
@@ -481,7 +511,10 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
     },
     onSuccess: (data) => {
       invalidar();
-      toast({ title: "Transação restaurada", description: data.descricao });
+      toast({
+        title: data.quantidade > 1 ? `${data.quantidade} transações restauradas` : "Transação restaurada",
+        description: data.descricao,
+      });
     },
     onError: (err: any) =>
       toast({ title: "Nada para restaurar", description: err.message, variant: "destructive" }),
@@ -645,6 +678,14 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
     </>
   );
 
+  const toggleSel = (id: number) =>
+    setSel((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -776,6 +817,39 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
         </CardContent>
       </Card>
 
+      {sel.size > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-primary/5 px-3 py-2">
+          <p className="text-sm text-muted-foreground">{sel.size} selecionada(s)</p>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => setSel(new Set())}>Limpar</Button>
+            <Button size="sm" variant="destructive" onClick={() => setExcluirLoteOpen(true)}>
+              <Trash2 className="h-4 w-4 mr-1" /> Excluir selecionadas
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <AlertDialog open={excluirLoteOpen} onOpenChange={setExcluirLoteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir {sel.size} transação(ões)</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza? As transações selecionadas vão para a lixeira e podem ser restauradas de uma vez por 30 dias.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={excluirLoteMut.isPending || sel.size === 0}
+              onClick={(e) => { e.preventDefault(); excluirLoteMut.mutate(Array.from(sel)); }}
+              className="bg-destructive"
+            >
+              {excluirLoteMut.isPending ? "Excluindo..." : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <Card>
         <CardContent className="p-0">
           {/* Mobile: lista em cards */}
@@ -792,7 +866,14 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
                 return (
                   <div key={t.id} className="space-y-2 p-4" data-testid={`pj-transacao-card-${t.id}`}>
                     <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4 shrink-0"
+                        checked={sel.has(t.id)}
+                        onChange={() => toggleSel(t.id)}
+                        aria-label="Selecionar transação"
+                      />
+                      <div className="min-w-0 flex-1">
                         <p className="font-medium leading-snug">{t.descricao}</p>
                         <p className="mt-0.5 text-xs text-muted-foreground">
                           {dataCurta(t.data_transacao)} · {rotuloFormaPj(t, bancos, cartoes)}
@@ -830,6 +911,18 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
             <table className="w-full text-sm">
               <thead className="border-b bg-muted/50">
                 <tr>
+                  <th className="p-3 w-8">
+                    <input
+                      type="checkbox"
+                      aria-label="Selecionar todas"
+                      checked={filtradas.length > 0 && filtradas.every((t) => sel.has(t.id))}
+                      onChange={(e) => setSel((prev) => {
+                        const n = new Set(prev);
+                        filtradas.forEach((t) => (e.target.checked ? n.add(t.id) : n.delete(t.id)));
+                        return n;
+                      })}
+                    />
+                  </th>
                   <th className="text-left p-3">Data</th>
                   <th className="text-left p-3">Descrição</th>
                   <th className="text-left p-3">Forma</th>
@@ -842,10 +935,10 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
               </thead>
               <tbody>
                 {isLoading ? (
-                  <tr><td colSpan={8} className="text-center p-4">Carregando...</td></tr>
+                  <tr><td colSpan={9} className="text-center p-4">Carregando...</td></tr>
                 ) : filtradas.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="text-center p-4 text-muted-foreground">
+                    <td colSpan={9} className="text-center p-4 text-muted-foreground">
                       {transacoes.length === 0 ? "Nenhuma transação ainda." : "Nenhum lançamento com esses filtros."}
                     </td>
                   </tr>
@@ -853,7 +946,15 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
                   filtradas.map((t) => {
                     const sb = stBadgePj(t.status || "Efetivada");
                     return (
-                    <tr key={t.id} className="border-b hover:bg-muted/30">
+                    <tr key={t.id} className={`border-b hover:bg-muted/30 ${sel.has(t.id) ? "bg-primary/5" : ""}`}>
+                      <td className="p-3">
+                        <input
+                          type="checkbox"
+                          aria-label="Selecionar transação"
+                          checked={sel.has(t.id)}
+                          onChange={() => toggleSel(t.id)}
+                        />
+                      </td>
                       <td className="p-3 whitespace-nowrap tabular-nums">{dataCurta(t.data_transacao)}</td>
                       <td className="p-3">
                         {t.descricao}

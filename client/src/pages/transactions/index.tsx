@@ -754,6 +754,7 @@ export default function Transactions() {
   const [ordenacao, setOrdenacao] = useState<Ordenacao>("data_desc");
   const { toast } = useToast();
   const [sel, setSel] = useState<Set<number>>(new Set());
+  const [excluirLoteOpen, setExcluirLoteOpen] = useState(false);
   const [diaOpen, setDiaOpen] = useState(false);
   const [diaValor, setDiaValor] = useState("5");
   const [diaTodasParcelas, setDiaTodasParcelas] = useState(true);
@@ -775,6 +776,32 @@ export default function Transactions() {
     },
     onError: (e: any) =>
       toast({ title: "Erro", description: e?.message || e?.error, variant: "destructive" }),
+  });
+
+  const excluirLote = useMutation({
+    mutationFn: (ids: number[]) =>
+      apiRequest("/api/transactions/excluir-lote", { method: "POST", data: { ids } }),
+    onSuccess: (r: any) => {
+      refetch();
+      queryClient.invalidateQueries({ queryKey: ["/api/wallet/current"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/summary"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payment-methods/totals"] });
+      queryClient.invalidateQueries({ predicate: (q) => String(q.queryKey[0] || "").startsWith("/api/cartoes") });
+      queryClient.invalidateQueries({ predicate: (q) => String(q.queryKey[0] || "").startsWith("/api/faturas") });
+      setExcluirLoteOpen(false);
+      setSel(new Set());
+      toast({
+        title: `${r?.excluidas ?? 0} transação(ões) excluída(s)`,
+        description: "Foram para a lixeira. Você pode desfazer por 30 dias.",
+        action: (
+          <ToastAction altText="Desfazer" onClick={handleRestaurarUltima}>
+            Desfazer
+          </ToastAction>
+        ),
+      });
+    },
+    onError: (e: any) =>
+      toast({ title: "Erro ao excluir", description: e?.message || e?.error, variant: "destructive" }),
   });
 
   const toggleSel = (id: number) => {
@@ -973,7 +1000,7 @@ export default function Transactions() {
       queryClient.invalidateQueries({ queryKey: ["/api/wallet/current"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/summary"] });
       toast({
-        title: "Transação restaurada",
+        title: r?.quantidade > 1 ? `${r.quantidade} transações restauradas` : "Transação restaurada",
         description: r?.descricao ? String(r.descricao) : undefined,
       });
     } catch {
@@ -1315,6 +1342,9 @@ export default function Transactions() {
                 >
                   <CalendarDays className="h-4 w-4 mr-1" /> Alterar dia
                 </Button>
+                <Button size="sm" variant="destructive" onClick={() => setExcluirLoteOpen(true)}>
+                  <Trash2Icon className="h-4 w-4 mr-1" /> Excluir selecionadas
+                </Button>
               </div>
             </div>
           )}
@@ -1610,6 +1640,27 @@ export default function Transactions() {
               className="bg-destructive"
             >
               {t('common.delete', 'Excluir')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={excluirLoteOpen} onOpenChange={setExcluirLoteOpen}>
+        <AlertDialogContent className="border bg-card">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir {sel.size} transação(ões)</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza? As transações selecionadas vão para a lixeira e podem ser restauradas de uma vez por 30 dias.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('common.cancel', 'Cancelar')}</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={excluirLote.isPending || sel.size === 0}
+              onClick={(e) => { e.preventDefault(); excluirLote.mutate(Array.from(sel)); }}
+              className="bg-destructive"
+            >
+              {excluirLote.isPending ? "Excluindo..." : "Excluir"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

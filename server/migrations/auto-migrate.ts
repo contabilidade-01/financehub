@@ -224,6 +224,8 @@ const STEPS: Step[] = [
       // Tabelas criadas em versões antigas não tinham empresa_id (CREATE IF NOT
       // EXISTS não altera tabela existente) — garante a coluna antes do índice.
       await db.execute(sql`ALTER TABLE transacoes_lixeira ADD COLUMN IF NOT EXISTS empresa_id INTEGER`);
+      // lote_id agrupa exclusões em lote: o "Desfazer" restaura o lote inteiro.
+      await db.execute(sql`ALTER TABLE transacoes_lixeira ADD COLUMN IF NOT EXISTS lote_id TEXT`);
       await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_lixeira_carteira ON transacoes_lixeira(carteira_id, excluida_em)`);
       await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_lixeira_empresa ON transacoes_lixeira(empresa_id, excluida_em)`);
     },
