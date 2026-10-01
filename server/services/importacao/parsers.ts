@@ -31,6 +31,10 @@ export interface ContaDoArquivo {
   agencia: string | null;
   conta: string | null;
   tipoConta: string | null;
+  /** Arquivo é fatura de cartão de crédito (CCSTMTRS), não extrato de conta. */
+  ehCartao?: boolean;
+  /** Nome da instituição (<ORG>) quando o arquivo traz. */
+  org?: string | null;
 }
 
 export interface Mapeamento {
@@ -182,11 +186,18 @@ export function lerOfx(texto: string): NonNullable<ArquivoLido["ofx"]> {
   const blocos =
     texto.match(/<STMTTRN>[\s\S]*?<\/STMTTRN>/gi) ||
     texto.split(/<STMTTRN>/i).slice(1).map((b) => `<STMTTRN>${b.split(/<\/BANKTRANLIST>/i)[0]}`);
+  const ehCartao = /<CREDITCARDMSGSRSV1>|<CCSTMTRS>|<CCACCTFROM>/i.test(texto);
   const movimentos: MovimentoBruto[] = [];
   for (const bloco of blocos) {
     const data = dataOfx(tag(bloco, "DTPOSTED"));
-    const valor = valorDeCelula(tag(bloco, "TRNAMT"));
+    let valor = valorDeCelula(tag(bloco, "TRNAMT"));
     if (!data || valor == null || valor === 0) continue;
+    // Fatura de cartão: alguns bancos mandam compra como valor positivo. O TRNTYPE manda no sinal.
+    if (ehCartao) {
+      const tt = String(tag(bloco, "TRNTYPE") || "").toUpperCase();
+      if (tt === "DEBIT" && valor > 0) valor = -valor;
+      else if (tt === "CREDIT" && valor < 0) valor = -valor;
+    }
     const nome = tag(bloco, "NAME") || "";
     const memo = tag(bloco, "MEMO") || "";
     // Descrição: junta NAME e MEMO quando trazem informação diferente.
@@ -211,6 +222,8 @@ export function lerOfx(texto: string): NonNullable<ArquivoLido["ofx"]> {
       agencia: tag(acct, "BRANCHID"),
       conta: tag(acct, "ACCTID"),
       tipoConta: tag(acct, "ACCTTYPE"),
+      ...(ehCartao ? { ehCartao: true } : {}),
+      ...(tag(texto, "ORG") ? { org: tag(texto, "ORG") } : {}),
     },
     movimentos,
     saldoFinal: bal ? valorDeCelula(tag(bal, "BALAMT")) : null,

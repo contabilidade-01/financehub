@@ -286,7 +286,10 @@ export async function atualizarContaPf(userId: number, contaId: number, b: any):
   const r = await db.execute(sql`
     UPDATE contas_bancarias
     SET nome = ${nome}, banco = ${banco}, tipo = ${tipo}, cor = ${cor},
-        ativo = ${ativo}, saldo_inicial = ${saldoIni}
+        ativo = ${ativo}, saldo_inicial = ${saldoIni},
+        agencia = ${b.agencia !== undefined ? (b.agencia || null) : a.agencia},
+        numero = ${b.numero !== undefined ? (b.numero || null) : a.numero},
+        cadastro_pendente = ${b.saldo_inicial != null ? false : !!a.cadastro_pendente}
     WHERE id = ${contaId} AND usuario_id = ${userId}
     RETURNING *
   `);

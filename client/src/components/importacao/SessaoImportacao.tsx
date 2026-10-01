@@ -23,7 +23,7 @@ import { ContaPlanoCombobox, type GrupoPlano } from "@/components/shared/ContaPl
 const GruposPlanoCtx = createContext<GrupoPlano[]>([]);
 import {
   api, brl, dataBr, BANCOS, ROTULO_ORIGEM,
-  type Detalhe, type Linha, type Mapeamento, type StatusLinha,
+  type CartaoCredito, type Detalhe, type Linha, type Mapeamento, type StatusLinha,
 } from "./api";
 
 type Filtro = "todas" | "sem_categoria" | "conciliar" | "duplicada" | "ignorar";
@@ -195,9 +195,11 @@ export function SessaoImportacao({ id, onVoltar }: { id: number; onVoltar: () =>
   }
 
   const { sessao, categorias, contas_bancarias } = data;
+  const cartoes = data.cartoes ?? [];
+  const ehCartao = sessao.destino === "cartao";
   const concluida = sessao.status !== "rascunho";
   const precisaMapa = !!sessao.cabecalho && data.linhas.length === 0;
-  const semConta = !sessao.conta_bancaria_id;
+  const semConta = ehCartao ? !sessao.cartao_id : !sessao.conta_bancaria_id;
 
   return (
     <GruposPlanoCtx.Provider value={data.grupos ?? []}>
@@ -227,21 +229,33 @@ export function SessaoImportacao({ id, onVoltar }: { id: number; onVoltar: () =>
         <Card className="border-emerald-600/30">
           <CardContent className="flex items-center gap-3 p-4 text-sm">
             <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-            <span>
-              Importação concluída: {sessao.resultado.criados} criado(s), {sessao.resultado.conciliados} conciliado(s),{" "}
-              {sessao.resultado.duplicados} duplicado(s) e {sessao.resultado.ignorados} ignorado(s).
-            </span>
+            <div className="space-y-1">
+              <p>
+                Importação concluída: {sessao.resultado.criados} criado(s), {sessao.resultado.conciliados} conciliado(s),{" "}
+                {sessao.resultado.duplicados} duplicado(s) e {sessao.resultado.ignorados} ignorado(s).
+              </p>
+              {sessao.resultado.criado_automaticamente && sessao.resultado.cadastro_pendente && (
+                <p className="text-amber-700 dark:text-amber-400">
+                  {sessao.resultado.destino === "cartao"
+                    ? `O cartão “${sessao.resultado.cartao_nome}” foi criado automaticamente com fechamento e vencimento provisórios. Complete em Cartões de Crédito para as faturas ficarem certas.`
+                    : `A conta “${sessao.resultado.conta_nome}” foi criada automaticamente. Informe o saldo inicial em Contas.`}
+                </p>
+              )}
+            </div>
           </CardContent>
         </Card>
       )}
 
-      {!concluida && (
+      {!concluida && !ehCartao && (
         <PassoConta
           id={id}
           sessao={sessao}
           contas={contas_bancarias}
           onDefinida={() => refetch()}
         />
+      )}
+      {!concluida && ehCartao && (
+        <PassoCartao id={id} sessao={sessao} cartoes={cartoes} temLinhas={data.linhas.length > 0} onDefinida={() => refetch()} />
       )}
 
       {!concluida && sessao.cabecalho && (
@@ -296,7 +310,7 @@ export function SessaoImportacao({ id, onVoltar }: { id: number; onVoltar: () =>
             <TabelaLinhas
               linhas={visiveis}
               categorias={categorias}
-              outrasContas={contas_bancarias.filter((c) => c.id !== sessao.conta_bancaria_id)}
+              outrasContas={ehCartao ? [] : contas_bancarias.filter((c) => c.id !== sessao.conta_bancaria_id)}
               escopo={sessao.escopo}
               selecionadas={selecionadas}
               setSelecionadas={setSelecionadas}
@@ -320,7 +334,7 @@ export function SessaoImportacao({ id, onVoltar }: { id: number; onVoltar: () =>
               Concluir importação
             </Button>
           </div>
-          {semConta && <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">Escolha ou crie a conta bancária para concluir.</p>}
+          {semConta && <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">{ehCartao ? "Escolha ou crie o cartão para concluir." : "Escolha ou crie a conta bancária para concluir."}</p>}
         </div>
       )}
 
@@ -331,7 +345,7 @@ export function SessaoImportacao({ id, onVoltar }: { id: number; onVoltar: () =>
             <AlertDialogTitle>Concluir importação?</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-1 text-sm">
-                <p>{linhasLocais.filter((l) => l.status === "pendente").length} lançamento(s) serão criados e {contagem.conciliar} conciliado(s) com lançamentos existentes, todos na conta bancária escolhida.</p>
+                <p>{linhasLocais.filter((l) => l.status === "pendente").length} lançamento(s) serão criados e {contagem.conciliar} conciliado(s) com lançamentos existentes, {ehCartao ? "todos na fatura do cartão escolhido (sem movimentar o caixa até você pagar a fatura)." : "todos na conta bancária escolhida."}</p>
                 {linhasLocais.some((l) => l.status === "transferencia" || (l.status === "conciliar" && l.transferencia_id)) && (
                   <p>
                     {linhasLocais.filter((l) => l.status === "transferencia" || (l.status === "conciliar" && l.transferencia_id)).length} transferência(s)
@@ -551,6 +565,136 @@ function TrocarConta({ id, contas, atual, onDefinida }: { id: number; contas: De
         {contas.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.nome || c.banco}</SelectItem>)}
       </SelectContent>
     </Select>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Cartão de crédito (fatura)
+// ---------------------------------------------------------------------------
+
+function PassoCartao({ id, sessao, cartoes, temLinhas, onDefinida }: { id: number; sessao: Detalhe["sessao"]; cartoes: CartaoCredito[]; temLinhas: boolean; onDefinida: () => void }) {
+  const { toast } = useToast();
+  const arq = sessao.conta_arquivo;
+  const bancoSugerido = (arq?.bancoId && BANCOS[arq.bancoId]) || arq?.org || "";
+  const [modo, setModo] = useState<"existente" | "nova">(cartoes.length ? "existente" : "nova");
+  const [cartaoId, setCartaoId] = useState<string>(sessao.cartao_id ? String(sessao.cartao_id) : "");
+  const [nova, setNova] = useState({ nome: bancoSugerido ? `CC ${bancoSugerido}` : "", dia_fechamento: "", dia_vencimento: "", limite: "" });
+  const [salvando, setSalvando] = useState(false);
+  const [invertendo, setInvertendo] = useState(false);
+  const atual = cartoes.find((c) => c.id === sessao.cartao_id);
+
+  const definir = async (body: unknown) => {
+    setSalvando(true);
+    try {
+      await api(`/api/importacoes/${id}/cartao`, { method: "PUT", body });
+      toast({ title: "Cartão definido", description: "Verificamos duplicidades e compras para conciliar." });
+      onDefinida();
+    } catch (e: any) {
+      toast({ title: "Não foi possível definir o cartão", description: e?.message, variant: "destructive" });
+    } finally {
+      setSalvando(false);
+    }
+  };
+  const inverter = async () => {
+    setInvertendo(true);
+    try {
+      await api(`/api/importacoes/${id}/inverter-sinal`, { method: "POST", body: {} });
+      onDefinida();
+    } catch (e: any) {
+      toast({ title: "Não foi possível inverter", description: e?.message, variant: "destructive" });
+    } finally {
+      setInvertendo(false);
+    }
+  };
+
+  const avisoSinal = temLinhas && (
+    <p className="text-xs text-muted-foreground">
+      Compras entram na fatura; pagamentos e estornos vêm como “Ignorado”. Se as compras apareceram como entradas,{" "}
+      <Button variant="link" className="h-auto p-0 text-xs" onClick={inverter} disabled={invertendo}>inverter os sinais</Button>.
+    </p>
+  );
+
+  if (atual) {
+    return (
+      <Card>
+        <CardContent className="space-y-2 p-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm">
+              <span className="text-muted-foreground">Cartão: </span>
+              <span className="font-medium">{atual.nome}</span>
+              <span className="text-muted-foreground"> · fecha dia {atual.dia_fechamento} · vence dia {atual.dia_vencimento}</span>
+              {atual.cadastro_pendente && <Badge variant="outline" className="ml-2 border-amber-500/60 font-normal text-amber-700 dark:text-amber-400">dias provisórios</Badge>}
+            </div>
+            {cartoes.length > 1 && (
+              <Select value={String(atual.id)} onValueChange={(v) => definir({ cartao_id: Number(v) })}>
+                <SelectTrigger className="h-8 sm:w-56"><SelectValue /></SelectTrigger>
+                <SelectContent>{cartoes.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.nome}</SelectItem>)}</SelectContent>
+              </Select>
+            )}
+          </div>
+          {sessao.destino_auto_criado && (
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              Cartão criado automaticamente a partir do arquivo. Depois de importar, informe o fechamento e o vencimento reais em Cartões de Crédito.
+            </p>
+          )}
+          {avisoSinal}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const novoValido = nova.nome.trim().length >= 2;
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">Cartão da fatura</CardTitle>
+        <CardDescription>
+          As compras entram na fatura deste cartão. Fechamento e vencimento são opcionais agora: se deixar em branco o cartão é criado
+          com dias provisórios e você completa depois.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {cartoes.length > 0 && (
+          <Tabs value={modo} onValueChange={(v) => setModo(v as any)}>
+            <TabsList>
+              <TabsTrigger value="existente">Cartão existente</TabsTrigger>
+              <TabsTrigger value="nova">Novo cartão</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        )}
+        {modo === "existente" ? (
+          <Select value={cartaoId} onValueChange={setCartaoId}>
+            <SelectTrigger className="sm:w-96"><SelectValue placeholder="Escolha o cartão" /></SelectTrigger>
+            <SelectContent>{cartoes.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.nome}{c.ultimos_digitos ? ` · final ${c.ultimos_digitos}` : ""}</SelectItem>)}</SelectContent>
+          </Select>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="space-y-1.5 lg:col-span-2">
+              <Label htmlFor="cc-nome">Nome do cartão</Label>
+              <Input id="cc-nome" value={nova.nome} onChange={(e) => setNova({ ...nova, nome: e.target.value })} placeholder="ex.: CC Nubank" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="cc-fech">Dia de fechamento</Label>
+              <Input id="cc-fech" value={nova.dia_fechamento} onChange={(e) => setNova({ ...nova, dia_fechamento: e.target.value })} inputMode="numeric" placeholder="opcional" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="cc-venc">Dia de vencimento</Label>
+              <Input id="cc-venc" value={nova.dia_vencimento} onChange={(e) => setNova({ ...nova, dia_vencimento: e.target.value })} inputMode="numeric" placeholder="opcional" />
+            </div>
+          </div>
+        )}
+        <Button
+          disabled={salvando || (modo === "existente" ? !cartaoId : !novoValido)}
+          onClick={() => definir(modo === "existente"
+            ? { cartao_id: Number(cartaoId) }
+            : { nova: { nome: nova.nome, dia_fechamento: Number(nova.dia_fechamento) || undefined, dia_vencimento: Number(nova.dia_vencimento) || undefined } })}
+        >
+          {salvando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          {modo === "existente" ? "Usar este cartão" : "Criar cartão e continuar"}
+        </Button>
+        {avisoSinal}
+      </CardContent>
+    </Card>
   );
 }
 

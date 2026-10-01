@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { storage, softDeleteTransacao, restaurarUltimaExcluida, listarLixeira } from "../storage";
+import { storage, softDeleteTransacao, softDeleteTransacoesLote, restaurarUltimaExcluida, listarLixeira } from "../storage";
 import { insertTransactionSchema, updateTransactionSchema, type TransactionWithDetails } from "../../shared/schema";
 import { z } from "zod";
 import { db } from "../db";
@@ -648,6 +648,24 @@ export async function deleteTransaction(req: Request, res: Response) {
   } catch (error) {
     console.error("Error in deleteTransaction:", error);
     res.status(500).json({ message: "Erro ao excluir transação" });
+  }
+}
+
+/** POST /api/transactions/excluir-lote — { ids: number[] } → lixeira (um "Desfazer" restaura o lote) */
+export async function excluirLotePf(req: Request, res: Response) {
+  try {
+    if (!req.user) return res.status(401).json({ error: "Não autenticado" });
+    const wallet = await storage.getWalletByUserId(req.user.id);
+    if (!wallet) return res.status(404).json({ message: "Carteira não encontrada" });
+    const { idsLimpos } = await import("../services/mover-meio.service");
+    const ids = idsLimpos(req.body?.ids ?? req.body?.transacao_ids);
+    if (!ids.length) return res.status(400).json({ message: "Selecione ao menos uma transação." });
+    if (ids.length > 1000) return res.status(400).json({ message: "Máximo de 1.000 transações por vez." });
+    const excluidas = await softDeleteTransacoesLote(wallet.id, req.user.id, ids);
+    res.json({ excluidas, solicitadas: ids.length, recuperavel: true, dias: 30 });
+  } catch (error) {
+    console.error("Error in excluirLotePf:", error);
+    res.status(500).json({ message: "Erro ao excluir transações" });
   }
 }
 

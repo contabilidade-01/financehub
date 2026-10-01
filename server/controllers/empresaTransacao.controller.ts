@@ -1,7 +1,7 @@
 import { condicaoCaixaPj } from "../services/erp/caixa-sql";
 import { Request, Response } from "express";
 import { storage } from "../storage";
-import { softDeleteEmpresaTransacao } from "../storage";
+import { softDeleteEmpresaTransacao, softDeleteEmpresaTransacoesLote } from "../storage";
 import { insertEmpresaTransacaoSchema } from "../../shared/schema";
 import { atualizarTransacaoEmpresa, baixarTransacaoEmpresa, reabrirTransacaoEmpresa } from "../services/empresa-transacao.service";
 import { aplicarMeioPagamentoPj } from "../services/meio-pagamento-pj";
@@ -274,6 +274,26 @@ export const deleteEmpresaTransacao = async (req: Request, res: Response) => {
     });
   } catch (err) {
     console.error("deleteEmpresaTransacao:", err);
+    return res.status(500).json({ error: "Erro interno." });
+  }
+};
+
+// POST /api/empresas/:id/transacoes/excluir-lote  { ids: number[] }
+export const excluirLoteEmpresaTransacao = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const empresaId = parseInt(req.params.id);
+    if (isNaN(empresaId)) return res.status(400).json({ error: "ID inválido." });
+    const empresa = await resolveEmpresa(empresaId, userId, res);
+    if (!empresa) return;
+    const bruto = req.body?.ids ?? req.body?.transacao_ids;
+    const ids = (Array.isArray(bruto) ? bruto : []).map(Number).filter((n) => Number.isInteger(n) && n > 0);
+    if (!ids.length) return res.status(400).json({ error: "Selecione ao menos uma transação." });
+    if (ids.length > 1000) return res.status(400).json({ error: "Máximo de 1.000 transações por vez." });
+    const excluidas = await softDeleteEmpresaTransacoesLote(empresaId, userId, ids);
+    return res.json({ excluidas, solicitadas: ids.length, recuperavel: true, dias: 30 });
+  } catch (err) {
+    console.error("excluirLoteEmpresaTransacao:", err);
     return res.status(500).json({ error: "Erro interno." });
   }
 };

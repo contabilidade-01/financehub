@@ -80,6 +80,26 @@ export async function excluirConta(req: Request, res: Response) {
 
 // ── Cartões (formas_pagamento com limite) ─────────────────────────
 
+/** GET /api/cadastros-pendentes — contas e cartões criados pela importação que o cliente ainda não completou. */
+export async function cadastrosPendentes(req: Request, res: Response) {
+  try {
+    const userId = req.user!.id;
+    const cartoes = await db.execute(sql`
+      SELECT id, nome, dia_fechamento, dia_vencimento, limite, ultimos_digitos FROM formas_pagamento
+      WHERE usuario_id = ${userId} AND COALESCE(global, false) = false AND ativo = true AND cadastro_pendente = true
+      ORDER BY nome
+    `);
+    const contasPend = await db.execute(sql`
+      SELECT id, nome, banco, numero, saldo_inicial FROM contas_bancarias
+      WHERE usuario_id = ${userId} AND empresa_id IS NULL AND ativo = true AND cadastro_pendente = true
+      ORDER BY nome
+    `);
+    return res.json({ cartoes, contas: contasPend, total: (cartoes as any[]).length + (contasPend as any[]).length });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || "Erro ao listar cadastros pendentes" });
+  }
+}
+
 export async function listarCartoes(req: Request, res: Response) {
   try {
     const de = (req.query.de as string) || undefined;
@@ -167,10 +187,17 @@ export async function atualizarCartao(req: Request, res: Response) {
           limite = ${limite},
           bandeira = ${b.banco !== undefined || b.bandeira !== undefined ? (b.banco || b.bandeira) : cartao.bandeira},
           cor = ${b.cor !== undefined ? b.cor : cartao.cor},
-          ativo = ${b.ativo != null ? !!b.ativo : cartao.ativo}
+          ativo = ${b.ativo != null ? !!b.ativo : cartao.ativo},
+          ultimos_digitos = ${b.ultimos_digitos !== undefined ? (String(b.ultimos_digitos || "").replace(/\D/g, "").slice(-4) || null) : cartao.ultimos_digitos},
+          cadastro_pendente = ${b.dia_fechamento != null && b.dia_vencimento != null ? false : !!cartao.cadastro_pendente}
       WHERE id = ${cartaoId} AND usuario_id = ${req.user!.id}
       RETURNING *
     `);
+    // Dias mudaram (ex.: cartão criado pela importação com dias provisórios): refaz as faturas.
+    if (Number(cartao.dia_fechamento) !== diaFech || Number(cartao.dia_vencimento) !== diaVenc) {
+      const wallet = await storage.getWalletByUserId(req.user!.id);
+      if (wallet) await faturaPf.recalcularFaturasCartaoPf(req.user!.id, wallet.id, (r as any[])[0]);
+    }
     return res.json((r as any[])[0]);
   } catch (e: any) {
     return res.status(400).json({ error: e?.message || "Erro ao atualizar cartão" });

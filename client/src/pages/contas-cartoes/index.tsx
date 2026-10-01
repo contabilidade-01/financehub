@@ -1,3 +1,4 @@
+import { CadastrosPendentesBanner } from "@/components/shared/CadastrosPendentesBanner";
 import { useMemo, useState } from "react";
 import { useConfirm } from "@/components/shared/ConfirmDialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -120,6 +121,7 @@ export default function ContasCartoesPage() {
   const invalidate = () => {
     qc.invalidateQueries({ predicate: (q) => String(q.queryKey[0] || "").startsWith("/api/contas") });
     qc.invalidateQueries({ queryKey: ["/api/vencimentos"] });
+    qc.invalidateQueries({ queryKey: ["/api/cadastros-pendentes"] });
     qc.invalidateQueries({ queryKey: ["/api/wallet/current"] });
   };
 
@@ -192,6 +194,7 @@ export default function ContasCartoesPage() {
 
   return (
     <div className="space-y-8">
+      <CadastrosPendentesBanner mostrar="contas" />
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Contas</h1>

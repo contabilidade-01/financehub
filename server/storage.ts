@@ -3920,19 +3920,50 @@ export async function softDeleteTodasTransacoes(walletId: number, userId: number
   return n;
 }
 
-// Restaura a última transação excluída da carteira (arrependimento).
-export async function restaurarUltimaExcluida(walletId: number): Promise<{ restaurada: boolean; descricao?: string }> {
+// Exclusão em lote (PF): UMA transação no banco move tudo para a lixeira com o mesmo lote_id,
+// para o "Desfazer" restaurar o lote inteiro. Só apaga o que pertence à carteira.
+export async function softDeleteTransacoesLote(walletId: number, userId: number, ids: number[]): Promise<number> {
+  const limpos = Array.from(new Set(ids.filter((n) => Number.isInteger(n) && n > 0)));
+  if (!limpos.length) return 0;
+  const lista = sql.join(limpos.map((i) => sql`${i}`), sql`, `);
+  const lote = randomUUID();
+  return await db.transaction(async (tx: any) => {
+    await tx.execute(sql`
+      INSERT INTO transacoes_lixeira (usuario_id, carteira_id, transacao_id, dados, lote_id)
+      SELECT ${userId}, carteira_id, id, to_jsonb(t), ${lote} FROM transacoes t
+      WHERE carteira_id = ${walletId} AND id IN (${lista})
+    `);
+    const del = (await tx.execute(sql`
+      DELETE FROM transacoes WHERE carteira_id = ${walletId} AND id IN (${lista}) RETURNING id
+    `)) as any[];
+    return del.length;
+  });
+}
+
+// Restaura a última exclusão da carteira (arrependimento). Se ela veio de uma exclusão em lote,
+// restaura o lote inteiro.
+export async function restaurarUltimaExcluida(walletId: number): Promise<{ restaurada: boolean; descricao?: string; quantidade?: number }> {
   const rows = await db.execute(sql`
-    SELECT id, dados FROM transacoes_lixeira WHERE carteira_id = ${walletId}
-    ORDER BY excluida_em DESC LIMIT 1
+    SELECT id, dados, lote_id FROM transacoes_lixeira WHERE carteira_id = ${walletId}
+    ORDER BY excluida_em DESC, id DESC LIMIT 1
   `);
   const item = (rows as any[])[0];
   if (!item) return { restaurada: false };
-  // Reconstrói a linha original a partir do JSON e reinsere.
-  await db.execute(sql`INSERT INTO transacoes SELECT (jsonb_populate_record(NULL::transacoes, ${item.dados}::jsonb)).*`);
-  await db.execute(sql`DELETE FROM transacoes_lixeira WHERE id = ${item.id}`);
+  const alvo = item.lote_id
+    ? sql`carteira_id = ${walletId} AND lote_id = ${item.lote_id}`
+    : sql`id = ${item.id}`;
+  const quantidade = await db.transaction(async (tx: any) => {
+    // Reconstrói as linhas originais a partir do JSON e reinsere (ignora ids que já voltaram).
+    const ins = (await tx.execute(sql`
+      INSERT INTO transacoes
+      SELECT (jsonb_populate_record(NULL::transacoes, dados)).* FROM transacoes_lixeira WHERE ${alvo}
+      ON CONFLICT DO NOTHING RETURNING id
+    `)) as any[];
+    await tx.execute(sql`DELETE FROM transacoes_lixeira WHERE ${alvo}`);
+    return ins.length;
+  });
   const desc = (item.dados && (item.dados.descricao || item.dados["descricao"])) || undefined;
-  return { restaurada: true, descricao: desc };
+  return { restaurada: true, descricao: item.lote_id ? undefined : desc, quantidade };
 }
 
 // Backup: lista os itens na lixeira do usuário (para conferência/recuperação).
@@ -4344,18 +4375,46 @@ export async function softDeleteEmpresaTransacao(transacaoId: number, empresaId:
   return true;
 }
 
-// Restaurar última transação PJ excluída da empresa.
-export async function restaurarUltimaExcluidaPJ(empresaId: number): Promise<{ restaurada: boolean; descricao?: string }> {
+// Exclusão em lote (PJ): mesmo desenho do PF (lote_id para desfazer o lote inteiro).
+export async function softDeleteEmpresaTransacoesLote(empresaId: number, userId: number, ids: number[]): Promise<number> {
+  const limpos = Array.from(new Set(ids.filter((n) => Number.isInteger(n) && n > 0)));
+  if (!limpos.length) return 0;
+  const lista = sql.join(limpos.map((i) => sql`${i}`), sql`, `);
+  const lote = randomUUID();
+  return await db.transaction(async (tx: any) => {
+    await tx.execute(sql`
+      INSERT INTO transacoes_lixeira (usuario_id, empresa_id, transacao_id, dados, lote_id)
+      SELECT ${userId}, ${empresaId}, id, to_jsonb(t), ${lote} FROM empresas_transacoes t
+      WHERE empresa_id = ${empresaId} AND id IN (${lista})
+    `);
+    const del = (await tx.execute(sql`
+      DELETE FROM empresas_transacoes WHERE empresa_id = ${empresaId} AND id IN (${lista}) RETURNING id
+    `)) as any[];
+    return del.length;
+  });
+}
+
+// Restaurar última exclusão PJ da empresa (o lote inteiro, se veio de exclusão em lote).
+export async function restaurarUltimaExcluidaPJ(empresaId: number): Promise<{ restaurada: boolean; descricao?: string; quantidade?: number }> {
   const rows = await db.execute(sql`
-    SELECT id, dados FROM transacoes_lixeira WHERE empresa_id = ${empresaId}
-    ORDER BY excluida_em DESC LIMIT 1
+    SELECT id, dados, lote_id FROM transacoes_lixeira WHERE empresa_id = ${empresaId}
+    ORDER BY excluida_em DESC, id DESC LIMIT 1
   `);
   const item = (rows as any[])[0];
   if (!item) return { restaurada: false };
-  await db.execute(sql`INSERT INTO empresas_transacoes SELECT (jsonb_populate_record(NULL::empresas_transacoes, ${item.dados}::jsonb)).*`);
-  await db.execute(sql`DELETE FROM transacoes_lixeira WHERE id = ${item.id}`);
-  const desc = item.dados?.descricao || undefined;
-  return { restaurada: true, descricao: desc };
+  const alvo = item.lote_id
+    ? sql`empresa_id = ${empresaId} AND lote_id = ${item.lote_id}`
+    : sql`id = ${item.id}`;
+  const quantidade = await db.transaction(async (tx: any) => {
+    const ins = (await tx.execute(sql`
+      INSERT INTO empresas_transacoes
+      SELECT (jsonb_populate_record(NULL::empresas_transacoes, dados)).* FROM transacoes_lixeira WHERE ${alvo}
+      ON CONFLICT DO NOTHING RETURNING id
+    `)) as any[];
+    await tx.execute(sql`DELETE FROM transacoes_lixeira WHERE ${alvo}`);
+    return ins.length;
+  });
+  return { restaurada: true, descricao: item.lote_id ? undefined : item.dados?.descricao || undefined, quantidade };
 }
 
 // Listar lixeira PJ para uma empresa.

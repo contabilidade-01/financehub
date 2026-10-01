@@ -224,6 +224,8 @@ const STEPS: Step[] = [
       // Tabelas criadas em versões antigas não tinham empresa_id (CREATE IF NOT
       // EXISTS não altera tabela existente) — garante a coluna antes do índice.
       await db.execute(sql`ALTER TABLE transacoes_lixeira ADD COLUMN IF NOT EXISTS empresa_id INTEGER`);
+      // lote_id agrupa exclusões em lote: o "Desfazer" restaura o lote inteiro.
+      await db.execute(sql`ALTER TABLE transacoes_lixeira ADD COLUMN IF NOT EXISTS lote_id TEXT`);
       await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_lixeira_carteira ON transacoes_lixeira(carteira_id, excluida_em)`);
       await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_lixeira_empresa ON transacoes_lixeira(empresa_id, excluida_em)`);
     },
@@ -1169,6 +1171,19 @@ const STEPS: Step[] = [
       await db.execute(sql`ALTER TABLE transacoes ADD COLUMN IF NOT EXISTS fitid VARCHAR(120)`);
       await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_transacoes_conta_fitid ON transacoes(conta_bancaria_id, fitid) WHERE fitid IS NOT NULL`);
       await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_emp_tx_conta_fitid ON empresas_transacoes(conta_bancaria_id, fitid) WHERE fitid IS NOT NULL`);
+    },
+  },
+  {
+    name: "importação de fatura de cartão + cadastro automático pendente (conta/cartão)",
+    run: async () => {
+      // Cadastros criados sozinhos pela importação ficam "pendentes" até o cliente completar.
+      await db.execute(sql`ALTER TABLE formas_pagamento ADD COLUMN IF NOT EXISTS cadastro_pendente BOOLEAN NOT NULL DEFAULT false`);
+      await db.execute(sql`ALTER TABLE contas_bancarias ADD COLUMN IF NOT EXISTS cadastro_pendente BOOLEAN NOT NULL DEFAULT false`);
+      await db.execute(sql`ALTER TABLE importacoes ADD COLUMN IF NOT EXISTS destino VARCHAR(6) NOT NULL DEFAULT 'conta'`);
+      await db.execute(sql`ALTER TABLE importacoes ADD COLUMN IF NOT EXISTS cartao_id INTEGER`);
+      await db.execute(sql`ALTER TABLE importacoes ADD COLUMN IF NOT EXISTS sinal_invertido BOOLEAN NOT NULL DEFAULT false`);
+      await db.execute(sql`ALTER TABLE importacoes ADD COLUMN IF NOT EXISTS destino_auto_criado BOOLEAN NOT NULL DEFAULT false`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_transacoes_cartao_fitid ON transacoes(forma_pagamento_id, fitid) WHERE fitid IS NOT NULL`);
     },
   },
   {

@@ -1,3 +1,4 @@
+import { CadastrosPendentesBanner } from "@/components/shared/CadastrosPendentesBanner";
 import { useEffect, useMemo, useState } from "react";
 import { useConfirm } from "@/components/shared/ConfirmDialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -33,6 +34,7 @@ type Cartao = {
   limite: number | string | null;
   dia_fechamento: number | null;
   dia_vencimento: number | null;
+  cadastro_pendente?: boolean;
 };
 
 type Fatura = {
@@ -324,6 +326,7 @@ export default function CartoesCreditoPage() {
       id ? apiRequest(`/api/cartoes/${id}`, { method: "PUT", data }) : apiRequest("/api/cartoes", { method: "POST", data }),
     onSuccess: () => {
       invalidate();
+      qc.invalidateQueries({ queryKey: ["/api/cadastros-pendentes"] });
       setCartaoOpen(false);
       setEditingCartao(null);
       setCartaoForm(emptyCartao);
@@ -464,6 +467,7 @@ export default function CartoesCreditoPage() {
 
   return (
     <div className="space-y-6">
+      <CadastrosPendentesBanner mostrar="cartoes" />
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
@@ -538,6 +542,11 @@ export default function CartoesCreditoPage() {
                   {c.bandeira ? `${c.bandeira} · ` : ""}fecha dia {c.dia_fechamento ?? "—"} · vence dia{" "}
                   {c.dia_vencimento ?? "—"}
                 </p>
+                {c.cadastro_pendente && !semDias && (
+                  <p className="text-xs text-amber-600 mt-1">
+                    Criado pela importação: confirme fechamento e vencimento (editar) para recalcular as faturas
+                  </p>
+                )}
                 {semDias && (
                   <p className="text-xs text-amber-600 mt-1">
                     Defina fechamento/vencimento para as faturas saírem certas

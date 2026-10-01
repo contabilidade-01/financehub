@@ -27,6 +27,7 @@ export async function criar(req: Request, res: Response) {
       empresaId: escopo === "pj" ? Number(req.body?.empresa_id) : null,
       arquivoNome: String(file.originalname || "extrato"),
       buffer: file.buffer,
+      destino: req.body?.destino === "cartao" ? "cartao" : "conta",
     });
     res.status(201).json(r);
   } catch (e) { falha(res, e); }
@@ -57,6 +58,19 @@ export async function conta(req: Request, res: Response) {
       nova: req.body?.nova,
     }));
   } catch (e) { falha(res, e); }
+}
+
+export async function cartao(req: Request, res: Response) {
+  try {
+    res.json(await svc.definirCartao(idParam(req), uid(req), {
+      cartaoId: req.body?.cartao_id ? Number(req.body.cartao_id) : undefined,
+      nova: req.body?.nova,
+    }));
+  } catch (e) { falha(res, e); }
+}
+
+export async function sinal(req: Request, res: Response) {
+  try { res.json(await svc.inverterSinal(idParam(req), uid(req))); } catch (e) { falha(res, e); }
 }
 
 export async function linhas(req: Request, res: Response) {
