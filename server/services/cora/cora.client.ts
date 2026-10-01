@@ -153,6 +153,26 @@ export async function registrarWebhook(c: CredenciaisCora, url: string, gatilho:
   return r.corpo;
 }
 
+/** Máximo que o Cora devolve por página na listagem de cobranças. */
+export const LISTAGEM_POR_PAGINA = 200;
+
+/**
+ * Lista as cobranças da conta (todas, emitidas por aqui ou direto no app do Cora).
+ * `start`/`end` filtram pela data de vencimento (AAAA-MM-DD). Devolve os itens da página.
+ */
+export async function listarCobrancasApi(c: CredenciaisCora, o: { start: string; end: string; page?: number; perPage?: number }): Promise<any[]> {
+  const q = new URLSearchParams({
+    start: o.start,
+    end: o.end,
+    page: String(o.page || 1),
+    perPage: String(Math.min(o.perPage || LISTAGEM_POR_PAGINA, LISTAGEM_POR_PAGINA)),
+  });
+  const r = await chamar(c, "GET", `/v2/invoices?${q.toString()}`);
+  if (r.status !== 200) throw erroDaApi(r, "Listagem de cobranças");
+  const corpo = r.corpo;
+  return Array.isArray(corpo?.items) ? corpo.items : Array.isArray(corpo) ? corpo : [];
+}
+
 // ----------------------------------------------------------------------------
 // Mapeamentos puros (testáveis sem rede)
 // ----------------------------------------------------------------------------
@@ -281,4 +301,100 @@ export function dadosDoPagamento(r: any): { pago_em: string | null; valor_pago: 
       : new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
   }
   return { pago_em, valor_pago: totalCentavos === null || totalCentavos === undefined ? null : Math.round(Number(totalCentavos)) / 100 };
+}
+
+// ----------------------------------------------------------------------------
+// Importação da conta Cora (boletos emitidos fora do app) — regras puras
+// ----------------------------------------------------------------------------
+
+/** Rascunho ainda não emitido: não é cobrança, não entra. */
+export function ehRascunho(statusCora: unknown): boolean {
+  const s = String(statusCora || "").toUpperCase();
+  return s === "DRAFT" || s === "RECURRENCE_DRAFT";
+}
+
+export interface ResumoCobrancaCora {
+  id: string;
+  status: StatusCobranca;
+  statusCora: string;
+  valor: number; // reais
+  vencimento: string; // AAAA-MM-DD
+  descricao: string;
+  cliente: { nome: string | null; documento: string | null; email: string | null };
+}
+
+/**
+ * Normaliza um item da listagem (ou do detalhe) do Cora. A API já variou o nome
+ * dos campos; aceita as formas conhecidas. Sem id ou vencimento → null (não dá
+ * para importar o que não se identifica nem se vence).
+ */
+export function resumoDaListagem(item: any): ResumoCobrancaCora | null {
+  const id = String(item?.id ?? "").trim();
+  const venc = String(item?.due_date ?? item?.payment_terms?.due_date ?? "").slice(0, 10);
+  if (!id || !/^\d{4}-\d{2}-\d{2}$/.test(venc)) return null;
+
+  const centavos = item?.total_amount ?? item?.amount ?? item?.total ?? null;
+  const valor = centavos === null || centavos === undefined ? NaN : Math.round(Number(centavos)) / 100;
+  if (!(valor > 0)) return null;
+
+  const docBruto = item?.customer_document ?? item?.customer?.document?.identity ?? item?.customer?.document ?? item?.customer?.identity ?? "";
+  const documento = String(typeof docBruto === "object" ? docBruto?.identity || "" : docBruto).replace(/\D/g, "") || null;
+  const nome = String(item?.customer_name ?? item?.customer?.name ?? "").trim() || null;
+  const email = String(item?.customer_email ?? item?.customer?.email ?? "").trim() || null;
+
+  const servico = Array.isArray(item?.services) ? item.services.find((x: any) => x?.name) : null;
+  const descricao = String(servico?.name || item?.code || "").trim() || `Cobrança Cora ${venc.split("-").reverse().join("/")}`;
+
+  return {
+    id,
+    status: mapearStatus(item?.status),
+    statusCora: String(item?.status || "").toUpperCase(),
+    valor,
+    vencimento: venc,
+    descricao: descricao.slice(0, 255),
+    cliente: { nome, documento, email },
+  };
+}
+
+/**
+ * Janela da importação: do 1º dia de N meses atrás até 60 dias à frente (boleto
+ * com vencimento mais longo entra quando cair na janela). Datas em AAAA-MM-DD.
+ */
+export function janelaImportacao(hoje: string, meses: number): { start: string; end: string } {
+  const [a, m, d] = hoje.split("-").map(Number);
+  const n = Math.max(1, Math.min(24, Math.trunc(meses) || 6));
+  const ini = new Date(Date.UTC(a, m - 1 - (n - 1), 1));
+  const fim = new Date(Date.UTC(a, m - 1, d + 60));
+  const iso = (x: Date) => x.toISOString().slice(0, 10);
+  return { start: iso(ini), end: iso(fim) };
+}
+
+export type AcaoImportacao = "criar" | "sincronizar" | "ignorar";
+export type AcaoCancelamento = "cancelar_apagar" | "cancelar_manter";
+
+/**
+ * O que fazer com uma cobrança da listagem diante do que já existe localmente.
+ * - não existe e está cancelada → ignorar (nunca entrou, não entra);
+ * - não existe → criar;
+ * - existe e o Cora diz outra coisa → sincronizar (o detalhe é a fonte de verdade);
+ * - existe como paga mas o título ainda está em aberto → sincronizar (baixa que falhou);
+ * - caso contrário → ignorar.
+ */
+export function decidirAcao(x: { existe: boolean; statusLocal?: string | null; statusCora: unknown; tituloStatus?: string | null }): AcaoImportacao {
+  const cora = mapearStatus(x.statusCora);
+  if (!x.existe) return cora === "cancelada" ? "ignorar" : "criar";
+  if (cora !== x.statusLocal) return "sincronizar";
+  if (cora === "paga" && x.tituloStatus === "Pendente") return "sincronizar";
+  return "ignorar";
+}
+
+/**
+ * Cobrança cancelada no Cora: o título importado some (era o próprio boleto);
+ * título lançado pelo usuário fica em aberto (pode receber por outro meio).
+ * Nunca apaga o que já foi baixado ou conciliado com o extrato.
+ */
+export function decidirCancelamento(t: { origem?: string | null; status?: string | null; conciliado?: boolean | null; temMovimentoExtrato?: boolean } | null | undefined): AcaoCancelamento {
+  if (!t) return "cancelar_manter";
+  if (t.origem === "cora" && t.status === "Pendente" && !t.conciliado && !t.temMovimentoExtrato) return "cancelar_apagar";
+  return "cancelar_manter";
 }

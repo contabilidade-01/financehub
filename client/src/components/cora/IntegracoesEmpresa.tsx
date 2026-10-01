@@ -33,8 +33,9 @@ export function IntegracoesEmpresa() {
         <CardHeader>
           <CardTitle className="text-base">Cora — boleto e Pix com baixa automática</CardTitle>
           <CardDescription>
-            Opcional. Conectando a conta Cora da {empresa.nome_fantasia || empresa.razao_social}, você emite cobranças pelo sistema e,
-            quando o cliente paga, a conta a receber é baixada sozinha. As cobranças ficam em Gestão → Recebimentos Cora.
+            Opcional. Conectando a conta Cora da {empresa.nome_fantasia || empresa.razao_social}, você escolhe como tratar as contas a receber:
+            lançar à mão (e, se quiser, emitir o boleto por aqui) ou importar da API Cora — aí os boletos emitidos na conta entram sozinhos,
+            pago vira recebido em Transações e em aberto fica em Contas a receber. As cobranças ficam em Gestão → Recebimentos Cora.
           </CardDescription>
         </CardHeader>
       </Card>

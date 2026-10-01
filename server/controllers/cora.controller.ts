@@ -31,6 +31,18 @@ export async function removerConexao(req: Request, res: Response) {
 export async function testarConexao(req: Request, res: Response) {
   try { const e = await empresa(req); res.json(await cora.testarConexao(e.id)); } catch (err) { falha(res, err); }
 }
+/** PUT { modo: 'manual' | 'cora' } — como a empresa trata as contas a receber. */
+export async function definirModo(req: Request, res: Response) {
+  try { const e = await empresa(req); res.json(await cora.definirModo(e.id, (req.body || {}).modo)); } catch (err) { falha(res, err); }
+}
+/** Importa agora os boletos da conta Cora (modo 'cora'). */
+export async function importar(req: Request, res: Response) {
+  try {
+    const e = await empresa(req);
+    const { importarCobrancas } = await import("../services/cora/cora.importacao");
+    res.json(await importarCobrancas(e.id));
+  } catch (err) { falha(res, err); }
+}
 export async function ativarWebhook(req: Request, res: Response) {
   try {
     const e = await empresa(req);

@@ -1455,6 +1455,15 @@ const STEPS: Step[] = [
       await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_onboarding_whatsapp_seq_usuario ON onboarding_whatsapp_sequence(usuario_id)`);
     },
   },
+  {
+    name: "Cora: modo de contas a receber (manual | importar da API) e resumo da última importação",
+    run: async () => {
+      // 'manual' = a empresa lança e dá baixa (pode emitir boleto pelo app);
+      // 'cora'   = os boletos emitidos na conta Cora entram sozinhos (pago → recebido, aberto → a receber).
+      await db.execute(sql`ALTER TABLE empresas_integracoes ADD COLUMN IF NOT EXISTS modo_recebimento VARCHAR(10) NOT NULL DEFAULT 'manual'`);
+      await db.execute(sql`ALTER TABLE empresas_integracoes ADD COLUMN IF NOT EXISTS ultima_importacao JSONB`);
+    },
+  },
 ];
 
 export async function runAutoMigrations(): Promise<void> {

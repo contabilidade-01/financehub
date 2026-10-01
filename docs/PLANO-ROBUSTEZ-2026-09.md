@@ -234,6 +234,21 @@ Todas as fases foram entregues no branch `claude/system-vulnerabilities-analysis
   - quando o cliente paga, o Cora avisa, o sistema confirma na API do Cora e dá a baixa sozinho;
   - a cada 30 minutos um job confere as cobranças, como rede de segurança;
   - dá para cancelar, enviar por e-mail, copiar o Pix e a linha digitável.
+  - **Contas a receber: manual ou importar da API Cora** (card em Configurações → Integrações e em
+    Recebimentos Cora → Conexão; coluna `empresas_integracoes.modo_recebimento`). No modo
+    `cora`, os boletos emitidos na conta (inclusive direto no app do Cora) são listados
+    (`GET /v2/invoices?start&end`, janela de `CORA_IMPORT_MESES` meses para trás e 60 dias à
+    frente) e viram conta a receber (`origem='cora'`, cliente cadastrado pelo CPF/CNPJ do boleto,
+    receita na conta "Recebimentos via Cora"); o detalhe de cada um decide: pago → baixa em
+    Transações na data e no valor pagos; em aberto → fica em Contas a receber; cancelado → o
+    título importado some (o lançado pelo usuário fica). Título igual lançado à mão (mesmo
+    valor, vencimento e cliente) é vinculado em vez de duplicado; baixa manual nunca é refeita.
+    Roda no job de 30 min, no aviso do Cora (boleto desconhecido entra na hora) e no botão
+    "Importar agora". Código: `server/services/cora/cora.importacao.ts`.
+  - **Por que um usuário não vê a aba Integrações:** a flag `integracao_cora` nasce desligada
+    (super admin liga por usuário ou "para todos" em `/admin/feature-flags`; o app lê a flag a
+    cada 60 s, recarregar a página depois de ligar) e o ERP é só da modalidade PJ ME — PJ sem
+    porte definido é tratado como MEI e vê o aviso "Disponível na modalidade PJ ME".
 
 ### Para ativar
 1. Defina `INTEGRACOES_SECRET` no EasyPanel (`openssl rand -base64 48`).

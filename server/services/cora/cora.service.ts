@@ -13,7 +13,7 @@ import { cifrar, decifrar, hashToken } from "../../utils/cripto-segredos";
 import { ErroErp } from "../erp/erp.service";
 import { baixarTitulos, criarTitulo } from "../erp/titulos.service";
 import {
-  cancelarCobranca, consultarCobranca, dadosDePagamento, dadosDoPagamento, emitirCobranca, esquecerToken,
+  cancelarCobranca, consultarCobranca, dadosDePagamento, dadosDoPagamento, decidirCancelamento, emitirCobranca, esquecerToken,
   mapearStatus, montarPayloadCobranca, obterToken, pendenciasDoCliente, registrarWebhook,
   type AmbienteCora, type CredenciaisCora, ErroCora,
 } from "./cora.client";
@@ -29,17 +29,43 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
 export async function obterConexao(empresaId: number) {
   const i = ((await db.execute(sql`
     SELECT id, ambiente, client_id, conta_bancaria_id, status, ultimo_erro, webhook_registrado, multa_pct, juros_mes_pct,
-           ultimo_sync_em, atualizado_em, (certificado_enc IS NOT NULL) AS tem_certificado, (chave_enc IS NOT NULL) AS tem_chave
+           ultimo_sync_em, atualizado_em, modo_recebimento, ultima_importacao,
+           (certificado_enc IS NOT NULL) AS tem_certificado, (chave_enc IS NOT NULL) AS tem_chave
     FROM empresas_integracoes WHERE empresa_id = ${empresaId} AND provedor = ${PROVEDOR}
   `)) as any[])[0];
-  return i ? { ...i, multa_pct: Number(i.multa_pct ?? 2), juros_mes_pct: Number(i.juros_mes_pct ?? 1) } : null;
+  return i
+    ? { ...i, multa_pct: Number(i.multa_pct ?? 2), juros_mes_pct: Number(i.juros_mes_pct ?? 1), modo_recebimento: modoValido(i.modo_recebimento) }
+    : null;
+}
+
+export type ModoRecebimento = "manual" | "cora";
+const modoValido = (m: unknown): ModoRecebimento => (m === "cora" ? "cora" : "manual");
+
+/**
+ * Como a empresa trata as contas a receber:
+ * - manual: ela lança e dá baixa (e, se quiser, emite boleto pelo app);
+ * - cora: os boletos emitidos na conta Cora entram sozinhos (pago → recebido em
+ *   Transações; em aberto → Contas a receber; cancelado → some).
+ * Só faz sentido com a conexão testada: a importação precisa falar com o Cora.
+ */
+export async function definirModo(empresaId: number, modoBruto: unknown) {
+  if (modoBruto !== "manual" && modoBruto !== "cora") throw new ErroErp("Modo inválido: use 'manual' ou 'cora'.");
+  const modo = modoBruto as ModoRecebimento;
+  const integ = ((await db.execute(sql`SELECT status FROM empresas_integracoes WHERE empresa_id = ${empresaId} AND provedor = ${PROVEDOR}`)) as any[])[0];
+  if (!integ) throw new ErroErp("Conecte a conta Cora antes de escolher o modo.", 409);
+  if (modo === "cora" && integ.status !== "conectada") throw new ErroErp("Teste a conexão com o Cora antes de importar as contas a receber.", 409);
+  await db.execute(sql`
+    UPDATE empresas_integracoes SET modo_recebimento = ${modo}, atualizado_em = now()
+    WHERE empresa_id = ${empresaId} AND provedor = ${PROVEDOR}
+  `);
+  return obterConexao(empresaId);
 }
 
 const PEM_CERT = /-----BEGIN CERTIFICATE-----[\s\S]+-----END CERTIFICATE-----/;
 const PEM_CHAVE = /-----BEGIN (?:RSA |EC )?PRIVATE KEY-----[\s\S]+-----END (?:RSA |EC )?PRIVATE KEY-----/;
 
 /** Conta bancária "Cora" da empresa (cria se não existir): é onde os recebimentos caem. */
-async function contaCora(empresaId: number, informada?: unknown): Promise<number> {
+export async function contaCora(empresaId: number, informada?: unknown): Promise<number> {
   if (informada) {
     const r = ((await db.execute(sql`SELECT id FROM contas_bancarias WHERE id = ${Number(informada)} AND empresa_id = ${empresaId}`)) as any[])[0];
     if (!r) throw new ErroErp("Conta bancária inválida.");
@@ -98,9 +124,15 @@ export async function removerConexao(empresaId: number) {
   return { removida: true };
 }
 
-async function credenciais(empresaId: number): Promise<{ cred: CredenciaisCora; integ: any }> {
+export async function credenciais(empresaId: number): Promise<{ cred: CredenciaisCora; integ: any }> {
   const integ = ((await db.execute(sql`SELECT * FROM empresas_integracoes WHERE empresa_id = ${empresaId} AND provedor = ${PROVEDOR}`)) as any[])[0];
   if (!integ?.certificado_enc || !integ?.chave_enc || !integ?.client_id) throw new ErroErp("Conecte a conta Cora em Recebimentos Cora → Conexão.", 409);
+  // A conta bancária da integração some se o usuário apagar a conta (FK ON DELETE SET NULL);
+  // sem ela a baixa automática falha com "Escolha a conta bancária". Repara na hora.
+  if (!integ.conta_bancaria_id) {
+    integ.conta_bancaria_id = await contaCora(empresaId);
+    await db.execute(sql`UPDATE empresas_integracoes SET conta_bancaria_id = ${integ.conta_bancaria_id} WHERE id = ${integ.id}`);
+  }
   return {
     integ,
     cred: { ambiente: integ.ambiente === "producao" ? "producao" : "stage", clientId: integ.client_id, certificado: decifrar(integ.certificado_enc), chave: decifrar(integ.chave_enc) },
@@ -295,8 +327,25 @@ export async function sincronizarCobranca(empresaId: number, cobrancaId: number)
       url_pdf = COALESCE(${dados.url_pdf}, url_pdf), atualizado_em = now()
     WHERE id = ${cobrancaId}
   `);
+  // Cancelada no Cora: o título que veio da importação ERA o boleto — some de Contas a
+  // receber (o nescon faz o mesmo). Título lançado pelo usuário continua em aberto.
+  const apagouTitulo = status === "cancelada" && cb.transacao_id ? await apagarTituloImportado(empresaId, Number(cb.transacao_id)) : false;
   if (baixou) await avisarPagamento(empresaId, cb, pg.valor_pago ?? Number(cb.valor));
-  return { status, mudou: status !== cb.status, baixou };
+  return { status, mudou: status !== cb.status, baixou, apagouTitulo };
+}
+
+/** Apaga o título importado do Cora se ainda estiver em aberto e sem vínculo com o extrato. */
+async function apagarTituloImportado(empresaId: number, tituloId: number): Promise<boolean> {
+  const t = ((await db.execute(sql`
+    SELECT t.origem, t.status, COALESCE(t.conciliado, false) AS conciliado,
+           EXISTS (SELECT 1 FROM extrato_movimentos m WHERE m.transacao_id = t.id) AS tem_movimento
+    FROM empresas_transacoes t WHERE t.id = ${tituloId} AND t.empresa_id = ${empresaId}
+  `)) as any[])[0];
+  const decisao = decidirCancelamento(t ? { ...t, conciliado: t.conciliado === true || t.conciliado === "t", temMovimentoExtrato: t.tem_movimento === true || t.tem_movimento === "t" } : null);
+  if (decisao !== "cancelar_apagar") return false;
+  // Apaga direto (não vai para a lixeira: o "desfazer" do usuário restauraria um boleto que o Cora cancelou).
+  await db.execute(sql`DELETE FROM empresas_transacoes WHERE id = ${tituloId} AND empresa_id = ${empresaId} AND origem = 'cora' AND status = 'Pendente'`);
+  return true;
 }
 
 export async function cancelar(empresaId: number, cobrancaId: number) {
@@ -379,8 +428,13 @@ export async function processarWebhook(token: string, headers: Record<string, an
   const cb = ((await db.execute(sql`
     SELECT id FROM cobrancas WHERE empresa_id = ${empresaId} AND provedor = ${PROVEDOR} AND provedor_id = ${recursoId}
   `)) as any[])[0];
-  if (!cb) return { status: 200 as const, ignorado: "cobrança desconhecida" };
   try {
+    if (!cb) {
+      // Boleto emitido direto no app do Cora: entra na hora se a empresa importa as contas a receber.
+      const { importarUma } = await import("./cora.importacao");
+      const r = await importarUma(empresaId, recursoId);
+      return r ? { status: 200 as const, resultado: r } : { status: 200 as const, ignorado: "cobrança desconhecida" };
+    }
     return { status: 200 as const, resultado: await sincronizarCobranca(empresaId, Number(cb.id)) };
   } catch (e) {
     // Libera o evento para o Cora reenviar (e o job ainda cobre).
@@ -389,12 +443,27 @@ export async function processarWebhook(token: string, headers: Record<string, an
   }
 }
 
-/** Rede de segurança do webhook: revisa cobranças em aberto dos últimos 120 dias. */
-export async function sincronizarTudo(): Promise<{ empresas: number; revisadas: number; baixadas: number; falhas: number }> {
-  const integs = (await db.execute(sql`SELECT empresa_id FROM empresas_integracoes WHERE provedor = ${PROVEDOR} AND status = 'conectada'`)) as any[];
-  let revisadas = 0, baixadas = 0, falhas = 0;
+/**
+ * Rede de segurança do webhook: importa os boletos da conta Cora (empresas no modo
+ * 'cora') e revisa as cobranças em aberto dos últimos 120 dias.
+ */
+export async function sincronizarTudo(): Promise<{ empresas: number; importadas: number; revisadas: number; baixadas: number; falhas: number }> {
+  const integs = (await db.execute(sql`SELECT empresa_id, modo_recebimento FROM empresas_integracoes WHERE provedor = ${PROVEDOR} AND status = 'conectada'`)) as any[];
+  let importadas = 0, revisadas = 0, baixadas = 0, falhas = 0;
+  const { importarCobrancas } = await import("./cora.importacao");
   for (const i of integs) {
     const empresaId = Number(i.empresa_id);
+    if (i.modo_recebimento === "cora") {
+      try {
+        const r = await importarCobrancas(empresaId);
+        importadas += r.criadas + r.vinculadas;
+        baixadas += r.baixadas;
+        falhas += r.falhas;
+      } catch (e: any) {
+        falhas++;
+        console.error(`[Cora] importação da empresa ${empresaId} falhou:`, e?.message || e);
+      }
+    }
     const abertas = (await db.execute(sql`
       SELECT id FROM cobrancas
       WHERE empresa_id = ${empresaId} AND status IN ('aberta', 'processando', 'vencida') AND vencimento >= CURRENT_DATE - 120
@@ -411,6 +480,6 @@ export async function sincronizarTudo(): Promise<{ empresas: number; revisadas: 
     }
     await db.execute(sql`UPDATE empresas_integracoes SET ultimo_sync_em = now() WHERE empresa_id = ${empresaId} AND provedor = ${PROVEDOR}`);
   }
-  return { empresas: integs.length, revisadas, baixadas, falhas };
+  return { empresas: integs.length, importadas, revisadas, baixadas, falhas };
 }
 

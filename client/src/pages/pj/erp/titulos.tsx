@@ -43,6 +43,7 @@ interface Titulo {
   conta_bancaria_id: number | null;
   conta_bancaria_nome: string | null;
   conciliado: boolean;
+  origem: string | null;
 }
 interface Resposta {
   linhas: Titulo[];
@@ -386,7 +387,10 @@ function Titulos({ empresaId, tipo }: { empresaId: number; tipo: TipoTitulo }) {
                       <td className="px-4 py-2"><Checkbox checked={sel.has(l.id)} onCheckedChange={() => alternar(l.id)} aria-label={`Selecionar ${l.descricao}`} /></td>
                       <td className="px-2 py-2 tabular-nums">{dataBr(l.data_vencimento || l.data_transacao)}</td>
                       <td className="px-2 py-2">
-                        <div>{l.descricao}</div>
+                        <div className="flex items-center gap-2">
+                          <span>{l.descricao}</span>
+                          {l.origem === "cora" && <Badge variant="outline" className="font-normal" title="Importado da conta Cora">Cora</Badge>}
+                        </div>
                         <div className="text-xs text-muted-foreground">
                           {[l.centro_nome, l.status === "Efetivada" && l.conta_bancaria_nome].filter(Boolean).join(" · ")}
                         </div>
@@ -409,7 +413,10 @@ function Titulos({ empresaId, tipo }: { empresaId: number; tipo: TipoTitulo }) {
                         <span className="text-xs tabular-nums text-muted-foreground">{dataBr(l.data_vencimento || l.data_transacao)}</span>
                         <span className="font-medium tabular-nums">{brl(l.valor)}</span>
                       </div>
-                      <div className="text-sm">{l.descricao}</div>
+                      <div className="flex items-center gap-2 text-sm">
+                        <span>{l.descricao}</span>
+                        {l.origem === "cora" && <Badge variant="outline" className="font-normal">Cora</Badge>}
+                      </div>
                       <div className="flex items-center justify-between gap-2">
                         <span className="min-w-0 truncate text-xs text-muted-foreground">{l.contato_nome || l.conta_nome || ""}</span>
                         <div className="flex shrink-0 items-center gap-2">{l.status === "Pendente" && situacao(l)}{acaoLinha(l)}</div>

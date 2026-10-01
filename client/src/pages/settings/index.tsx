@@ -396,7 +396,7 @@ export default function SettingsPage() {
           <TabsTrigger value="api">{t('settings.api', 'API')}</TabsTrigger>
           <TabsTrigger value="assinatura">{t('settings.subscription', 'Assinatura')}</TabsTrigger>
           <TabsTrigger value="privacidade">{t('settings.privacy', 'Meus dados')}</TabsTrigger>
-          {coraLiberado && temErpPj(user as any) && <TabsTrigger value="integracoes">Integrações</TabsTrigger>}
+          {coraLiberado && <TabsTrigger value="integracoes">Integrações</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="perfil">
@@ -641,9 +641,22 @@ export default function SettingsPage() {
           <MeusDados />
         </TabsContent>
 
-        {coraLiberado && temErpPj(user as any) && (
+        {coraLiberado && (
           <TabsContent value="integracoes">
-            <IntegracoesEmpresa />
+            {temErpPj(user as any) ? (
+              <IntegracoesEmpresa />
+            ) : (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Integrações</CardTitle>
+                  <CardDescription>Disponível na modalidade PJ ME.</CardDescription>
+                </CardHeader>
+                <CardContent className="text-sm text-muted-foreground">
+                  A conexão com o Cora e a importação das contas a receber fazem parte da gestão completa (ERP) da modalidade PJ ME.
+                  Fale com o suporte para mudar a sua modalidade.
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
         )}
       </Tabs>

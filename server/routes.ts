@@ -1647,6 +1647,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/empresas/:id/integracoes/cora", ...coraAuth, coraCtrl.removerConexao);
   app.post("/api/empresas/:id/integracoes/cora/testar", sensitiveLimiter, ...coraAuth, coraCtrl.testarConexao);
   app.post("/api/empresas/:id/integracoes/cora/webhook", sensitiveLimiter, ...coraAuth, coraCtrl.ativarWebhook);
+  app.put("/api/empresas/:id/integracoes/cora/modo", sensitiveLimiter, ...coraAuth, coraCtrl.definirModo);
+  app.post("/api/empresas/:id/integracoes/cora/importar", sensitiveLimiter, ...coraAuth, coraCtrl.importar);
   app.get("/api/empresas/:id/erp/cobrancas", ...coraAuth, coraCtrl.listarCobrancas);
   app.post("/api/empresas/:id/erp/cobrancas", ...coraAuth, coraCtrl.emitir);
   app.post("/api/empresas/:id/erp/cobrancas/:cid/sincronizar", ...coraAuth, coraCtrl.sincronizar);
