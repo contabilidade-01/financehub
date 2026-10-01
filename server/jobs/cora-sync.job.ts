@@ -1,6 +1,7 @@
 /**
- * Cora Sync — rede de segurança do webhook: a cada 30 minutos revisa as
- * cobranças em aberto das empresas conectadas e baixa as que foram pagas.
+ * Cora Sync — rede de segurança do webhook: a cada 30 minutos importa os boletos
+ * da conta Cora (empresas no modo "importar da API") e revisa as cobranças em
+ * aberto das empresas conectadas, baixando as que foram pagas.
  * Inicializado no bootstrap do app (server/index.ts).
  */
 import { sincronizarTudo } from "../services/cora/cora.service";
@@ -14,7 +15,7 @@ async function run(): Promise<void> {
   rodando = true;
   try {
     const r = await sincronizarTudo();
-    if (r.revisadas || r.falhas) console.log(`[Cora] sync: ${r.empresas} empresa(s), ${r.revisadas} revisada(s), ${r.baixadas} baixada(s), ${r.falhas} falha(s)`);
+    if (r.importadas || r.revisadas || r.falhas) console.log(`[Cora] sync: ${r.empresas} empresa(s), ${r.importadas} importada(s), ${r.revisadas} revisada(s), ${r.baixadas} baixada(s), ${r.falhas} falha(s)`);
   } catch (err: any) {
     console.error("[Cora] ❌ Erro na sincronização:", err?.message || err);
   } finally {

@@ -1,12 +1,13 @@
 import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, FileKey2, Loader2, PlugZap, ShieldCheck, Upload, XCircle } from "lucide-react";
+import { CheckCircle2, FileKey2, Loader2, PlugZap, RefreshCw, ShieldCheck, Upload, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useConfirm } from "@/components/shared/ConfirmDialog";
 import { useToast } from "@/hooks/use-toast";
@@ -24,6 +25,35 @@ export interface Conexao {
   ultimo_sync_em: string | null;
   tem_certificado: boolean;
   tem_chave: boolean;
+  /** manual = a empresa lança e dá baixa; cora = os boletos da conta Cora entram sozinhos. */
+  modo_recebimento: "manual" | "cora";
+  ultima_importacao: ResultadoImportacao | null;
+}
+
+export interface ResultadoImportacao {
+  listadas: number;
+  criadas: number;
+  vinculadas: number;
+  atualizadas: number;
+  baixadas: number;
+  canceladas: number;
+  ignoradas: number;
+  falhas: number;
+  em: string;
+}
+
+export function resumoImportacao(u: ResultadoImportacao | null | undefined): string {
+  if (!u) return "Nenhuma importação feita ainda.";
+  const quando = new Date(u.em);
+  const data = isNaN(quando.getTime()) ? "" : ` em ${quando.toLocaleString("pt-BR")}`;
+  const partes = [
+    `${u.listadas} boleto(s) lido(s)`,
+    `${u.criadas + u.vinculadas} novo(s) em Contas a receber`,
+    `${u.baixadas} recebido(s)`,
+    ...(u.canceladas ? [`${u.canceladas} cancelado(s)`] : []),
+    ...(u.falhas ? [`${u.falhas} falha(s)`] : []),
+  ];
+  return `Última importação${data}: ${partes.join(", ")}.`;
 }
 
 async function api<T = any>(url: string, method = "GET", body?: unknown): Promise<T> {
@@ -87,7 +117,7 @@ export function ConexaoCora({ empresaId, bancos }: { empresaId: number; bancos: 
   const qc = useQueryClient();
   const { data: atual, isLoading, url } = useConexaoCora(empresaId);
   const [form, setForm] = useState<null | { ambiente: "stage" | "producao"; client_id: string; certificado: string; chave: string; multa_pct: string; juros_mes_pct: string; conta_bancaria_id: string }>(null);
-  const [ocupado, setOcupado] = useState<"" | "salvar" | "testar" | "webhook" | "remover">("");
+  const [ocupado, setOcupado] = useState<"" | "salvar" | "testar" | "webhook" | "remover" | "modo" | "importar">("");
 
   const f = form ?? {
     ambiente: atual?.ambiente ?? "stage",
@@ -127,8 +157,28 @@ export function ConexaoCora({ empresaId, bancos }: { empresaId: number; bancos: 
     }), () => "Conta Cora conectada").then((r) => { if (r) setForm(null); });
 
   const remover = async () => {
-    if (!(await confirmar({ title: "Desconectar o Cora?", description: "As credenciais são apagadas. Cobranças já emitidas continuam no Cora, mas deixam de ser baixadas automaticamente.", confirmText: "Desconectar", destructive: true }))) return;
+    if (!(await confirmar({ title: "Desconectar o Cora?", description: "As credenciais são apagadas. Cobranças já emitidas continuam no Cora, mas deixam de ser baixadas automaticamente, e a importação das contas a receber para.", confirmText: "Desconectar", destructive: true }))) return;
     executar("remover", () => api(url, "DELETE"), () => "Cora desconectado");
+  };
+
+  const mudarModo = (modo: "manual" | "cora") => {
+    if (!atual || modo === atual.modo_recebimento) return;
+    executar("modo", () => api(`${url}/modo`, "PUT", { modo }), () =>
+      modo === "cora" ? "Contas a receber passam a vir da conta Cora" : "Contas a receber voltam ao lançamento manual");
+  };
+
+  const importarAgora = async () => {
+    setOcupado("importar");
+    try {
+      const r = await api<ResultadoImportacao>(`${url}/importar`, "POST");
+      qc.invalidateQueries({ queryKey: [url] });
+      qc.invalidateQueries({ predicate: (q) => String(q.queryKey[0]).includes(`/api/empresas/${empresaId}/`) });
+      toast({ title: "Importação concluída", description: resumoImportacao(r) });
+    } catch (e: any) {
+      toast({ title: "Não foi possível importar", description: e?.message, variant: "destructive" });
+    } finally {
+      setOcupado("");
+    }
   };
 
   if (isLoading) return <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Carregando…</div>;
@@ -232,6 +282,48 @@ export function ConexaoCora({ empresaId, bancos }: { empresaId: number; bancos: 
           </div>
         </CardContent>
       </Card>
+
+      {atual && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Contas a receber</CardTitle>
+            <CardDescription>De onde vêm as contas a receber desta empresa.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <RadioGroup value={atual.modo_recebimento} onValueChange={(v) => mudarModo(v as "manual" | "cora")} disabled={!!ocupado} className="gap-3">
+              <label htmlFor="modo-manual" className="flex cursor-pointer items-start gap-3 rounded-md border p-3 has-[[data-state=checked]]:border-primary">
+                <RadioGroupItem id="modo-manual" value="manual" className="mt-0.5" />
+                <div className="space-y-1">
+                  <div className="text-sm font-medium">Lançamento manual</div>
+                  <p className="text-xs text-muted-foreground">
+                    Você cria as contas a receber e dá baixa quando recebe. Se quiser, emite o boleto pelo Cora em Contas a receber → "Cobrar via Cora".
+                  </p>
+                </div>
+              </label>
+              <label htmlFor="modo-cora" className="flex cursor-pointer items-start gap-3 rounded-md border p-3 has-[[data-state=checked]]:border-primary">
+                <RadioGroupItem id="modo-cora" value="cora" className="mt-0.5" disabled={atual.status !== "conectada"} />
+                <div className="space-y-1">
+                  <div className="text-sm font-medium">Importar da API Cora</div>
+                  <p className="text-xs text-muted-foreground">
+                    Os boletos emitidos na conta Cora entram sozinhos: pago vai para Transações como recebido (na data e no valor pagos),
+                    em aberto fica em Contas a receber, cancelado some. O cliente do boleto é cadastrado em Clientes e a receita entra na conta
+                    "Recebimentos via Cora". A conferência roda a cada 30 minutos e no aviso do Cora.
+                  </p>
+                  {atual.status !== "conectada" && <p className="text-xs text-amber-700 dark:text-amber-400">Teste a conexão antes de escolher esta opção.</p>}
+                </div>
+              </label>
+            </RadioGroup>
+            {atual.modo_recebimento === "cora" && (
+              <div className="flex flex-col gap-2 rounded-md bg-muted/50 p-3 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                <span>{resumoImportacao(atual.ultima_importacao)}</span>
+                <Button size="sm" variant="outline" className="shrink-0" disabled={!!ocupado} onClick={importarAgora}>
+                  {ocupado === "importar" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}Importar agora
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
