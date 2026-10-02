@@ -33,6 +33,11 @@ function getFaqs(tipo: Tipo): FaqItem[] {
       resposta:
         "Sim. Seguimos a LGPD: você pode solicitar a exportação (portabilidade) ou a exclusão dos seus dados a qualquer momento.",
     },
+    {
+      pergunta: "Como funcionam as mensagens do WhatsApp? É seguro mandar meus lançamentos por lá?",
+      resposta:
+        "Sim. As mensagens ficam hospedadas em servidor seguro, e as únicas informações compartilhadas são os dados das suas transações (valor, categoria, data). Nunca pedimos ou compartilhamos dados de conta bancária, senha ou cartão de crédito — nem qualquer outro dado sensível — pelo WhatsApp.",
+    },
   ];
 
   if (isPJ) {
