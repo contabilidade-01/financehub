@@ -83,6 +83,8 @@ const ImportarExtrato = lazy(() => import("@/pages/importar-extrato"));
 const FluxoProjetadoPF = lazy(() => import("@/pages/fluxo-projetado"));
 const ReembolsosPage = lazy(() => import("@/pages/reembolsos"));
 const VendasPF = lazy(() => import("@/pages/vendas/pf"));
+const Termos = lazy(() => import("@/pages/legal/LegalPage").then((m) => ({ default: m.Termos })));
+const Privacidade = lazy(() => import("@/pages/legal/LegalPage").then((m) => ({ default: m.Privacidade })));
 const VendasPJ = lazy(() => import("@/pages/vendas/pj"));
 
 function Router() {
@@ -128,6 +130,8 @@ function Router() {
     location === "/forgot-password" ||
     location === "/reset-password" ||
     location === "/subscription-expired" ||
+    location === "/termos" ||
+    location === "/privacidade" ||
     location.startsWith("/assinar") ||
     location.startsWith("/checkout/plans");
 
@@ -156,6 +160,8 @@ function Router() {
         {/* Páginas de vendas (marketing) — funcionam logado ou deslogado */}
         <Route path="/assinar/pf" component={VendasPF} />
         <Route path="/assinar/pj" component={VendasPJ} />
+        <Route path="/termos" component={Termos} />
+        <Route path="/privacidade" component={Privacidade} />
         {!isAuthenticated ? (
           <>
             <Route path="/" component={isMarketingHost() ? VendasPF : Login} />
