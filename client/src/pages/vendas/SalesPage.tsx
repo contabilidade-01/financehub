@@ -10,6 +10,7 @@ import Pricing from "./sections/Pricing";
 import Faq from "./sections/Faq";
 import CtaFinal from "./sections/CtaFinal";
 import Footer from "./sections/Footer";
+import { goToApp } from "@/lib/marketing-host";
 import type { Plan, Tipo } from "./types";
 
 // Benefícios padrão (usados quando o plano não tem features cadastradas em JSON).
@@ -60,10 +61,10 @@ export default function SalesPage({ tipo }: { tipo: Tipo }) {
 
   const irAssinar = () => {
     if (isAuthenticated) navigate("/subscription/renew");
-    else navigate(`/register?tipo=${tipo}`);
+    else goToApp(`/register?tipo=${tipo}`, navigate);
   };
 
-  const irLogin = () => navigate("/");
+  const irLogin = () => goToApp("/", navigate);
   const trocarTipo = () => navigate(tipo === "juridica" ? "/assinar/pf" : "/assinar/pj");
 
   const ctaLabel = isAuthenticated ? "Assinar agora" : "Começar — 15 dias grátis";

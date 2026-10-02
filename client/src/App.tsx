@@ -1,4 +1,5 @@
 import { Switch, Route, useLocation, Redirect } from "wouter";
+import { isMarketingHost } from "@/lib/marketing-host";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -157,7 +158,7 @@ function Router() {
         <Route path="/assinar/pj" component={VendasPJ} />
         {!isAuthenticated ? (
           <>
-            <Route path="/" component={Login} />
+            <Route path="/" component={isMarketingHost() ? VendasPF : Login} />
             {/* Link do WhatsApp "assine por aqui": pede login e volta para a assinatura */}
             <Route path="/subscription/renew" component={Login} />
             <Route path="/register" component={Register} />
