@@ -131,7 +131,8 @@ export async function transcribeAudio(base64Data: string, mimetype?: string): Pr
 export async function analyzeWithGemini(base64Data: string, mimetype: string, type: "image" | "document"): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
   const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-  if (!apiKey) throw new Error("GEMINI_API_KEY não configurada");
+  const openaiKey = String(process.env.OPENAI_API_KEY || "").trim();
+  if (!apiKey && !openaiKey) throw new Error("GEMINI_API_KEY não configurada");
 
   const alvo = type === "image"
     ? "a imagem (cupom fiscal, nota fiscal, comprovante ou uma foto com anotações de produtos comprados)"
@@ -162,25 +163,55 @@ Forma de pagamento: FORMA
 
 Os números de valor devem usar notação decimal americana (ponto como separador, ex.: 1234.56).`;
 
-  const response = await withRetry(
-    () => axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-      {
-        contents: [
-          {
-            parts: [
-              { text: prompt },
-              { inline_data: { mime_type: mimetype, data: base64Data } },
+  // OpenAI só aceita imagens (não PDF) via image_url — fallback quando o Gemini falha (ex.: sem crédito).
+  const podeOpenai = !!openaiKey && mimetype.startsWith("image/");
+  const viaOpenai = async (): Promise<string> => {
+    const resp = await withRetry(
+      () => axios.post(
+        `${String(process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "")}/chat/completions`,
+        {
+          model: process.env.OPENAI_VISION_MODEL || process.env.AI_MODEL || "gpt-4o-mini",
+          messages: [{
+            role: "user",
+            content: [
+              { type: "text", text: prompt },
+              { type: "image_url", image_url: { url: `data:${mimetype};base64,${base64Data}` } },
             ],
-          },
-        ],
-      },
-      { timeout: 60000 }
-    ),
-    { provider: "gemini" }
-  );
+          }],
+        },
+        { headers: { Authorization: `Bearer ${openaiKey}` }, timeout: 60000 }
+      ),
+      { provider: "openai" }
+    );
+    return resp.data?.choices?.[0]?.message?.content || "";
+  };
 
-  return response.data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  if (!apiKey) return viaOpenai();
+
+  try {
+    const response = await withRetry(
+      () => axios.post(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        {
+          contents: [
+            {
+              parts: [
+                { text: prompt },
+                { inline_data: { mime_type: mimetype, data: base64Data } },
+              ],
+            },
+          ],
+        },
+        { timeout: 60000 }
+      ),
+      { provider: "gemini" }
+    );
+    return response.data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  } catch (geminiErr: any) {
+    if (!podeOpenai) throw geminiErr;
+    console.warn(`[Vision] Gemini falhou (${geminiErr?.message}), usando fallback OpenAI...`);
+    return viaOpenai();
+  }
 }
 
 // ============================================

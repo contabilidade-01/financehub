@@ -45,7 +45,7 @@ async function buscarCandidatos(etapa: string, diasMinimos: number): Promise<Can
       AND u.remotejid != ''
       AND u.remotejid NOT LIKE '%@g.us'
       AND u.data_cadastro IS NOT NULL
-      AND (u.data_cadastro AT TIME ZONE 'America/Sao_Paulo')::date <= (NOW() AT TIME ZONE 'America/Sao_Paulo')::date - ${diasMinimos}
+      AND (u.data_cadastro AT TIME ZONE 'America/Sao_Paulo')::date <= (NOW() AT TIME ZONE 'America/Sao_Paulo')::date - (${diasMinimos})::int
       AND NOT EXISTS (
         SELECT 1 FROM onboarding_whatsapp_sequence s
         WHERE s.usuario_id = u.id AND s.etapa = ${etapa}
@@ -134,6 +134,15 @@ async function runSequence(): Promise<void> {
   await enviarEtapa("dia3", 3, (u) => textoDia3(u.tipo_pessoa === "juridica"));
 }
 
+/** Nunca deixa uma falha do job virar unhandled rejection (derrubaria o processo). */
+async function runSequenceSafe(): Promise<void> {
+  try {
+    await runSequence();
+  } catch (err: any) {
+    console.error("[OnboardingWhatsApp] Erro na sequência de boas-vindas:", err?.message);
+  }
+}
+
 let sequenceInterval: NodeJS.Timeout | null = null;
 
 export function initializeOnboardingWhatsappSequence(): void {
@@ -142,8 +151,8 @@ export function initializeOnboardingWhatsappSequence(): void {
     return;
   }
   console.log("[OnboardingWhatsApp] ✅ Sequência de boas-vindas inicializada (intervalo: 1h)");
-  setTimeout(runSequence, 2 * 60 * 1000); // dá tempo do app estabilizar
-  sequenceInterval = setInterval(runSequence, CHECK_INTERVAL);
+  setTimeout(runSequenceSafe, 2 * 60 * 1000); // dá tempo do app estabilizar
+  sequenceInterval = setInterval(runSequenceSafe, CHECK_INTERVAL);
 }
 
 export function stopOnboardingWhatsappSequence(): void {
