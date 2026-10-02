@@ -3,18 +3,12 @@
  *
  * controledinheiro.com.br (e www.) abre a landing; app.controledinheiro.com.br
  * continua abrindo o login. Localhost, IPs e hosts "app." são tratados como app.
- * VITE_MARKETING_HOSTS (lista separada por vírgula) permite sobrescrever.
  */
-const HOSTS_MARKETING_PADRAO = ["controledinheiro.com.br", "www.controledinheiro.com.br"];
-
-function hostsMarketing(): string[] {
-  const env = (import.meta.env.VITE_MARKETING_HOSTS as string | undefined)?.trim();
-  return env ? env.split(",").map((h) => h.trim().toLowerCase()).filter(Boolean) : HOSTS_MARKETING_PADRAO;
-}
+const HOSTS_MARKETING = ["controledinheiro.com.br", "www.controledinheiro.com.br"];
 
 export function isMarketingHost(): boolean {
   if (typeof window === "undefined") return false;
-  return hostsMarketing().includes(window.location.hostname.toLowerCase());
+  return HOSTS_MARKETING.includes(window.location.hostname.toLowerCase());
 }
 
 /** URL do app a partir do domínio de marketing (ex.: https://app.controledinheiro.com.br). */
