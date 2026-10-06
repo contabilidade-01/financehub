@@ -13,6 +13,8 @@ export type OfertaCriarConta = {
   empresaId: number;
   empresaNome: string;
   idTransacao: number;
+  /** Descrição do lançamento que caiu em Outras (ex.: "Gasolina"). */
+  descricao?: string;
   nomeConta: string;
   tipo: "Receita" | "Despesa";
   classificacao: "FIXA" | "VARIAVEL" | "OUTRA";
@@ -150,5 +152,38 @@ export async function tentarResolverOfertaCriarConta(
     };
   }
 
+  // "Gasolina na caixinha" logo após "Quer criar a conta…?": fala do MESMO
+  // lançamento, sem valor novo. Mandar ao modelo arrisca lançar de novo
+  // (duplicata) — pergunta só sim ou não.
+  if (confirmacao === "ambiguo" && curta && falaDoLancamentoOfertado(userMessage, oferta)) {
+    return {
+      handled: true,
+      reply:
+        `O lançamento 🔍 ${oferta.idTransacao} já está registrado (em *Outras*). ` +
+        `Quer que eu crie a conta *${oferta.nomeConta}* e mova ele para lá? Responda *sim* ou *não*.`,
+    };
+  }
+
   return { handled: false, confirmacao, oferta };
+}
+
+function normOferta(s: string): string {
+  return String(s || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+/** Sem número e citando o nome da conta sugerida ou a descrição do lançamento. */
+export function falaDoLancamentoOfertado(
+  userMessage: string,
+  oferta: Pick<OfertaCriarConta, "nomeConta" | "descricao">,
+): boolean {
+  const msg = normOferta(userMessage);
+  if (!msg.trim() || /\d/.test(msg)) return false;
+  const palavrasMsg = new Set(msg.split(/[^a-z0-9]+/).filter(Boolean));
+  const fortes = normOferta(`${oferta.nomeConta} ${oferta.descricao || ""}`)
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w.length >= 4 && !/^(outras?|despesas?|receitas?|conta|lancamento)$/.test(w));
+  return fortes.some((w) => palavrasMsg.has(w));
 }

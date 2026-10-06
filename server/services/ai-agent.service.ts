@@ -2524,6 +2524,19 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
             resolvido = await resolverMeioPorNomePj(empresa.id, ctx.userId, doMsg);
           }
         }
+        // Resposta solta sem pista de conta/cartão (ex.: "Sim" ao resumo da foto)
+        // não pode anular o meio que o modelo trouxe da conversa (ex.: Caixinha).
+        const argForma = String(args.forma_pagamento || "").trim();
+        if (
+          !resolvido.ok &&
+          detUser.tipo === "nome" &&
+          !detUser.pista &&
+          argForma &&
+          argForma !== meioTexto
+        ) {
+          const peloArg = await resolverMeioPorNomePj(empresa.id, ctx.userId, argForma);
+          if (peloArg.ok) resolvido = peloArg;
+        }
         if (!resolvido.ok) {
           return JSON.stringify({
             error: resolvido.mensagem,
@@ -2624,6 +2637,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
             empresaId: empresa.id,
             empresaNome: String(empresaNome),
             idTransacao: criada.id,
+            descricao: String(args.descricao || ""),
             nomeConta: nomeSugerido,
             tipo,
             classificacao,
