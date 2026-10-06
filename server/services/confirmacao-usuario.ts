@@ -53,6 +53,16 @@ export function sugerirNomeConta(
   userMessage?: string,
   contaInformada?: string | null,
 ): string {
+  // Combustível é o nome que a classificação PJ procura no plano: criar
+  // "Gasolina" faria o próximo "etanol"/"diesel" cair em Outras de novo.
+  const textoBase = `${descricao || ""} ${contaInformada || ""}`
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  if (/\b(abastec\w*|combustive(l|is)|gasolina|etanol|diesel|alcool|gnv)\b/.test(textoBase)) {
+    return "Combustível";
+  }
+
   if (contaInformada) {
     const limpa = String(contaInformada)
       .replace(/^\d+(\.\d+)*\s*[—\-–]?\s*/u, "")

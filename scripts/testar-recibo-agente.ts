@@ -95,6 +95,16 @@ else ok("pergunta não afirma escrita");
   else ok("trava pede só o meio");
 }
 
+// Foto + "via caixinha": meio já dado → pede só a confirmação, não o meio.
+{
+  const m = mensagemTravaFalsoRecibo(
+    "Cupom fiscal Auto Posto Lider, Etanol Comum, Total R$ 133,66, via caixinha",
+  );
+  if (/meio de pagamento|como pagou/i.test(m)) fail("trava pediu meio já dado (caixinha)", m);
+  else if (!/Caixinha/.test(m) || !/SIM/.test(m)) fail("trava deveria pedir confirmação na Caixinha", m);
+  else ok("trava com caixinha pede só confirmação");
+}
+
 // precisa_meio não conta como escrita
 {
   const raw = JSON.stringify({
