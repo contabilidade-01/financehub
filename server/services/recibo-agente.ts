@@ -1,3 +1,5 @@
+import { detectarMeio } from "./parse-meio";
+
 /**
  * Recibo do agente WhatsApp — montado pelo servidor após gravação real.
  * O modelo NÃO deve inventar "Despesa registrada!" sem tool de escrita.
@@ -200,7 +202,7 @@ export function mensagemTravaFalsoRecibo(userMessage?: string): string {
     /\b(compra|mercadoria|servico|pagamento|aluguel|gasolina|uber|lanche|salario)\b/.test(n) ||
     (n.split(/\s+/).filter(Boolean).length >= 3 && temValor);
   const temMeio =
-    /\b(pix|pics|dinheiro|cartao|credito|boleto|ted|debito|caixa|banco|conta|nubank|itau|santander)\b/.test(n);
+    /\b(pix|pics|dinheiro|especie|cash|cartao|credito|boleto|ted|debito|caixa|caixinha|banco|conta|nubank|itau|santander)\b/.test(n);
 
   const faltam: string[] = [];
   if (!temValor) faltam.push("o valor");
@@ -208,9 +210,12 @@ export function mensagemTravaFalsoRecibo(userMessage?: string): string {
   if (!temMeio) faltam.push("como pagou (conta, Caixinha/dinheiro ou cartão)");
 
   if (faltam.length === 0) {
+    // O cliente já disse tudo (ex.: foto + "via caixinha"): não pedir o meio de
+    // novo — só a confirmação, citando a Caixinha quando ela veio na mensagem.
+    const naCaixinha = detectarMeio(String(userMessage || "")).tipo === "dinheiro" ? " na Caixinha" : "";
     return (
-      "Ainda não registrei nada neste turno. " +
-      "Confirme o meio de pagamento (conta bancária, Caixinha ou cartão) para eu lançar de verdade."
+      `Ainda não registrei nada. Confirma o lançamento${naCaixinha}? ` +
+      "Responda *SIM* para registrar, ou me diga o que corrigir."
     );
   }
   if (faltam.length === 1) {

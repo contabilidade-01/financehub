@@ -230,6 +230,8 @@ export interface ToolContext {
   // Texto da mensagem atual do usuário. Usado por depositar_meta/sacar_meta para
   // casar a meta pelo contexto quando o usuário não dá id/título exato.
   userMessage?: string;
+  /** Mensagem anterior do usuário (ex.: foto + "via caixinha" antes do "Sim"). */
+  mensagemAnteriorUsuario?: string;
   /** Preenchido pelo simulador de WhatsApp (homologação). */
   toolTrace?: { name: string; args: Record<string, unknown>; resultPreview: string }[];
   /** Auditoria: ferramentas chamadas nesta mensagem, com args e resultado resumido. */
@@ -2431,7 +2433,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         const empresa = await resolverEmpresa(ctx.userId, args.empresa, ctx);
         if ("erro" in empresa) return JSON.stringify(empresa);
 
-        const { detectarMeio, textoMeioDeDetect } = await import("./parse-meio");
+        const { detectarMeio, textoMeioDeDetect, ehSoConfirmacaoOuRecusa } = await import("./parse-meio");
         const { resolverMeioPorNomePj, aplicarMeioPagamentoPj } = await import("./meio-pagamento-pj");
 
         // Meio: frase do usuário manda — pistas (banco/cartão) e cartão genérico.
@@ -2449,6 +2451,11 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         } else {
           meioTexto = String(args.forma_pagamento || "").trim();
           if (!meioTexto) meioTexto = textoMeioDeDetect(detUser);
+        }
+        // "Sim" ao resumo sem forma nos args: vale o meio que o cliente disse na
+        // mensagem anterior (ex.: foto com legenda "via caixinha").
+        if (!meioTexto && ehSoConfirmacaoOuRecusa(ctx.userMessage || "") && ctx.mensagemAnteriorUsuario) {
+          meioTexto = textoMeioDeDetect(detectarMeio(ctx.mensagemAnteriorUsuario));
         }
         if (!meioTexto) {
           const resolvidoVazio = await resolverMeioPorNomePj(empresa.id, ctx.userId, "");
@@ -3536,6 +3543,8 @@ export async function runAgent(
 
   // Disponibiliza o texto atual para os handlers (ex.: casar meta pelo contexto).
   ctx.userMessage = userMessage;
+  ctx.mensagemAnteriorUsuario =
+    [...(history || [])].reverse().find((m) => m.role === "user" && m.content)?.content || undefined;
   ctx.decisoes = [];
   // Pendências ("em qual meio?", "criar a conta X?") vêm do banco: sobrevivem a
   // restart e funcionam com mais de uma réplica.
