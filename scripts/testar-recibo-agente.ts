@@ -8,7 +8,9 @@ import {
   finalizarRespostaAgente,
   montarReciboDeEscrita,
   mensagemTravaFalsoRecibo,
+  extrairConsulta,
 } from "../server/services/recibo-agente";
+import { resumoConferenciaFatura } from "../server/services/conferencia-fatura-texto";
 
 let falhas = 0;
 const ok = (n: string) => console.log("ok  ", n);
@@ -134,6 +136,40 @@ else ok("pergunta não afirma escrita");
   const out = finalizarRespostaAgente({ content: "", escritas: [extrairEscritaOk("marcar_a_receber", raw)!] });
   if (!/A Receber/.test(out)) fail("recibo marcar_a_receber", out);
   else ok("recibo marcar_a_receber");
+}
+
+// Conferência de fatura (só valores): não cai na trava de recibo e lista o que falta
+{
+  const r = {
+    cartao: "CC Mercado Pago", competencia: "2026-10", periodo_de: "2026-09-05", periodo_ate: "2026-10-05",
+    total_lancado: 150.04, total_informado: 162.66, diferenca: -12.62,
+    itens: [
+      { informado: { descricao: "", valor: 12.62 }, status: "nao_encontrado", lancamentos: [] },
+      { informado: { descricao: "", valor: 137.42 }, status: "confere", lancamentos: [{ id: 700, descricao: "Mercado", valor: 137.42, data: "2026-09-20" }] },
+      { informado: { descricao: "", valor: 12.62 }, status: "outra_competencia", lancamentos: [{ id: 701, descricao: "Uber", valor: 12.62, data: "2026-10-07", competencia: "2026-11" }] },
+    ],
+    nao_informados: [{ id: 702, descricao: "Spotify", valor: 21.9, data: "2026-09-25" }],
+  };
+  const txt = resumoConferenciaFatura(r);
+  if (!/fatura 10\/2026/.test(txt) || !/Faltando no sistema/.test(txt) || !/R\$ 12,62/.test(txt) || !/fatura 11\/2026/.test(txt) || !/#702/.test(txt)) {
+    fail("resumo conferência", txt);
+  } else ok("resumo conferência lista faltando/outra fatura/fora da lista");
+
+  const raw = JSON.stringify({ ...r, resumo_texto: txt, somente_leitura: true });
+  const c = extrairConsulta("conferir_fatura_cartao", raw);
+  if (!c) fail("conferência não reconhecida como consulta");
+  // Modelo falou "3 lançamentos registrados nesta fatura" → não é falso recibo
+  const out1 = finalizarRespostaAgente({ content: "Conferi: 2 lançamentos registrados nesta fatura, falta o de R$ 12,62.", escritas: [], consultas: [c!] });
+  if (/Ainda não registrei/.test(out1)) fail("conferência caiu na trava", out1);
+  else ok("conferência não cai na trava de recibo");
+  // Modelo sem texto → resumo do servidor
+  const out2 = finalizarRespostaAgente({ content: "", escritas: [], consultas: [c!] });
+  if (out2 !== txt) fail("conferência sem texto deveria usar resumo do servidor", out2);
+  else ok("conferência sem texto usa resumo do servidor");
+  // Recibo inventado depois de consulta continua bloqueado
+  const out3 = finalizarRespostaAgente({ content: "🔴 Despesa registrada! R$ 12,62", escritas: [], consultas: [c!] });
+  if (/Despesa registrada/.test(out3)) fail("recibo falso após consulta passou", out3);
+  else ok("recibo falso após consulta bloqueado");
 }
 
 if (falhas) {

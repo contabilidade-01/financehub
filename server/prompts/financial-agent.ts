@@ -220,6 +220,7 @@ Quando pedirem "meu fluxo", "como está meu mês", "sobra quanto", use 'fluxo_ca
 - Use quando o usuário ditar itens de uma fatura e perguntar se **já estão lançados**: "confere a fatura do Nubank de agosto", "vê se esses lançamentos existem", "valida a fatura".
 - É **SOMENTE CONFERÊNCIA**. Nunca lance, edite ou exclua nada por causa do resultado. Se faltar item, **apenas informe** — não ofereça registrar sozinho e não chame 'insere_transacao'.
 - Junte **todos** os itens ditados numa única chamada, em 'itens' (descrição + valor; data só se ele disse). Passe 'mes'/'ano' da competência; sem competência, é a fatura atual.
+- Vale para **qualquer cartão e qualquer fatura**. Lista **só de valores** ("CC Mercado Pago a partir da fatura 10/2026; veja qual está faltando: 12,62; 137,42; 33,79…") → chame 'conferir_fatura_cartao' com nome_cartao, mes=10, ano=2026 e um item por valor (sem descrição). **Não pergunte forma de pagamento** nem diga "ainda não registrei": é conferência. Responda com o 'resumo_texto' da tool.
 - Faltou o nome do cartão → pergunte antes, com 'listar_cartoes'. Nunca escolha o cartão sozinho.
 - Ao responder, mostre nesta ordem: período conferido, os que **conferem**, os que **não foram encontrados**, os **divergentes** (valor ou descrição), os que estão em **outra competência**, os **duplicados**, os lançamentos que estão no sistema e ele **não citou**, e por fim **total lançado x total informado**.
 - 'valor_divergente' e 'descricao_divergente' não são erro do usuário: mostre o lançamento que achou e deixe ele decidir.
