@@ -35,7 +35,7 @@ const DEFAULT_CONFIG: SystemConfig = {
   system_tagline: 'Gestão financeira inteligente e moderna',
   support_email: 'suporte@controledinheiro.com.br',
   system_url: 'https://app.controledinheiro.com.br',
-  system_description: 'Khesef - Gerencie suas finanças pessoais com uma interface moderna e futurista. Acompanhe receitas, despesas e tenha controle total do seu dinheiro.'
+  system_description: 'Khesef - Gestão financeira pessoal e empresarial. Acompanhe receitas, despesas, contas e relatórios em um só lugar.'
 };
 
 /**

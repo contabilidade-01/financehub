@@ -1,21 +1,41 @@
 import axios from "axios";
-import { storage, getDailySummary, getPeriodSummary, getWeeklySummary, getCategoryBreakdown, comparePeriods, createMeta, getMetasByUsuarioId, depositarMeta, deleteMeta, ajustarSaldoMeta, sacarMeta, verificarOrcamentos, getStatusOrcamentoContaPJ, getContasAPagar, marcarComoPaga, marcarRecorrente, getFluxoCaixaResumo, getSaldoCartao, getCartoesComSaldo, getFaturaCartao, resolveMemoriaCategoria, aprenderMemoriaCategoria, resolveOuCriaFormaPagamento, criarCompraParcelada, getUltimaCompra, editarTransacoesPorIds, getStatusOrcamentoCategoria, softDeleteTransacao, softDeleteTodasTransacoes, restaurarUltimaExcluida, softDeleteEmpresaTransacao, restaurarUltimaExcluidaPJ, transacaoPertenceAoWallet, cadastrarOuAtualizarCartao, resolveMemoriaGlobal } from "../storage";
+import { storage, getDailySummary, getPeriodSummary, getWeeklySummary, getCategoryBreakdown, comparePeriods, createMeta, getMetasByUsuarioId, depositarMeta, deleteMeta, ajustarSaldoMeta, sacarMeta, verificarOrcamentos, getStatusOrcamentoContaPJ, getContasAPagar, marcarComoPaga, marcarRecorrente, getFluxoCaixaResumo, getSaldoCartao, getCartoesComSaldo, getFaturaCartao, conferirFaturaCartao, resolveMemoriaCategoria, aprenderMemoriaCategoria, resolveOuCriaFormaPagamento, criarCompraParcelada, getUltimaCompra, editarTransacoesPorIds, getStatusOrcamentoCategoria, softDeleteTransacao, softDeleteTodasTransacoes, restaurarUltimaExcluida, softDeleteEmpresaTransacao, restaurarUltimaExcluidaPJ, transacaoPertenceAoWallet, cadastrarOuAtualizarCartao, resolveMemoriaGlobal } from "../storage";
 import { buscarTransacoesPorFiltro, buscarEmpresaTransacoesPorFiltro, empresaTransacaoPertenceAEmpresa, type CandidatoTransacao } from "../storage";
 import { FINANCIAL_AGENT_SYSTEM_PROMPT, buildDynamicContext } from "../prompts/financial-agent";
 import { insertTransactionSchema } from "../../shared/schema";
 import { withRetry } from "../utils/ai-errors";
+import { db } from "../db";
+import { sql } from "drizzle-orm";
+import { casarCategoriaPorNome, sugerirCategoriaPorDescricao, chaveMemoria, type CategoriaPf } from "./categorizar-pf";
+import { hidratarPendencias } from "./ia-pendencias";
+import { reconciliarLancamento, trechoDoLancamento, segmentarLancamentos, hojeSP, contextoDataParaPrompt, detectarReembolsavel } from "./nlp-br";
+import { expandirCodigosLote, normalizarCompetencia } from "./lote-codigos";
 import { resolverContaPj } from "./classificar-conta-pj";
 import { atualizarTransacaoEmpresa, baixarTransacaoEmpresa } from "./empresa-transacao.service";
 import { listarCartoes as listarCartoesPj, criarCartao as criarCartaoPj, listarFaturas as listarFaturasPj, getSaldoCartaoEmpresa } from "./fatura-pj.service";
-import { sugerirNomeConta } from "./confirmacao-usuario";
+import { sugerirNomeConta, interpretarConfirmacao } from "./confirmacao-usuario";
 import {
   pareceLancamentoSemMeio,
   registrarPendenteMeio,
   obterPendenteMeio,
   limparPendenteMeio,
   mensagemPedirMeio,
+  mensagemPedirValor,
+  pareceLancamentoSemValor,
   respostaEhSoMeio,
+  respostaEhSoValor,
+  pareceLancamentoCompletoPj,
+  type LancamentoSemMeio,
 } from "./atalho-meio-pj";
+import {
+  detectarCodigoConta,
+  detectarCorrecaoValor,
+  registrarEdicao,
+  obterEdicao,
+  limparEdicao,
+  mensagemConfirmarValor,
+  mensagemConfirmarConta,
+} from "./correcao-rapida-pj";
 import {
   registrarOfertaCriarConta,
   limparOfertaCriarConta,
@@ -23,6 +43,11 @@ import {
   tentarResolverOfertaCriarConta,
   obterOfertaCriarConta,
 } from "./oferta-criar-conta-pj";
+import {
+  detectarComandoRepetir,
+  prepararRepetir,
+  tentarResolverRepetir,
+} from "./repetir-ultima-despesa";
 
 /**
  * AI Agent Service — processa mensagens financeiras com function calling.
@@ -107,7 +132,8 @@ export async function transcribeAudio(base64Data: string, mimetype?: string): Pr
 export async function analyzeWithGemini(base64Data: string, mimetype: string, type: "image" | "document"): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
   const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-  if (!apiKey) throw new Error("GEMINI_API_KEY não configurada");
+  const openaiKey = String(process.env.OPENAI_API_KEY || "").trim();
+  if (!apiKey && !openaiKey) throw new Error("GEMINI_API_KEY não configurada");
 
   const alvo = type === "image"
     ? "a imagem (cupom fiscal, nota fiscal, comprovante ou uma foto com anotações de produtos comprados)"
@@ -119,11 +145,18 @@ REGRA DE QUALIDADE (leia primeiro): se ${type === "image" ? "a imagem" : "o docu
 ILEGIVEL: <motivo curto> (ex.: "ILEGIVEL: foto muito escura, não dá pra ler os valores")
 Não invente itens nem valores quando não tiver certeza.
 
-Se estiver legível, liste os itens neste formato (um por linha):
-Comprei DESCRICAO DO ITEM 1 por VALOR
-Comprei DESCRICAO DO ITEM 2 por VALOR
+Primeiro identifique a DIREÇÃO do dinheiro para o dono do WhatsApp:
+- SAIDA: cupom/nota fiscal de compra, boleto pago, comprovante de Pix/TED ENVIADO ("Pix enviado", "Transferência realizada", "Pagamento efetuado").
+- ENTRADA: comprovante de Pix/TED RECEBIDO ("Pix recebido", "Você recebeu", "Crédito em conta"), depósito, estorno, reembolso.
+- INDEFINIDA: quando não dá para saber quem pagou a quem.
 
-E, quando houver na imagem/documento, acrescente ao final (só o que existir):
+Se estiver legível, responda neste formato (só as linhas que existirem):
+Direção: SAIDA | ENTRADA | INDEFINIDA
+Tipo de documento: cupom fiscal | nota fiscal | comprovante pix | comprovante transferência | boleto | extrato | outro
+Pagador: NOME
+Recebedor: NOME
+Item: DESCRICAO DO ITEM 1 | VALOR
+Item: DESCRICAO DO ITEM 2 | VALOR
 Total: VALOR
 Data: AAAA-MM-DD
 Estabelecimento: NOME
@@ -131,35 +164,65 @@ Forma de pagamento: FORMA
 
 Os números de valor devem usar notação decimal americana (ponto como separador, ex.: 1234.56).`;
 
-  const response = await withRetry(
-    () => axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-      {
-        contents: [
-          {
-            parts: [
-              { text: prompt },
-              { inline_data: { mime_type: mimetype, data: base64Data } },
+  // OpenAI só aceita imagens (não PDF) via image_url — fallback quando o Gemini falha (ex.: sem crédito).
+  const podeOpenai = !!openaiKey && mimetype.startsWith("image/");
+  const viaOpenai = async (): Promise<string> => {
+    const resp = await withRetry(
+      () => axios.post(
+        `${String(process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "")}/chat/completions`,
+        {
+          model: process.env.OPENAI_VISION_MODEL || process.env.AI_MODEL || "gpt-4o-mini",
+          messages: [{
+            role: "user",
+            content: [
+              { type: "text", text: prompt },
+              { type: "image_url", image_url: { url: `data:${mimetype};base64,${base64Data}` } },
             ],
-          },
-        ],
-      },
-      { timeout: 60000 }
-    ),
-    { provider: "gemini" }
-  );
+          }],
+        },
+        { headers: { Authorization: `Bearer ${openaiKey}` }, timeout: 60000 }
+      ),
+      { provider: "openai" }
+    );
+    return resp.data?.choices?.[0]?.message?.content || "";
+  };
 
-  return response.data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  if (!apiKey) return viaOpenai();
+
+  try {
+    const response = await withRetry(
+      () => axios.post(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        {
+          contents: [
+            {
+              parts: [
+                { text: prompt },
+                { inline_data: { mime_type: mimetype, data: base64Data } },
+              ],
+            },
+          ],
+        },
+        { timeout: 60000 }
+      ),
+      { provider: "gemini" }
+    );
+    return response.data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  } catch (geminiErr: any) {
+    if (!podeOpenai) throw geminiErr;
+    console.warn(`[Vision] Gemini falhou (${geminiErr?.message}), usando fallback OpenAI...`);
+    return viaOpenai();
+  }
 }
 
 // ============================================
 // TOOLS — definição p/ function calling
 // ============================================
 
-interface ToolContext {
+export interface ToolContext {
   userId: number;
   walletId: number;
-  categories: { id: number; nome: string; tipo: string }[];
+  categories: { id: number; nome: string; tipo: string; descricao?: string | null }[];
   tipoPessoa?: string;
   empresaAtiva?: { id: number; nome: string; cnpj: string | null; segmento?: string | null } | null;
   // true quando a mensagem veio de imagem/áudio/documento (extração automática).
@@ -168,8 +231,12 @@ interface ToolContext {
   // Texto da mensagem atual do usuário. Usado por depositar_meta/sacar_meta para
   // casar a meta pelo contexto quando o usuário não dá id/título exato.
   userMessage?: string;
+  /** Mensagem anterior do usuário (ex.: foto + "via caixinha" antes do "Sim"). */
+  mensagemAnteriorUsuario?: string;
   /** Preenchido pelo simulador de WhatsApp (homologação). */
   toolTrace?: { name: string; args: Record<string, unknown>; resultPreview: string }[];
+  /** Auditoria: ferramentas chamadas nesta mensagem, com args e resultado resumido. */
+  decisoes?: { tool: string; args: Record<string, unknown>; ok: boolean; resumo: string }[];
 }
 
 // Ferramentas que o login PJ (empresa ativa) enxerga. Tudo que ficou de fora
@@ -195,6 +262,7 @@ const TOOLS_PJ = new Set([
   "pagar_transacao_empresa",
   "criar_conta_empresa",
   "criar_conta_e_mover_empresa",
+  "criar_mensalidade",
   "cadastrar_cartao_empresa",
   "criar_conta_bancaria_empresa",
   "listar_cartoes_empresa",
@@ -260,7 +328,7 @@ function buildTools(ctx?: ToolContext) {
       type: "function" as const,
       function: {
         name: "insere_transacao",
-        description: "Insere uma nova transação (receita ou despesa). OBRIGATÓRIO informar forma_pagamento (Pix, boleto, dinheiro, nome do cartão…). Se o usuário não disse como pagou, NÃO chame esta tool — pergunte antes.",
+        description: "Insere uma nova transação (receita ou despesa). forma_pagamento é OPCIONAL: se o usuário NÃO disse como pagou (ou disse 'dinheiro', 'caixinha', 'à vista', 'em espécie'), registre na CAIXINHA (dinheiro) — não precisa perguntar. Só use conta/cartão quando o usuário citar (ex.: 'no cartão Inter', 'pix da conta Nubank'). NUNCA invente nome de cartão/banco que o usuário não disse.",
         parameters: {
           type: "object",
           properties: {
@@ -269,9 +337,10 @@ function buildTools(ctx?: ToolContext) {
             tipo: { type: "string", enum: ["Receita", "Despesa"], description: "Tipo da transação" },
             data_transacao: { type: "string", description: "Data no formato YYYY-MM-DD" },
             categoria: { type: "string", description: "Nome da categoria (ex: Alimentação, Transporte)" },
-            forma_pagamento: { type: "string", description: "Como pagou/recebeu: 'Pix', 'Boleto', 'Dinheiro', nome da conta ou do cartão. Obrigatório. NUNCA invente nome de cartão/banco que o usuário não disse." },
+            forma_pagamento: { type: "string", description: "OPCIONAL. Como pagou/recebeu: omita ou use 'Dinheiro'/'Caixinha' para a caixinha; ou 'Pix', 'Boleto', nome da conta, ou nome do cartão. NUNCA invente nome de cartão/banco." },
+            reembolsavel: { type: "boolean", description: "true quando a DESPESA é de terceiro e vai ser reembolsada ao usuário ('a ser reembolsada pela X', 'a empresa vai me reembolsar', 'coloca a receber'). Vai para A Receber e não conta como gasto pessoal. Coloque quem reembolsa na descrição." },
           },
-          required: ["descricao", "valor", "tipo", "data_transacao", "categoria", "forma_pagamento"],
+          required: ["descricao", "valor", "tipo", "data_transacao", "categoria"],
         },
       },
     },
@@ -626,6 +695,24 @@ function buildTools(ctx?: ToolContext) {
     {
       type: "function" as const,
       function: {
+        name: "criar_mensalidade",
+        description: "Cadastra uma MENSALIDADE (assinatura/conta fixa que se repete TODO mês). Use quando disserem 'mensalidade', 'todo mês', 'assinatura', 'conta fixa' (ex.: 'mensalidade Netflix 39,90 no cartão Nubank todo dia 10', 'assinatura da academia 120 por boleto dia 5'). O sistema gera o lançamento sozinho a cada mês: boleto vira conta a pagar; cartão vira lançamento na fatura. Vale PF e (com empresa ativa) PJ.",
+        parameters: {
+          type: "object",
+          properties: {
+            descricao: { type: "string", description: "Nome da mensalidade (ex.: 'Netflix', 'Aluguel', 'Academia')" },
+            valor: { type: "number", description: "Valor mensal" },
+            dia_vencimento: { type: "number", description: "Dia do mês em que vence/cobra (1 a 31)" },
+            cartao: { type: "string", description: "Nome do cartão, se for paga no CARTÃO. Vazio/omitido = boleto/conta a pagar." },
+            categoria: { type: "string", description: "Categoria/conta da despesa (opcional; o sistema classifica se faltar)" },
+          },
+          required: ["descricao", "valor", "dia_vencimento"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
         name: "listar_contas_pagar",
         description: "Lista contas a pagar pendentes, organizadas por urgência (atrasadas, próximas, futuras). Use quando perguntarem 'quais minhas contas', 'o que tenho pra pagar', 'contas do mês'.",
         parameters: {
@@ -715,13 +802,44 @@ function buildTools(ctx?: ToolContext) {
       type: "function" as const,
       function: {
         name: "fatura_cartao",
-        description: "Lista todas as transações da fatura atual de um cartão (conciliação). Use quando pedirem 'fatura do cartão', 'o que gastei no cartão'.",
+        description: "Lista todas as transações da fatura de um cartão (conciliação). Sem mes/ano usa a fatura atual. Use quando pedirem 'fatura do cartão', 'o que gastei no cartão'.",
         parameters: {
           type: "object",
           properties: {
             nome_cartao: { type: "string", description: "Nome do cartão" },
+            mes: { type: "number", description: "Mês da competência (1-12). Opcional — sem ele, fatura atual." },
+            ano: { type: "number", description: "Ano da competência (ex.: 2026). Opcional — padrão é o ano corrente." },
           },
           required: ["nome_cartao"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "conferir_fatura_cartao",
+        description: "CONFERE uma fatura de cartão que o usuário ditou contra os lançamentos já registrados. SOMENTE LEITURA — nunca cria, edita nem exclui nada. Use quando pedirem 'conferir a fatura', 'ver se esses lançamentos já existem', 'validar a fatura do cartão'. Passe TODOS os itens que o usuário ditou de uma vez.",
+        parameters: {
+          type: "object",
+          properties: {
+            nome_cartao: { type: "string", description: "Nome do cartão da fatura." },
+            mes: { type: "number", description: "Mês da competência da fatura (1-12). Sem ele, usa a fatura atual." },
+            ano: { type: "number", description: "Ano da competência (ex.: 2026). Padrão: ano corrente." },
+            itens: {
+              type: "array",
+              description: "Itens da fatura ditados pelo usuário.",
+              items: {
+                type: "object",
+                properties: {
+                  descricao: { type: "string", description: "Descrição do item na fatura." },
+                  valor: { type: "number", description: "Valor do item." },
+                  data: { type: "string", description: "AAAA-MM-DD, se o usuário informou a data. Opcional." },
+                },
+                required: ["descricao", "valor"],
+              },
+            },
+          },
+          required: ["nome_cartao", "itens"],
         },
       },
     },
@@ -759,6 +877,8 @@ function buildTools(ctx?: ToolContext) {
             forma_pagamento: { type: "string", description: "Cartão/forma (nome que o usuário disse). Obrigatório. NUNCA invente." },
             categoria: { type: "string" },
             data_inicio: { type: "string", description: "AAAA-MM-DD (default hoje)" },
+            competencia_inicial: { type: "string", description: "AAAA-MM da fatura da 1ª parcela, quando o usuário disser ('a partir da fatura 10/2026' → '2026-10'). Omita para a fatura vigente." },
+            reembolsavel: { type: "boolean", description: "true quando a compra é de terceiro e vai ser reembolsada ao usuário ('a ser reembolsada pela X', 'coloca a receber'). Todas as parcelas vão para A Receber (continuam na fatura, mas não contam como gasto pessoal). Coloque quem reembolsa na descrição." },
             confirmar_sem_cartao: {
               type: "boolean",
               description: "So true depois que o usuario confirmar que o parcelamento NAO e num cartao de credito (carne, boleto parcelado).",
@@ -803,6 +923,25 @@ function buildTools(ctx?: ToolContext) {
             },
           },
           required: ["ids", "destino"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "marcar_a_receber",
+        description:
+          "Edita EM MASSA despesas JA REGISTRADAS para 'A Receber' (reembolsavel: gasto de terceiro que vai ser devolvido ao usuario) ou tira de 'A Receber' (reembolsavel=false). Use para 'coloca os lancamentos #606 a #620 a receber', 'essas parcelas sao reembolsaveis pela Nescon', 'tira do a receber'. Aceita lista de codigos e/ou faixa (codigo_inicial..codigo_final). Por padrao inclui todas as parcelas da mesma compra. Continua na fatura do cartao; so muda a classificacao.",
+        parameters: {
+          type: "object",
+          properties: {
+            ids: { type: "array", items: { type: "number" }, description: "Codigos dos lancamentos (ex.: [606, 607])." },
+            codigo_inicial: { type: "number", description: "Inicio da faixa de codigos ('de #606 a #620' → 606)." },
+            codigo_final: { type: "number", description: "Fim da faixa de codigos ('de #606 a #620' → 620)." },
+            reembolsavel: { type: "boolean", description: "true = colocar A Receber (padrao). false = tirar de A Receber (volta a ser despesa pessoal)." },
+            incluir_parcelas: { type: "boolean", description: "Padrao true: aplica a todas as parcelas da mesma compra parcelada." },
+            reembolsado_por: { type: "string", description: "Opcional: quem vai reembolsar (ex.: 'Nescon'). Entra na descricao se ainda nao estiver." },
+          },
         },
       },
     },
@@ -1195,7 +1334,8 @@ function buildTools(ctx?: ToolContext) {
     if (ctx?.tipoPessoa === "juridica") {
       return [];
     }
-    return todas;
+    // PF não recebe ferramentas de empresa: lista menor = menos confusão do modelo.
+    return todas.filter((t) => !/empresa/.test(t.function.name));
   }
   return todas.filter((t) => TOOLS_PJ.has(t.function.name));
 }
@@ -1213,7 +1353,8 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       (name === "insere_transacao" ||
         name === "parcelar_compra" ||
         name === "editar_ultima_compra" ||
-        name === "atualiza_transacao")
+        name === "atualiza_transacao" ||
+        name === "marcar_a_receber")
     ) {
       return JSON.stringify({
         erro: true,
@@ -1236,66 +1377,73 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
 
     switch (name) {
       case "insere_transacao": {
-        // Normaliza o tipo para o padrão do banco ("Receita" | "Despesa").
-        const tipo = /receita|entrada|income|recebimento/i.test(args.tipo || "")
-          ? "Receita"
-          : "Despesa";
-
-        // Exige forma de pagamento — não inventa PIX nem deixa em branco.
-        const formaInformada = String(args.forma_pagamento || "").trim();
-        if (!formaInformada) {
-          const cartoes = await getCartoesComSaldo(ctx.userId, ctx.walletId).catch(() => []);
-          const nomesCartoes = (cartoes as any[]).map((c) => c.cartao_nome || c.nome).filter(Boolean);
-          const sugestoes = [
-            "Pix", "Boleto", "Dinheiro", "Débito",
-            ...nomesCartoes.slice(0, 5),
-          ];
-          return JSON.stringify({
-            precisa_forma: true,
-            error: "Forma de pagamento não informada.",
-            mensagem: "Pergunte ao usuário como pagou/recebeu antes de registrar. Não invente Pix.",
-            sugestoes,
-            exemplo: nomesCartoes.length
-              ? `Foi no Pix, boleto, dinheiro ou no cartão (${nomesCartoes.join(", ")})?`
-              : "Foi no Pix, boleto, dinheiro ou em qual cartão?",
-          });
-        }
-
-        // Resolver categoria pelo nome (case-insensitive), preferindo o tipo.
-        const nomeBusca = (args.categoria || "").toLowerCase();
-        const cat = ctx.categories.find(
-          (c) => c.nome.toLowerCase() === nomeBusca && c.tipo === tipo
-        ) || ctx.categories.find(
-          (c) => c.nome.toLowerCase() === nomeBusca
+        // Fase 1 — o texto do cliente corrige valor/data/tipo do LLM
+        // ("1.500" lido como 1,5; "ontem"; "me pagou" ≠ "paguei").
+        const rec = reconciliarLancamento(
+          { valor: args.valor, data: args.data_transacao, tipo: args.tipo },
+          ctx.userMessage || "",
+          { origemMidia: ctx.origemMidia },
         );
+        if (rec.ajustes.length) console.log(`[AI Agent] insere_transacao ajustes (user ${ctx.userId}):`, rec.ajustes.join("; "));
+        if (!rec.valor) {
+          return JSON.stringify({ precisa_valor: true, mensagem: "Pergunte ao usuário o valor do lançamento. Não grave nada ainda." });
+        }
+        if (!rec.tipo) {
+          return JSON.stringify({ precisa_tipo: true, mensagem: "Não ficou claro se é entrada ou saída. Pergunte: 'É entrada ou saída?'. Não grave nada ainda." });
+        }
+        const tipo = rec.tipo;
 
-        // F4.2 — Memória: se o modelo não casou categoria, tenta o que o
-        // usuário já ensinou (comerciante/descrição → categoria).
+        // forma_pagamento é OPCIONAL. Sem forma (ou "dinheiro/caixinha/à vista/espécie")
+        // => CAIXINHA (dinheiro): o usuário novo consegue lançar de cara, só para saber
+        // para onde o dinheiro vai. Conta/cartão só quando o usuário citar.
+        const formaInformada = String(args.forma_pagamento || "").trim();
+        const ehCaixinha =
+          !formaInformada ||
+          /^(dinheiro|caixinha|em dinheiro|à vista|a vista|esp[ée]cie|em esp[ée]cie|em m[ãa]os|cash)$/i.test(formaInformada);
+
+        // Fase 1 — ordem de decisão da categoria:
+        //  1) correção que o cliente já fez para este comerciante (memória 'correcao');
+        //  2) nome do LLM casado com a categoria real (sinônimos/sem acento: "Farmácia" → "Saúde");
+        //  3) memória de uso (palpites anteriores confirmados pelo uso);
+        //  4) consenso global; 5) palavras-chave da descrição; 6) "Outras".
+        const catsTipo = ctx.categories as CategoriaPf[];
+        const mem = args.descricao ? await resolveMemoriaCategoria(ctx.userId, args.descricao) : undefined;
+        const memCat = mem ? catsTipo.find((c) => c.id === mem.categoria_id && c.tipo === tipo) : undefined;
+        let cat: CategoriaPf | undefined;
+        let origemCategoria = "";
+        if (memCat && mem?.origem === "correcao") {
+          cat = memCat; origemCategoria = "correcao";
+        }
+        if (!cat) {
+          const c = casarCategoriaPorNome(args.categoria, catsTipo, tipo);
+          // "Outras" do LLM não vence uma pista melhor (memória/palavra-chave).
+          if (c && !/^outr/i.test(c.nome)) { cat = c; origemCategoria = "llm"; }
+        }
+        if (!cat && memCat) { cat = memCat; origemCategoria = "memoria"; }
         let categoriaId = cat?.id;
         let categoriaNome = cat?.nome;
-        if (!categoriaId && args.descricao) {
-          const mem = await resolveMemoriaCategoria(ctx.userId, args.descricao);
-          if (mem) {
-            categoriaId = mem.categoria_id;
-            categoriaNome = mem.categoria_nome;
-          }
-        }
-        // Cérebro coletivo (global agregado): usa o consenso da multidão quando
-        // o modelo e a memória pessoal não resolveram.
+        // Cérebro coletivo (global agregado).
         if (!categoriaId && args.descricao) {
           const g = await resolveMemoriaGlobal("pf", args.descricao);
           if (g) {
-            const gc = ctx.categories.find(c => c.nome.toLowerCase() === g.categoria_nome.toLowerCase() && c.tipo === tipo)
-              || ctx.categories.find(c => c.nome.toLowerCase() === g.categoria_nome.toLowerCase());
-            if (gc) { categoriaId = gc.id; categoriaNome = gc.nome; }
+            const gc = casarCategoriaPorNome(g.categoria_nome, catsTipo, tipo);
+            if (gc) { categoriaId = gc.id; categoriaNome = gc.nome; origemCategoria = "global"; }
           }
+        }
+        if (!categoriaId) {
+          const sug = sugerirCategoriaPorDescricao(`${args.descricao || ""} ${ctx.origemMidia ? "" : ctx.userMessage || ""}`, catsTipo, tipo);
+          if (sug) { categoriaId = sug.categoria.id; categoriaNome = sug.categoria.nome; origemCategoria = `palavra:${sug.termo}`; }
+        }
+        if (!categoriaId) {
+          const c = casarCategoriaPorNome(args.categoria, catsTipo, tipo);
+          if (c) { categoriaId = c.id; categoriaNome = c.nome; origemCategoria = "llm-outras"; }
         }
         // Fallbacks: "Outros" do tipo → qualquer do tipo → qualquer categoria.
         if (!categoriaId) {
           const fb = ctx.categories.find(c => /outr/i.test(c.nome) && c.tipo === tipo)
             || ctx.categories.find(c => c.tipo === tipo)
             || ctx.categories[0];
-          if (fb) { categoriaId = fb.id; categoriaNome = categoriaNome || fb.nome; }
+          if (fb) { categoriaId = fb.id; categoriaNome = categoriaNome || fb.nome; origemCategoria = "fallback"; }
         }
         // Defensivo: usuário sem categorias (plano de contas não criado) —
         // cria uma "Outros" na hora, para o lançamento nunca falhar por isso.
@@ -1321,23 +1469,34 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         let formaPagId: number | undefined;
         let formaPagNome: string | undefined;
         let cartaoIncompleto: any = undefined;
-        if (args.forma_pagamento) {
-          const fp = await resolveOuCriaFormaPagamento(ctx.userId, args.forma_pagamento);
+        if (!ehCaixinha && formaInformada) {
+          const fp = await resolveOuCriaFormaPagamento(ctx.userId, formaInformada, { criarCartao: false });
+          if (fp.naoEncontrado) {
+            return JSON.stringify({
+              precisa_meio: true,
+              mensagem: `Não encontrei a forma de pagamento/cartão "${formaInformada}" no cadastro. Pergunte se é um cartão novo (para cadastrar com limite, fechamento e vencimento) ou qual das formas cadastradas foi usada. NÃO grave ainda.`,
+            });
+          }
           if (fp.id) { formaPagId = fp.id; formaPagNome = fp.nome; }
           if (fp.incompleto) cartaoIncompleto = { nome: fp.nome, faltando: fp.faltando };
         }
+        if (ehCaixinha) formaPagNome = "Caixinha";
 
-        const today = new Date().toISOString().slice(0, 10);
         const txData: any = {
           carteira_id: ctx.walletId,
           categoria_id: categoriaId,
           descricao: args.descricao || "Transação",
-          valor: args.valor || 0,
+          valor: rec.valor,
           tipo,
-          data_transacao: args.data_transacao || today,
+          data_transacao: rec.data,
           status: "Efetivada",
+          origem: "whatsapp",
         };
         if (formaPagId) txData.forma_pagamento_id = formaPagId;
+        // Gasto de terceiro: só despesa; o texto do cliente também liga ("a ser reembolsada pela X").
+        const reembolsavelIns = tipo === "Despesa" &&
+          (args.reembolsavel === true ||
+            (!ctx.origemMidia && detectarReembolsavel(trechoDoLancamento(ctx.userMessage || "", rec.valor, args.descricao))));
 
         // Mesma regra do formulário/API: cartão → fatura + sem caixa; senão → conta padrão.
         try {
@@ -1359,18 +1518,24 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         } catch (meioErr: any) {
           return JSON.stringify({ error: meioErr?.message || "Meio de pagamento inválido" });
         }
+        // Mesma regra da API: reembolsável fica Pendente (= A Receber) até o reembolso chegar.
+        if (reembolsavelIns) {
+          txData.reembolsavel = true;
+          txData.status = "Pendente";
+        }
 
         try {
           const result = await storage.createTransaction(txData as any);
-          // F4.2 — Aprender: se o modelo deu categoria real (não fallback).
-          if (cat && args.descricao) {
-            await aprenderMemoriaCategoria(ctx.userId, args.descricao, cat.id, cat.nome);
+          console.log(`[AI Agent] categoria "${categoriaNome}" via ${origemCategoria || "?"} para "${args.descricao}" (user ${ctx.userId})`);
+          // Aprende palpites bons (não fallback) sem sobrescrever correções do cliente.
+          if (args.descricao && categoriaId && origemCategoria && origemCategoria !== "fallback" && origemCategoria !== "correcao") {
+            await aprenderMemoriaCategoria(ctx.userId, args.descricao, categoriaId, categoriaNome || "", "ia");
           }
           // Aviso na hora: status do orçamento da categoria (se houver limite).
           const orcamento = tipo === "Despesa"
             ? await getStatusOrcamentoCategoria(ctx.userId, ctx.walletId, categoriaId!)
             : null;
-          return JSON.stringify({ success: true, id: result.id, ...txData, categoria: categoriaNome || "Outros", forma_pagamento: formaPagNome, orcamento, cartao_incompleto: cartaoIncompleto });
+          return JSON.stringify({ success: true, id: result.id, ...txData, a_receber: reembolsavelIns || undefined, categoria: categoriaNome || "Outros", origem_categoria: origemCategoria || undefined, ajustes_texto: rec.ajustes.length ? rec.ajustes : undefined, forma_pagamento: formaPagNome, orcamento, cartao_incompleto: cartaoIncompleto });
         } catch (dbErr: any) {
           // Loga a causa REAL (constraint, coluna, etc.) para diagnóstico.
           console.error(`[AI Agent] insere_transacao FALHOU no banco:`, dbErr?.message, "| payload:", JSON.stringify(txData));
@@ -1384,15 +1549,30 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         if (args.valor) updateData.valor = args.valor;
         if (args.tipo) updateData.tipo = args.tipo;
         if (args.data_transacao) updateData.data_transacao = args.data_transacao;
+        let catCorrigida: CategoriaPf | undefined;
         if (args.categoria) {
-          const cat = ctx.categories.find(c => c.nome.toLowerCase() === args.categoria.toLowerCase());
-          if (cat) updateData.categoria_id = cat.id;
+          catCorrigida = casarCategoriaPorNome(args.categoria, ctx.categories as CategoriaPf[]);
+          if (!catCorrigida) {
+            // Antes: ignorava em silêncio e respondia "atualizado".
+            return JSON.stringify({
+              success: false,
+              error: `Categoria "${args.categoria}" não existe.`,
+              categorias_disponiveis: ctx.categories.map((c) => c.nome),
+              mensagem: "Mostre as categorias disponíveis e pergunte qual usar.",
+            });
+          }
+          updateData.categoria_id = catCorrigida.id;
         }
 
         // Isolamento: só edita transação da própria carteira.
         const doDono = await transacaoPertenceAoWallet(args.id_transacao, ctx.walletId);
         if (!doDono) return JSON.stringify({ success: false, error: "Transação não encontrada nas suas transações." });
+        const antes = catCorrigida ? await storage.getTransactionById(args.id_transacao) : undefined;
         const result = await storage.updateTransaction(args.id_transacao, updateData);
+        // Correção do cliente vira regra: próximos lançamentos iguais já vêm certos.
+        if (result && catCorrigida && antes?.descricao) {
+          await aprenderMemoriaCategoria(ctx.userId, String(antes.descricao), catCorrigida.id, catCorrigida.nome, "correcao");
+        }
         return JSON.stringify({ success: !!result, transaction: result });
       }
 
@@ -1457,6 +1637,16 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           return JSON.stringify({ error: "Nenhuma transação encontrada com os filtros fornecidos." });
         }
 
+        // Fase 1 — trava no código (não só no prompt): só exclui quando a
+        // mensagem ATUAL do cliente é uma confirmação ("sim", "pode", "confirmo").
+        if (interpretarConfirmacao(ctx.userMessage || "") !== "sim") {
+          return JSON.stringify({
+            precisa_confirmacao: true,
+            mensagem: `Encontrei ${transacoesFiltradas.length} lançamento(s). Mostre a lista ao usuário e pergunte se confirma a exclusão. NÃO diga que excluiu.`,
+            transacoes: transacoesFiltradas.slice(0, 10).map(t => ({ id: t.id, descricao: t.descricao, valor: t.valor, data: t.data_transacao })),
+          });
+        }
+
         for (const transacao of transacoesFiltradas) {
           await softDeleteTransacao(transacao.id, ctx.walletId, ctx.userId);
         }
@@ -1476,6 +1666,12 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       }
 
       case "excluir_todas": {
+        if (interpretarConfirmacao(ctx.userMessage || "") !== "sim") {
+          return JSON.stringify({
+            precisa_confirmacao: true,
+            mensagem: "Pergunte ao usuário se ele confirma apagar TODAS as transações (vão para a lixeira por 30 dias). NÃO diga que excluiu.",
+          });
+        }
         const n = await softDeleteTodasTransacoes(ctx.walletId, ctx.userId);
         return JSON.stringify({ success: true, excluidas: n, recuperavel: true, msg: `${n} transação(ões) movidas para a lixeira (recuperáveis por 30 dias).` });
       }
@@ -1535,7 +1731,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       }
 
       case "resumo_dia": {
-        const data = args.data || new Date().toISOString().slice(0, 10);
+        const data = args.data || hojeSP();
         const summary = await getDailySummary(ctx.walletId, data);
         return JSON.stringify({ data, ...summary });
       }
@@ -1564,14 +1760,14 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       case "gastos_por_categoria": {
         const now = new Date();
         const de = args.data_inicio || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-        const ate = args.data_fim || now.toISOString().slice(0, 10);
+        const ate = args.data_fim || hojeSP();
         const cats = await getCategoryBreakdown(ctx.walletId, de, ate);
         return JSON.stringify({ de, ate, categorias: cats });
       }
 
       case "gerar_grafico": {
         const tipo = args.tipo || "bar";
-        const data = args.data || new Date().toISOString().slice(0, 10);
+        const data = args.data || hojeSP();
         const baseUrl = process.env.BASE_URL || "http://localhost:5000";
         // Gera URL do endpoint de chart existente (requer auth — usar API key interna)
         const chartUrl = `${baseUrl}/api/charts/${tipo === "pizza" ? "pizza" : "bar"}?date=${data}`;
@@ -1860,10 +2056,70 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           status: "Pendente",
           recorrente: args.recorrente || false,
           classificacao_despesa: args.recorrente ? "fixa" : "variavel",
+          origem: "whatsapp",
         };
 
         const result = await storage.createTransaction(txData as any);
         return JSON.stringify({ success: true, id: result.id, ...txData, categoria: cat?.nome, msg: "Conta a pagar criada!" });
+      }
+
+      case "criar_mensalidade": {
+        const { criarMensalidade, gerarMensalidadeSeDevido, carteiraDoUsuario } =
+          await import("./mensalidades.service");
+        const descricao = String(args.descricao || "").trim();
+        const valor = Number(args.valor) || 0;
+        const dia = Math.min(31, Math.max(1, Math.floor(Number(args.dia_vencimento) || 0)));
+        if (!descricao || !(valor > 0) || !(dia >= 1 && dia <= 31)) {
+          return JSON.stringify({ error: "Preciso da descrição, valor e dia de vencimento (1–31) da mensalidade." });
+        }
+        const cartaoNome = String(args.cartao || "").trim();
+        const ehCartao = !!cartaoNome && !/^(boleto|conta|dinheiro|caixinha|à vista|a vista)$/i.test(cartaoNome);
+        const fmtValor = valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        if (emModoPj(ctx) && ctx.empresaAtiva) {
+          const empresaId = ctx.empresaAtiva.id;
+          let cartao_id: number | null = null;
+          if (ehCartao) {
+            const { resolverMeioPorNomePj } = await import("./meio-pagamento-pj");
+            const resolvido = await resolverMeioPorNomePj(empresaId, ctx.userId, cartaoNome);
+            if (!resolvido.ok || !resolvido.cartao_id) {
+              return JSON.stringify({ error: `Não encontrei o cartão "${cartaoNome}" na empresa. Cadastre o cartão (nome, dia de fechamento e vencimento) antes de criar a mensalidade.` });
+            }
+            cartao_id = resolvido.cartao_id;
+          }
+          const criada = await criarMensalidade({
+            usuario_id: ctx.userId, empresa_id: empresaId, carteira_id: null,
+            descricao, valor, dia_vencimento: dia,
+            tipo_meio: ehCartao ? "cartao" : "boleto",
+            categoria_id: null, conta_bancaria_id: null,
+            forma_pagamento_id: null, cartao_id, origem: "whatsapp",
+          });
+          await gerarMensalidadeSeDevido(criada.id);
+          return JSON.stringify({
+            success: true, id: criada.id,
+            msg: `Mensalidade *${descricao}* criada — R$ ${fmtValor} todo dia ${dia} (${ehCartao ? `cartão ${cartaoNome}` : "boleto"}). Já lancei a deste mês; as próximas entram sozinhas.`,
+          });
+        }
+
+        // PF
+        let forma_pagamento_id: number | null = null;
+        if (ehCartao) {
+          const fp = await resolveOuCriaFormaPagamento(ctx.userId, cartaoNome);
+          if (fp.id) forma_pagamento_id = fp.id;
+        }
+        const carteiraId = ctx.walletId || (await carteiraDoUsuario(ctx.userId));
+        const criada = await criarMensalidade({
+          usuario_id: ctx.userId, empresa_id: null, carteira_id: carteiraId,
+          descricao, valor, dia_vencimento: dia,
+          tipo_meio: ehCartao ? "cartao" : "boleto",
+          categoria_id: null, conta_bancaria_id: null,
+          forma_pagamento_id, cartao_id: null, origem: "whatsapp",
+        });
+        await gerarMensalidadeSeDevido(criada.id);
+        return JSON.stringify({
+          success: true, id: criada.id,
+          msg: `Mensalidade *${descricao}* criada — R$ ${fmtValor} todo dia ${dia} (${ehCartao ? `cartão ${cartaoNome}` : "boleto"}). Já lancei a deste mês; as próximas entram sozinhas.`,
+        });
       }
 
       case "listar_contas_pagar": {
@@ -1944,8 +2200,33 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         const todos = [...cartoes, ...globalPMs];
         const cartao = todos.find(c => c.nome.toLowerCase().includes(args.nome_cartao.toLowerCase()));
         if (!cartao) return JSON.stringify({ error: `Cartão '${args.nome_cartao}' não encontrado.` });
-        const fatura = await getFaturaCartao(cartao.id, ctx.walletId);
+        const fatura = await getFaturaCartao(cartao.id, ctx.walletId, args.mes, args.ano);
         return JSON.stringify(fatura);
+      }
+
+      // Conferência de fatura — PF, somente leitura. Não escreve nada no banco.
+      case "conferir_fatura_cartao": {
+        const itens = Array.isArray(args.itens) ? args.itens : [];
+        if (itens.length === 0) {
+          return JSON.stringify({ error: "Nenhum item informado. Peça ao usuário a lista de lançamentos da fatura (descrição e valor)." });
+        }
+        const doUsuario = await storage.getPaymentMethodsByUserId(ctx.userId);
+        const globais = await storage.getGlobalPaymentMethods();
+        const cartao = [...doUsuario, ...globais].find(c => c.nome.toLowerCase().includes(String(args.nome_cartao || "").toLowerCase()));
+        if (!cartao) return JSON.stringify({ error: `Cartão '${args.nome_cartao}' não encontrado.` });
+
+        const r = await conferirFaturaCartao(
+          ctx.walletId,
+          cartao.id,
+          itens.map((i: any) => ({ descricao: String(i.descricao || ""), valor: Number(i.valor), data: i.data })),
+          args.mes,
+          args.ano,
+        );
+        return JSON.stringify({
+          ...r,
+          somente_leitura: true,
+          instrucao: "Isto é CONFERÊNCIA. Não lance, não edite e não exclua nada a partir deste resultado. Mostre o período conferido, depois os itens agrupados por status (confere / valor_divergente / descricao_divergente / outra_competencia / duplicado / nao_encontrado), depois os lançamentos em 'nao_informados' (estão no sistema e o usuário não citou) e, por fim, total lançado x total informado. Se algo faltar, apenas diga o que falta — não ofereça lançar sozinho.",
+        });
       }
 
       case "quanto_posso_gastar": {
@@ -2042,12 +2323,18 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         let formaNome: string | undefined;
         let cartaoIncompletoP: any = undefined;
         if (args.forma_pagamento) {
-          const fp = await resolveOuCriaFormaPagamento(ctx.userId, args.forma_pagamento);
+          const fp = await resolveOuCriaFormaPagamento(ctx.userId, args.forma_pagamento, { criarCartao: false });
+          if (fp.naoEncontrado) {
+            return JSON.stringify({
+              precisa_meio: true,
+              mensagem: `Não encontrei o cartão "${args.forma_pagamento}". Pergunte se é um cartão novo (para cadastrar) ou qual cartão cadastrado foi usado. NÃO grave ainda.`,
+            });
+          }
           formaId = fp.id || null;
           formaNome = fp.nome;
           if (fp.incompleto) cartaoIncompletoP = { nome: fp.nome, faltando: fp.faltando };
         }
-        const dataInicio = /^\d{4}-\d{2}-\d{2}$/.test(args.data_inicio || "") ? args.data_inicio : new Date().toISOString().slice(0, 10);
+        const dataInicio = /^\d{4}-\d{2}-\d{2}$/.test(args.data_inicio || "") ? args.data_inicio : hojeSP();
 
         // Conta padrão se não for cartão completo (criarCompraParcelada já amarra fatura no cartão).
         let contaBancariaId: number | null = null;
@@ -2078,6 +2365,9 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           contaBancariaId = await contaPadraoPf(ctx.userId);
         }
 
+        const competenciaInicial = normalizarCompetencia(args.competencia_inicial);
+        const reembolsavelP = args.reembolsavel === true ||
+          (!ctx.origemMidia && detectarReembolsavel(ctx.userMessage || ""));
         const r = await criarCompraParcelada({
           walletId: ctx.walletId,
           categoriaId: catP!.id,
@@ -2088,12 +2378,61 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           dataInicio,
           usuarioId: ctx.userId,
           contaBancariaId,
+          competenciaInicial,
+          reembolsavel: reembolsavelP,
         });
-        const orcamentoP = await getStatusOrcamentoCategoria(ctx.userId, ctx.walletId, catP!.id);
+        // A Receber não é gasto pessoal: não consome orçamento.
+        const orcamentoP = reembolsavelP ? null : await getStatusOrcamentoCategoria(ctx.userId, ctx.walletId, catP!.id);
         return JSON.stringify({
-          success: true, compra_grupo: r.compra_grupo, parcelas: r.parcelas,
+          success: true, compra_grupo: r.compra_grupo, parcelas: r.parcelas, descricao: args.descricao || "Compra",
           valor_parcela: r.valor_parcela, total: Math.round(valorTotal * 100) / 100,
           categoria: catP?.nome, forma_pagamento: formaNome, ids: r.ids, orcamento: orcamentoP, cartao_incompleto: cartaoIncompletoP,
+          a_receber: reembolsavelP || undefined, competencia_inicial: competenciaInicial || undefined,
+        });
+      }
+
+      case "marcar_a_receber": {
+        const ids = expandirCodigosLote(args);
+        if (!ids.length) {
+          return JSON.stringify({ error: "Informe os códigos (lista ou faixa, ex.: #606 a #620)." });
+        }
+        if (ids.length > 500) {
+          return JSON.stringify({ error: `Faixa grande demais (${ids.length} códigos). Confirme os códigos com o usuário.` });
+        }
+        const marcar = args.reembolsavel !== false;
+        const { definirReembolsavelLote } = await import("../storage");
+        const r = await definirReembolsavelLote(ctx.walletId, ids, marcar, {
+          incluirParcelas: args.incluir_parcelas !== false,
+        });
+        if (!r.ids.length) {
+          return JSON.stringify({
+            success: false,
+            error: "Nenhuma despesa sua com esses códigos (só despesas da sua carteira podem ir para A Receber).",
+            ignorados: r.ignorados,
+          });
+        }
+        const quem = String(args.reembolsado_por || "").trim();
+        if (marcar && quem) {
+          await db.execute(sql`
+            UPDATE transacoes
+            SET descricao = LEFT(descricao || ' (reembolso ' || ${quem}::text || ')', 255)
+            WHERE carteira_id = ${ctx.walletId}
+              AND id IN (${sql.join(r.ids.map((n) => sql`${n}`), sql`, `)})
+              AND position(lower(${quem}::text) in lower(descricao)) = 0
+          `);
+        }
+        const faixa = r.ids.length > 1 ? `#${r.ids[0]} a #${r.ids[r.ids.length - 1]}` : `#${r.ids[0]}`;
+        const totalBR = r.total.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        return JSON.stringify({
+          success: true,
+          a_receber: marcar,
+          ids: r.ids,
+          total: r.total,
+          ignorados: r.ignorados.length ? r.ignorados : undefined,
+          mensagem: marcar
+            ? `${r.ids.length} lançamento(s) (${faixa}, R$ ${totalBR}) agora estão em A Receber${quem ? ` (reembolso ${quem})` : ""}. Continuam na fatura, mas não contam como gasto seu.` +
+              (r.ignorados.length ? ` Ignorei ${r.ignorados.map((i) => `#${i}`).join(", ")} (não é despesa sua).` : "")
+            : `${r.ids.length} lançamento(s) (${faixa}, R$ ${totalBR}) saíram de A Receber e voltaram a ser despesa sua.`,
         });
       }
 
@@ -2179,7 +2518,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         const empresa = await resolverEmpresa(ctx.userId, args.empresa, ctx);
         if ("erro" in empresa) return JSON.stringify(empresa);
 
-        const { detectarMeio, textoMeioDeDetect } = await import("./parse-meio");
+        const { detectarMeio, textoMeioDeDetect, ehSoConfirmacaoOuRecusa } = await import("./parse-meio");
         const { resolverMeioPorNomePj, aplicarMeioPagamentoPj } = await import("./meio-pagamento-pj");
 
         // Meio: frase do usuário manda — pistas (banco/cartão) e cartão genérico.
@@ -2197,6 +2536,11 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         } else {
           meioTexto = String(args.forma_pagamento || "").trim();
           if (!meioTexto) meioTexto = textoMeioDeDetect(detUser);
+        }
+        // "Sim" ao resumo sem forma nos args: vale o meio que o cliente disse na
+        // mensagem anterior (ex.: foto com legenda "via caixinha").
+        if (!meioTexto && ehSoConfirmacaoOuRecusa(ctx.userMessage || "") && ctx.mensagemAnteriorUsuario) {
+          meioTexto = textoMeioDeDetect(detectarMeio(ctx.mensagemAnteriorUsuario));
         }
         if (!meioTexto) {
           const resolvidoVazio = await resolverMeioPorNomePj(empresa.id, ctx.userId, "");
@@ -2250,8 +2594,18 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           });
         }
 
-        if (!(Number(args.valor) > 0)) {
-          return JSON.stringify({ error: "Informe o valor do lançamento." });
+        // Fase 1 — texto do cliente corrige valor/data/tipo do LLM.
+        const recPj = reconciliarLancamento(
+          { valor: args.valor, data: args.data_transacao, tipo: args.tipo },
+          msgUser,
+          { origemMidia: ctx.origemMidia },
+        );
+        if (recPj.ajustes.length) console.log(`[AI Agent] lancar_empresa ajustes (user ${ctx.userId}):`, recPj.ajustes.join("; "));
+        if (!recPj.valor) {
+          return JSON.stringify({ error: "Informe o valor do lançamento.", precisa_valor: true });
+        }
+        if (!recPj.tipo) {
+          return JSON.stringify({ precisa_tipo: true, mensagem: "Não ficou claro se é entrada ou saída. Pergunte: 'É entrada ou saída?'. Não grave nada ainda." });
         }
 
         let resolvido = await resolverMeioPorNomePj(empresa.id, ctx.userId, meioTexto);
@@ -2261,6 +2615,19 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           if (doMsg && doMsg !== meioTexto) {
             resolvido = await resolverMeioPorNomePj(empresa.id, ctx.userId, doMsg);
           }
+        }
+        // Resposta solta sem pista de conta/cartão (ex.: "Sim" ao resumo da foto)
+        // não pode anular o meio que o modelo trouxe da conversa (ex.: Caixinha).
+        const argForma = String(args.forma_pagamento || "").trim();
+        if (
+          !resolvido.ok &&
+          detUser.tipo === "nome" &&
+          !detUser.pista &&
+          argForma &&
+          argForma !== meioTexto
+        ) {
+          const peloArg = await resolverMeioPorNomePj(empresa.id, ctx.userId, argForma);
+          if (peloArg.ok) resolvido = peloArg;
         }
         if (!resolvido.ok) {
           return JSON.stringify({
@@ -2278,23 +2645,40 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         }
 
         const contas = await storage.getEmpresasContasByEmpresaId(empresa.id);
-        const tipo = args.tipo === "Receita" ? "Receita" : "Despesa";
+        const tipo = recPj.tipo;
+        // Com vários lançamentos na mesma mensagem, classifica só pelo trecho deste item.
+        const trechoItem = trechoDoLancamento(msgUser, recPj.valor, args.descricao);
         const { conta, usouOutras, motivo, ignorouInformada } = resolverContaPj({
           contas,
           tipo,
           contaInformada: args.conta,
-          descricao: `${args.descricao || ""} ${ctx.userMessage || ""}`,
+          descricao: `${args.descricao || ""} ${trechoItem}`,
           segmento: ctx.empresaAtiva?.segmento || (empresa as any).segmento,
         });
+        // Palpite fraco (segmento / "Outras"): usa o que o cliente já ensinou
+        // (correções pelo WhatsApp e escolhas na conciliação bancária).
+        let contaFinal = conta;
+        if (conta && (motivo === "segmento" || motivo === "outras") && args.descricao) {
+          try {
+            const { resolveMemoriaContaPJ } = await import("../storage");
+            const memPj = await resolveMemoriaContaPJ(ctx.userId, chaveMemoria(String(args.descricao)) || String(args.descricao));
+            const cMem = memPj ? contas.find((c: any) => c.id === memPj.conta_contabil_id && c.tipo === tipo) : undefined;
+            if (cMem) {
+              console.log(`[Classificação PJ] memória: "${args.descricao}" → ${cMem.codigo} (antes ${conta.codigo}, ${motivo})`);
+              contaFinal = cMem;
+            }
+          } catch { /* segue com a classificação por regras */ }
+        }
         if (ignorouInformada) {
           console.log(`[Classificação PJ] palpite '${args.conta}' descartado (motivo=${motivo}) para "${args.descricao}" → ${conta?.codigo}`);
         }
         if (!conta) {
           return JSON.stringify({ error: `A empresa não tem uma conta do tipo ${tipo} no plano de contas. Peça ao usuário para escolher uma conta.` });
         }
+        const contaUsada = contaFinal ?? conta;
+        const usouOutrasFinal = usouOutras && contaUsada.id === conta.id;
 
-        const today = new Date().toISOString().slice(0, 10);
-        const dataISO = (args.data_transacao || today).slice(0, 10);
+        const dataISO = recPj.data;
         let meio;
         try {
           meio = await aplicarMeioPagamentoPj({
@@ -2313,9 +2697,9 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
 
         const criada = await storage.createEmpresaTransacao({
           empresa_id: empresa.id,
-          categoria_id: conta.id,
+          categoria_id: contaUsada.id,
           descricao: args.descricao || "Lançamento",
-          valor: Number(args.valor) || 0,
+          valor: recPj.valor,
           tipo,
           data_transacao: dataISO,
           status: "Efetivada",
@@ -2329,11 +2713,11 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           metodo_pagamento: meio.metodo_pagamento || resolvido.rotulo,
         } as any);
         const orcamento = tipo === "Despesa"
-          ? await getStatusOrcamentoContaPJ(empresa.id, conta.id)
+          ? await getStatusOrcamentoContaPJ(empresa.id, contaUsada.id)
           : null;
         const empresaNome = empresa.nome_fantasia || empresa.razao_social;
         let pendente_criar_conta: any = null;
-        if (usouOutras) {
+        if (usouOutrasFinal) {
           const nomeSugerido = sugerirNomeConta(
             String(args.descricao || ""),
             ctx.userMessage,
@@ -2345,6 +2729,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
             empresaId: empresa.id,
             empresaNome: String(empresaNome),
             idTransacao: criada.id,
+            descricao: String(args.descricao || ""),
             nomeConta: nomeSugerido,
             tipo,
             classificacao,
@@ -2361,13 +2746,13 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         return JSON.stringify({
           success: true, id: criada.id, empresa: empresaNome,
           descricao: args.descricao || "Lançamento",
-          conta: `${conta.codigo} — ${conta.nome}`, valor: args.valor, tipo, data: dataISO,
+          conta: `${contaUsada.codigo} — ${contaUsada.nome}`, valor: recPj.valor, tipo, data: dataISO,
           pago_com: resolvido.rotulo,
           meio: meio.isCartao ? "cartao" : "conta_bancaria",
           aviso_meio: resolvido.aviso || undefined,
-          usou_outras: usouOutras,
+          usou_outras: usouOutrasFinal,
           pendente_criar_conta,
-          dica: usouOutras
+          dica: usouOutrasFinal
             ? `Lancei em Outras. OFEREÇA criar a conta *${pendente_criar_conta.nome_sugerido}* e mover o lançamento. Quando o usuário confirmar (sim/pode/ok/claro/fechou/cria...), chame 'criar_conta_e_mover_empresa' com id_transacao=${criada.id} e nome=${pendente_criar_conta.nome_sugerido} — NÃO peça confirmação de novo. Se recusar (não/deixa/cancela), não crie.`
             : (resolvido.aviso
               ? resolvido.aviso
@@ -2527,7 +2912,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         }
 
         // 1ª parcela: HOJE → fatura vigente (respeita dia de fechamento do cartão).
-        const today = new Date().toISOString().slice(0, 10);
+        const today = hojeSP();
         const dataInicio = /^\d{4}-\d{2}-\d{2}/.test(args.data_inicio || "")
           ? String(args.data_inicio).slice(0, 10)
           : today;
@@ -2748,6 +3133,13 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         // Mesmas validações da tela (serviço compartilhado com o controller).
         const r = await atualizarTransacaoEmpresa(empresa.id, args.id_transacao, ctx.userId, dados);
         if (!r.ok) return JSON.stringify({ success: false, error: r.error });
+        // Correção de conta vira regra para os próximos lançamentos com essa descrição.
+        if (dados.categoria_id && r.anterior?.descricao && Number(r.anterior.categoria_id) !== Number(dados.categoria_id)) {
+          try {
+            const { aprenderMemoriaContaPJ } = await import("../storage");
+            await aprenderMemoriaContaPJ(ctx.userId, chaveMemoria(String(r.anterior.descricao)) || String(r.anterior.descricao), dados.categoria_id);
+          } catch { /* aprendizado é best-effort */ }
+        }
         return JSON.stringify({
           success: true,
           alterado: dados,
@@ -3060,63 +3452,215 @@ async function resolverEmpresa(
 // AGENT LOOP — function calling até resposta
 // ============================================
 
-// Chama o modelo de chat com FALLBACK: tenta o principal (OpenAI) e, se falhar,
-// um reserva (qualquer endpoint compatível com a API da OpenAI — ex.: Groq,
-// OpenRouter, ou outro modelo). Configurar via env:
-//   AI_FALLBACK_API_KEY, AI_FALLBACK_BASE_URL (default OpenAI), AI_MODEL_FALLBACK
-async function callChatCompletion(messages: any[], tools: any[]): Promise<any> {
-  const primaryKey = process.env.OPENAI_API_KEY;
-  const primaryModel = process.env.AI_MODEL || "gpt-4o-mini";
+// Chama o modelo de chat.
+// - llm "openai" (padrão WhatsApp): OpenAI + fallback AI_FALLBACK_* / Groq
+// - llm "deepseek": só DeepSeek (orquestrador admin) — não mistura com OpenAI
+async function callChatCompletion(
+  messages: any[],
+  tools: any[],
+  opts?: { llm?: "openai" | "deepseek" },
+): Promise<any> {
+  // Fila de provedores (OpenAI → DeepSeek → Gemini…, ver ia-provedores.ts).
+  // O orquestrador prefere o DeepSeek; se ele falhar, a fila segue normal.
+  const { chatComFila } = await import("./ia-provedores");
+  return chatComFila(
+    { messages, tools, tool_choice: "auto", temperature: 0.1 },
+    { preferir: opts?.llm === "deepseek" ? "deepseek" : null, origem: opts?.llm === "deepseek" ? "orquestrador" : "agente" },
+  );
+}
 
-  try {
-    if (!primaryKey) throw new Error("OPENAI_API_KEY não configurada");
-    const payload = { messages, tools, tool_choice: "auto", temperature: 0.3 };
-    return await withRetry(
-      () => axios.post(
-        "https://api.openai.com/v1/chat/completions",
-        { model: primaryModel, ...payload },
-        { headers: { Authorization: `Bearer ${primaryKey}`, "Content-Type": "application/json" }, timeout: 60000 },
-      ),
-      { provider: "openai-chat" },
-    );
-  } catch (primaryErr) {
-    const fbKey = process.env.AI_FALLBACK_API_KEY || process.env.GROQ_API_KEY;
-    if (!fbKey) throw primaryErr; // sem reserva configurado
-    const isGroq = !process.env.AI_FALLBACK_API_KEY && !!process.env.GROQ_API_KEY;
-    const fbUrl = isGroq
-      ? "https://api.groq.com/openai/v1/chat/completions"
-      : (process.env.AI_FALLBACK_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "") + "/chat/completions";
-    const fbModel = isGroq ? "llama-3.3-70b-versatile" : (process.env.AI_MODEL_FALLBACK || "gpt-4o-mini");
+export type AgentLlm = "openai" | "deepseek";
 
-    console.warn(`[AI] modelo principal falhou — usando reserva (${fbModel} em ${fbUrl})`);
-
-    // LIMPEZA PARA FALLBACK: Modelos como Llama/Groq não suportam campos extras como 'annotations' em mensagens do assistant
-    const cleanMessages = messages.map(m => {
-      const { annotations, ...rest } = m;
-      return rest;
-    });
-
-    return await withRetry(
-      () => axios.post(
-        fbUrl,
-        { messages: cleanMessages, tools, tool_choice: "auto", temperature: 0.3, model: fbModel },
-        { headers: { Authorization: `Bearer ${fbKey}`, "Content-Type": "application/json" }, timeout: 60000 },
-      ),
-      { provider: isGroq ? "groq-fallback" : "ai-fallback" },
-    );
+/** Lança um item já entendido (descrição/valor/tipo/data/conta) com o meio informado. */
+async function lancarItemPj(
+  ctx: ToolContext,
+  item: LancamentoSemMeio & { empresaNome?: string },
+  meio: string,
+  empNome: string,
+): Promise<string> {
+  const raw = await executeTool(
+    "lancar_empresa",
+    {
+      empresa: item.empresaNome || empNome,
+      descricao: item.descricao,
+      valor: item.valor,
+      tipo: item.tipo,
+      forma_pagamento: meio,
+      // A data dita na 1ª mensagem ("no dia 22/09/2026"); sem ela, hoje.
+      ...(item.data ? { data_transacao: item.data } : {}),
+      // Conta do plano informada pelo cliente ("Código 3.07").
+      ...(item.conta ? { conta: item.conta } : {}),
+    },
+    ctx,
+  );
+  let parsed: any = null;
+  try { parsed = JSON.parse(raw); } catch { parsed = null; }
+  if (parsed?.id) {
+    limparPendenteMeio(ctx.userId);
+    const { montarReciboDeEscrita } = await import("./recibo-agente");
+    return montarReciboDeEscrita({ tool: "lancar_empresa", raw, parsed });
   }
+  if (parsed?.mensagem || parsed?.error) {
+    return String(parsed.mensagem || parsed.error);
+  }
+  return "Não consegui lançar com esse meio. Diga dinheiro, pix + banco, ou o nome do cartão.";
+}
+
+type LancamentoAlvoPj = { id: number; descricao: string; valor: number; tipo: string; contaAtual: string | null };
+
+/** Lançamento citado pelo código, ou o último feito pelo WhatsApp nas últimas horas. */
+async function buscarLancamentoPj(empresaId: number, id?: number): Promise<LancamentoAlvoPj | null> {
+  const rows = (id
+    ? await db.execute(sql`
+        SELECT t.id, t.descricao, t.valor, t.tipo, c.codigo || ' — ' || c.nome AS conta_atual
+        FROM empresas_transacoes t LEFT JOIN empresas_contas c ON c.id = t.categoria_id
+        WHERE t.empresa_id = ${empresaId} AND t.id = ${id}
+        LIMIT 1`)
+    : await db.execute(sql`
+        SELECT t.id, t.descricao, t.valor, t.tipo, c.codigo || ' — ' || c.nome AS conta_atual
+        FROM empresas_transacoes t LEFT JOIN empresas_contas c ON c.id = t.categoria_id
+        WHERE t.empresa_id = ${empresaId} AND t.origem = 'whatsapp'
+          AND t.data_registro > now() - interval '6 hours'
+        ORDER BY t.id DESC
+        LIMIT 1`)) as any[];
+  const r = rows[0];
+  return r ? { id: Number(r.id), descricao: r.descricao, valor: Number(r.valor), tipo: r.tipo, contaAtual: r.conta_atual ?? null } : null;
+}
+
+async function contaPjPorCodigo(empresaId: number, codigo: string) {
+  const rows = (await db.execute(sql`
+    SELECT id, codigo, nome, tipo, sintetica FROM empresas_contas
+    WHERE empresa_id = ${empresaId} AND codigo = ${codigo} AND ativo = true
+    LIMIT 1`)) as any[];
+  return rows[0] as { id: number; codigo: string; nome: string; tipo: string; sintetica: boolean } | undefined;
+}
+
+/**
+ * Correções rápidas PJ sem o modelo: "SIM" de uma edição pendente,
+ * "Corrige o valor 100,00" e "Código 3.07". null = não é com este atalho.
+ */
+async function tentarCorrecaoRapidaPj(ctx: ToolContext, msg: string): Promise<string | null> {
+  const emp = ctx.empresaAtiva;
+  if (!emp) return null;
+
+  const ed = obterEdicao(ctx.userId);
+  if (ed && ed.empresaId === emp.id) {
+    const c = interpretarConfirmacao(msg);
+    if (c === "sim") {
+      limparEdicao(ctx.userId);
+      const raw = await executeTool("atualiza_transacao_empresa", { empresa: emp.nome, id_transacao: ed.id, ...ed.campos }, ctx);
+      let r: any = null;
+      try { r = JSON.parse(raw); } catch { r = null; }
+      if (!r?.success) return `Não consegui alterar o #${ed.id}: ${r?.error || "erro ao salvar"}.`;
+      const t = r.transacao || {};
+      const linhas = [`✅ *Alterado* — #${ed.id} ${ed.descricao}`];
+      if (ed.campos.valor != null) linhas.push(`💰 R$ ${Number(ed.campos.valor).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+      if (ed.campos.conta) {
+        const conta = await contaPjPorCodigo(emp.id, ed.campos.conta);
+        linhas.push(`📊 ${conta ? `${conta.codigo} — ${conta.nome}` : ed.campos.conta}`);
+      }
+      void t;
+      return linhas.join("\n");
+    }
+    if (c === "nao") {
+      limparEdicao(ctx.userId);
+      return "Ok, não alterei nada.";
+    }
+  }
+
+  const cv = detectarCorrecaoValor(msg);
+  if (cv) {
+    const pend = obterPendenteMeio(ctx.userId);
+    if (pend && !cv.id) {
+      // Ainda não foi lançado: corrige o que está esperando o meio.
+      const atualizado = { ...pend, valor: cv.valor };
+      if (pend.meio) return lancarItemPj(ctx, atualizado, pend.meio, emp.nome);
+      registrarPendenteMeio(ctx.userId, pend.empresaNome || emp.nome, atualizado);
+      return mensagemPedirMeio(atualizado, true);
+    }
+    const alvo = await buscarLancamentoPj(emp.id, cv.id);
+    if (!alvo) {
+      return cv.id
+        ? `Não achei o lançamento #${cv.id} nesta empresa. Confira o código no recibo.`
+        : "Qual lançamento devo corrigir? Me mande o código que aparece no recibo (ex.: *corrige o valor do #204 para 100*).";
+    }
+    limparOfertaCriarConta(ctx.userId);
+    registrarEdicao({ userId: ctx.userId, empresaId: emp.id, id: alvo.id, descricao: alvo.descricao, campos: { valor: cv.valor } });
+    return mensagemConfirmarValor(alvo, cv.valor);
+  }
+
+  const cod = detectarCodigoConta(msg);
+  if (cod) {
+    const conta = await contaPjPorCodigo(emp.id, cod);
+    if (!conta) return `Não achei a conta *${cod}* no plano de contas desta empresa. Confira o código em *Plano de Contas* ou me diga o nome da conta.`;
+    if (conta.sintetica) return `*${conta.codigo} — ${conta.nome}* é um grupo e não recebe lançamento. Me diga uma conta dentro dele (ex.: ${conta.codigo}.01).`;
+    const pend = obterPendenteMeio(ctx.userId);
+    if (pend) {
+      const atualizado = { ...pend, conta: conta.codigo };
+      registrarPendenteMeio(ctx.userId, pend.empresaNome || emp.nome, atualizado);
+      if (atualizado.valor == null) return `Ok, vai na conta *${conta.codigo} — ${conta.nome}*.\n\n${mensagemPedirValor(atualizado)}`;
+      if (pend.meio) return lancarItemPj(ctx, atualizado, pend.meio, emp.nome);
+      return `Ok, vai na conta *${conta.codigo} — ${conta.nome}*.\n\n${mensagemPedirMeio(atualizado)}`;
+    }
+    const alvo = await buscarLancamentoPj(emp.id);
+    if (!alvo || alvo.tipo !== conta.tipo) {
+      return `A conta *${conta.codigo} — ${conta.nome}* é de ${conta.tipo.toLowerCase()}. Qual lançamento devo mover para ela? Me mande o código do recibo (ex.: *#204*).`;
+    }
+    limparOfertaCriarConta(ctx.userId);
+    registrarEdicao({ userId: ctx.userId, empresaId: emp.id, id: alvo.id, descricao: alvo.descricao, campos: { conta: conta.codigo } });
+    return mensagemConfirmarConta(alvo, conta);
+  }
+  return null;
 }
 
 export async function runAgent(
   userMessage: string,
   ctx: ToolContext,
   history: { role: string; content: string }[] = [],
+  opts?: { llm?: AgentLlm },
 ): Promise<string> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error("OPENAI_API_KEY não configurada");
+  const llm: AgentLlm = opts?.llm || "openai";
+  // Basta um provedor na fila (OpenAI, DeepSeek, Gemini ou Groq).
+  const { algumProvedorConfigurado } = await import("./ia-provedores");
+  if (!algumProvedorConfigurado()) {
+    throw new Error("Nenhum provedor de IA configurado (OPENAI_API_KEY, DEEPSEEK_API_KEY ou GEMINI_API_KEY)");
+  }
 
   // Disponibiliza o texto atual para os handlers (ex.: casar meta pelo contexto).
   ctx.userMessage = userMessage;
+  ctx.mensagemAnteriorUsuario =
+    [...(history || [])].reverse().find((m) => m.role === "user" && m.content)?.content || undefined;
+  ctx.decisoes = [];
+  // Pendências ("em qual meio?", "criar a conta X?") vêm do banco: sobrevivem a
+  // restart e funcionam com mais de uma réplica.
+  await hidratarPendencias(ctx.userId);
+
+  // Atalho "adiciona/adicionar/mais/outro/outra <valor>" = repetir a ÚLTIMA despesa
+  // (mesma descrição/conta/meio, só o valor muda). SEMPRE confirma antes. PF e PJ.
+  {
+    const repResolvido = await tentarResolverRepetir(ctx.userId, userMessage);
+    if (repResolvido.handled) return repResolvido.reply;
+    const cmdRep = detectarComandoRepetir(userMessage);
+    if (cmdRep) {
+      const modoPj = emModoPj(ctx) && !!ctx.empresaAtiva;
+      return await prepararRepetir(
+        {
+          userId: ctx.userId,
+          modoPj,
+          walletId: ctx.walletId ?? null,
+          empresaId: modoPj ? (ctx.empresaAtiva?.id ?? null) : null,
+          empresaNome: modoPj ? (ctx.empresaAtiva?.nome ?? null) : null,
+        },
+        cmdRep.valor,
+      );
+    }
+  }
+
+  // PJ: "SIM" de edição pendente, "Corrige o valor 100", "Código 3.07" — sem o modelo.
+  if (emModoPj(ctx) && ctx.empresaAtiva && !ctx.origemMidia) {
+    const correcao = await tentarCorrecaoRapidaPj(ctx, userMessage);
+    if (correcao) return correcao;
+  }
 
   // Oferta "criar conta e mover" (PJ): respostas curtas sim/não executam sem depender do LLM.
   if (emModoPj(ctx)) {
@@ -3128,36 +3672,57 @@ export async function runAgent(
   if (emModoPj(ctx) && ctx.empresaAtiva) {
     const empNome = ctx.empresaAtiva.nome;
     const soMeio = respostaEhSoMeio(userMessage);
+    const soValor = ctx.origemMidia ? null : respostaEhSoValor(userMessage);
     const pend = obterPendenteMeio(ctx.userId);
+
+    const lancarPendente = (item: LancamentoSemMeio & { empresaNome?: string }, meio: string) =>
+      lancarItemPj(ctx, item, meio, empNome);
+
+    if (pend && soValor != null) {
+      // "Valor de 870,00 Reais" depois do "Anotei…": completa/corrige o pendente
+      // (antes virava um lançamento novo chamado "Valor de Reais").
+      const atualizado = { ...pend, valor: soValor };
+      if (pend.meio) return await lancarPendente(atualizado, pend.meio);
+      registrarPendenteMeio(ctx.userId, pend.empresaNome || empNome, atualizado);
+      return mensagemPedirMeio(atualizado, pend.valor != null);
+    }
     if (pend && soMeio) {
-      const raw = await executeTool(
-        "lancar_empresa",
-        {
-          empresa: pend.empresaNome || empNome,
-          descricao: pend.descricao,
-          valor: pend.valor,
-          tipo: pend.tipo,
-          forma_pagamento: soMeio,
-        },
-        ctx,
-      );
-      let parsed: any = null;
-      try { parsed = JSON.parse(raw); } catch { parsed = null; }
-      if (parsed?.id) {
-        limparPendenteMeio(ctx.userId);
-        const { montarReciboDeEscrita } = await import("./recibo-agente");
-        return montarReciboDeEscrita({ tool: "lancar_empresa", raw, parsed });
+      if (pend.valor == null) {
+        registrarPendenteMeio(ctx.userId, pend.empresaNome || empNome, { ...pend, meio: soMeio });
+        return mensagemPedirValor(pend);
       }
-      if (parsed?.mensagem || parsed?.error) {
-        return String(parsed.mensagem || parsed.error);
-      }
-      return "Não consegui lançar com esse meio. Diga dinheiro, pix + banco, ou o nome do cartão.";
+      return await lancarPendente(pend, soMeio);
     }
 
-    const semMeio = pareceLancamentoSemMeio(userMessage);
+    // Mídia (foto/áudio) exige confirmação antes de gravar; vários itens na
+    // mesma mensagem vão para o agente (o atalho juntaria tudo em um só).
+    const semMeio =
+      !ctx.origemMidia && segmentarLancamentos(userMessage).length <= 1
+        ? pareceLancamentoSemMeio(userMessage)
+        : null;
     if (semMeio) {
       registrarPendenteMeio(ctx.userId, empNome, semMeio);
       return mensagemPedirMeio(semMeio);
+    }
+    // "Venda de mercadorias no dia 23/09/2026" sem valor → pergunta o valor
+    // (em vez de o modelo inventar ou ignorar a data).
+    const semValor =
+      !ctx.origemMidia && segmentarLancamentos(userMessage).length <= 1
+        ? pareceLancamentoSemValor(userMessage)
+        : null;
+    if (semValor) {
+      registrarPendenteMeio(ctx.userId, empNome, semValor);
+      return mensagemPedirValor(semValor);
+    }
+    // "Despesa Pedágio na caixinha 100 reais": tudo informado → lança direto
+    // (o modelo pedia "Confirma?" e depois dizia que não havia contas).
+    const completo =
+      !ctx.origemMidia && segmentarLancamentos(userMessage).length <= 1
+        ? pareceLancamentoCompletoPj(userMessage)
+        : null;
+    if (completo) {
+      limparPendenteMeio(ctx.userId);
+      return await lancarPendente(completo, completo.meio);
     }
   }
 
@@ -3303,6 +3868,8 @@ Se for ambíguo → pergunte só sim ou não.
 
 ## ⚠️ CONTEÚDO EXTRAÍDO DE MÍDIA (foto/áudio/documento) — CONFIRME ANTES DE GRAVAR
 - Esta mensagem foi extraída automaticamente de uma mídia e PODE conter erros de leitura/transcrição.
+- "Direção: ENTRADA" = Receita (Pix/TED recebido, estorno). "Direção: SAIDA" = Despesa. "INDEFINIDA" → pergunte se foi entrada ou saída.
+- Comprovante de Pix/transferência vira UM lançamento pelo Total (Pagador/Recebedor ajudam na descrição). Cupom de mercado: UM lançamento pelo Total.
 - NÃO registre lançamento(s) agora. Primeiro RESUMA o que entendeu: descrição, categoria provável, data e VALOR (e o total, se houver vários itens).
 - Termine perguntando: "Confirma o lançamento? Responda *SIM* para registrar, ou me diga o que corrigir."
 - Só use as ferramentas de lançamento (insere_transacao / lancar_empresa) DEPOIS que o usuário confirmar (ex.: responder "sim", "pode lançar", "confirmo") numa próxima mensagem.
@@ -3314,10 +3881,21 @@ Se for ambíguo → pergunte só sim ou não.
     ? ""
     : `
 
-## Categorias Disponíveis
-${ctx.categories.map(c => `- ${c.nome} (${c.tipo})`).join("\n")}`;
+## Categorias Disponíveis (use EXATAMENTE um destes nomes)
+${ctx.categories.map(c => `- ${c.nome} (${c.tipo})${c.descricao ? `: ${String(c.descricao).replace(/\s*(DESPESA|RECEITA) (FIXA|VARIÁVEL)\.?/gi, "").slice(0, 90)}` : ""}`).join("\n")}`;
 
-  const systemPrompt = FINANCIAL_AGENT_SYSTEM_PROMPT + buildDynamicContext() + pjInstructions + midiaInstructions + categoriasBloco;
+  const regrasInterpretacao = `
+
+## Datas e interpretação (obrigatório)
+${contextoDataParaPrompt()}
+- "ontem", "sexta passada", "dia 5", "05/09" → converta para YYYY-MM-DD usando HOJE acima.
+- Valores em formato brasileiro: "1.500" = 1500; "1.500,50" = 1500.50; "2k" = 2000; "mil e duzentos" = 1200.
+- O valor é o dinheiro, não quantidades nem datas ("2 pizzas 80" → 80; "dia 5 aluguel 1500" → 1500).
+- "paguei/gastei/comprei/fiz pix para" = Despesa. "recebi/me pagou/pagaram/caiu/vendi/estorno/reembolso" = Receita.
+- Sem sinal de entrada ou saída e sem contexto claro → pergunte "É entrada ou saída?" antes de lançar.
+- Vários lançamentos na mesma mensagem ("frete 50 e comissão 30") → um lançamento por item, cada um com a própria descrição e valor.
+- Se a ferramenta responder precisa_valor / precisa_tipo / precisa_meio, faça a pergunta ao usuário e NÃO diga que registrou.`;
+  const systemPrompt = FINANCIAL_AGENT_SYSTEM_PROMPT + buildDynamicContext() + regrasInterpretacao + pjInstructions + midiaInstructions + categoriasBloco;
 
   // Histórico curto da conversa (memória entre mensagens) entra entre o
   // system prompt e a mensagem atual, para o agente manter contexto.
@@ -3347,7 +3925,7 @@ ${ctx.categories.map(c => `- ${c.nome} (${c.tipo})`).join("\n")}`;
   for (let i = 0; i < maxIterations; i++) {
     let response;
     try {
-      response = await callChatCompletion(messages, tools);
+      response = await callChatCompletion(messages, tools, { llm });
     } catch (chatErr: any) {
       console.error(`[AI Agent] Erro em callChatCompletion na iteração ${i}:`, chatErr?.message);
       if (ultimoResultadoTool) {
@@ -3387,7 +3965,20 @@ ${ctx.categories.map(c => `- ${c.nome} (${c.tipo})`).join("\n")}`;
     // Executar cada tool call
     for (const toolCall of assistantMessage.tool_calls) {
       const fnName = toolCall.function.name;
-      const fnArgs = JSON.parse(toolCall.function.arguments || "{}");
+      // JSON malformado do modelo não pode derrubar a rodada (escritas anteriores
+      // já gravadas + "erro inesperado" → cliente reenvia → duplicata).
+      let fnArgs: any;
+      try {
+        fnArgs = JSON.parse(toolCall.function.arguments || "{}");
+      } catch {
+        console.warn(`[AI Agent] argumentos inválidos em ${fnName}:`, String(toolCall.function.arguments).slice(0, 200));
+        messages.push({
+          role: "tool",
+          tool_call_id: toolCall.id,
+          content: JSON.stringify({ error: "Argumentos inválidos (JSON malformado). Chame a ferramenta novamente com JSON válido." }),
+        });
+        continue;
+      }
 
       console.log(`[AI Agent] Tool call: ${fnName}(${JSON.stringify(fnArgs)})`);
       // Mapeamento de aliases para evitar erros de "function not defined"
@@ -3485,6 +4076,12 @@ ${ctx.categories.map(c => `- ${c.nome} (${c.tipo})`).join("\n")}`;
       ultimaToolExecutada = fnName;
       ultimoResultadoTool = result;
       registrarEscrita(fnName, result);
+      ctx.decisoes?.push({
+        tool: fnName,
+        args: fnArgs && typeof fnArgs === "object" ? fnArgs : {},
+        ok: !/"error"\s*:|"precisa_/.test(String(result || "")),
+        resumo: String(result || "").slice(0, 400),
+      });
       if (ctx.toolTrace) {
         ctx.toolTrace.push({
           name: fnName,

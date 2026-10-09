@@ -1,7 +1,11 @@
 import { useAuth } from "@/hooks/use-auth";
+import { diasAteSP } from "../../../shared/datas-sp";
 
-const MS_DIA = 1000 * 60 * 60 * 24;
 const AVISO_VENCIMENTO_DIAS = 7;
+// Assinante: o acesso já inclui 3 dias de tolerância depois do vencimento e o
+// Asaas cobra sozinho. O aviso só aparece quando a mensalidade venceu sem
+// pagamento (restam 3 dias ou menos de acesso).
+const AVISO_ASSINANTE_DIAS = 3;
 
 export function useSubscriptionStatus() {
   const { user } = useAuth();
@@ -13,11 +17,9 @@ export function useSubscriptionStatus() {
 
   const expirationDate = user?.data_expiracao_assinatura || null;
 
-  const daysRemaining = ((): number | null => {
-    if (!expirationDate) return null;
-    const ms = new Date(expirationDate).getTime() - Date.now();
-    return Math.ceil(ms / MS_DIA);
-  })();
+  // Dias de calendário em São Paulo: vencer hoje às 20h é "hoje", não "amanhã".
+  // (O corte de acesso abaixo continua pelo horário exato.)
+  const daysRemaining = diasAteSP(expirationDate);
 
   const isAdminUser = isAdmin();
 
@@ -46,7 +48,7 @@ export function useSubscriptionStatus() {
     hasActiveAccess() &&
     daysRemaining != null &&
     daysRemaining >= 0 &&
-    daysRemaining <= AVISO_VENCIMENTO_DIAS;
+    daysRemaining <= (isTrial ? AVISO_VENCIMENTO_DIAS : AVISO_ASSINANTE_DIAS);
 
   return {
     user,

@@ -12,7 +12,12 @@
 import { getAsaasService, AsaasService, AsaasCreditCardData, AsaasCreditCardHolderInfo } from './asaas.service';
 import { getNotificationService, NotificationService } from './notification.service';
 import type { IStorage } from '../storage';
-import { filtrarPlanosPorTipo } from '../storage';
+import { resolverPlanoDoUsuario } from './resolver-plano';
+import { obterEncargos, camposAsaas } from './cobranca-encargos';
+import { novaExpiracao, vencimentoPrimeiraCobranca, fimDoPeriodoPago, fimDoCicloPago, vencimentoDoCiclo, proximaCobrancaDoAcesso, vencimentoCoberto } from './assinatura-datas';
+import { rotuloModalidade } from '../../shared/modalidade';
+import { db } from '../db';
+import { sql } from 'drizzle-orm';
 import type {
   User,
   SubscriptionPlan,
@@ -101,6 +106,51 @@ export interface ActivateSubscriptionResult {
 // SUBSCRIPTION SERVICE CLASS
 // ============================================
 
+/**
+ * Cobrança pendente pode ser reenviada ao cliente? Só se o valor for o do plano
+ * atual, ainda não tiver vencido (vencimento >= hoje, calendário de SP) e não
+ * estiver marcada como vencida pelo Asaas.
+ */
+export function podeReaproveitarCobranca(
+  c: { valor: unknown; vencimento: unknown; status?: string },
+  valorEsperado: number,
+  hoje: string,
+  vencimentoEsperado?: string,
+): boolean {
+  const v = Number(c.valor);
+  if (!Number.isFinite(v) || Math.abs(v - valorEsperado) >= 0.005) return false;
+  if (c.status && c.status !== 'PENDING' && c.status !== 'pending') return false;
+  const venc = c.vencimento instanceof Date ? c.vencimento.toISOString().slice(0, 10) : String(c.vencimento || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(venc)) return false; // sem data conhecida: gera uma nova
+  if (venc < hoje) return false;
+  // Vencimento tem de ser o fim da vigência atual: cobrança criada com outra
+  // data (ex.: 21/10 para uma degustação que acabou em 21/09) é refeita.
+  if (vencimentoEsperado && venc !== vencimentoEsperado) return false;
+  return true;
+}
+
+/** Última conferência de pagamento no Asaas por cliente (manual ou automática). */
+let tabelaConferenciasPronta = false;
+export async function garantirTabelaConferencias(): Promise<void> {
+  if (tabelaConferenciasPronta) return;
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS asaas_conferencias (
+      usuario_id    INTEGER PRIMARY KEY,
+      conferido_em  TIMESTAMPTZ NOT NULL DEFAULT now(),
+      origem        VARCHAR(12) NOT NULL DEFAULT 'auto'
+    )
+  `);
+  tabelaConferenciasPronta = true;
+}
+
+async function registrarConferencia(userId: number, origem: 'auto' | 'manual'): Promise<void> {
+  await garantirTabelaConferencias();
+  await db.execute(sql`
+    INSERT INTO asaas_conferencias (usuario_id, conferido_em, origem) VALUES (${userId}, now(), ${origem})
+    ON CONFLICT (usuario_id) DO UPDATE SET conferido_em = now(), origem = EXCLUDED.origem
+  `);
+}
+
 export class SubscriptionService {
   private asaasService: AsaasService | null = null;
   private notificationService: NotificationService;
@@ -179,6 +229,7 @@ export class SubscriptionService {
       const cfgCiclo = CICLO_ASAAS[data.ciclo || 'mensal'] || CICLO_ASAAS.mensal;
       const valorCiclo = parseFloat(plan.priceMonthly.toString()) * cfgCiclo.meses;
       const asaasSubscription = await (await this.getAsaas()).createSubscription({
+        ...camposAsaas(await obterEncargos()),
         customer: asaasCustomer.asaasCustomerId,
         billingType: 'CREDIT_CARD',
         cycle: cfgCiclo.cycle,
@@ -264,7 +315,7 @@ export class SubscriptionService {
     userId: number,
     ciclo: 'mensal' | 'trimestral' | 'anual',
     cpfCnpjInformado?: string
-  ): Promise<{ url: string; ciclo: string }> {
+  ): Promise<{ url: string; ciclo: string; vencimento?: string }> {
     const user = await this.storage.getUserById(userId);
     if (!user) {
       throw new Error('Usuário não encontrado');
@@ -286,44 +337,77 @@ export class SubscriptionService {
     if (!tipoPessoa) {
       throw new Error('Defina se o usuário é Pessoa Física ou Jurídica antes de gerar a cobrança.');
     }
-    const candidatos = filtrarPlanosPorTipo(plans, tipoPessoa);
-    if (!candidatos.length) {
-      const rotulo = tipoPessoa === 'juridica' ? 'Pessoa Jurídica' : 'Pessoa Física';
-      throw new Error(`Nenhum plano ativo para ${rotulo}. Cadastre um plano desse tipo em Pagamentos.`);
+    const plan = resolverPlanoDoUsuario(user, plans);
+    if (!plan) {
+      throw new Error(`Nenhum plano ativo para ${rotuloModalidade(user as any)}. Cadastre um plano desse tipo em Pagamentos.`);
     }
-    if (candidatos.length > 1) {
-      console.warn(
-        `[Assinatura] ${candidatos.length} planos ativos para tipo '${tipoPessoa}'; usando o mais barato (${candidatos[0].planCode}). Mantenha um plano por tipo.`,
-      );
-    }
-    const plan = candidatos[0];
+
+    // Valor que a cobrança DEVE ter para o plano atual (respeita o override).
+    const valorEsperado = parseFloat(plan.priceMonthly.toString()) * cfgCiclo.meses;
+    const hoje = AsaasService.getTodayForAsaas();
+    // Só reaproveita cobrança com o valor do plano atual E ainda não vencida:
+    // entregar um link vencido (ex.: de 21/09 num link gerado em 25/09) confunde
+    // o cliente e o ciclo passaria a contar da data antiga.
+    const vencimentoEsperado = vencimentoPrimeiraCobranca(hoje, user as any);
+    const reaproveitavel = (valor: any, vencimento: any, status?: string) =>
+      podeReaproveitarCobranca({ valor, vencimento, status }, valorEsperado, hoje, vencimentoEsperado);
 
     const existingActive = await this.storage.getActiveSubscriptionByUserId(userId);
     if (existingActive) {
-      throw new Error('Usuário já possui uma assinatura ativa');
+      // Assinante com mensalidade em aberto (renovação gerada pelo Asaas): o
+      // "renovar" devolve a fatura dessa cobrança, em vez de criar outra assinatura.
+      const doAtivo = await this.storage.getPaymentTransactionsBySubscriptionId(existingActive.id);
+      const aberta = doAtivo
+        .filter((p) => p.asaasInvoiceUrl && (p.status === 'pending' || p.status === 'overdue'))
+        .sort((a, b) => String((a as any).dueDate || '').localeCompare(String((b as any).dueDate || '')))[0];
+      if (aberta?.asaasInvoiceUrl) return { url: aberta.asaasInvoiceUrl, ciclo, vencimento: String((aberta as any).dueDate || '').slice(0, 10) || undefined };
+      throw new Error('Sua assinatura está em dia. A próxima cobrança é gerada automaticamente pelo Asaas.');
     }
 
     const asaas = await this.getAsaas();
 
-    // Reaproveita cobrança pendente já gerada (evita assinatura duplicada no Asaas)
+    // Reaproveita cobrança pendente já gerada (evita duplicar no Asaas) — MAS só se
+    // o valor bater com o plano atual. Se o valor mudou (ex.: virou Consultoria
+    // R$ 200), a cobrança antiga é cancelada e uma nova, no valor certo, é criada.
     const existentes = await this.storage.getAllSubscriptionsByUserId(userId);
     const pendente = existentes.find((s) => s.status === 'pending' && s.asaasSubscriptionId);
     if (pendente?.asaasSubscriptionId) {
       const locais = await this.storage.getPaymentTransactionsBySubscriptionId(pendente.id);
-      const localUrl = locais.find((p) => p.asaasInvoiceUrl && p.status === 'pending')?.asaasInvoiceUrl;
-      if (localUrl) {
+      const localPend = locais.find((p) => p.asaasInvoiceUrl && p.status === 'pending');
+      if (localPend?.asaasInvoiceUrl && reaproveitavel(localPend.amount, (localPend as any).dueDate)) {
         await this.storage.updateUser(userId, { ciclo_assinatura: ciclo } as any);
-        return { url: localUrl, ciclo };
+        return { url: localPend.asaasInvoiceUrl, ciclo, vencimento: String((localPend as any).dueDate || '').slice(0, 10) || undefined };
       }
       try {
         const asaasPays = await asaas.getSubscriptionPayments(pendente.asaasSubscriptionId, { limit: 5 });
-        const aberta = asaasPays.data.find((p) => p.invoiceUrl && (p.status === 'PENDING' || p.status === 'OVERDUE'));
+        const aberta = asaasPays.data.find(
+          (p) => p.invoiceUrl && reaproveitavel(p.value, p.dueDate, p.status),
+        );
         if (aberta?.invoiceUrl) {
           await this.storage.updateUser(userId, { ciclo_assinatura: ciclo } as any);
-          return { url: aberta.invoiceUrl, ciclo };
+          return { url: aberta.invoiceUrl, ciclo, vencimento: aberta.dueDate };
         }
       } catch (err) {
         console.warn('[SubscriptionService] Não reaproveitou cobrança pendente:', err);
+      }
+      // Chegou aqui = existe pendência vencida ou com VALOR diferente do plano atual.
+      // Cancela a antiga (Asaas + local) e gera uma nova, com vencimento hoje.
+      try {
+        await asaas.cancelSubscription(pendente.asaasSubscriptionId);
+        console.log(`[Assinatura] Cobrança pendente antiga cancelada (vencida ou valor != ${valorEsperado}) user=${userId}.`);
+      } catch (err) {
+        console.warn('[SubscriptionService] Falha ao cancelar cobrança pendente antiga:', err);
+      }
+      try {
+        await this.storage.updateUserSubscription(pendente.id, { status: 'canceled' } as any);
+        // As cobranças dela somem no Asaas: não ficam "Pendente" no histórico.
+        for (const p of await this.storage.getPaymentTransactionsBySubscriptionId(pendente.id)) {
+          if (p.status === 'pending' || p.status === 'overdue') {
+            await this.storage.updatePaymentTransaction(p.id, { status: 'canceled' } as any);
+          }
+        }
+      } catch (err) {
+        console.warn('[SubscriptionService] Falha ao marcar assinatura antiga como cancelada:', err);
       }
     }
 
@@ -366,9 +450,13 @@ export class SubscriptionService {
 
     const systemName = await getSystemName();
     const valorCiclo = parseFloat(plan.priceMonthly.toString()) * cfgCiclo.meses;
-    const nextDueDate = AsaasService.getTodayForAsaas();
+    // Degustação ainda rodando: a 1ª mensalidade vence quando ela termina (pagar
+    // antes não faz perder os dias restantes). Senão, vence hoje.
+    const nextDueDate = vencimentoEsperado;
 
     const asaasSubscription = await asaas.createSubscription({
+      // Multa e juros de atraso (config do admin; padrão 2% + 1% a.m.).
+      ...camposAsaas(await obterEncargos()),
       customer: asaasCustomer.asaasCustomerId,
       billingType: 'UNDEFINED',
       cycle: cfgCiclo.cycle,
@@ -378,7 +466,8 @@ export class SubscriptionService {
       externalReference: `user:${userId}`,
     });
 
-    const periodEnd = addMeses(new Date(), cfgCiclo.meses);
+    // currentPeriodEnd = próxima cobrança (sem a tolerância) — é o que a tela mostra.
+    const periodEnd = fimDoCicloPago(nextDueDate, cfgCiclo.meses);
     const subscription = await this.storage.createUserSubscription({
       usuarioId: userId,
       planId: plan.id,
@@ -413,24 +502,313 @@ export class SubscriptionService {
     });
 
     console.log(`[SubscriptionService] Hosted checkout user=${userId} invoice=${firstPayment.invoiceUrl}`);
-    return { url: firstPayment.invoiceUrl, ciclo };
+    return { url: firstPayment.invoiceUrl, ciclo, vencimento: firstPayment.dueDate };
+  }
+
+  /**
+   * Sincroniza o VALOR da assinatura recorrente do usuário no Asaas com o plano
+   * atual (respeitando o override plano_forcado_id). Usado quando o admin muda a
+   * marcação Base↔Consultoria: se já existe assinatura ativa/pendente no Asaas,
+   * atualiza o valor da recorrência E das cobranças em aberto (sem trabalho manual).
+   */
+  async sincronizarValorAssinatura(
+    userId: number,
+  ): Promise<{ atualizado: boolean; valor?: number; motivo?: string }> {
+    const user = await this.storage.getUserById(userId);
+    if (!user) return { atualizado: false, motivo: 'Usuário não encontrado' };
+
+    const ciclo = (((user as any).ciclo_assinatura || 'mensal') as 'mensal' | 'trimestral' | 'anual');
+    const cfg = CICLO_ASAAS[ciclo] || CICLO_ASAAS.mensal;
+
+    const plans = await this.storage.getActiveSubscriptionPlans();
+    const plan = resolverPlanoDoUsuario(user, plans);
+    if (!plan) return { atualizado: false, motivo: `Sem plano ativo para ${rotuloModalidade(user as any)}` };
+    const valor = parseFloat(plan.priceMonthly.toString()) * cfg.meses;
+
+    // Assinatura atual (ativa ou pendente) com id no Asaas.
+    const todas = await this.storage.getAllSubscriptionsByUserId(userId);
+    const atual = todas.find(
+      (s) => s.asaasSubscriptionId && (s.status === 'active' || s.status === 'pending'),
+    );
+    if (!atual?.asaasSubscriptionId) {
+      return { atualizado: false, valor, motivo: 'Sem assinatura ativa no Asaas — o novo valor vale na próxima cobrança/renovação.' };
+    }
+
+    const asaas = await this.getAsaas();
+    await asaas.updateSubscription(atual.asaasSubscriptionId, {
+      value: valor,
+      updatePendingPayments: true,
+    } as any);
+    try {
+      await this.storage.updateUserSubscription(atual.id, { planId: plan.id } as any);
+    } catch { /* referência local — não crítico */ }
+
+    console.log(`[Assinatura] Valor sincronizado no Asaas user=${userId} plano=${plan.planCode} valor=${valor}.`);
+    return { atualizado: true, valor };
+  }
+
+  /**
+   * Usuários com assinatura ativa/pendente no Asaas afetados por um plano:
+   * os que já estão nele e os que passariam a usá-lo pela regra de modalidade
+   * (ex.: PJ ME quando o plano PJ ME é criado/reativado).
+   */
+  async assinantesAfetadosPeloPlano(planId: number): Promise<number[]> {
+    const plans = await this.storage.getActiveSubscriptionPlans();
+    const rows = (await db.execute(sql`
+      SELECT DISTINCT us.usuario_id
+      FROM user_subscriptions us
+      WHERE us.asaas_subscription_id IS NOT NULL
+        AND us.status IN ('active', 'pending')
+    `)) as any[];
+    const afetados: number[] = [];
+    for (const r of rows) {
+      const userId = Number(r.usuario_id);
+      const user = await this.storage.getUserById(userId);
+      if (!user) continue;
+      const todas = await this.storage.getAllSubscriptionsByUserId(userId);
+      const atual = todas.find((s) => s.asaasSubscriptionId && (s.status === 'active' || s.status === 'pending'));
+      const resolvido = resolverPlanoDoUsuario(user, plans);
+      if (Number(atual?.planId) === planId || resolvido?.id === planId) afetados.push(userId);
+    }
+    return afetados;
+  }
+
+  /**
+   * Admin mudou preço/escopo de um plano: reajusta no Asaas a recorrência e as
+   * cobranças em aberto de todos os assinantes afetados. Um erro não para os demais.
+   */
+  async sincronizarAssinantesDoPlano(
+    planId: number,
+  ): Promise<{ total: number; atualizados: number; falhas: { userId: number; motivo: string }[] }> {
+    const ids = await this.assinantesAfetadosPeloPlano(planId);
+    const falhas: { userId: number; motivo: string }[] = [];
+    let atualizados = 0;
+    for (const userId of ids) {
+      try {
+        const r = await this.sincronizarValorAssinatura(userId);
+        if (r.atualizado) atualizados++;
+        else if (r.motivo) falhas.push({ userId, motivo: r.motivo });
+      } catch (e: any) {
+        falhas.push({ userId, motivo: e?.response?.data?.errors?.[0]?.description || e?.message || 'erro no Asaas' });
+      }
+    }
+    console.log(`[Assinatura] Plano ${planId}: ${atualizados}/${ids.length} assinaturas reajustadas no Asaas, ${falhas.length} falha(s).`);
+    return { total: ids.length, atualizados, falhas };
+  }
+
+  /**
+   * "Pagamento confirmado" por e-mail e WhatsApp — uma vez por cobrança
+   * (o Asaas manda CONFIRMED e depois RECEIVED no cartão; a conferência
+   * automática também pode reconhecer o mesmo pagamento).
+   */
+  async avisarPagamentoConfirmado(
+    userId: number,
+    p: { id: string; value?: number | string; invoiceUrl?: string; transactionReceiptUrl?: string },
+    acessoAte: Date,
+  ): Promise<void> {
+    const user = await this.storage.getUserById(userId);
+    if (!user) return;
+    const valor = Number(p.value ?? 0);
+    try {
+      const { reservarAvisoUnico } = await import('./lembretes-cobranca');
+      if (await reservarAvisoUnico(userId, `email-pago:${p.id}`)) {
+        const ativa = await this.storage.getActiveSubscriptionByUserId(userId).catch(() => undefined);
+        const plano = ativa ? (await this.storage.getSubscriptionPlanById(ativa.planId).catch(() => undefined))?.name : undefined;
+        await this.notificationService.sendPaymentConfirmed(user, valor, p.invoiceUrl, {
+          acessoAte,
+          proximaCobranca: proximaCobrancaDoAcesso(acessoAte),
+          plano: plano || undefined,
+          comprovanteUrl: p.transactionReceiptUrl,
+        });
+      }
+    } catch (err: any) {
+      console.warn('[Assinatura] e-mail de pagamento confirmado:', err?.message);
+    }
+    try {
+      const { avisarPagamentoConfirmado } = await import('./lembretes-cobranca');
+      await avisarPagamentoConfirmado(user as any, p.id, valor, acessoAte);
+    } catch { /* WhatsApp é best-effort */ }
+  }
+
+  /**
+   * Confere no Asaas (fonte da verdade) se o cliente pagou alguma cobrança que
+   * o sistema ainda não reconheceu — webhook perdido, fila pausada, token
+   * errado — e libera o acesso. Idempotente: só age quando o pagamento
+   * estende o acesso atual ou o usuário ainda não está como 'ativa'.
+   */
+  async sincronizarPagamentosAsaas(userId: number, origem: 'auto' | 'manual' = 'auto'): Promise<{
+    ativado: boolean;
+    pagos: number;
+    acessoAte?: Date;
+    motivo?: string;
+  }> {
+    // Conferência feita (manual ou automática): a automática deste cliente
+    // só volta depois da janela (ver asaas-sync.job.ts).
+    await registrarConferencia(userId, origem).catch((e) => console.warn('[Assinatura] registrar conferência:', e?.message));
+    const user = await this.storage.getUserById(userId);
+    if (!user) return { ativado: false, pagos: 0, motivo: 'Usuário não encontrado' };
+    const cliente = await this.storage.getAsaasCustomerByUserId(userId);
+    if (!cliente?.asaasCustomerId) return { ativado: false, pagos: 0, motivo: 'Cliente sem cadastro no Asaas' };
+
+    const asaas = await this.getAsaas();
+    const lista = await asaas.getCustomerPayments(cliente.asaasCustomerId, { limit: 50 });
+    const PAGO = ['RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH', 'DUNNING_RECEIVED'];
+    const pagos = (lista.data || [])
+      .filter((p: any) => PAGO.includes(String(p.status || '').toUpperCase()) && p.dueDate)
+      .sort((a: any, b: any) => String(a.dueDate).localeCompare(String(b.dueDate)));
+    if (!pagos.length) return { ativado: false, pagos: 0, motivo: 'Nenhum pagamento confirmado no Asaas' };
+
+    const subs = await this.storage.getAllSubscriptionsByUserId(userId);
+    const ciclo = ((user as any).ciclo_assinatura as string) || 'mensal';
+    const meses = CICLO_ASAAS[ciclo]?.meses || 1;
+    let acessoAte: Date | undefined;
+    let ativado = false;
+
+    // Correção: versões anteriores ancoravam no vencimento ALTERADO no painel do
+    // Asaas (fatura de 21/09 prorrogada para 21/10 virava acesso até 24/11).
+    // Se o acesso gravado é exatamente esse cálculo errado, volta para o certo.
+    const correto = pagos
+      .map((p: any) => vencimentoDoCiclo(p))
+      .filter((v): v is string => !!v)
+      .map((v) => fimDoPeriodoPago(v, meses))
+      .sort((a, b) => b.getTime() - a.getTime())[0];
+    const errados = new Set(
+      pagos
+        .filter((p: any) => p.originalDueDate && String(p.originalDueDate).slice(0, 10) !== String(p.dueDate).slice(0, 10))
+        .map((p: any) => fimDoPeriodoPago(String(p.dueDate).slice(0, 10), meses).toISOString()),
+    );
+    const expGravada = (user as any).data_expiracao_assinatura ? new Date((user as any).data_expiracao_assinatura) : null;
+    if (correto && expGravada && errados.has(expGravada.toISOString()) && expGravada > correto) {
+      await this.storage.updateUser(userId, { data_expiracao_assinatura: correto } as any);
+      const proxima = proximaCobrancaDoAcesso(correto);
+      const subAtiva = subs.find((x) => x.status === 'active');
+      if (subAtiva && proxima) {
+        await this.storage.updateUserSubscription(subAtiva.id, { currentPeriodEnd: new Date(`${proxima}T23:59:59.999-03:00`) } as any);
+      }
+      console.log(`[Assinatura] user ${userId}: acesso corrigido de ${expGravada.toISOString()} para ${correto.toISOString()} (vencimento original do Asaas)`);
+      acessoAte = correto;
+      ativado = true;
+    }
+
+    for (const p of pagos as any[]) {
+      const localSub =
+        subs.find((x) => x.asaasSubscriptionId && x.asaasSubscriptionId === p.subscription) ||
+        [...subs].sort((a, b) => b.id - a.id)[0];
+      if (!localSub) continue;
+
+      let local = await this.storage.getPaymentTransactionByAsaasId(p.id);
+      // Já aplicado antes (webhook ou conferência anterior): não recalcula — um
+      // ajuste de vigência feito depois pelo admin ("Definir") é respeitado.
+      if (local?.status === 'confirmed') {
+        const atualU = await this.storage.getUserById(userId);
+        if ((atualU as any)?.data_expiracao_assinatura) acessoAte = new Date((atualU as any).data_expiracao_assinatura);
+        continue;
+      }
+      if (!local) {
+        local = await this.storage.createPaymentTransaction({
+          usuarioId: userId,
+          subscriptionId: localSub.id,
+          asaasPaymentId: p.id,
+          asaasInvoiceUrl: p.invoiceUrl,
+          amount: String(p.value ?? '0'),
+          status: 'pending',
+          paymentMethod: String(p.billingType || 'undefined').toLowerCase(),
+          dueDate: p.dueDate,
+          description: p.description || 'Cobrança Asaas (sincronizada)',
+          metadata: JSON.stringify(p),
+        } as any);
+      }
+
+      // Pagamento novo para o sistema (webhook perdido): libera — sem reduzir um
+      // acesso maior já concedido — e só então marca como confirmado.
+      const venc = vencimentoDoCiclo(p) as string;
+      acessoAte = await this.activateUserSubscription(userId, localSub.id, venc, p.id);
+      await this.storage.updatePaymentTransaction(local.id, { status: 'confirmed', confirmedDate: new Date() } as any);
+      ativado = true;
+      await this.avisarPagamentoConfirmado(userId, p, acessoAte);
+      console.log(`[Assinatura] Pagamento ${p.id} (venc. ${venc}) reconhecido pela sincronização — user ${userId} até ${acessoAte.toISOString()}`);
+    }
+    return { ativado, pagos: pagos.length, acessoAte };
+  }
+
+  /**
+   * Ciclo que o pagamento cobre, pelas cobranças locais da assinatura (ver
+   * vencimentoCoberto). Cobrança mais antiga ainda "pendente" aqui é conferida
+   * no Asaas: excluída/cancelada lá não conta. Se o Asaas não responder, ela é
+   * ignorada (vale o vencimento da fatura paga, como antes).
+   */
+  private async cicloCobertoPeloPagamento(
+    subscriptionId: number,
+    vencimento: string | null | undefined,
+    asaasPaymentId?: string | null,
+  ): Promise<string | null | undefined> {
+    if (!vencimento || !subscriptionId) return vencimento;
+    try {
+      const locais = await this.storage.getPaymentTransactionsBySubscriptionId(subscriptionId);
+      const venc = String(vencimento).slice(0, 10);
+      const cobrancas: Array<{ id: string | null; status: string; dueDate: any }> = [];
+      for (const p of locais) {
+        let status = String(p.status || '');
+        const due = (p as any).dueDate ? String((p as any).dueDate).slice(0, 10) : null;
+        const emAberto = status === 'pending' || status === 'overdue';
+        const outra = !asaasPaymentId || p.asaasPaymentId !== asaasPaymentId;
+        if (emAberto && outra && due && due < venc) {
+          status = 'canceled';
+          if (p.asaasPaymentId) {
+            try {
+              const asaas = await this.getAsaas();
+              const remoto: any = await asaas.getPayment(p.asaasPaymentId);
+              const st = String(remoto?.status || '').toUpperCase();
+              if (remoto?.deleted) {
+                await this.storage.updatePaymentTransaction(p.id, { status: 'canceled' } as any);
+              } else if (st === 'PENDING' || st === 'OVERDUE') {
+                status = 'pending';
+              } else if (['RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH', 'DUNNING_RECEIVED'].includes(st)) {
+                status = 'confirmed';
+              }
+            } catch (err: any) {
+              console.warn(`[Assinatura] Não conferiu a cobrança ${p.asaasPaymentId} no Asaas:`, err?.message);
+            }
+          }
+        }
+        cobrancas.push({ id: p.asaasPaymentId, status, dueDate: due });
+      }
+      const coberto = vencimentoCoberto(cobrancas, venc, asaasPaymentId);
+      if (coberto && coberto !== venc) {
+        console.log(`[Assinatura] sub ${subscriptionId}: pagamento da fatura ${venc} cobre o ciclo ${coberto} (há cobrança anterior em aberto)`);
+      }
+      return coberto || vencimento;
+    } catch (err: any) {
+      console.warn('[Assinatura] Falha ao calcular o ciclo coberto; usando o vencimento da fatura:', err?.message);
+      return vencimento;
+    }
   }
 
   /**
    * Ativar assinatura do usuário (após confirmação de pagamento)
    */
-  async activateUserSubscription(userId: number, subscriptionId: number): Promise<void> {
+  async activateUserSubscription(userId: number, subscriptionId: number, vencimento?: string | null, asaasPaymentId?: string | null): Promise<Date> {
     try {
       const user = await this.storage.getUserById(userId);
       const ciclo = ((user as any)?.ciclo_assinatura as string) || 'mensal';
       const meses = CICLO_ASAAS[ciclo]?.meses || 1;
       const agora = new Date();
-      const periodEnd = addMeses(agora, meses);
+      // Pagou uma fatura mais nova com outra mais antiga ainda em aberto: o
+      // pagamento cobre o ciclo mais antigo (não pula um mês de graça).
+      vencimento = await this.cicloCobertoPeloPagamento(subscriptionId, vencimento, asaasPaymentId);
+      // Ancorado no VENCIMENTO da cobrança paga (+ ciclo + tolerância), não no
+      // momento da confirmação: pagar antes não perde dias, pagar atrasado não
+      // desalinha do Asaas, e CONFIRMED + RECEIVED (cartão) dão o mesmo resultado.
+      // Nunca reduz um acesso já concedido.
+      const periodEnd = novaExpiracao((user as any)?.data_expiracao_assinatura, vencimento, meses, agora);
+      // Assinatura local: período = próxima cobrança do Asaas (sem a tolerância),
+      // que é o que a tela "Próxima cobrança" mostra.
+      const proxima = proximaCobrancaDoAcesso(periodEnd);
 
       await this.storage.updateUserSubscription(subscriptionId, {
         status: 'active',
         currentPeriodStart: agora,
-        currentPeriodEnd: periodEnd,
+        currentPeriodEnd: proxima ? new Date(`${proxima}T23:59:59.999-03:00`) : periodEnd,
       });
 
       // Fonte de acesso do app é data_expiracao_assinatura — precisa ir junto.
@@ -443,6 +821,7 @@ export class SubscriptionService {
       } as any);
 
       console.log(`[SubscriptionService] User ${userId} subscription activated until ${periodEnd.toISOString()}`);
+      return periodEnd;
     } catch (error) {
       console.error('[SubscriptionService] Error activating subscription:', error);
       throw error;

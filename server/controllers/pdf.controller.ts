@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { resolverArquivoSeguro } from "../utils/safe-path";
 import { storage } from '../storage';
 import fs from 'fs';
 import path from 'path';
@@ -441,7 +442,10 @@ export async function generateReportPDF(req: Request, res: Response) {
 export async function downloadReportPDF(req: Request, res: Response) {
   try {
     const { filename } = req.params;
-    const filepath = path.join(process.cwd(), 'public', 'reports', filename);
+    const filepath = resolverArquivoSeguro(path.join(process.cwd(), 'public', 'reports'), filename);
+    if (!filepath) {
+      return res.status(400).json({ message: "Nome de arquivo inválido" });
+    }
 
     if (!fs.existsSync(filepath)) {
       return res.status(404).json({ message: "Arquivo não encontrado" });

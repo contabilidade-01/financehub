@@ -3,12 +3,30 @@ export type Periodo =
   | "current_month"
   | "next_month"
   | "last_month"
+  | "month"
   | "current_quarter"
   | "current_year"
   | "next_3m"
   | "next_6m"
   | "next_12m"
   | "custom";
+
+/** YYYY-MM do mês corrente (fuso local). */
+export function mesAtualISO(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function limitesDoMesISO(ym: string): { de: string; ate: string } {
+  const [ys, ms] = ym.slice(0, 7).split("-");
+  const y = Number(ys);
+  const m = Number(ms);
+  if (!y || !m) return limitesDoMes(0);
+  return {
+    de: iso(new Date(y, m - 1, 1)),
+    ate: iso(new Date(y, m, 0)),
+  };
+}
 
 const iso = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -59,6 +77,8 @@ export function rangeDoPeriodo(
       return janelaAFrente(5);
     case "next_12m":
       return janelaAFrente(11);
+    case "month":
+      return limitesDoMesISO(customFrom || mesAtualISO());
     case "custom":
       return { de: customFrom || undefined, ate: customTo || undefined };
     default:
@@ -73,6 +93,13 @@ const fmtBR = (s: string) => {
 
 export function rotuloPeriodo(periodo: Periodo, de?: string, ate?: string): string {
   if (periodo === "all") return "todo o período";
+  if (periodo === "month" && de) {
+    const [y, m] = de.split("-");
+    return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString("pt-BR", {
+      month: "long",
+      year: "numeric",
+    });
+  }
   if (periodo === "custom") return de && ate ? `${fmtBR(de)} – ${fmtBR(ate)}` : "período personalizado";
 
   const mesAno = (offset: number) => {

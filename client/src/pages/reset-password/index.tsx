@@ -19,6 +19,8 @@ import { z } from "zod";
 import { VersionDisplay } from "@/components/shared/VersionDisplay";
 import { useTranslation } from "@/contexts/LocalizationContext";
 import { ArrowLeft } from "lucide-react";
+import { camposDaModalidade, modalidadeDe } from "@shared/modalidade";
+import { ModalidadeSelector } from "@/components/shared/ModalidadeSelector";
 
 type TokenInfo = {
   valid: boolean;
@@ -54,7 +56,7 @@ const createResetSchema = (
   const senha = z.object({
     nova_senha: z
       .string()
-      .min(6, t("reset.validation.password_min", "A senha deve ter pelo menos 6 caracteres")),
+      .min(8, t("reset.validation.password_min_8", "A senha deve ter pelo menos 8 caracteres")),
     confirmar_senha: z.string().min(1, t("reset.validation.confirm_required", "Confirme a senha")),
   });
   const base = cadastroPendente
@@ -71,8 +73,9 @@ const createResetSchema = (
             message: t("reset.validation.email_real", "Informe um e-mail real"),
           }),
         tipo_pessoa: z.enum(["fisica", "juridica"], {
-          required_error: t("reset.validation.person_type", "Escolha pessoal (PF) ou empresa (PJ)"),
+          required_error: t("reset.validation.person_type", "Escolha a modalidade: PF, PJ MEI ou PJ ME"),
         }),
+        porte_pj: z.enum(["mei", "me"]).optional(),
         razao_social: z.string().optional(),
         nome_fantasia: z.string().optional(),
         cnpj: z.string().optional(),
@@ -108,6 +111,7 @@ type ResetForm = {
   telefone?: string;
   email?: string;
   tipo_pessoa?: "fisica" | "juridica";
+  porte_pj?: "mei" | "me";
   razao_social?: string;
   nome_fantasia?: string;
   cnpj?: string;
@@ -146,6 +150,7 @@ function ResetFormCard({ token, info }: { token: string; info: TokenInfo }) {
     },
   });
   const tipoPessoa = form.watch("tipo_pessoa");
+  const portePj = form.watch("porte_pj");
 
   const onSubmit = async (data: ResetForm) => {
     try {
@@ -160,6 +165,7 @@ function ResetFormCard({ token, info }: { token: string; info: TokenInfo }) {
         payload.email = (data.email || "").trim().toLowerCase();
         if (data.tipo_pessoa) payload.tipo_pessoa = data.tipo_pessoa;
         if (data.tipo_pessoa === "juridica") {
+          payload.porte_pj = data.porte_pj || "mei";
           payload.razao_social = (data.razao_social || "").trim();
           payload.nome_fantasia = (data.nome_fantasia || "").trim();
           payload.cnpj = (data.cnpj || "").replace(/\D/g, "");
@@ -203,9 +209,9 @@ function ResetFormCard({ token, info }: { token: string; info: TokenInfo }) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-pattern">
+    <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <Card className="glass-card neon-border">
+        <Card className="border bg-card">
           <CardHeader>
             <CardTitle>
               {cadastroPendente
@@ -218,7 +224,7 @@ function ResetFormCard({ token, info }: { token: string; info: TokenInfo }) {
                     "reset.signup_description",
                     "Confirme seus dados e defina a senha de acesso. Nome e WhatsApp já vieram da conversa."
                   )
-                : t("reset.description", "Escolha uma senha com pelo menos 6 caracteres.")}
+                : t("reset.description_8", "Escolha uma senha com pelo menos 8 caracteres.")}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -286,40 +292,14 @@ function ResetFormCard({ token, info }: { token: string; info: TokenInfo }) {
                           <FormLabel>
                             {t("reset.person_type_label", "Este cadastro é para")}
                           </FormLabel>
-                          <div className="grid grid-cols-2 gap-2">
-                            <button
-                              type="button"
-                              onClick={() => field.onChange("fisica")}
-                              className={`rounded-md border px-3 py-3 text-left text-sm transition-colors ${
-                                field.value === "fisica"
-                                  ? "border-primary bg-primary/10"
-                                  : "border-input hover:bg-muted/50"
-                              }`}
-                            >
-                              <span className="block font-medium">
-                                {t("reset.person_type_pf", "Pessoal (PF)")}
-                              </span>
-                              <span className="mt-0.5 block text-xs text-muted-foreground">
-                                {t("reset.person_type_pf_hint", "Minhas finanças")}
-                              </span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => field.onChange("juridica")}
-                              className={`rounded-md border px-3 py-3 text-left text-sm transition-colors ${
-                                field.value === "juridica"
-                                  ? "border-primary bg-primary/10"
-                                  : "border-input hover:bg-muted/50"
-                              }`}
-                            >
-                              <span className="block font-medium">
-                                {t("reset.person_type_pj", "Empresa (PJ)")}
-                              </span>
-                              <span className="mt-0.5 block text-xs text-muted-foreground">
-                                {t("reset.person_type_pj_hint", "Finanças da empresa")}
-                              </span>
-                            </button>
-                          </div>
+                          <ModalidadeSelector
+                            value={field.value ? modalidadeDe({ tipo_pessoa: field.value, porte_pj: portePj }) : undefined}
+                            onChange={(m) => {
+                              const campos = camposDaModalidade(m);
+                              form.setValue("porte_pj", campos.porte_pj || undefined);
+                              field.onChange(campos.tipo_pessoa);
+                            }}
+                          />
                           <FormMessage />
                         </FormItem>
                       )}
@@ -402,7 +382,7 @@ function ResetFormCard({ token, info }: { token: string; info: TokenInfo }) {
                           name="segmento"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>{t("reset.segmento_label", "Segmento")}</FormLabel>
+                              <FormLabel>{t("reset.segmento_label", "Plano de contas da empresa")}</FormLabel>
                               <FormControl>
                                 <select
                                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -410,9 +390,9 @@ function ResetFormCard({ token, info }: { token: string; info: TokenInfo }) {
                                   onChange={field.onChange}
                                 >
                                   <option value="">{t("reset.segmento_placeholder", "Selecione")}</option>
-                                  <option value="servicos">Serviços</option>
-                                  <option value="comercio">Comércio</option>
-                                  <option value="misto">Misto</option>
+                                  <option value="servicos">Base Serviços</option>
+                                  <option value="comercio">Base Comércio</option>
+                                  <option value="misto">Base Comércio (comércio e serviços)</option>
                                 </select>
                               </FormControl>
                               <FormMessage />
@@ -516,7 +496,7 @@ export default function ResetPassword() {
 
   if (checking) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-pattern">
+      <div className="min-h-screen flex items-center justify-center p-4">
         <p className="text-sm text-muted-foreground">
           {t("reset.checking", "Verificando link...")}
         </p>
@@ -526,9 +506,9 @@ export default function ResetPassword() {
 
   if (!info.valid) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-pattern">
+      <div className="min-h-screen flex items-center justify-center p-4">
         <div className="w-full max-w-md">
-          <Card className="glass-card neon-border">
+          <Card className="border bg-card">
             <CardHeader>
               <CardTitle>{t("reset.invalid_title", "Link inválido ou expirado")}</CardTitle>
               <CardDescription>

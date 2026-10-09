@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { storage } from "../storage";
 import { db } from "../db";
 import { wallets, users } from "../../shared/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import "../types/session.types";
@@ -11,6 +11,7 @@ import { getSubscriptionService } from "../services/subscription.service";
 import { generateRandomPassword } from "../utils/password-generator";
 import { uazapiService } from "../services/uazapi.service";
 import { gerarLinkDefinirSenha } from "./password-reset.controller";
+import { normalizarPorte } from "../../shared/modalidade";
 
 /**
  * @swagger
@@ -521,7 +522,7 @@ export async function updateUserStatus(req: Request, res: Response) {
         const newPassword = generateRandomPassword(8);
         
         // Atualizar a senha do usuário
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        const hashedPassword = await bcrypt.hash(newPassword, 12);
         await storage.updateUser(updatedUser.id, { senha: hashedPassword });
         
         console.log(`Nova senha gerada para o usuário ${updatedUser.nome} (valor não registrado em log).`);
@@ -926,7 +927,7 @@ export async function getAuditLog(req: Request, res: Response) {
 export async function createUser(req: Request, res: Response) {
   try {
     console.log("=== ADMIN CREATE USER - REQUEST ===");
-    console.log("Request body:", req.body);
+    console.log("Request body:", { ...req.body, senha: req.body?.senha ? "[omitida]" : undefined });
     console.log("Super Admin:", req.user?.email);
     console.log("===============================");
 
@@ -1042,6 +1043,12 @@ export async function updateUser(req: Request, res: Response) {
     if (body.ativo !== undefined) updateData.ativo = Boolean(body.ativo);
     if (body.tipo_usuario !== undefined) updateData.tipo_usuario = body.tipo_usuario;
     if (body.tipo_pessoa !== undefined) updateData.tipo_pessoa = body.tipo_pessoa;
+    if (body.porte_pj !== undefined || body.tipo_pessoa !== undefined) {
+      const tipo = body.tipo_pessoa ?? undefined;
+      if (tipo === "fisica") updateData.porte_pj = null;
+      else if (body.porte_pj !== undefined) updateData.porte_pj = normalizarPorte(body.porte_pj);
+      else if (tipo === "juridica") updateData.porte_pj = "mei";
+    }
 
     // E-mail: normaliza e valida unicidade (necessário p/ recuperação de senha)
     if (body.email !== undefined) {
@@ -1159,7 +1166,7 @@ export async function updateUser(req: Request, res: Response) {
     // Alteração de senha (se informada)
     if (novaSenha) {
       console.log("Atualizando senha do usuário...");
-      const hashedPassword = await bcrypt.hash(novaSenha, 10);
+      const hashedPassword = await bcrypt.hash(novaSenha, 12);
       await storage.updateUser(userId, { senha: hashedPassword });
       console.log("Senha atualizada com sucesso");
     }
@@ -1177,7 +1184,7 @@ export async function updateUser(req: Request, res: Response) {
         let accessPassword = novaSenha || null;
         if (!accessPassword) {
           accessPassword = generateRandomPassword(8);
-          const hashedPassword = await bcrypt.hash(accessPassword, 10);
+          const hashedPassword = await bcrypt.hash(accessPassword, 12);
           await storage.updateUser(updatedUser.id, { senha: hashedPassword });
           console.log(`Nova senha gerada para o usuário ${updatedUser.nome} (valor não registrado em log).`);
         }
@@ -1438,6 +1445,16 @@ export async function getAssinaturas(req: Request, res: Response) {
   try {
     const todos = await storage.getAllUsers();
     const hoje = new Date();
+    const planos = await storage.getActiveSubscriptionPlans();
+    const consultoriaId = planos.find((p) => p.planCode === "mensal_pj_consultoria")?.id ?? null;
+    // Última conferência de pagamento no Asaas (manual ou automática).
+    const conferencias = new Map<number, { em: string; origem: string }>();
+    try {
+      const { garantirTabelaConferencias } = await import("../services/subscription.service");
+      await garantirTabelaConferencias();
+      const rows = (await db.execute(sql`SELECT usuario_id, conferido_em, origem FROM asaas_conferencias`)) as any[];
+      for (const r of rows) conferencias.set(Number(r.usuario_id), { em: new Date(r.conferido_em).toISOString(), origem: r.origem });
+    } catch { /* coluna informativa */ }
     const lista = todos
       .filter((u) => u.tipo_usuario === "normal" || u.tipo_usuario === "usuario")
       .map((u) => {
@@ -1452,10 +1469,15 @@ export async function getAssinaturas(req: Request, res: Response) {
         return {
           id: u.id, nome: u.nome, telefone: u.telefone, email: u.email,
           tipo_pessoa: (u as any).tipo_pessoa || "fisica",
+          porte_pj: (u as any).porte_pj || null,
           ativo: u.ativo, status_assinatura: u.status_assinatura,
           ciclo_assinatura: (u as any).ciclo_assinatura || null,
           data_expiracao_assinatura: u.data_expiracao_assinatura,
           situacao, dias_para_vencer: dias,
+          plano_forcado_id: (u as any).plano_forcado_id ?? null,
+          com_consultoria: consultoriaId != null && (u as any).plano_forcado_id === consultoriaId,
+          conferido_em: conferencias.get(u.id)?.em ?? null,
+          conferido_origem: conferencias.get(u.id)?.origem ?? null,
         };
       });
     return res.json(lista);
@@ -1470,21 +1492,92 @@ export async function getAssinaturas(req: Request, res: Response) {
 export async function definirAssinatura(req: Request, res: Response) {
   try {
     const userId = parseInt(req.params.id);
-    const { ciclo, inicio } = req.body || {};
+    const { ciclo, inicio, ajustarAsaas } = req.body || {};
     const meses = MESES_CICLO[ciclo];
     if (!meses) return res.status(400).json({ error: "ciclo inválido (mensal | trimestral | anual)" });
     const user = await storage.getUserById(userId);
     if (!user) return res.status(404).json({ error: "Usuário não encontrado" });
-    const base = typeof inicio === "string" && /^\d{4}-\d{2}-\d{2}/.test(inicio) ? new Date(inicio) : new Date();
-    const venc = addMeses(base, meses);
+    const { fimDoPeriodoPago, proximoVencimento, fimDoCicloPago } = await import("../services/assinatura-datas");
+    const { diaSP } = await import("../../shared/datas-sp");
+    const inicioISO = typeof inicio === "string" && /^\d{4}-\d{2}-\d{2}/.test(inicio) ? inicio.slice(0, 10) : (diaSP(new Date()) as string);
+    // Mesma regra das cobranças: vigência = início + ciclo; acesso até o fim do
+    // dia da vigência + 3 dias de tolerância.
+    const vigencia = proximoVencimento(inicioISO, meses);
+    const venc = fimDoPeriodoPago(inicioISO, meses);
     const updated = await storage.updateUser(userId, {
       ciclo_assinatura: ciclo, data_expiracao_assinatura: venc, ativo: true,
       status_assinatura: "ativa", subscriptionActive: true,
     } as any);
-    return res.json(updated);
+
+    // Assinatura no Asaas: "Próxima cobrança" local e (se pedido) a próxima
+    // cobrança do Asaas passam a ser o fim da vigência.
+    let asaas: { ajustado: boolean; motivo?: string } = { ajustado: false };
+    const sub = await storage.getActiveSubscriptionByUserId(userId);
+    if (sub) {
+      await storage.updateUserSubscription(sub.id, { currentPeriodEnd: fimDoCicloPago(inicioISO, meses) } as any);
+      if (ajustarAsaas !== false && sub.asaasSubscriptionId) {
+        try {
+          const { getAsaasService } = await import("../services/asaas.service");
+          const svc = await getAsaasService();
+          const atual = await svc.getSubscription(sub.asaasSubscriptionId);
+          if (String((atual as any)?.nextDueDate || "").slice(0, 10) === vigencia) {
+            asaas = { ajustado: true, motivo: "Já estava nessa data." };
+          } else {
+            await svc.updateSubscription(sub.asaasSubscriptionId, { nextDueDate: vigencia } as any);
+            asaas = { ajustado: true };
+          }
+        } catch (e: any) {
+          asaas = { ajustado: false, motivo: e?.response?.data?.errors?.[0]?.description || e?.message || "Falha no Asaas" };
+        }
+      } else if (!sub.asaasSubscriptionId) {
+        asaas = { ajustado: false, motivo: "Cliente sem assinatura no Asaas." };
+      }
+    } else {
+      asaas = { ajustado: false, motivo: "Cliente sem assinatura no Asaas." };
+    }
+    return res.json({ ...updated, vigencia, acesso_ate: venc, asaas });
   } catch (err) {
     console.error("definirAssinatura:", err);
     return res.status(500).json({ error: "Erro ao definir assinatura" });
+  }
+}
+
+// POST /api/admin/assinaturas/:id/consultoria  { ativar: boolean }
+// Marca/desmarca o usuário PJ como "com consultoria" (cobra R$ 200 no lugar do
+// padrão 79,90). Grava plano_forcado_id; o checkout/renovação passa a respeitar.
+export async function definirConsultoria(req: Request, res: Response) {
+  try {
+    const userId = parseInt(req.params.id);
+    const ativar = req.body?.ativar === true || req.body?.ativar === "true";
+    const user = await storage.getUserById(userId);
+    if (!user) return res.status(404).json({ error: "Usuário não encontrado" });
+    if (ativar && (user as any).tipo_pessoa !== "juridica") {
+      return res.status(400).json({ error: "Consultoria é só para Pessoa Jurídica." });
+    }
+    let plano_forcado_id: number | null = null;
+    if (ativar) {
+      const planos = await storage.getActiveSubscriptionPlans();
+      const consultoria = planos.find((p) => p.planCode === "mensal_pj_consultoria");
+      if (!consultoria) {
+        return res.status(500).json({ error: "Plano 'PJ com Consultoria' não encontrado. Rode a migração/deploy." });
+      }
+      plano_forcado_id = consultoria.id;
+    }
+    await storage.updateUser(userId, { plano_forcado_id } as any);
+
+    // Se o cliente já tem assinatura ativa no Asaas, sincroniza o valor lá na hora
+    // (recorrência + cobrança em aberto) — sem precisar mexer manualmente no Asaas.
+    let asaas: { atualizado: boolean; valor?: number; motivo?: string } = { atualizado: false };
+    try {
+      asaas = await getSubscriptionService(storage).sincronizarValorAssinatura(userId);
+    } catch (e: any) {
+      console.warn("definirConsultoria: falha ao sincronizar valor no Asaas:", e?.message || e);
+      asaas = { atualizado: false, motivo: "Não consegui sincronizar no Asaas agora; o valor vale na próxima cobrança." };
+    }
+    return res.json({ success: true, com_consultoria: ativar, plano_forcado_id, asaas });
+  } catch (err) {
+    console.error("definirConsultoria:", err);
+    return res.status(500).json({ error: "Erro ao definir cobrança de consultoria" });
   }
 }
 
@@ -1527,6 +1620,95 @@ export async function gerarLinkCobranca(req: Request, res: Response) {
   } catch (err: any) {
     console.error("gerarLinkCobranca:", err);
     return res.status(500).json({ error: err?.message || "Falha ao gerar link de cobrança" });
+  }
+}
+
+// POST /api/admin/assinaturas/:id/sincronizar-asaas — confere no Asaas e libera quem pagou
+export async function sincronizarAssinaturaAsaas(req: Request, res: Response) {
+  try {
+    const userId = parseInt(req.params.id);
+    if (!Number.isFinite(userId)) return res.status(400).json({ error: "id inválido" });
+    const r = await getSubscriptionService(storage).sincronizarPagamentosAsaas(userId, "manual");
+    return res.json(r);
+  } catch (err: any) {
+    console.error("sincronizarAssinaturaAsaas:", err);
+    return res.status(500).json({ error: err?.response?.data?.errors?.[0]?.description || err?.message || "Falha ao consultar o Asaas" });
+  }
+}
+
+// GET/PUT /api/admin/cobranca/encargos — multa e juros das mensalidades
+export async function getEncargosCobranca(_req: Request, res: Response) {
+  try {
+    const { obterEncargos, MULTA_MAXIMA, JUROS_MES_MAXIMO } = await import("../services/cobranca-encargos");
+    return res.json({ ...(await obterEncargos()), multaMaxima: MULTA_MAXIMA, jurosMesMaximo: JUROS_MES_MAXIMO });
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || "Erro ao ler encargos" });
+  }
+}
+
+export async function salvarEncargosCobranca(req: Request, res: Response) {
+  try {
+    const { salvarEncargos } = await import("../services/cobranca-encargos");
+    return res.json(await salvarEncargos({ multa: req.body?.multa, jurosMes: req.body?.jurosMes }));
+  } catch (err: any) {
+    return res.status(400).json({ error: err?.message || "Valores inválidos" });
+  }
+}
+
+// POST /api/admin/cobranca/encargos/aplicar — leva multa/juros às assinaturas já existentes no Asaas
+export async function aplicarEncargosCobranca(_req: Request, res: Response) {
+  try {
+    const { aplicarEncargosAsaas } = await import("../services/cobranca-encargos");
+    return res.json(await aplicarEncargosAsaas());
+  } catch (err: any) {
+    console.error("aplicarEncargosCobranca:", err);
+    return res.status(500).json({ error: err?.message || "Falha ao atualizar o Asaas" });
+  }
+}
+
+// Provedores de IA (fila com troca automática)
+export async function getProvedoresIa(_req: Request, res: Response) {
+  try {
+    const { painelProvedores } = await import("../services/ia-provedores");
+    return res.json(await painelProvedores());
+  } catch (err: any) {
+    console.error("getProvedoresIa:", err);
+    return res.status(500).json({ error: err?.message || "Erro ao ler provedores" });
+  }
+}
+
+export async function salvarProvedoresIa(req: Request, res: Response) {
+  try {
+    const { salvarConfig } = await import("../services/ia-provedores");
+    const ordem = Array.isArray(req.body?.ordem) ? req.body.ordem.map(String) : [];
+    const desligados = Array.isArray(req.body?.desligados) ? req.body.desligados.map(String) : [];
+    await salvarConfig(ordem, desligados);
+    return res.json({ ok: true });
+  } catch (err: any) {
+    return res.status(400).json({ error: err?.message || "Configuração inválida" });
+  }
+}
+
+export async function testarProvedorIa(req: Request, res: Response) {
+  try {
+    const { testarProvedor, ORDEM_PADRAO } = await import("../services/ia-provedores");
+    const p = String(req.params.provedor);
+    if (!ORDEM_PADRAO.includes(p as any)) return res.status(400).json({ error: "Provedor desconhecido" });
+    return res.json(await testarProvedor(p as any));
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || "Falha no teste" });
+  }
+}
+
+export async function reativarProvedorIa(req: Request, res: Response) {
+  try {
+    const { reativarProvedor, ORDEM_PADRAO } = await import("../services/ia-provedores");
+    const p = String(req.params.provedor);
+    if (!ORDEM_PADRAO.includes(p as any)) return res.status(400).json({ error: "Provedor desconhecido" });
+    await reativarProvedor(p as any);
+    return res.json({ ok: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || "Falha ao reativar" });
   }
 }
 

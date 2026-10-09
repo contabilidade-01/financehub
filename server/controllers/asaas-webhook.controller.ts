@@ -68,8 +68,11 @@ export async function handleAsaasWebhook(req: Request, res: Response) {
       return res.status(200).json({ message: "Evento já processado" });
     }
 
-    // 3. Salvar webhook no banco (log)
-    const webhookRecord = await storage.createAsaasWebhook({
+    // 3. Salvar webhook no banco (log). Reenvio de um evento que falhou antes
+    // reaproveita o registro: inserir de novo batia na chave única e TODA
+    // reentrega do Asaas morria com 500 — o pagamento nunca era processado
+    // (e o Asaas pausa a fila depois de várias falhas).
+    const webhookRecord = existingWebhook ?? await storage.createAsaasWebhook({
       eventType: event,
       asaasEventId: payment.id + '-' + event,
       payload: JSON.stringify(req.body),
@@ -226,6 +229,11 @@ async function processWebhookEvent(eventType: string, paymentData: any, webhookI
       // Pagamento confirmado - ATIVAR ASSINATURA
       console.log(`[AsaasWebhook] Payment confirmed: ${paymentData.id}`);
 
+      // Já aplicado antes (CONFIRMED seguido de RECEIVED no cartão, reentrega do
+      // Asaas, ou reconhecido pela conferência): não recalcula — um ajuste feito
+      // depois pelo admin ("Definir") é respeitado.
+      const jaAplicado = payment.status === 'confirmed';
+
       await storage.updatePaymentTransaction(payment.id, {
         status: 'confirmed',
         confirmedDate: new Date(),
@@ -233,20 +241,24 @@ async function processWebhookEvent(eventType: string, paymentData: any, webhookI
       });
 
       // Ativar assinatura do usuário
-      if (payment.subscriptionId) {
-        await subscriptionService.activateUserSubscription(payment.usuarioId, payment.subscriptionId);
-      }
-
-      // Enviar notificação de pagamento confirmado (respeitando configurações do super_admin)
-      if (notificationSettings.sendEmail || notificationSettings.sendWhatsApp) {
-        console.log(`[AsaasWebhook] Sending payment notification (Email: ${notificationSettings.sendEmail}, WhatsApp: ${notificationSettings.sendWhatsApp})`);
-        await notificationService.sendPaymentConfirmed(
-          user,
-          parseFloat(payment.amount.toString()),
-          payment.asaasInvoiceUrl || undefined
-        );
-      } else {
-        console.log('[AsaasWebhook] Payment notifications disabled by admin settings');
+      if (payment.subscriptionId && !jaAplicado) {
+        // O ciclo é o do vencimento ORIGINAL da cobrança (se foi prorrogada no
+        // painel do Asaas, continua sendo a fatura daquele ciclo).
+        const { vencimentoDoCiclo } = await import('../services/assinatura-datas');
+        const vencimento = vencimentoDoCiclo(paymentData) || vencimentoDoCiclo({ dueDate: (payment as any).dueDate });
+        const acessoAte = await subscriptionService.activateUserSubscription(payment.usuarioId, payment.subscriptionId, vencimento, paymentData.id);
+        // E-mail e WhatsApp de confirmação: uma vez por cobrança (CONFIRMED e
+        // RECEIVED chegam os dois no cartão), respeitando a config do admin.
+        if (notificationSettings.sendEmail || notificationSettings.sendWhatsApp) {
+          await subscriptionService.avisarPagamentoConfirmado(payment.usuarioId, {
+            id: paymentData.id,
+            value: paymentData.value ?? payment.amount,
+            invoiceUrl: paymentData.invoiceUrl || payment.asaasInvoiceUrl || undefined,
+            transactionReceiptUrl: paymentData.transactionReceiptUrl,
+          }, acessoAte);
+        } else {
+          console.log('[AsaasWebhook] Payment notifications disabled by admin settings');
+        }
       }
 
       // IMPORTANTE: Webhook de ativação é SEMPRE enviado, independente das configurações de email/whatsapp
@@ -510,7 +522,18 @@ async function processWebhookEvent(eventType: string, paymentData: any, webhookI
     case 'PAYMENT_DELETED':
       // Pagamento deletado
       console.log(`[AsaasWebhook] Payment deleted: ${paymentData.id}`);
-      // Apenas logar, não tomar ação
+      // Excluída no Asaas: sai do histórico como pendente e não conta como
+      // ciclo em aberto. Paga não muda (estorno chega por outro evento).
+      if (payment.status === 'pending' || payment.status === 'overdue') {
+        await storage.updatePaymentTransaction(payment.id, { status: 'canceled', metadata: JSON.stringify(paymentData) });
+      }
+      break;
+
+    case 'PAYMENT_RESTORED':
+      console.log(`[AsaasWebhook] Payment restored: ${paymentData.id}`);
+      if (payment.status === 'canceled') {
+        await storage.updatePaymentTransaction(payment.id, { status: 'pending', metadata: JSON.stringify(paymentData) });
+      }
       break;
 
     default:

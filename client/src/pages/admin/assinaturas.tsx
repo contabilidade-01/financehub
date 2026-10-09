@@ -12,14 +12,28 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { useToast } from "@/hooks/use-toast";
 import { CalendarClock, RefreshCw, CheckCircle2 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { rotuloModalidade } from "@shared/modalidade";
 
 type Assinatura = {
   id: number; nome: string; telefone: string | null; email: string;
-  tipo_pessoa: "fisica" | "juridica"; ativo: boolean;
+  tipo_pessoa: "fisica" | "juridica"; porte_pj?: string | null; ativo: boolean;
   status_assinatura: string | null; ciclo_assinatura: string | null;
   data_expiracao_assinatura: string | null;
   situacao: string; dias_para_vencer: number | null;
+  com_consultoria?: boolean; plano_forcado_id?: number | null;
+  conferido_em?: string | null; conferido_origem?: string | null;
 };
+
+// Conferência automática no Asaas: a cada 30 min (a manual reinicia a janela).
+const JANELA_CONFERENCIA_MIN = 30;
+const horaSP = (d: Date) => d.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+function textoConferencia(a: Assinatura): string {
+  if (!a.conferido_em) return "Pagamento ainda não conferido no Asaas";
+  const em = new Date(a.conferido_em);
+  const proxima = new Date(em.getTime() + JANELA_CONFERENCIA_MIN * 60_000);
+  const como = a.conferido_origem === "manual" ? "manual" : "automática";
+  return `Conferido ${horaSP(em)} (${como}) · próxima automática após ${horaSP(proxima)}`;
+}
 
 const CICLOS = [
   { value: "mensal", label: "Mensal", meses: 1 },
@@ -32,9 +46,9 @@ const hoje = () => new Date().toISOString().slice(0, 10);
 const addMesesISO = (iso: string, meses: number) => { const d = new Date(iso + "T00:00:00"); d.setMonth(d.getMonth() + meses); return d.toLocaleDateString("pt-BR"); };
 
 const SIT: Record<string, { label: string; cls: string }> = {
-  em_dia: { label: "Em dia", cls: "bg-emerald-500/15 text-emerald-600" },
+  em_dia: { label: "Em dia", cls: "bg-emerald-500/15 text-income" },
   vence_breve: { label: "Vence em breve", cls: "bg-amber-500/15 text-amber-600" },
-  vencido: { label: "Vencido", cls: "bg-rose-500/15 text-rose-600" },
+  vencido: { label: "Vencido", cls: "bg-rose-500/15 text-expense" },
   degustacao: { label: "Degustação", cls: "bg-blue-500/15 text-blue-600" },
   sem_data: { label: "Sem plano", cls: "bg-muted text-muted-foreground" },
 };
@@ -44,7 +58,7 @@ export default function AdminAssinaturas() {
   const queryClient = useQueryClient();
   const [filtro, setFiltro] = useState<string>("todos");
   const [definindo, setDefinindo] = useState<Assinatura | null>(null);
-  const [form, setForm] = useState({ ciclo: "mensal", inicio: hoje() });
+  const [form, setForm] = useState({ ciclo: "mensal", inicio: hoje(), ajustarAsaas: true });
   const [linkCobranca, setLinkCobranca] = useState<string>("");
 
   const { data: lista = [], isLoading } = useQuery<Assinatura[]>({
@@ -54,9 +68,33 @@ export default function AdminAssinaturas() {
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["/api/admin/assinaturas"] });
 
+  // Preços vêm dos planos (editáveis em Pagamentos), não de valores fixos.
+  const { data: planos = [] } = useQuery<any[]>({
+    queryKey: ["/api/admin/subscription-plans"],
+    queryFn: () => apiRequest("/api/admin/subscription-plans"),
+  });
+  const fmt = (v?: string | number | null) =>
+    v == null ? "—" : Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const precoConsultoria = fmt(planos.find((p) => p.planCode === "mensal_pj_consultoria")?.priceMonthly);
+  const precoBase = (a?: { porte_pj?: string | null } | null) => {
+    const ativos = planos.filter((p) => p.active && p.tipoPessoa === "juridica");
+    const porte = a?.porte_pj === "me" ? "me" : "mei";
+    const doPorte = ativos.filter((p) => p.portePj === porte);
+    const lista = doPorte.length ? doPorte : ativos.filter((p) => !p.portePj);
+    return fmt(lista.sort((x, y) => Number(x.priceMonthly) - Number(y.priceMonthly))[0]?.priceMonthly);
+  };
+
   const definirMut = useMutation({
     mutationFn: ({ id, data }: { id: number; data: any }) => apiRequest(`/api/admin/assinaturas/${id}/definir`, { method: "POST", data }),
-    onSuccess: () => { invalidate(); setDefinindo(null); toast({ title: "Assinatura definida" }); },
+    onSuccess: (r: any) => {
+      invalidate();
+      setDefinindo(null);
+      const br = (iso?: string) => (iso ? String(iso).slice(0, 10).split("-").reverse().join("/") : "—");
+      const asaasTxt = r?.asaas?.ajustado
+        ? `Próxima cobrança no Asaas: ${br(r.vigencia)}.`
+        : r?.asaas?.motivo ? `Asaas não ajustado: ${r.asaas.motivo}` : "";
+      toast({ title: `Vigência até ${br(r?.vigencia)}`, description: `Acesso até ${new Date(r?.acesso_ate).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })} (3 dias de tolerância). ${asaasTxt}` });
+    },
     onError: (err: any) => toast({ title: "Erro", description: err?.error || err?.message || "Falha", variant: "destructive" }),
   });
   const renovarMut = useMutation({
@@ -66,8 +104,37 @@ export default function AdminAssinaturas() {
   });
   const linkMut = useMutation({
     mutationFn: ({ id, ciclo }: { id: number; ciclo: string }) => apiRequest(`/api/admin/assinaturas/${id}/gerar-link`, { method: "POST", data: { ciclo } }),
-    onSuccess: (r: any) => { setLinkCobranca(r?.url || ""); toast({ title: "Link gerado", description: "Copie e envie ao cliente." }); },
+    onSuccess: (r: any) => {
+      setLinkCobranca(r?.url || "");
+      const venc = r?.vencimento ? String(r.vencimento).slice(0, 10).split("-").reverse().join("/") : null;
+      toast({ title: "Link gerado", description: `${venc ? `1ª cobrança vence em ${venc} (fim da vigência atual). ` : ""}Copie e envie ao cliente.` });
+    },
     onError: (err: any) => toast({ title: "Erro", description: err?.error || err?.message || "Falha ao gerar link", variant: "destructive" }),
+  });
+  const sincronizarMut = useMutation({
+    mutationFn: (id: number) => apiRequest(`/api/admin/assinaturas/${id}/sincronizar-asaas`, { method: "POST", data: {} }),
+    onSuccess: (r: any) => {
+      invalidate();
+      if (r?.ativado) {
+        toast({ title: "Pagamento reconhecido", description: `Acesso liberado até ${r.acessoAte ? new Date(r.acessoAte).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "—"}.` });
+      } else {
+        toast({ title: "Nada a liberar", description: `${r?.motivo || (r?.pagos ? "Os pagamentos do Asaas já estão refletidos." : "Nenhum pagamento confirmado no Asaas.")} A conferência automática deste cliente volta em ${JANELA_CONFERENCIA_MIN} min.` });
+      }
+    },
+    onError: (err: any) => toast({ title: "Erro", description: err?.error || err?.message || "Falha ao consultar o Asaas", variant: "destructive" }),
+  });
+  const consultoriaMut = useMutation({
+    mutationFn: ({ id, ativar }: { id: number; ativar: boolean }) => apiRequest(`/api/admin/assinaturas/${id}/consultoria`, { method: "POST", data: { ativar } }),
+    onSuccess: (r: any, vars) => {
+      invalidate();
+      const alvo = lista.find((x) => x.id === vars.id);
+      const base = r?.com_consultoria ? `Marcado: R$ ${precoConsultoria} (com consultoria)` : `Voltou ao padrão: R$ ${precoBase(alvo)}`;
+      const desc = r?.asaas?.atualizado
+        ? "Valor já sincronizado no Asaas (recorrência e cobrança em aberto)."
+        : (r?.asaas?.motivo || "Vale na próxima cobrança/renovação.");
+      toast({ title: base, description: desc });
+    },
+    onError: (err: any) => toast({ title: "Erro", description: err?.error || err?.message || "Falha", variant: "destructive" }),
   });
 
   const resumo = useMemo(() => {
@@ -78,13 +145,13 @@ export default function AdminAssinaturas() {
 
   const filtrada = filtro === "todos" ? lista : lista.filter((a) => a.situacao === filtro);
 
-  const openDefinir = (a: Assinatura) => { setDefinindo(a); setForm({ ciclo: a.ciclo_assinatura || "mensal", inicio: hoje() }); setLinkCobranca(""); };
+  const openDefinir = (a: Assinatura) => { setDefinindo(a); setForm({ ciclo: a.ciclo_assinatura || "mensal", inicio: hoje(), ajustarAsaas: true }); setLinkCobranca(""); };
   const cicloMeses = CICLOS.find((c) => c.value === form.ciclo)?.meses ?? 1;
 
   return (
     <div className="space-y-6 p-2">
       <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2"><CalendarClock className="h-6 w-6" /> Assinaturas & Vencimentos</h1>
+        <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2"><CalendarClock className="h-6 w-6" /> Assinaturas & Vencimentos</h1>
         <p className="text-sm text-muted-foreground mt-1">Defina o ciclo (mensal/trimestral/anual) de cada cliente e acompanhe os vencimentos. Cobrança automática virá depois.</p>
       </div>
 
@@ -92,9 +159,9 @@ export default function AdminAssinaturas() {
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         {[
           { k: "total", label: "Total", v: resumo.total, cls: "" },
-          { k: "em_dia", label: "Em dia", v: resumo.em_dia, cls: "text-emerald-600" },
+          { k: "em_dia", label: "Em dia", v: resumo.em_dia, cls: "text-income" },
           { k: "vence_breve", label: "Vence ≤7d", v: resumo.vence_breve, cls: "text-amber-600" },
-          { k: "vencido", label: "Vencidos", v: resumo.vencido, cls: "text-rose-600" },
+          { k: "vencido", label: "Vencidos", v: resumo.vencido, cls: "text-expense" },
           { k: "degustacao", label: "Degustação", v: resumo.degustacao, cls: "text-blue-600" },
         ].map((c) => (
           <Card key={c.k} className={filtro === c.k || (c.k === "total" && filtro === "todos") ? "ring-1 ring-primary" : "cursor-pointer"} onClick={() => setFiltro(c.k === "total" ? "todos" : c.k)}>
@@ -130,7 +197,7 @@ export default function AdminAssinaturas() {
                   <div className="flex-1 min-w-[180px]">
                     <div className="font-medium flex items-center gap-2">
                       {a.nome}
-                      <Badge variant="outline" className="text-[10px]">{a.tipo_pessoa === "juridica" ? "PJ" : "PF"}</Badge>
+                      <Badge variant="outline" className="text-xs">{rotuloModalidade(a, true)}</Badge>
                     </div>
                     <div className="text-xs text-muted-foreground">{a.telefone || a.email}</div>
                   </div>
@@ -142,11 +209,30 @@ export default function AdminAssinaturas() {
                     <div className="text-xs text-muted-foreground">Vencimento</div>
                     <div className="font-medium">{fmtDate(a.data_expiracao_assinatura)}</div>
                     {a.dias_para_vencer != null && (
-                      <div className="text-[11px] text-muted-foreground">{a.dias_para_vencer < 0 ? `há ${-a.dias_para_vencer}d` : `em ${a.dias_para_vencer}d`}</div>
+                      <div className="text-xs text-muted-foreground">{a.dias_para_vencer < 0 ? `há ${-a.dias_para_vencer}d` : `em ${a.dias_para_vencer}d`}</div>
+                    )}
+                    {a.conferido_em && (
+                      <div className="text-[11px] text-muted-foreground" title={textoConferencia(a)}>
+                        Asaas: {horaSP(new Date(a.conferido_em))}{a.conferido_origem === "manual" ? " (manual)" : ""}
+                      </div>
                     )}
                   </div>
                   <Badge className={s.cls}>{s.label}</Badge>
+                  {a.tipo_pessoa === "juridica" && (
+                    <button
+                      type="button"
+                      onClick={() => consultoriaMut.mutate({ id: a.id, ativar: !a.com_consultoria })}
+                      disabled={consultoriaMut.isPending}
+                      title={`Alternar cobrança: Base (R$ ${precoBase(a)}) ↔ Com consultoria (R$ ${precoConsultoria})`}
+                      className={`text-xs rounded-full px-2.5 py-1 border transition-colors ${a.com_consultoria ? "bg-violet-500/15 text-violet-600 border-violet-500/30" : "bg-muted text-muted-foreground border-transparent hover:bg-muted/70"}`}
+                    >
+                      {a.com_consultoria ? `Consultoria R$ ${precoConsultoria}` : `Base R$ ${precoBase(a)}`}
+                    </button>
+                  )}
                   <div className="flex items-center gap-1">
+                    <Button size="sm" variant="outline" title={`Confere agora no Asaas se o cliente pagou e libera o acesso. ${textoConferencia(a)}`} onClick={() => sincronizarMut.mutate(a.id)} disabled={sincronizarMut.isPending}>
+                      <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Conferir pagamento
+                    </Button>
                     <Button size="sm" variant="outline" onClick={() => renovarMut.mutate(a.id)} disabled={!a.ciclo_assinatura || renovarMut.isPending}>
                       <RefreshCw className="h-3.5 w-3.5 mr-1" /> Renovar
                     </Button>
@@ -180,15 +266,41 @@ export default function AdminAssinaturas() {
               </div>
             </div>
             <div className="text-sm text-muted-foreground">
-              Vencimento calculado: <strong className="text-foreground">{addMesesISO(form.inicio, cicloMeses)}</strong> ({cicloMeses} {cicloMeses === 1 ? "mês" : "meses"}).
+              Vigência até <strong className="text-foreground">{addMesesISO(form.inicio, cicloMeses)}</strong> ({cicloMeses} {cicloMeses === 1 ? "mês" : "meses"}) — é o vencimento da próxima cobrança. Acesso segue por mais 3 dias de tolerância.
             </div>
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" className="mt-1" checked={form.ajustarAsaas} onChange={(e) => setForm({ ...form, ajustarAsaas: e.target.checked })} />
+              <span>Ajustar a próxima cobrança no Asaas para <strong>{addMesesISO(form.inicio, cicloMeses)}</strong> <span className="text-muted-foreground">(se o cliente tiver assinatura lá)</span></span>
+            </label>
 
             {/* Cobrança automática (Asaas) — gera link para o cliente pagar */}
             <div className="rounded-md border p-3 space-y-2 bg-muted/30">
               <div className="text-xs text-muted-foreground">
                 <strong>Cobrança no Asaas:</strong> envia nome, e-mail e telefone que já temos e abre a página do Asaas. O cliente só completa o que faltar (CPF/cartão/Pix). O acesso libera sozinho quando o pagamento confirmar. Ciclo: <strong>{form.ciclo}</strong>.
               </div>
-              <Button size="sm" variant="secondary" className="w-full" onClick={() => definindo && linkMut.mutate({ id: definindo.id, ciclo: form.ciclo })} disabled={linkMut.isPending}>
+              {definindo?.tipo_pessoa === "juridica" && (() => {
+                const atualDef = lista.find((a) => a.id === definindo.id);
+                const comConsult = atualDef?.com_consultoria ?? false;
+                return (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded border bg-background px-2 py-1.5">
+                    <span className="text-xs">
+                      Valor que será cobrado:{" "}
+                      <strong className={comConsult ? "text-violet-600" : ""}>
+                        {comConsult ? `Consultoria — R$ ${precoConsultoria}` : `Base — R$ ${precoBase(atualDef)}`}
+                      </strong>
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={consultoriaMut.isPending}
+                      onClick={() => consultoriaMut.mutate({ id: definindo.id, ativar: !comConsult })}
+                    >
+                      {comConsult ? `Mudar para Base (${precoBase(atualDef)})` : `Cobrar Consultoria (${precoConsultoria})`}
+                    </Button>
+                  </div>
+                );
+              })()}
+              <Button size="sm" variant="secondary" className="w-full" onClick={() => definindo && linkMut.mutate({ id: definindo.id, ciclo: form.ciclo })} disabled={linkMut.isPending || consultoriaMut.isPending}>
                 {linkMut.isPending ? "Gerando…" : "Gerar link de cobrança"}
               </Button>
               {linkCobranca && (
@@ -201,7 +313,7 @@ export default function AdminAssinaturas() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDefinindo(null)}>Cancelar</Button>
-            <Button onClick={() => definindo && definirMut.mutate({ id: definindo.id, data: { ciclo: form.ciclo, inicio: form.inicio } })} disabled={definirMut.isPending}>
+            <Button onClick={() => definindo && definirMut.mutate({ id: definindo.id, data: { ciclo: form.ciclo, inicio: form.inicio, ajustarAsaas: form.ajustarAsaas } })} disabled={definirMut.isPending}>
               {definirMut.isPending ? "Salvando…" : "Ativar manual"}
             </Button>
           </DialogFooter>

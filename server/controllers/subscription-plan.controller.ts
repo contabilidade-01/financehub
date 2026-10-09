@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import { storage, filtrarPlanosPorTipo } from "../storage";
 import { insertSubscriptionPlanSchema, updateSubscriptionPlanSchema } from "../../shared/schema";
 import { z } from "zod";
+import { camposDaModalidade, modalidadeDeParametros } from "../../shared/modalidade";
+import { getSubscriptionService } from "../services/subscription.service";
 
 /**
  * Subscription Plan Controller
@@ -27,11 +29,22 @@ export async function getActivePlans(req: Request, res: Response) {
     // Rota pública (sem sessão): o tipo vem do usuário logado, quando houver,
     // ou de ?tipo=. Mesma regra usada para escolher o plano da cobrança, para
     // o cliente nunca ver um preço e ser cobrado outro.
-    const tipoUsuario = (req as any).user?.tipo_pessoa as string | undefined;
-    const tipoQuery = String(req.query.tipo || "");
-    const tipo = tipoUsuario || (tipoQuery === "fisica" || tipoQuery === "juridica" ? tipoQuery : null);
-
-    res.json(tipo ? filtrarPlanosPorTipo(plans, tipo) : plans);
+    // Modalidade: usuário logado, ou ?tipo=juridica&porte=me / ?modalidade=pj_me / ?tipo=me.
+    const u = (req as any).user as { tipo_pessoa?: string; porte_pj?: string } | undefined;
+    const temQuery = req.query.tipo || req.query.porte || req.query.modalidade;
+    if (u?.tipo_pessoa) {
+      return res.json(filtrarPlanosPorTipo(plans, u.tipo_pessoa, u.porte_pj));
+    }
+    if (temQuery) {
+      const m = modalidadeDeParametros({
+        tipo: String(req.query.tipo || ""),
+        porte: String(req.query.porte || ""),
+        modalidade: String(req.query.modalidade || ""),
+      });
+      const c = camposDaModalidade(m);
+      return res.json(filtrarPlanosPorTipo(plans, c.tipo_pessoa, c.porte_pj));
+    }
+    res.json(plans);
   } catch (error) {
     console.error("Error fetching active subscription plans:", error);
     res.status(500).json({ error: "Erro ao buscar planos de assinatura" });
@@ -134,7 +147,18 @@ export async function createPlan(req: Request, res: Response) {
     // Criar plano
     const plan = await storage.createSubscriptionPlan(validatedData);
 
-    res.status(201).json(plan);
+    // Um plano novo pode passar a valer para assinantes (ex.: PJ ME ganha preço
+    // próprio): reajusta no Asaas quem for afetado.
+    let asaasSync: any = null;
+    if ((plan as any).active !== false) {
+      try {
+        asaasSync = await getSubscriptionService(storage).sincronizarAssinantesDoPlano(plan.id);
+      } catch (e: any) {
+        asaasSync = { erro: e?.message || "Falha ao sincronizar com o Asaas" };
+      }
+    }
+
+    res.status(201).json({ ...plan, asaasSync });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: "Dados inválidos", details: error.errors });
@@ -193,7 +217,27 @@ export async function updatePlan(req: Request, res: Response) {
     // Atualizar plano
     const updatedPlan = await storage.updateSubscriptionPlan(planId, validatedData);
 
-    res.json(updatedPlan);
+    // Preço/escopo mudou → reajusta automaticamente as assinaturas no Asaas
+    // (recorrência + cobranças em aberto) de todos os assinantes afetados.
+    const mudou = (campo: string) =>
+      (validatedData as any)[campo] !== undefined &&
+      String((validatedData as any)[campo] ?? "") !== String((existingPlan as any)[campo] ?? "");
+    const precoMudou =
+      (validatedData as any).priceMonthly !== undefined &&
+      Math.abs(Number((validatedData as any).priceMonthly) - Number(existingPlan.priceMonthly)) >= 0.005;
+    let asaasSync: any = null;
+    if (precoMudou || mudou("active") || mudou("tipoPessoa") || mudou("portePj")) {
+      console.log(
+        `[Planos] ${existingPlan.planCode}: R$ ${existingPlan.priceMonthly} → R$ ${(updatedPlan as any)?.priceMonthly} (admin ${user.id}); sincronizando Asaas…`,
+      );
+      try {
+        asaasSync = await getSubscriptionService(storage).sincronizarAssinantesDoPlano(planId);
+      } catch (e: any) {
+        asaasSync = { erro: e?.message || "Falha ao sincronizar com o Asaas" };
+      }
+    }
+
+    res.json({ ...updatedPlan, asaasSync });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: "Dados inválidos", details: error.errors });
@@ -295,5 +339,22 @@ export async function getPlanById(req: Request, res: Response) {
   } catch (error) {
     console.error("Error fetching subscription plan:", error);
     res.status(500).json({ error: "Erro ao buscar plano de assinatura" });
+  }
+}
+
+/** Quantas assinaturas no Asaas serão reajustadas se este plano mudar (confirmação no admin). */
+export async function getPlanSubscribers(req: Request, res: Response) {
+  try {
+    const user = (req as any).user;
+    if (!user || user.tipo_usuario !== "super_admin") {
+      return res.status(403).json({ error: "Acesso negado." });
+    }
+    const planId = parseInt(req.params.id);
+    if (isNaN(planId)) return res.status(400).json({ error: "ID inválido" });
+    const ids = await getSubscriptionService(storage).assinantesAfetadosPeloPlano(planId);
+    res.json({ planId, assinaturasAfetadas: ids.length });
+  } catch (error) {
+    console.error("Error counting plan subscribers:", error);
+    res.status(500).json({ error: "Erro ao contar assinantes do plano" });
   }
 }

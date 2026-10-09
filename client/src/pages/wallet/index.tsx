@@ -87,8 +87,8 @@ export default function WalletPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
         >
-          <h1 className="text-2xl md:text-3xl font-bold mb-1">{t('wallet.page_title', 'Minha Carteira')}</h1>
-          <p className="text-gray-400">{t('wallet.page_description', 'Gerencie suas finanças em um só lugar')}</p>
+          <h1 className="text-2xl font-semibold tracking-tight mb-1">{t('wallet.page_title', 'Minha Carteira')}</h1>
+          <p className="text-muted-foreground">{t('wallet.page_description', 'Gerencie suas finanças em um só lugar')}</p>
         </motion.div>
       </div>
       
@@ -109,7 +109,7 @@ export default function WalletPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.1 }}
         >
-          <Card className="glass-card neon-border">
+          <Card className="border bg-card">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-xl font-bold">Carteira Principal</CardTitle>
               {!isEditing ? (
@@ -124,7 +124,7 @@ export default function WalletPage() {
                 <Button 
                   onClick={() => setIsEditing(false)} 
                   variant="ghost" 
-                  className="text-gray-400 hover:bg-gray-500/10"
+                  className="text-muted-foreground hover:bg-gray-500/10"
                 >
                   Cancelar
                 </Button>
@@ -140,7 +140,7 @@ export default function WalletPage() {
               ) : isEditing ? (
                 <div className="space-y-4">
                   <div>
-                    <h3 className="text-sm text-gray-400 mb-2">Nome da carteira</h3>
+                    <h3 className="text-sm text-muted-foreground mb-2">Nome da carteira</h3>
                     <Input 
                       value={walletName} 
                       onChange={(e) => setWalletName(e.target.value)} 
@@ -167,12 +167,12 @@ export default function WalletPage() {
                       <WalletIcon className="h-6 w-6 text-primary" />
                     </div>
                     <div>
-                      <h3 className="text-sm text-gray-400">Nome da carteira</h3>
+                      <h3 className="text-sm text-muted-foreground">Nome da carteira</h3>
                       <h2 className="text-xl font-bold">{wallet?.nome}</h2>
                     </div>
                   </div>
                   <div>
-                    <h3 className="text-sm text-gray-400 mb-1">Saldo atual</h3>
+                    <h3 className="text-sm text-muted-foreground mb-1">Saldo atual</h3>
                     <h2 className="text-3xl font-numeric text-primary mb-4">
                       {formatCurrency(Number(wallet?.saldo_atual) || 0)}
                     </h2>
@@ -188,14 +188,14 @@ export default function WalletPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.2 }}
         >
-          <Card className="glass-card neon-border">
+          <Card className="border bg-card">
             <CardHeader className="pb-2">
               <CardTitle className="text-xl font-bold">Ações Rápidas</CardTitle>
               <CardDescription>Adicione novas transações</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <Button 
-                className="w-full bg-green-500/20 hover:bg-green-500/40 text-green-400 hover:text-white border-green-500/40"
+                className="w-full bg-green-500/20 hover:bg-green-500/40 text-income hover:text-white border-green-500/40"
                 variant="outline"
                 onClick={() => {
                   setTransactionType(TransactionType.INCOME);
@@ -207,7 +207,7 @@ export default function WalletPage() {
               </Button>
               
               <Button 
-                className="w-full bg-red-500/20 hover:bg-red-500/40 text-red-400 hover:text-white border-red-500/40"
+                className="w-full bg-red-500/20 hover:bg-red-500/40 text-expense hover:text-white border-red-500/40"
                 variant="outline"
                 onClick={() => {
                   setTransactionType(TransactionType.EXPENSE);

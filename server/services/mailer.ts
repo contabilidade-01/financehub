@@ -10,7 +10,7 @@ function smtpPass(): string | undefined {
   return process.env.SMTP_PASS || process.env.SMTP_PASSWORD;
 }
 
-function smtpFrom(): string | undefined {
+export function smtpFrom(): string | undefined {
   return process.env.SMTP_FROM || process.env.EMAIL_FROM;
 }
 

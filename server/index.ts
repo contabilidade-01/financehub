@@ -35,6 +35,7 @@ import { setupRedirect } from "./middleware/setup.middleware";
 import { securityHeaders } from "./middleware/security.middleware";
 import { runAutoMigrations } from "./migrations/auto-migrate";
 import { randomBytes } from "crypto";
+import { setWebSocketSessionParser } from "./websocket";
 
 // Configurar timezone global da aplicação para São Paulo
 process.env.TZ = 'America/Sao_Paulo';
@@ -125,7 +126,7 @@ if (process.env.DATABASE_URL) {
   console.warn('⚠️ Store de sessão: MemoryStore (sem DATABASE_URL).');
 }
 
-app.use(session({
+const sessionMiddleware = session({
   secret: resolvedSessionSecret,
   resave: false,
   saveUninitialized: false,
@@ -136,7 +137,10 @@ app.use(session({
     httpOnly: true,
     sameSite: 'lax',
   }
-}));
+});
+app.use(sessionMiddleware);
+// O WebSocket autentica pelo mesmo cookie de sessão (nunca por id na URL).
+setWebSocketSessionParser(sessionMiddleware);
 
 // Middleware para desabilitar cache em endpoints da API
 app.use('/api', (req, res, next) => {
@@ -149,33 +153,16 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
+// Log de acesso da API: método, rota, status e tempo. Nunca o corpo da resposta
+// (continha dados financeiros, tokens e e-mails nos logs do servidor).
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
-
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
-
   res.on("finish", () => {
-    const duration = Date.now() - start;
     if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-
-      if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "…";
-      }
-
-      log(logLine);
+      log(`${req.method} ${path} ${res.statusCode} in ${Date.now() - start}ms`);
     }
   });
-
   next();
 });
 
@@ -213,10 +200,12 @@ app.use((req, res, next) => {
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+    // Em produção, erros 5xx não expõem detalhes internos ao cliente.
+    const message =
+      status >= 500 && isProduction ? "Erro interno do servidor" : err.message || "Internal Server Error";
 
-    res.status(status).json({ message });
-    throw err;
+    console.error(`[Erro ${status}]`, err);
+    if (!res.headersSent) res.status(status).json({ message });
   });
 
   // importantly only setup vite in development and after
@@ -273,5 +262,33 @@ app.use((req, res, next) => {
     initializeAlerts();
   }).catch(err => {
     console.error("[Alerts] Falha ao carregar módulo de alertas:", err.message);
+  });
+
+  // Inicializar sequência de boas-vindas via WhatsApp (dias 0/1/3) — roda a cada 1h
+  import("./jobs/onboarding-whatsapp.job").then(({ initializeOnboardingWhatsappSequence }) => {
+    initializeOnboardingWhatsappSequence();
+  }).catch(err => {
+    console.error("[OnboardingWhatsApp] Falha ao carregar módulo de boas-vindas:", err.message);
+  });
+
+  // Inicializar geração de mensalidades (recorrências mensais) — roda a cada 6h
+  import("./jobs/mensalidades.job").then(({ initializeMensalidades }) => {
+    initializeMensalidades();
+  }).catch(err => {
+    console.error("[Mensalidades] Falha ao carregar job de mensalidades:", err.message);
+  });
+
+  // Assinaturas: confere no Asaas a cada 30min (manual reinicia a janela) quem pagou e não foi liberado
+  import("./jobs/asaas-sync.job").then(({ initializeAsaasSync }) => {
+    initializeAsaasSync();
+  }).catch(err => {
+    console.error("[AsaasSync] Falha ao carregar job de sincronização:", err.message);
+  });
+
+  // Recebimentos Cora: confere cobranças em aberto a cada 30min (cobre webhook perdido)
+  import("./jobs/cora-sync.job").then(({ initializeCoraSync }) => {
+    initializeCoraSync();
+  }).catch(err => {
+    console.error("[Cora] Falha ao carregar job de sincronização:", err.message);
   });
 })();

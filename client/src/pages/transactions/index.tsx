@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useNovoLancamento } from "@/lib/novo-lancamento";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Transaction, TransactionStatus, TransactionType, Category, PaymentMethod } from "@shared/schema";
 import { TransactionForm } from "@/components/shared/TransactionForm";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -44,6 +53,8 @@ import {
   CheckCircle2,
   RotateCcw,
   FileSpreadsheet,
+  CalendarDays,
+  SlidersHorizontal,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -379,7 +390,7 @@ function CategoryFilterDropdown({
                   <div className="flex items-center">
                     <div 
                       className="w-3 h-3 rounded-full mr-2" 
-                      style={{ backgroundColor: category.cor || "#6C63FF" }}
+                      style={{ backgroundColor: category.cor || "#64748B" }}
                     ></div>
                     {translateCategoryName(category.nome, t)}
                   </div>
@@ -679,14 +690,14 @@ function SubtotalCard({
   label, value, tone, hint,
 }: { label: string; value: string; tone: "neutral" | "income" | "expense"; hint?: string }) {
   const cor =
-    tone === "income" ? "text-emerald-500"
-    : tone === "expense" ? "text-rose-500"
+    tone === "income" ? "text-income"
+    : tone === "expense" ? "text-expense"
     : "text-foreground";
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
-      <p className="text-[11px] font-label text-muted-foreground">{label}</p>
+    <div className="rounded-lg border border-border bg-white/[0.03] px-4 py-3">
+      <p className="text-xs font-label text-muted-foreground">{label}</p>
       <p className={`mt-1 text-xl font-numeric font-semibold ${cor}`}>{value}</p>
-      {hint && <p className="mt-0.5 text-[11px] text-muted-foreground">{hint}</p>}
+      {hint && <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>}
     </div>
   );
 }
@@ -722,6 +733,13 @@ export default function Transactions() {
   const { t } = useTranslation();
   const [isTransactionFormOpen, setIsTransactionFormOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  // Filtros recolhidos no mobile (a busca continua sempre visível).
+  const [filtrosAbertos, setFiltrosAbertos] = useState(false);
+  // Atalho "+ Novo" da barra inferior (mobile).
+  useNovoLancamento(() => {
+    setEditingTransaction(null);
+    setIsTransactionFormOpen(true);
+  });
   const [deletingTransaction, setDeletingTransaction] = useState<Transaction | null>(null);
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -735,6 +753,65 @@ export default function Transactions() {
   const [valorMax, setValorMax] = useState("");
   const [ordenacao, setOrdenacao] = useState<Ordenacao>("data_desc");
   const { toast } = useToast();
+  const [sel, setSel] = useState<Set<number>>(new Set());
+  const [excluirLoteOpen, setExcluirLoteOpen] = useState(false);
+  const [diaOpen, setDiaOpen] = useState(false);
+  const [diaValor, setDiaValor] = useState("5");
+  const [diaTodasParcelas, setDiaTodasParcelas] = useState(true);
+
+  const alterarDia = useMutation({
+    mutationFn: (data: { transacao_ids: number[]; dia: number; todas_parcelas: boolean }) =>
+      apiRequest("/api/transactions/alterar-dia", { method: "POST", data }),
+    onSuccess: (r: any) => {
+      refetch();
+      queryClient.invalidateQueries({ predicate: (q) => String(q.queryKey[0] || "").startsWith("/api/cartoes") });
+      queryClient.invalidateQueries({ predicate: (q) => String(q.queryKey[0] || "").startsWith("/api/faturas") });
+      setDiaOpen(false);
+      setSel(new Set());
+      const extra = r?.extra_parcelas ? ` (+${r.extra_parcelas} parcela(s))` : "";
+      toast({
+        title: `Dia alterado em ${r?.alterados ?? 0} lançamento(s)${extra}`,
+        description: "Faturas de cartão foram recalculadas pelo novo dia.",
+      });
+    },
+    onError: (e: any) =>
+      toast({ title: "Erro", description: e?.message || e?.error, variant: "destructive" }),
+  });
+
+  const excluirLote = useMutation({
+    mutationFn: (ids: number[]) =>
+      apiRequest("/api/transactions/excluir-lote", { method: "POST", data: { ids } }),
+    onSuccess: (r: any) => {
+      refetch();
+      queryClient.invalidateQueries({ queryKey: ["/api/wallet/current"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/summary"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payment-methods/totals"] });
+      queryClient.invalidateQueries({ predicate: (q) => String(q.queryKey[0] || "").startsWith("/api/cartoes") });
+      queryClient.invalidateQueries({ predicate: (q) => String(q.queryKey[0] || "").startsWith("/api/faturas") });
+      setExcluirLoteOpen(false);
+      setSel(new Set());
+      toast({
+        title: `${r?.excluidas ?? 0} transação(ões) excluída(s)`,
+        description: "Foram para a lixeira. Você pode desfazer por 30 dias.",
+        action: (
+          <ToastAction altText="Desfazer" onClick={handleRestaurarUltima}>
+            Desfazer
+          </ToastAction>
+        ),
+      });
+    },
+    onError: (e: any) =>
+      toast({ title: "Erro ao excluir", description: e?.message || e?.error, variant: "destructive" }),
+  });
+
+  const toggleSel = (id: number) => {
+    setSel((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  };
   
   // WebSocket para atualizações em tempo real
   const { isConnected, connectionError, badges, dismissBadge, clearAllBadges, markAsViewed, totalCount, shakingTransactions, triggerTransactionShake, clearTransactionShake } = useWebSocket();
@@ -759,6 +836,21 @@ export default function Transactions() {
   const { data: paymentMethods } = useQuery<PaymentMethod[]>({
     queryKey: ["/api/payment-methods"]
   });
+
+  const getStatusBadgeClass = (status: TransactionStatus) => {
+    switch (status) {
+      case TransactionStatus.COMPLETED:
+        return "bg-success/10 text-success";
+      case TransactionStatus.PENDING:
+        return "bg-warning/10 text-warning";
+      case TransactionStatus.SCHEDULED:
+        return "bg-primary/10 text-primary";
+      case TransactionStatus.CANCELED:
+        return "bg-destructive/10 text-destructive";
+      default:
+        return "bg-muted text-muted-foreground";
+    }
+  };
 
   const getStatusLabel = (status: TransactionStatus) => {
     switch (status) {
@@ -908,7 +1000,7 @@ export default function Transactions() {
       queryClient.invalidateQueries({ queryKey: ["/api/wallet/current"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/summary"] });
       toast({
-        title: "Transação restaurada",
+        title: r?.quantidade > 1 ? `${r.quantidade} transações restauradas` : "Transação restaurada",
         description: r?.descricao ? String(r.descricao) : undefined,
       });
     } catch {
@@ -999,11 +1091,11 @@ export default function Transactions() {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between">
           <div className="mb-4 md:mb-0">
             <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-2xl md:text-3xl font-bold mb-1">{t('transactions.title', 'Transações')}</h1>
+              <h1 className="text-2xl font-semibold tracking-tight mb-1">{t('transactions.title', 'Transações')}</h1>
               {/* Indicador de conexão WebSocket */}
               <div className="flex items-center gap-2">
                 <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'} animate-pulse`}></div>
-                <span className="text-xs text-gray-400">
+                <span className="text-xs text-muted-foreground">
                   {isConnected ? t('transactions.realtime_active', 'Tempo real ativo') : t('transactions.disconnected', 'Desconectado')}
                 </span>
               </div>
@@ -1015,16 +1107,16 @@ export default function Transactions() {
                 {totalCount > 1 && (
                   <button
                     onClick={clearAllBadges}
-                    className="text-xs text-gray-400 hover:text-gray-300 underline transition-colors"
+                    className="text-xs text-muted-foreground hover:text-gray-300 underline transition-colors"
                   >
                     {t('transactions.clear_all', 'Limpar todas')} ({totalCount})
                   </button>
                 )}
               </div>
             )}
-            <p className="text-gray-400">{t('transactions.subtitle', 'Gerencie suas transações financeiras')}</p>
+            <p className="text-muted-foreground">{t('transactions.subtitle', 'Gerencie suas transações financeiras')}</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={handleRestaurarUltima} title="Restaura a última exclusão (lixeira)">
               <RotateCcw className="mr-2 h-4 w-4" />
               Restaurar última
@@ -1036,7 +1128,7 @@ export default function Transactions() {
             <Button onClick={() => {
               setEditingTransaction(null);
               setIsTransactionFormOpen(true);
-            }} className="neon-border">
+            }} className="">
               <PlusIcon className="mr-2 h-4 w-4" />
               {t('transactions.new_transaction', 'Nova Transação')}
             </Button>
@@ -1060,17 +1152,17 @@ export default function Transactions() {
               variant="outline"
               className="text-xs"
             >
-              🧪 Teste
+              Teste
             </Button>
             )}
           </div>
         </div>
       </header>
 
-      <div className={`glass-card neon-border rounded-2xl ${theme === 'light' ? 'bg-white' : ''}`}>
-        <div className={`p-5 ${theme === 'light' ? 'text-gray-900' : ''}`}>
-          <div className="flex flex-col md:flex-row gap-4 mb-6 md:items-end">
-            <div className="flex-1">
+      <div className={`border bg-card rounded-lg bg-card`}>
+        <div className="p-4 text-foreground md:p-5">
+          <div className="mb-6 flex flex-col gap-4">
+            <div className="w-full md:max-w-md">
               <label className="text-sm font-medium text-muted-foreground block mb-1">
                 {t('transactions.filters.search_label', 'Busca')}
               </label>
@@ -1078,10 +1170,20 @@ export default function Transactions() {
                 placeholder={t('transactions.filters.search_placeholder', 'Buscar transações...')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-dark-purple/10 h-10"
+                className="h-10"
               />
+              <Button
+                type="button"
+                variant="outline"
+                className="mt-3 w-full md:hidden"
+                onClick={() => setFiltrosAbertos((v) => !v)}
+                aria-expanded={filtrosAbertos}
+              >
+                <SlidersHorizontal className="h-4 w-4" />
+                {filtrosAbertos ? "Ocultar filtros" : "Filtros"}
+              </Button>
             </div>
-            <div className="flex flex-wrap gap-4">
+            <div className={`${filtrosAbertos ? "flex" : "hidden"} md:flex flex-wrap gap-4`}>
               <TypeFilterDropdown
                 value={typeFilter}
                 onChange={setTypeFilter}
@@ -1121,7 +1223,7 @@ export default function Transactions() {
                   placeholder="0"
                   value={valorMin}
                   onChange={(e) => setValorMin(e.target.value)}
-                  className="h-10 w-[110px] bg-dark-purple/10"
+                  className="h-10 w-[110px]"
                 />
               </div>
               <div className="flex flex-col gap-1">
@@ -1133,7 +1235,7 @@ export default function Transactions() {
                   placeholder="∞"
                   value={valorMax}
                   onChange={(e) => setValorMax(e.target.value)}
-                  className="h-10 w-[110px] bg-dark-purple/10"
+                  className="h-10 w-[110px]"
                 />
               </div>
 
@@ -1154,8 +1256,9 @@ export default function Transactions() {
                       setValorMin("");
                       setValorMax("");
                       setOrdenacao("data_desc");
+                      setSel(new Set());
                     }}
-                    className="bg-dark-purple/10"
+                    
                   >
                     {t('transactions.filters.clear_filters', 'Limpar Filtros')}
                   </Button>
@@ -1168,11 +1271,11 @@ export default function Transactions() {
             <div className="flex flex-wrap items-end gap-4 mb-6">
               <div className="flex flex-col gap-1">
                 <label className="text-sm font-medium text-muted-foreground">{t('transactions.filters.date_from', 'De')}</label>
-                <Input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="h-10 w-[170px] bg-dark-purple/10" />
+                <Input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="h-10 w-[170px]" />
               </div>
               <div className="flex flex-col gap-1">
                 <label className="text-sm font-medium text-muted-foreground">{t('transactions.filters.date_to', 'Até')}</label>
-                <Input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="h-10 w-[170px] bg-dark-purple/10" />
+                <Input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="h-10 w-[170px]" />
               </div>
             </div>
           )}
@@ -1222,55 +1325,106 @@ export default function Transactions() {
             />
           </div>
 
+          {sel.size > 0 && (
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-primary/5 px-3 py-2">
+              <p className="text-sm text-muted-foreground">{sel.size} selecionado(s)</p>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" onClick={() => setSel(new Set())}>
+                  Limpar
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setDiaValor("5");
+                    setDiaTodasParcelas(true);
+                    setDiaOpen(true);
+                  }}
+                >
+                  <CalendarDays className="h-4 w-4 mr-1" /> Alterar dia
+                </Button>
+                <Button size="sm" variant="destructive" onClick={() => setExcluirLoteOpen(true)}>
+                  <Trash2Icon className="h-4 w-4 mr-1" /> Excluir selecionadas
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* Desktop Table View */}
           <div className="hidden md:block">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[640px]">
                 <thead>
                   <tr>
-                    <th className="text-left pb-4 text-xs font-label text-gray-400">{t('transactions.table.description', 'DESCRIÇÃO')}</th>
-                    <th className="text-left pb-4 text-xs font-label text-gray-400">FORMA</th>
-                    <th className="text-left pb-4 text-xs font-label text-gray-400">{t('transactions.table.category', 'CATEGORIA')}</th>
-                    <th className="text-left pb-4 text-xs font-label text-gray-400">{t('transactions.table.date', 'DATA')}</th>
-                    <th className="text-left pb-4 text-xs font-label text-gray-400">{t('transactions.table.value', 'VALOR')}</th>
-                    <th className="text-left pb-4 text-xs font-label text-gray-400">{t('transactions.table.status', 'STATUS')}</th>
-                    <th className="text-right pb-4 text-xs font-label text-gray-400">{t('transactions.table.actions', 'AÇÕES')}</th>
+                    <th className="pb-4 pr-2 w-8">
+                      <input
+                        type="checkbox"
+                        aria-label="Selecionar todos"
+                        checked={
+                          filteredTransactions.length > 0 &&
+                          filteredTransactions.every((t) => sel.has(t.id))
+                        }
+                        onChange={(e) => {
+                          const on = e.target.checked;
+                          setSel((prev) => {
+                            const n = new Set(prev);
+                            filteredTransactions.forEach((t) => (on ? n.add(t.id) : n.delete(t.id)));
+                            return n;
+                          });
+                        }}
+                      />
+                    </th>
+                    <th className="text-left pb-4 text-xs font-label text-muted-foreground">{t('transactions.table.description', 'DESCRIÇÃO')}</th>
+                    <th className="text-left pb-4 text-xs font-label text-muted-foreground">FORMA</th>
+                    <th className="text-left pb-4 text-xs font-label text-muted-foreground">{t('transactions.table.category', 'CATEGORIA')}</th>
+                    <th className="text-left pb-4 text-xs font-label text-muted-foreground">{t('transactions.table.date', 'DATA')}</th>
+                    <th className="text-left pb-4 text-xs font-label text-muted-foreground">{t('transactions.table.value', 'VALOR')}</th>
+                    <th className="text-left pb-4 text-xs font-label text-muted-foreground">{t('transactions.table.status', 'STATUS')}</th>
+                    <th className="text-right pb-4 text-xs font-label text-muted-foreground">{t('transactions.table.actions', 'AÇÕES')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {isLoading ? (
                     <tr>
-                      <td colSpan={7} className="py-4 text-center">{t('common.loading', 'Carregando...')}</td>
+                      <td colSpan={8} className="py-4 text-center">{t('common.loading', 'Carregando...')}</td>
                     </tr>
                   ) : filteredTransactions.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-4 text-center">{t('transactions.table.no_transactions', 'Nenhuma transação encontrada')}</td>
+                      <td colSpan={8} className="py-4 text-center">{t('transactions.table.no_transactions', 'Nenhuma transação encontrada')}</td>
                     </tr>
                   ) : (
                     filteredTransactions.map((transaction) => (
                       <TransactionRow 
                         key={transaction.id} 
                         isShaking={shakingTransactions.has(transaction.id)}
-                        className="cursor-pointer border-t border-white/5"
+                        className={`cursor-pointer border-t border-border ${sel.has(transaction.id) ? "bg-primary/5" : ""}`}
                       >
+                        <td className="py-4 pr-2">
+                          <input
+                            type="checkbox"
+                            checked={sel.has(transaction.id)}
+                            onChange={() => toggleSel(transaction.id)}
+                            onClick={(e) => e.stopPropagation()}
+                            aria-label={`Selecionar ${transaction.descricao}`}
+                          />
+                        </td>
                         <td className="py-4 pr-4">
                           <div className="flex items-center">
                             <div className={`w-8 h-8 rounded-full ${transaction.tipo === TransactionType.INCOME ? 'bg-green-500/20' : 'bg-red-500/20'} flex items-center justify-center mr-3`}>
                               {transaction.tipo === TransactionType.INCOME ? (
-                                <ArrowUpIcon className="h-4 w-4 text-green-500" />
+                                <ArrowUpIcon className="h-4 w-4 text-income" />
                               ) : (
-                                <ArrowDownIcon className="h-4 w-4 text-red-500" />
+                                <ArrowDownIcon className="h-4 w-4 text-expense" />
                               )}
                             </div>
                             <div>
                               <div className="font-medium">
                                 {transaction.descricao}
                                 {transaction.reembolsavel && (
-                                  <span className="ml-2 rounded bg-blue-500/10 px-2 py-0.5 text-[10px] text-blue-500">A receber</span>
+                                  <span className="ml-2 rounded bg-blue-500/10 px-2 py-0.5 text-xs text-blue-500">A receber</span>
                                 )}
                               </div>
                               {(transaction as any).parcela_num && (transaction as any).parcela_total ? (
-                                <div className="text-xs text-gray-400">
+                                <div className="text-xs text-muted-foreground">
                                   {(transaction as any).parcela_num}/{(transaction as any).parcela_total}
                                 </div>
                               ) : null}
@@ -1286,25 +1440,16 @@ export default function Transactions() {
                           </span>
                         </td>
                         <td className="py-4 whitespace-nowrap">
-                          <span className="text-gray-400">{formatDate(transaction.data_transacao)}</span>
+                          <span className="text-muted-foreground">{formatDate(transaction.data_transacao)}</span>
                         </td>
                         <td className="py-4 whitespace-nowrap">
-                          <span className={`${transaction.tipo === TransactionType.INCOME ? 'text-green-400' : 'text-red-400'} font-numeric`}>
+                          <span className={`${transaction.tipo === TransactionType.INCOME ? 'text-income' : 'text-expense'} font-numeric`}>
                             {transaction.tipo === TransactionType.INCOME ? '+ ' : '- '}
                             {formatCurrency(Number(transaction.valor))}
                           </span>
                         </td>
                         <td className="py-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 rounded-lg text-xs
-                            ${theme === 'light' && transaction.status === TransactionStatus.COMPLETED ? 'bg-emerald-400 text-white' : ''}
-                            ${theme === 'light' && transaction.status === TransactionStatus.PENDING ? 'bg-yellow-400 text-gray-900' : ''}
-                            ${theme === 'light' && transaction.status === TransactionStatus.SCHEDULED ? 'bg-blue-400 text-white' : ''}
-                            ${theme === 'light' && transaction.status === TransactionStatus.CANCELED ? 'bg-red-400 text-white' : ''}
-                            ${theme !== 'light' && transaction.status === TransactionStatus.COMPLETED ? 'bg-emerald-500/10 text-emerald-400' : ''}
-                            ${theme !== 'light' && transaction.status === TransactionStatus.PENDING ? 'bg-yellow-500/10 text-yellow-400' : ''}
-                            ${theme !== 'light' && transaction.status === TransactionStatus.SCHEDULED ? 'bg-blue-500/10 text-blue-400' : ''}
-                            ${theme !== 'light' && transaction.status === TransactionStatus.CANCELED ? 'bg-red-500/10 text-red-400' : ''}
-                          `}>
+                          <span className={`px-2 py-0.5 rounded-md text-xs font-medium ${getStatusBadgeClass(transaction.status)}`}>
                             {getStatusLabel(transaction.status)}
                           </span>
                         </td>
@@ -1318,7 +1463,7 @@ export default function Transactions() {
                                 title="Dar baixa"
                                 onClick={() => handlePagar(transaction.id)}
                               >
-                                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                                <CheckCircle2 className="h-4 w-4 text-income" />
                               </Button>
                             )}
                             {transaction.status === TransactionStatus.COMPLETED && (
@@ -1349,9 +1494,9 @@ export default function Transactions() {
           {/* Mobile Card View */}
           <div className="md:hidden space-y-4">
             {isLoading ? (
-              <div className="text-center py-8 text-gray-400">{t('common.loading', 'Carregando...')}</div>
+              <div className="text-center py-8 text-muted-foreground">{t('common.loading', 'Carregando...')}</div>
             ) : filteredTransactions.length === 0 ? (
-              <div className="text-center py-8 text-gray-400">
+              <div className="text-center py-8 text-muted-foreground">
                 {t('transactions.table.no_transactions', 'Nenhuma transação encontrada')}
               </div>
             ) : (
@@ -1359,37 +1504,44 @@ export default function Transactions() {
                 <TransactionCard 
                   key={transaction.id} 
                   isShaking={shakingTransactions.has(transaction.id)}
-                  className={`rounded-lg p-4 border ${theme === 'light' ? 'bg-white border-gray-100' : 'bg-white/5 border-white/10'}`}
+                  className={`rounded-lg p-4 border bg-card border-border`}
                 >
                   <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center flex-1">
-                      <div className={`w-10 h-10 rounded-full ${transaction.tipo === TransactionType.INCOME ? 'bg-green-500/20' : 'bg-red-500/20'} flex items-center justify-center mr-3 flex-shrink-0`}>
+                    <div className="flex min-w-0 flex-1 items-center">
+                      <input
+                        type="checkbox"
+                        className="mr-2 mt-1 flex-shrink-0"
+                        checked={sel.has(transaction.id)}
+                        onChange={() => toggleSel(transaction.id)}
+                        aria-label={`Selecionar ${transaction.descricao}`}
+                      />
+                      <div className={`w-9 h-9 rounded-full ${transaction.tipo === TransactionType.INCOME ? "bg-income/10" : "bg-expense/10"} flex items-center justify-center mr-3 flex-shrink-0`}>
                         {transaction.tipo === TransactionType.INCOME ? (
-                          <ArrowUpIcon className="h-5 w-5 text-green-500" />
+                          <ArrowUpIcon className="h-5 w-5 text-income" />
                         ) : (
-                          <ArrowDownIcon className="h-5 w-5 text-red-500" />
+                          <ArrowDownIcon className="h-5 w-5 text-expense" />
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className={`font-medium truncate ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>
+                        <div className={`font-medium truncate text-foreground`}>
                           {transaction.descricao}
                         </div>
                         {transaction.reembolsavel && (
-                          <span className="inline-block rounded bg-blue-500/10 px-2 py-0.5 text-[10px] text-blue-500">A receber</span>
+                          <span className="inline-block rounded bg-blue-500/10 px-2 py-0.5 text-xs text-blue-500">A receber</span>
                         )}
                         {(transaction as any).parcela_num && (transaction as any).parcela_total ? (
-                          <div className={`text-xs ${theme === 'light' ? 'text-gray-500' : 'text-gray-400'}`}>
+                          <div className={`text-xs text-muted-foreground`}>
                             {(transaction as any).parcela_num}/{(transaction as any).parcela_total}
                           </div>
                         ) : null}
-                        <div className={`text-sm ${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>{getPaymentMethodDisplay(transaction)}</div>
+                        <div className={`text-sm text-muted-foreground`}>{getPaymentMethodDisplay(transaction)}</div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1 ml-2">
+                    <div className="ml-2 flex shrink-0 items-center gap-1">
                       {(transaction.status === TransactionStatus.PENDING ||
                         transaction.status === TransactionStatus.SCHEDULED) && (
                         <Button size="sm" variant="ghost" onClick={() => handlePagar(transaction.id)}>
-                          <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                          <CheckCircle2 className="h-4 w-4 text-income" />
                         </Button>
                       )}
                       {transaction.status === TransactionStatus.COMPLETED && (
@@ -1407,37 +1559,28 @@ export default function Transactions() {
 
                   <div className="space-y-2">
                     <div className="flex justify-between items-center">
-                      <span className={`text-sm font-medium ${theme === 'light' ? 'text-gray-700' : 'text-gray-400'}`}>{t('transactions.table.value', 'Valor')}:</span>
-                      <span className={`${transaction.tipo === TransactionType.INCOME ? 'text-green-500' : 'text-red-500'} font-numeric font-medium`}>
+                      <span className={`text-sm font-medium text-foreground`}>{t('transactions.table.value', 'Valor')}:</span>
+                      <span className={`${transaction.tipo === TransactionType.INCOME ? 'text-income' : 'text-expense'} font-numeric font-medium`}>
                         {transaction.tipo === TransactionType.INCOME ? '+ ' : '- '}
                         {formatCurrency(Number(transaction.valor))}
                       </span>
                     </div>
 
                     <div className="flex justify-between items-center">
-                      <span className={`text-sm font-medium ${theme === 'light' ? 'text-gray-700' : 'text-gray-400'}`}>{t('transactions.table.category', 'Categoria')}:</span>
+                      <span className={`text-sm font-medium text-foreground`}>{t('transactions.table.category', 'Categoria')}:</span>
                       <span className="px-2 py-1 rounded-lg bg-primary/10 text-primary text-xs">
                         {getCategoryName(transaction.categoria_id ?? null)}
                       </span>
                     </div>
 
                     <div className="flex justify-between items-center">
-                      <span className={`text-sm font-medium ${theme === 'light' ? 'text-gray-700' : 'text-gray-400'}`}>{t('transactions.table.date', 'Data')}:</span>
-                      <span className={`text-sm ${theme === 'light' ? 'text-gray-600' : 'text-gray-300'}`}>{formatDate(transaction.data_transacao)}</span>
+                      <span className={`text-sm font-medium text-foreground`}>{t('transactions.table.date', 'Data')}:</span>
+                      <span className={`text-sm text-muted-foreground`}>{formatDate(transaction.data_transacao)}</span>
                     </div>
 
                     <div className="flex justify-between items-center">
-                      <span className={`text-sm font-medium ${theme === 'light' ? 'text-gray-700' : 'text-gray-400'}`}>{t('transactions.table.status', 'Status')}:</span>
-                      <span className={`px-2 py-1 rounded-lg text-xs
-                        ${theme === 'light' && transaction.status === TransactionStatus.COMPLETED ? 'bg-emerald-400 text-white' : ''}
-                        ${theme === 'light' && transaction.status === TransactionStatus.PENDING ? 'bg-yellow-400 text-gray-900' : ''}
-                        ${theme === 'light' && transaction.status === TransactionStatus.SCHEDULED ? 'bg-blue-400 text-white' : ''}
-                        ${theme === 'light' && transaction.status === TransactionStatus.CANCELED ? 'bg-red-400 text-white' : ''}
-                        ${theme !== 'light' && transaction.status === TransactionStatus.COMPLETED ? 'bg-emerald-500/10 text-emerald-400' : ''}
-                        ${theme !== 'light' && transaction.status === TransactionStatus.PENDING ? 'bg-yellow-500/10 text-yellow-400' : ''}
-                        ${theme !== 'light' && transaction.status === TransactionStatus.SCHEDULED ? 'bg-blue-500/10 text-blue-400' : ''}
-                        ${theme !== 'light' && transaction.status === TransactionStatus.CANCELED ? 'bg-red-500/10 text-red-400' : ''}
-                      `}>
+                      <span className={`text-sm font-medium text-foreground`}>{t('transactions.table.status', 'Status')}:</span>
+                      <span className={`px-2 py-0.5 rounded-md text-xs font-medium ${getStatusBadgeClass(transaction.status)}`}>
                         {getStatusLabel(transaction.status)}
                       </span>
                     </div>
@@ -1449,77 +1592,41 @@ export default function Transactions() {
         </div>
       </div>
 
-      <AnimatePresence>
-        {isTransactionFormOpen && (
-          <>
-            {/* Overlay */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.3 }}
-              className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
-              onClick={() => setIsTransactionFormOpen(false)}
+      {/* Formulário de lançamento: Radix Dialog (Esc, foco preso, rolagem travada; painel inferior no mobile) */}
+      <Dialog open={isTransactionFormOpen} onOpenChange={setIsTransactionFormOpen}>
+        <DialogContent className="max-w-[600px]" aria-describedby={undefined}>
+          <DialogTitle className="sr-only">
+            {editingTransaction ? t('transactions.edit_transaction', 'Editar transação') : t('transactions.new_transaction', 'Nova Transação')}
+          </DialogTitle>
+          <button
+            type="button"
+            onClick={() => setIsTransactionFormOpen(false)}
+            className="absolute right-2 top-2 z-20 inline-flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <X className="h-5 w-5" />
+            <span className="sr-only">{t('common.close', 'Fechar')}</span>
+          </button>
+            <TransactionForm 
+              transaction={editingTransaction}
+              onSuccess={() => {
+                setIsTransactionFormOpen(false);
+                refetch();
+                queryClient.invalidateQueries({ queryKey: ["/api/wallet/current"] });
+                queryClient.invalidateQueries({ queryKey: ["/api/dashboard/summary"] });
+                queryClient.invalidateQueries({ queryKey: ["/api/payment-methods/totals"] });
+                toast({
+                  title: editingTransaction ? t('transactions.transaction_updated', 'Transação atualizada') : t('transactions.transaction_created', 'Transação criada'),
+                  description: editingTransaction 
+                    ? t('transactions.update_success', 'A transação foi atualizada com sucesso.') 
+                    : t('transactions.create_success', 'A transação foi criada com sucesso.'),
+                });
+              }}
             />
-            
-            {/* Modal */}
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-              <motion.div
-                initial={{ 
-                  opacity: 0, 
-                  scale: 0.8,
-                  y: 50
-                }}
-                animate={{ 
-                  opacity: 1, 
-                  scale: 1,
-                  y: 0
-                }}
-                exit={{ 
-                  opacity: 0, 
-                  scale: 0.8,
-                  y: 50
-                }}
-                transition={{ 
-                  type: "spring",
-                  damping: 25,
-                  stiffness: 300,
-                  duration: 0.3
-                }}
-                className={`${theme === 'light' ? 'bg-white border border-gray-200' : 'glass-card'} w-full max-w-[600px] max-h-[90vh] overflow-y-auto rounded-lg p-6 relative`}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <button
-                  onClick={() => setIsTransactionFormOpen(false)}
-                  className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 z-10"
-                >
-                  <X className="h-5 w-5" />
-                  <span className="sr-only">{t('common.close', 'Fechar')}</span>
-                </button>
-                <TransactionForm 
-                  transaction={editingTransaction}
-                  onSuccess={() => {
-                    setIsTransactionFormOpen(false);
-                    refetch();
-                    queryClient.invalidateQueries({ queryKey: ["/api/wallet/current"] });
-                    queryClient.invalidateQueries({ queryKey: ["/api/dashboard/summary"] });
-                    queryClient.invalidateQueries({ queryKey: ["/api/payment-methods/totals"] });
-                    toast({
-                      title: editingTransaction ? t('transactions.transaction_updated', 'Transação atualizada') : t('transactions.transaction_created', 'Transação criada'),
-                      description: editingTransaction 
-                        ? t('transactions.update_success', 'A transação foi atualizada com sucesso.') 
-                        : t('transactions.create_success', 'A transação foi criada com sucesso.'),
-                    });
-                  }}
-                />
-              </motion.div>
-            </div>
-          </>
-        )}
-      </AnimatePresence>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={!!deletingTransaction} onOpenChange={(open) => !open && setDeletingTransaction(null)}>
-        <AlertDialogContent className="glass-card">
+        <AlertDialogContent className="border bg-card">
           <AlertDialogHeader>
             <AlertDialogTitle>{t('transactions.delete_transaction', 'Excluir transação')}</AlertDialogTitle>
             <AlertDialogDescription>
@@ -1537,6 +1644,86 @@ export default function Transactions() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AlertDialog open={excluirLoteOpen} onOpenChange={setExcluirLoteOpen}>
+        <AlertDialogContent className="border bg-card">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir {sel.size} transação(ões)</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza? As transações selecionadas vão para a lixeira e podem ser restauradas de uma vez por 30 dias.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('common.cancel', 'Cancelar')}</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={excluirLote.isPending || sel.size === 0}
+              onClick={(e) => { e.preventDefault(); excluirLote.mutate(Array.from(sel)); }}
+              className="bg-destructive"
+            >
+              {excluirLote.isPending ? "Excluindo..." : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog open={diaOpen} onOpenChange={setDiaOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Alterar dia da transação</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              {sel.size} lançamento(s). O mês de cada um permanece; só o dia muda.
+              Em cartão, compra depois do fechamento cai na fatura seguinte — por isso setembro
+              virava outubro. Use um dia ≤ ao fechamento do cartão.
+            </p>
+            <div className="space-y-1.5">
+              <Label>Novo dia (1–31) *</Label>
+              <Input
+                type="number"
+                min={1}
+                max={31}
+                value={diaValor}
+                onChange={(e) => setDiaValor(e.target.value)}
+              />
+            </div>
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={diaTodasParcelas}
+                onChange={(e) => setDiaTodasParcelas(e.target.checked)}
+              />
+              <span>
+                Aplicar em todas as parcelas da compra
+                <span className="block text-xs text-muted-foreground">
+                  Cada parcela mantém o próprio mês; só o dia muda. A fatura é recalculada.
+                </span>
+              </span>
+            </label>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDiaOpen(false)}>Cancelar</Button>
+            <Button
+              disabled={alterarDia.isPending || sel.size === 0}
+              onClick={() => {
+                const dia = Number(diaValor);
+                if (!(dia >= 1 && dia <= 31)) {
+                  toast({ title: "Informe um dia entre 1 e 31", variant: "destructive" });
+                  return;
+                }
+                alterarDia.mutate({
+                  transacao_ids: Array.from(sel),
+                  dia,
+                  todas_parcelas: diaTodasParcelas,
+                });
+              }}
+            >
+              Aplicar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

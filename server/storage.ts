@@ -1,3 +1,6 @@
+import { dataCaixaPj } from "./services/erp/caixa-sql";
+import { codigoPai, contasDoModelo, modeloDoSegmento, type ModeloPlano } from "./data/plano-contas-pj-modelos";
+import { chaveNome, compararCodigos, grupoDaConta, prefixoLegado, proximoCodigoFilho, resolverPai } from "./services/plano-contas-pj";
 import bcrypt from "bcryptjs";
 import { randomBytes, randomUUID } from "crypto";
 import { db } from "./db";
@@ -78,11 +81,15 @@ import {
   type MetaComProgresso
 } from "../shared/schema";
 import { eq, and, or, desc, gte, lte, isNull, count, sum, sql, ne } from "drizzle-orm";
+import { hashApiToken, mascararApiToken } from "./utils/api-token-hash";
 
 // Pagar a fatura do cartão é QUITAÇÃO DE DÍVIDA, não despesa nova: a compra já
 // entrou por competência no dia em que foi feita. Sem excluir o pagamento, o
 // mesmo gasto conta duas vezes no DRE e no Resumo. Vale só onde a transação
 // estiver com o alias 't'. Cobre PF (faturas) e PJ (empresas_faturas).
+// Data de caixa (baixa) do lançamento PJ: recebimento/pagamento cai no mês
+// em que o dinheiro se moveu, não no da competência.
+const DATA_CAIXA_PJ = dataCaixaPj("t");
 const NAO_E_PAGAMENTO_FATURA = sql`NOT EXISTS (
   SELECT 1 FROM empresas_faturas f WHERE f.transacao_pagamento_id = t.id
 ) AND NOT EXISTS (
@@ -104,13 +111,23 @@ const NAO_E_PAGAMENTO_FATURA_PF = sql`NOT EXISTS (
  *   2. Se não existe, valem os planos sem tipo (NULL = serve aos dois), que é
  *      o caso de quem ainda tem um plano único.
  */
-export function filtrarPlanosPorTipo<T extends { tipoPessoa?: string | null }>(
+export function filtrarPlanosPorTipo<T extends { tipoPessoa?: string | null; portePj?: string | null }>(
   planos: T[],
   tipoPessoa: string | null | undefined,
+  portePj?: string | null,
 ): T[] {
-  const doTipo = tipoPessoa ? planos.filter((p) => p.tipoPessoa === tipoPessoa) : [];
-  if (doTipo.length > 0) return doTipo;
-  return planos.filter((p) => !p.tipoPessoa);
+  // Sem tipo definido → tratar como PF (evita cliente antigo/nulo ficar sem plano
+  // depois que o plano único NULL vira tipado). Ver plano de separação PF/PJ.
+  const t = tipoPessoa || "fisica";
+  const doTipo = planos.filter((p) => p.tipoPessoa === t);
+  if (doTipo.length === 0) return planos.filter((p) => !p.tipoPessoa);
+  if (t !== "juridica") return doTipo;
+  // PJ: plano do porte (PJ ME / PJ MEI) vence; sem plano do porte, valem os
+  // planos PJ sem porte (porte_pj NULL). PJ antigo sem porte = MEI.
+  const porte = String(portePj || "").toLowerCase() === "me" ? "me" : "mei";
+  const doPorte = doTipo.filter((p) => p.portePj === porte);
+  if (doPorte.length > 0) return doPorte;
+  return doTipo.filter((p) => !p.portePj);
 }
 
 /**
@@ -300,10 +317,12 @@ export interface IStorage {
   updateEmpresa(id: number, empresaData: UpdateEmpresa): Promise<Empresa | undefined>;
   deleteEmpresa(id: number): Promise<boolean>;
   // EmpresaConta (plano de contas PJ)
-  seedEmpresasContas(empresaId: number): Promise<EmpresaConta[]>;
+  seedEmpresasContas(empresaId: number, modelo?: ModeloPlano): Promise<EmpresaConta[]>;
+  completarPlanoComModelo(empresaId: number, modelo: ModeloPlano): Promise<{ criadas: number }>;
+  getPlanoContasCompleto(empresaId: number): Promise<EmpresaConta[]>;
   getEmpresasContasByEmpresaId(empresaId: number): Promise<EmpresaConta[]>;
   getEmpresaContaById(id: number): Promise<EmpresaConta | undefined>;
-  proximoCodigoConta(empresaId: number, tipo: string, classificacao?: string | null): Promise<string>;
+  proximoCodigoConta(empresaId: number, tipo: string, classificacao?: string | null, opts?: { parentId?: number | null; grupo_gerencial?: string | null }): Promise<string>;
   createEmpresaConta(contaData: InsertEmpresaConta): Promise<EmpresaConta>;
   updateEmpresaConta(id: number, contaData: UpdateEmpresaConta): Promise<EmpresaConta | undefined>;
   deleteEmpresaConta(id: number): Promise<boolean>;
@@ -360,7 +379,7 @@ export class DbStorage implements IStorage {
   
   async createUser(userData: InsertUser): Promise<User> {
     // Hash password
-    const hashedPassword = await bcrypt.hash(userData.senha, 10);
+    const hashedPassword = await bcrypt.hash(userData.senha, 12);
     const result = await db.insert(users).values({
       ...userData,
       senha: hashedPassword,
@@ -390,7 +409,7 @@ export class DbStorage implements IStorage {
   }
   
   async updatePassword(id: number, newPassword: string): Promise<boolean> {
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
     
     const result = await db.update(users)
       .set({ senha: hashedPassword })
@@ -970,28 +989,30 @@ export class DbStorage implements IStorage {
   async getApiTokenByToken(token: string): Promise<ApiToken | undefined> {
     const result = await db.select()
       .from(apiTokens)
-      .where(eq(apiTokens.token, token))
+      .where(eq(apiTokens.token, hashApiToken(token)))
       .limit(1);
     
     return result[0];
   }
   
+  /** Retorna o registro com `token` em texto puro — única vez em que ele existe. */
   async createApiToken(userId: number, tokenData: InsertApiToken): Promise<ApiToken> {
     // Gerar um token aleatório e seguro
     const token = this.generateApiToken();
     
-    // Salvar dados do token
+    // Salvar só o hash + uma dica para exibição
     const result = await db.insert(apiTokens)
       .values({
         ...tokenData,
         usuario_id: userId,
-        token: token,
+        token: hashApiToken(token),
+        token_hint: mascararApiToken(token),
         data_criacao: new Date(),
         ativo: true
-      })
+      } as any)
       .returning();
     
-    return result[0];
+    return { ...result[0], token };
   }
   
   async updateApiToken(id: number, tokenData: UpdateApiToken): Promise<ApiToken | undefined> {
@@ -1692,39 +1713,78 @@ export class DbStorage implements IStorage {
     return result.length > 0;
   }
 
-  // Plano de contas padrão (Yampa-like), criado quando a empresa é cadastrada.
-  async seedEmpresasContas(empresaId: number): Promise<EmpresaConta[]> {
-    // ativo/is_cmv têm default no banco; omitidos aqui de propósito (cast no insert).
-    const seed = [
-      // Receitas
-      { empresa_id: empresaId, codigo: '1.01', nome: 'Receita de Vendas',            tipo: 'Receita', classificacao: 'OUTRA',     icone: 'shopping-bag', cor: '#10B981', descricao: 'Vendas de mercadorias/produtos.' },
-      { empresa_id: empresaId, codigo: '1.02', nome: 'Receita de Serviços',          tipo: 'Receita', classificacao: 'OUTRA',     icone: 'briefcase',    cor: '#10B981', descricao: 'Prestação de serviços.' },
-      { empresa_id: empresaId, codigo: '1.03', nome: 'Outras Receitas Operacionais', tipo: 'Receita', classificacao: 'OUTRA',     icone: 'plus-circle',  cor: '#10B981', descricao: 'Receitas operacionais diversas.' },
-      { empresa_id: empresaId, codigo: '1.04', nome: 'Receitas Financeiras',        tipo: 'Receita', classificacao: 'OUTRA',     icone: 'trending-up',  cor: '#10B981', descricao: 'Rendimentos de aplicações, juros recebidos.' },
+  // Plano de contas do modelo (Base Serviços ou Base Comércio), criado quando a
+  // empresa é cadastrada. Sem modelo explícito, usa o segmento da empresa.
+  async seedEmpresasContas(empresaId: number, modelo?: ModeloPlano): Promise<EmpresaConta[]> {
+    if (!modelo) {
+      const emp = await this.getEmpresaById(empresaId);
+      modelo = modeloDoSegmento((emp as any)?.segmento);
+    }
+    const criadas: EmpresaConta[] = [];
+    const idPorCodigo = new Map<string, number>();
+    // Grupos antes das filhas (o modelo já vem nessa ordem), para ter o parent_id.
+    for (const c of contasDoModelo(modelo)) {
+      const pai = codigoPai(c.codigo);
+      const [row] = await db.insert(empresasContas).values({
+        empresa_id: empresaId,
+        codigo: c.codigo,
+        nome: c.nome,
+        tipo: c.tipo,
+        classificacao: c.classificacao,
+        grupo_gerencial: c.grupo,
+        is_cmv: !!c.is_cmv,
+        sintetica: !!c.sintetica,
+        parent_id: pai ? idPorCodigo.get(pai) ?? null : null,
+        descricao: c.descricao ?? null,
+      } as any).onConflictDoNothing().returning();
+      if (row) {
+        idPorCodigo.set(c.codigo, row.id);
+        criadas.push(row);
+      }
+    }
+    return criadas;
+  }
 
-      // Despesas Fixas
-      { empresa_id: empresaId, codigo: '2.01', nome: 'Folha de Pagamento',           tipo: 'Despesa', classificacao: 'FIXA',      icone: 'users',        cor: '#EF4444', descricao: 'Salários, encargos e benefícios.' },
-      { empresa_id: empresaId, codigo: '2.02', nome: 'Aluguel',                      tipo: 'Despesa', classificacao: 'FIXA',      icone: 'home',         cor: '#EF4444', descricao: 'Aluguel do imóvel comercial.' },
-      { empresa_id: empresaId, codigo: '2.03', nome: 'Energia / Água / Internet',    tipo: 'Despesa', classificacao: 'FIXA',      icone: 'zap',          cor: '#EF4444', descricao: 'Contas de consumo fixo.' },
-      { empresa_id: empresaId, codigo: '2.04', nome: 'Contabilidade',                tipo: 'Despesa', classificacao: 'FIXA',      icone: 'file-text',    cor: '#EF4444', descricao: 'Honorários contábeis.' },
-      { empresa_id: empresaId, codigo: '2.05', nome: 'Impostos e Taxas',             tipo: 'Despesa', classificacao: 'FIXA',      icone: 'percent',      cor: '#EF4444', descricao: 'Impostos fixos, taxas municipais.' },
-      { empresa_id: empresaId, codigo: '2.06', nome: 'Pró-labore / Retiradas',       tipo: 'Despesa', classificacao: 'FIXA',      icone: 'user-check',   cor: '#EF4444', descricao: 'Retirada dos sócios.' },
+  /**
+   * Completa o plano da empresa com as contas do modelo que ainda não existem
+   * (comparando pelo nome). Nunca altera nem renumera contas existentes.
+   */
+  async completarPlanoComModelo(empresaId: number, modelo: ModeloPlano): Promise<{ criadas: number }> {
+    const atuais = await this.getPlanoContasCompleto(empresaId);
+    const porNome = new Set(atuais.map((c) => `${c.tipo}|${chaveNome(c.nome)}`));
+    const sinteticaDoGrupo = new Map<string, EmpresaConta>();
+    for (const c of atuais) if ((c as any).sintetica && !sinteticaDoGrupo.has(String(c.grupo_gerencial))) sinteticaDoGrupo.set(String(c.grupo_gerencial), c);
 
-      // Despesas Variáveis
-      { empresa_id: empresaId, codigo: '3.01', nome: 'Compras de Mercadoria (CMV)',  tipo: 'Despesa', classificacao: 'VARIAVEL',  icone: 'package',      cor: '#F59E0B', descricao: 'CMV — Custo da Mercadoria Vendida.' },
-      { empresa_id: empresaId, codigo: '3.02', nome: 'Matéria-prima / Insumos',      tipo: 'Despesa', classificacao: 'VARIAVEL',  icone: 'tool',         cor: '#F59E0B', descricao: 'Insumos para produção/serviço.' },
-      { empresa_id: empresaId, codigo: '3.03', nome: 'Comissão de Vendedores',       tipo: 'Despesa', classificacao: 'VARIAVEL',  icone: 'percent',      cor: '#F59E0B', descricao: 'Comissões variáveis sobre vendas.' },
-      { empresa_id: empresaId, codigo: '3.04', nome: 'Frete',                        tipo: 'Despesa', classificacao: 'VARIAVEL',  icone: 'truck',        cor: '#F59E0B', descricao: 'Fretes e logística variável.' },
-      { empresa_id: empresaId, codigo: '3.05', nome: 'Marketing / Anúncios',         tipo: 'Despesa', classificacao: 'VARIAVEL',  icone: 'megaphone',    cor: '#F59E0B', descricao: 'Mídia, tráfego pago, anúncios.' },
-      { empresa_id: empresaId, codigo: '3.06', nome: 'Despesas Financeiras',         tipo: 'Despesa', classificacao: 'VARIAVEL',  icone: 'credit-card',  cor: '#F59E0B', descricao: 'Juros, taxas bancárias, IOF.' },
+    let criadas = 0;
+    for (const m of contasDoModelo(modelo)) {
+      if (porNome.has(`${m.tipo}|${chaveNome(m.nome)}`)) continue;
+      if (m.sintetica) {
+        if (sinteticaDoGrupo.has(m.grupo)) continue;
+        const usados = new Set((await this.getPlanoContasCompleto(empresaId)).map((c) => c.codigo));
+        let codigo = m.codigo;
+        for (let n = 8; usados.has(codigo) && n < 99; n++) codigo = String(n);
+        const [g] = await db.insert(empresasContas).values({
+          empresa_id: empresaId, codigo, nome: m.nome, tipo: m.tipo, classificacao: m.classificacao,
+          grupo_gerencial: m.grupo, sintetica: true, descricao: m.descricao ?? null,
+        } as any).onConflictDoNothing().returning();
+        if (g) { sinteticaDoGrupo.set(m.grupo, g); criadas++; }
+        continue;
+      }
+      await this.createEmpresaConta({
+        empresa_id: empresaId, nome: m.nome, tipo: m.tipo, classificacao: m.classificacao,
+        grupo_gerencial: m.grupo, is_cmv: !!m.is_cmv, descricao: m.descricao ?? null,
+        parent_id: sinteticaDoGrupo.get(m.grupo)?.id ?? null,
+      } as any);
+      porNome.add(`${m.tipo}|${chaveNome(m.nome)}`);
+      criadas++;
+    }
+    return { criadas };
+  }
 
-      // Outras
-      { empresa_id: empresaId, codigo: '4.01', nome: 'Outras Despesas Operacionais', tipo: 'Despesa', classificacao: 'OUTRA',     icone: 'more-horizontal', cor: '#6366F1', descricao: 'Demais despesas operacionais.' }
-    ];
-
-    if (seed.length === 0) return [];
-    const result = await db.insert(empresasContas).values(seed as any).returning();
-    return result;
+  /** Plano inteiro (grupos sintéticos e contas inativas), para a tela de árvore. */
+  async getPlanoContasCompleto(empresaId: number): Promise<EmpresaConta[]> {
+    const rows = await db.select().from(empresasContas).where(eq(empresasContas.empresa_id, empresaId));
+    return (rows as EmpresaConta[]).sort((a: EmpresaConta, b: EmpresaConta) => compararCodigos(a.codigo, b.codigo));
   }
 
   async getEmpresasContasByEmpresaId(empresaId: number): Promise<EmpresaConta[]> {
@@ -1733,7 +1793,10 @@ export class DbStorage implements IStorage {
       .where(
         and(
           eq(empresasContas.empresa_id, empresaId),
-          eq(empresasContas.ativo, true)
+          eq(empresasContas.ativo, true),
+          // Só contas analíticas: grupo sintético nunca recebe lançamento, então
+          // não aparece em selects, na IA nem na importação.
+          eq(empresasContas.sintetica, false)
         )
       )
       .orderBy(empresasContas.codigo);
@@ -1744,32 +1807,48 @@ export class DbStorage implements IStorage {
     return result[0];
   }
 
-  // Próximo código livre da sequência, no mesmo padrão G.NN do plano base
-  // (seedEmpresasContas): 1=Receita, 2=Despesa FIXA, 3=Despesa VARIAVEL, 4=Despesa OUTRA.
-  async proximoCodigoConta(empresaId: number, tipo: string, classificacao?: string | null): Promise<string> {
-    const grupo = tipo === 'Receita'
-      ? '1'
-      : ({ FIXA: '2', VARIAVEL: '3' } as Record<string, string>)[(classificacao || 'OUTRA').toUpperCase()] || '4';
+  // Próximo código livre: filho do grupo sintético (pai informado ou o do mesmo
+  // grupo gerencial). Plano antigo, sem grupos: sequência G.NN por classificação.
+  async proximoCodigoConta(
+    empresaId: number,
+    tipo: string,
+    classificacao?: string | null,
+    opts: { parentId?: number | null; grupo_gerencial?: string | null } = {},
+  ): Promise<string> {
+    // Tabela inteira (inclusive inativas): a constraint única não ignora conta inativa.
+    const todas = await this.getPlanoContasCompleto(empresaId);
+    const pai = opts.parentId
+      ? todas.find((c) => c.id === opts.parentId)
+      : resolverPai(todas as any, { tipo, classificacao, grupo_gerencial: opts.grupo_gerencial });
+    if (pai) return proximoCodigoFilho(todas, pai.codigo);
 
-    // Consulta a tabela direto (e não getEmpresasContasByEmpresaId, que filtra
-    // ativo=true): a constraint única não ignora conta inativa.
-    const rows = await db.execute(sql`
-      SELECT codigo FROM empresas_contas
-      WHERE empresa_id = ${empresaId} AND codigo LIKE ${grupo + '.%'}
-    `);
-
+    const grupo = prefixoLegado(tipo, classificacao);
     let maior = 0;
-    for (const r of rows as any[]) {
-      const m = String(r.codigo).match(/^\d+\.(\d+)$/);
-      if (m) maior = Math.max(maior, parseInt(m[1], 10));
+    for (const c of todas) {
+      const m = String(c.codigo).match(/^(\d+)\.(\d+)$/);
+      if (m && m[1] === grupo) maior = Math.max(maior, parseInt(m[2], 10));
     }
     return `${grupo}.${String(maior + 1).padStart(2, '0')}`;
   }
 
   async createEmpresaConta(contaData: InsertEmpresaConta): Promise<EmpresaConta> {
+    const empresaId = contaData.empresa_id!;
+    const todas = await this.getPlanoContasCompleto(empresaId);
+
+    // Pai: o informado (precisa ser grupo sintético da mesma empresa) ou o
+    // grupo sintético do mesmo grupo gerencial. A conta herda o grupo do pai.
+    let pai = contaData.parent_id ? todas.find((c) => c.id === contaData.parent_id) : undefined;
+    if (contaData.parent_id && (!pai || !(pai as any).sintetica)) {
+      throw Object.assign(new Error('O grupo escolhido não é um grupo do plano de contas desta empresa.'), { status: 400 });
+    }
+    if (!pai && !contaData.sintetica) pai = resolverPai(todas as any, contaData) as any;
+    const grupo = contaData.grupo_gerencial || (pai ? (pai as any).grupo_gerencial : null) || grupoDaConta(contaData);
+
     const inserir = (codigo: string) => db.insert(empresasContas).values({
       ...contaData,
       codigo,
+      grupo_gerencial: grupo,
+      parent_id: pai?.id ?? null,
       created_at: new Date()
     } as any).returning();
 
@@ -1780,11 +1859,12 @@ export class DbStorage implements IStorage {
 
     // Sem código informado: gera na sequência. Em corrida (23505), tenta o próximo.
     for (let tentativa = 0; tentativa < 5; tentativa++) {
-      const codigo = await this.proximoCodigoConta(
-        contaData.empresa_id!,
-        contaData.tipo,
-        contaData.classificacao,
-      );
+      const codigo = contaData.sintetica && !pai
+        ? String(Math.max(0, ...(await this.getPlanoContasCompleto(empresaId)).map((c) => (/^\d+$/.test(c.codigo) ? Number(c.codigo) : 0))) + 1)
+        : await this.proximoCodigoConta(empresaId, contaData.tipo, contaData.classificacao, {
+            parentId: pai?.id ?? null,
+            grupo_gerencial: grupo,
+          });
       try {
         const result = await inserir(codigo);
         return result[0];
@@ -1804,6 +1884,8 @@ export class DbStorage implements IStorage {
     // Bloqueia exclusão se houver transação vinculada
     const used = await db.select({ count: count() }).from(empresasTransacoes).where(eq(empresasTransacoes.categoria_id, id));
     if ((used[0]?.count ?? 0) > 0) return false;
+    const filhas = await db.select({ count: count() }).from(empresasContas).where(eq(empresasContas.parent_id, id));
+    if ((filhas[0]?.count ?? 0) > 0) return false;
     const result = await db.delete(empresasContas).where(eq(empresasContas.id, id)).returning({ id: empresasContas.id });
     return result.length > 0;
   }
@@ -1959,8 +2041,8 @@ export class DbStorage implements IStorage {
       FROM empresas_transacoes t
       JOIN empresas_contas c ON t.categoria_id = c.id
       WHERE t.empresa_id = ${empresaId}
-        AND t.data_transacao >= ${de}
-        AND t.data_transacao <= ${ate}
+        AND ${DATA_CAIXA_PJ} >= ${de}
+        AND ${DATA_CAIXA_PJ} <= ${ate}
         AND t.status = 'Efetivada'
         AND NOT (COALESCE(t.reembolso_pessoal, false) = true AND t.status = 'Pendente')
         AND ${NAO_E_PAGAMENTO_FATURA}
@@ -2040,8 +2122,8 @@ export class DbStorage implements IStorage {
       JOIN empresas_contas c ON t.categoria_id = c.id
       WHERE t.empresa_id = ${empresaId}
         AND t.tipo = 'Despesa'
-        AND t.data_transacao >= ${de}
-        AND t.data_transacao <= ${ate}
+        AND ${DATA_CAIXA_PJ} >= ${de}
+        AND ${DATA_CAIXA_PJ} <= ${ate}
         AND t.status = 'Efetivada'
         AND NOT (COALESCE(t.reembolso_pessoal, false) = true AND t.status = 'Pendente')
         AND ${NAO_E_PAGAMENTO_FATURA}
@@ -2055,14 +2137,13 @@ export class DbStorage implements IStorage {
 
     // receita
     const recRows = await db.execute(sql`
-      SELECT COALESCE(SUM(valor::numeric), 0) AS total
-      FROM empresas_transacoes
-      WHERE empresa_id = ${empresaId}
-        AND tipo = 'Receita'
-        AND data_transacao >= ${de}
-        AND data_transacao <= ${ate}
-        AND status = 'Efetivada'
-        AND NOT (COALESCE(reembolso_pessoal, false) = true AND status = 'Pendente')
+      SELECT COALESCE(SUM(t.valor::numeric), 0) AS total
+      FROM empresas_transacoes t
+      WHERE t.empresa_id = ${empresaId}
+        AND t.tipo = 'Receita'
+        AND ${DATA_CAIXA_PJ} >= ${de}
+        AND ${DATA_CAIXA_PJ} <= ${ate}
+        AND t.status = 'Efetivada'
     `);
     receita = parseFloat((recRows as any[])[0]?.total) || 0;
 
@@ -2102,18 +2183,18 @@ export class DbStorage implements IStorage {
   // mês mostraria dinheiro que ainda não saiu.
   async getEmpresaFluxoCaixaMensal(empresaId: number, ano: number): Promise<EmpresaFluxoCaixaMensal> {
     const contas = await db.select().from(empresasContas)
-      .where(eq(empresasContas.empresa_id, empresaId))
+      .where(and(eq(empresasContas.empresa_id, empresaId), eq(empresasContas.sintetica, false)))
       .orderBy(empresasContas.codigo);
 
     const rows = await db.execute(sql`
       SELECT t.categoria_id AS conta_id,
-             EXTRACT(MONTH FROM t.data_transacao)::int AS mes,
+             EXTRACT(MONTH FROM ${DATA_CAIXA_PJ})::int AS mes,
              SUM(CASE WHEN t.tipo = 'Receita' THEN t.valor::numeric ELSE -t.valor::numeric END) AS total
       FROM empresas_transacoes t
       WHERE t.empresa_id = ${empresaId}
         AND COALESCE(t.movimenta_caixa, true) = true
         AND t.status = 'Efetivada'
-        AND EXTRACT(YEAR FROM t.data_transacao) = ${ano}
+        AND EXTRACT(YEAR FROM ${DATA_CAIXA_PJ}) = ${ano}
       GROUP BY t.categoria_id, mes
     `);
 
@@ -2137,14 +2218,14 @@ export class DbStorage implements IStorage {
     // Movimento (com sinal) por conta bancária × mês, dentro do ano.
     const movRows = await db.execute(sql`
       SELECT t.conta_bancaria_id,
-             EXTRACT(MONTH FROM t.data_transacao)::int AS mes,
+             EXTRACT(MONTH FROM ${DATA_CAIXA_PJ})::int AS mes,
              SUM(CASE WHEN t.tipo = 'Receita' THEN t.valor::numeric ELSE -t.valor::numeric END) AS total
       FROM empresas_transacoes t
       WHERE t.empresa_id = ${empresaId}
         AND t.conta_bancaria_id IS NOT NULL
         AND COALESCE(t.movimenta_caixa, true) = true
         AND t.status = 'Efetivada'
-        AND EXTRACT(YEAR FROM t.data_transacao) = ${ano}
+        AND EXTRACT(YEAR FROM ${DATA_CAIXA_PJ}) = ${ano}
       GROUP BY t.conta_bancaria_id, mes
     `);
     const movContas = (movRows as any[]).map((r) => ({
@@ -2160,7 +2241,7 @@ export class DbStorage implements IStorage {
         AND t.conta_bancaria_id IS NOT NULL
         AND COALESCE(t.movimenta_caixa, true) = true
         AND t.status = 'Efetivada'
-        AND EXTRACT(YEAR FROM t.data_transacao) < ${ano}
+        AND EXTRACT(YEAR FROM ${DATA_CAIXA_PJ}) < ${ano}
       GROUP BY t.conta_bancaria_id
     `);
     const saldoAntesAno = (antesRows as any[]).map((r) => ({
@@ -2178,7 +2259,7 @@ export class DbStorage implements IStorage {
       WHERE t.empresa_id = ${empresaId}
         AND COALESCE(t.movimenta_caixa, true) = true
         AND t.status = 'Efetivada'
-        AND EXTRACT(YEAR FROM t.data_transacao) < ${ano}
+        AND EXTRACT(YEAR FROM ${DATA_CAIXA_PJ}) < ${ano}
     `);
     const movimentoAntesAno = parseFloat((antesTotalRows as any[])[0]?.total) || 0;
 
@@ -2407,30 +2488,53 @@ export async function getCartoesComSaldo(userId: number, walletId: number): Prom
 }
 
 /**
- * Lista transações de um cartão específico no período da fatura atual (para conciliação).
+ * Janela de uma fatura de cartão: [inicio, fim) — fim é EXCLUSIVO.
+ *
+ * A competência é o mês em que a fatura ABRE (o mês das compras): com
+ * fechamento no dia 1, a competência 8/2026 vai de 2026-08-01 a 2026-09-01.
+ * Sem mês/ano informados devolve a fatura ATUAL, com a mesma regra de sempre
+ * (se hoje já passou do fechamento, a fatura aberta é a que começou neste mês).
  */
-export async function getFaturaCartao(cartaoId: number, walletId: number): Promise<{
+export function janelaFatura(diaFechamento: number, mes?: number, ano?: number): { inicio: string; fim: string } {
+  const diaFech = diaFechamento || 1;
+  const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+  // Fechamento no dia 31 num mês de 30 (ou em fevereiro) tem que cair no último
+  // dia do mês. Sem isso a data transborda e a fatura vaza para o mês seguinte.
+  const ultimoDia = (a: number, m: number) => new Date(a, m + 1, 0).getDate();
+  const noMes = (a: number, m: number) => new Date(a, m, Math.min(diaFech, ultimoDia(a, m)));
+
+  let anoIni: number;
+  let mesIni: number; // 0-based
+
+  if (mes && mes >= 1 && mes <= 12) {
+    anoIni = ano || new Date().getFullYear();
+    mesIni = mes - 1;
+  } else {
+    const now = new Date();
+    anoIni = now.getFullYear();
+    const fechEsteMes = Math.min(diaFech, ultimoDia(now.getFullYear(), now.getMonth()));
+    mesIni = now.getDate() >= fechEsteMes ? now.getMonth() : now.getMonth() - 1;
+  }
+
+  return {
+    inicio: iso(noMes(anoIni, mesIni)),
+    fim: iso(noMes(anoIni, mesIni + 1)),
+  };
+}
+
+/**
+ * Lista transações de um cartão específico no período de uma fatura (para
+ * conciliação). Sem mês/ano usa a fatura atual.
+ */
+export async function getFaturaCartao(cartaoId: number, walletId: number, mes?: number, ano?: number): Promise<{
   cartao: string; periodo_de: string; periodo_ate: string; total: number; transacoes: any[]
 }> {
   const cartaoRows = await db.select().from(paymentMethods).where(eq(paymentMethods.id, cartaoId)).limit(1);
   const cartao = cartaoRows[0];
   if (!cartao) throw new Error("Cartão não encontrado");
 
-  const diaFech = cartao.dia_fechamento || 1;
-  const now = new Date();
-
-  let inicioFatura: string;
-  let fimFatura: string;
-
-  if (now.getDate() >= diaFech) {
-    inicioFatura = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(diaFech).padStart(2, '0')}`;
-    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, diaFech);
-    fimFatura = nextMonth.toISOString().slice(0, 10);
-  } else {
-    const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, diaFech);
-    inicioFatura = prevMonth.toISOString().slice(0, 10);
-    fimFatura = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(diaFech).padStart(2, '0')}`;
-  }
+  const { inicio: inicioFatura, fim: fimFatura } = janelaFatura(cartao.dia_fechamento || 1, mes, ano);
 
   const rows = await db.execute(sql`
     SELECT t.id, t.descricao, t.valor, t.data_transacao, t.reembolsavel, c.nome AS categoria
@@ -2584,6 +2688,92 @@ export async function marcarReembolsoRecebido(transacaoId: number, walletId: num
     RETURNING *
   `);
   return (result as any[])[0];
+}
+
+export async function marcarReembolsosRecebidosLote(ids: number[], walletId: number): Promise<number> {
+  const limpos = Array.from(new Set((ids || []).map(Number).filter((n) => Number.isInteger(n) && n > 0)));
+  if (!limpos.length) return 0;
+  const today = new Date().toISOString().slice(0, 10);
+  const result = await db.execute(sql`
+    UPDATE transacoes
+    SET status = 'Efetivada', data_pagamento = ${today}
+    WHERE carteira_id = ${walletId}
+      AND COALESCE(reembolsavel, false) = true
+      AND status = 'Pendente'
+      AND id IN (${sql.join(limpos.map((n) => sql`${n}`), sql`, `)})
+    RETURNING id
+  `);
+  return (result as any[]).length;
+}
+
+/**
+ * Marca (ou desmarca) despesas como "A Receber" em lote — gasto de terceiro que
+ * vai ser reembolsado. Só despesas da própria carteira.
+ * - incluirParcelas: estende para todas as parcelas da mesma compra (compra_grupo).
+ * - Marcar: fica Pendente e sem data_pagamento (= ainda não recebido), mesmo que a fatura já esteja paga.
+ * - Desmarcar: compra de cartão volta a seguir a fatura (paga → Efetivada na data do pagamento).
+ */
+export async function definirReembolsavelLote(
+  walletId: number,
+  ids: number[],
+  reembolsavel: boolean,
+  opts: { incluirParcelas?: boolean } = {},
+): Promise<{ ids: number[]; ignorados: number[]; total: number }> {
+  const limpos = Array.from(new Set((ids || []).map(Number).filter((n) => Number.isInteger(n) && n > 0)));
+  if (!limpos.length) return { ids: [], ignorados: [], total: 0 };
+  const lista = sql.join(limpos.map((n) => sql`${n}`), sql`, `);
+
+  const alvoRows = await db.execute(sql`
+    SELECT DISTINCT t.id
+    FROM transacoes t
+    WHERE t.carteira_id = ${walletId}
+      AND t.tipo = 'Despesa'
+      AND (
+        t.id IN (${lista})
+        ${opts.incluirParcelas
+          ? sql`OR (t.compra_grupo IS NOT NULL AND t.compra_grupo IN (
+                  SELECT g.compra_grupo FROM transacoes g
+                  WHERE g.carteira_id = ${walletId} AND g.id IN (${lista}) AND g.compra_grupo IS NOT NULL))`
+          : sql``}
+      )
+  `);
+  const alvo = (alvoRows as any[]).map((r) => Number(r.id)).sort((a, b) => a - b);
+  const ignorados = limpos.filter((id) => !alvo.includes(id));
+  if (!alvo.length) return { ids: [], ignorados, total: 0 };
+  const listaAlvo = sql.join(alvo.map((n) => sql`${n}`), sql`, `);
+
+  const res = reembolsavel
+    ? await db.execute(sql`
+        UPDATE transacoes
+        SET reembolsavel = true, status = 'Pendente', data_pagamento = NULL
+        WHERE carteira_id = ${walletId}
+          AND id IN (${listaAlvo})
+          AND NOT (COALESCE(reembolsavel, false) = true AND status = 'Efetivada')
+        RETURNING id, valor
+      `)
+    : await db.execute(sql`
+        UPDATE transacoes t
+        SET reembolsavel = false,
+            status = CASE
+              WHEN f.status = 'paga' THEN 'Efetivada'
+              WHEN t.fatura_id IS NOT NULL THEN 'Pendente'
+              ELSE t.status
+            END,
+            data_pagamento = CASE
+              WHEN f.status = 'paga' THEN COALESCE((f.data_pagamento AT TIME ZONE 'America/Sao_Paulo')::date, t.data_pagamento)
+              WHEN t.fatura_id IS NOT NULL THEN NULL
+              ELSE t.data_pagamento
+            END
+        FROM transacoes t2
+        LEFT JOIN faturas f ON f.id = t2.fatura_id
+        WHERE t.id = t2.id
+          AND t.carteira_id = ${walletId}
+          AND t.id IN (${listaAlvo})
+        RETURNING t.id, t.valor
+      `);
+  const rows = res as any[];
+  const total = Math.round(rows.reduce((s, r) => s + (Number(r.valor) || 0), 0) * 100) / 100;
+  return { ids: rows.map((r) => Number(r.id)).sort((a, b) => a - b), ignorados, total };
 }
 
 export async function getFluxoCaixaResumo(walletId: number, mes?: number, ano?: number): Promise<{
@@ -2857,15 +3047,21 @@ export async function createIngestionEvent(ev: {
   etapa?: string | null; // transcricao | visao | agente | envio | pipeline
   detalhe?: string | null;
   provider?: string | null;
+  /** Ferramentas chamadas pela IA (args + resultado resumido) — auditoria. */
+  decisoes?: unknown[] | null;
+  modelo?: string | null;
+  message_id?: string | null;
 }): Promise<void> {
   try {
     await db.execute(sql`
       INSERT INTO ingestion_events
-        (usuario_id, remote_jid, canal, tipo_mensagem, mensagem_raw, resultado, etapa, detalhe, provider)
+        (usuario_id, remote_jid, canal, tipo_mensagem, mensagem_raw, resultado, etapa, detalhe, provider, decisoes, modelo, message_id)
       VALUES
         (${ev.usuario_id ?? null}, ${ev.remote_jid ?? null}, ${ev.canal ?? 'whatsapp'},
          ${ev.tipo_mensagem ?? null}, ${ev.mensagem_raw ?? null}, ${ev.resultado},
-         ${ev.etapa ?? null}, ${ev.detalhe ?? null}, ${ev.provider ?? null})
+         ${ev.etapa ?? null}, ${ev.detalhe ?? null}, ${ev.provider ?? null},
+         ${ev.decisoes && ev.decisoes.length ? JSON.stringify(ev.decisoes) : null}::jsonb,
+         ${ev.modelo ?? null}, ${ev.message_id ?? null})
     `);
   } catch (err: any) {
     // Nunca deixar o log de ingestão derrubar o fluxo principal.
@@ -2946,47 +3142,65 @@ function normalizeChaveMem(s: string): string {
 export async function resolveMemoriaCategoria(
   userId: number,
   texto: string,
-): Promise<{ categoria_id: number; categoria_nome: string } | undefined> {
+): Promise<{ categoria_id: number; categoria_nome: string; origem: string; hits: number } | undefined> {
   const alvo = normalizeChaveMem(texto);
   if (!alvo) return undefined;
   try {
+    const { chaveCasa } = await import("./services/categorizar-pf");
     const rows = await db.execute(sql`
-      SELECT chave, valor FROM memoria_usuario
+      SELECT chave, valor, hits FROM memoria_usuario
       WHERE usuario_id = ${userId} AND tipo = 'merchant_categoria'
     `);
+    // Casa por palavras inteiras ("uber" casa "uber trabalho", mas não "uberlândia").
+    // Preferência: correção do cliente > mais palavras em comum > mais usada.
     let melhor: any;
+    let melhorPeso = -1;
     for (const r of rows as any[]) {
-      const k = normalizeChaveMem(r.chave);
-      if (k && (alvo.includes(k) || k.includes(alvo))) {
-        if (!melhor || k.length > normalizeChaveMem(melhor.chave).length) melhor = r;
-      }
+      if (!chaveCasa(String(r.chave || ""), alvo)) continue;
+      const v = typeof r.valor === "string" ? JSON.parse(r.valor) : r.valor;
+      const peso = (v?.origem === "correcao" ? 1000 : 0) + normalizeChaveMem(r.chave).length * 10 + Number(r.hits || 0);
+      if (peso > melhorPeso) { melhor = { ...r, v }; melhorPeso = peso; }
     }
-    if (!melhor) return undefined;
-    const v = typeof melhor.valor === "string" ? JSON.parse(melhor.valor) : melhor.valor;
-    if (!v?.categoria_id) return undefined;
-    return { categoria_id: Number(v.categoria_id), categoria_nome: v.categoria_nome };
+    if (!melhor?.v?.categoria_id) return undefined;
+    return {
+      categoria_id: Number(melhor.v.categoria_id),
+      categoria_nome: melhor.v.categoria_nome,
+      origem: melhor.v.origem || "ia",
+      hits: Number(melhor.hits || 0),
+    };
   } catch (err: any) {
     console.error("[Memória] falha ao resolver:", err?.message);
     return undefined;
   }
 }
 
+/**
+ * origem 'correcao' = o cliente corrigiu a categoria (vale mais que qualquer palpite).
+ * Um palpite da IA nunca sobrescreve uma correção do cliente.
+ */
 export async function aprenderMemoriaCategoria(
   userId: number,
   chave: string,
   categoriaId: number,
   categoriaNome: string,
+  origem: "ia" | "correcao" = "ia",
 ): Promise<void> {
-  const chaveNorm = normalizeChaveMem(chave);
+  const { chaveMemoria } = await import("./services/categorizar-pf");
+  const chaveNorm = normalizeChaveMem(chaveMemoria(chave) || chave);
   if (!chaveNorm) return;
   try {
-    const valor = JSON.stringify({ categoria_id: categoriaId, categoria_nome: categoriaNome });
+    const valor = JSON.stringify({ categoria_id: categoriaId, categoria_nome: categoriaNome, origem });
     await db.execute(sql`
       INSERT INTO memoria_usuario (usuario_id, tipo, chave, valor)
       VALUES (${userId}, 'merchant_categoria', ${chaveNorm}, ${valor}::jsonb)
       ON CONFLICT (usuario_id, tipo, chave)
-      DO UPDATE SET valor = ${valor}::jsonb, hits = memoria_usuario.hits + 1,
-                    updated_at = (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')
+      DO UPDATE SET
+        valor = CASE
+          WHEN memoria_usuario.valor->>'origem' = 'correcao' AND ${origem} <> 'correcao' THEN memoria_usuario.valor
+          ELSE ${valor}::jsonb
+        END,
+        hits = memoria_usuario.hits + 1,
+        updated_at = (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')
     `);
   } catch (err: any) {
     console.error("[Memória] falha ao aprender:", err?.message);
@@ -3008,7 +3222,8 @@ function ehFormaGenerica(nome: string): boolean {
 export async function resolveOuCriaFormaPagamento(
   userId: number,
   nome: string,
-): Promise<{ id: number; nome: string; criado: boolean; incompleto: boolean; faltando: string[] }> {
+  opts: { criarCartao?: boolean } = {},
+): Promise<{ id: number; nome: string; criado: boolean; incompleto: boolean; faltando: string[]; naoEncontrado?: boolean }> {
   const norm = (s: string) => (s || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const alvo = norm(nome);
   const rows = await db.execute(sql`
@@ -3050,6 +3265,11 @@ export async function resolveOuCriaFormaPagamento(
   if (match) {
     const a = analisar(match);
     return { id: match.id, nome: match.nome, criado: false, ...a };
+  }
+  // IA (WhatsApp): nome de cartão desconhecido NÃO vira cartão novo sozinho —
+  // o chamador pergunta ao cliente (evita cartões fantasmas por erro de digitação/áudio).
+  if (opts.criarCartao === false && !ehFormaGenerica(nome)) {
+    return { id: 0, nome, criado: false, incompleto: false, faltando: [], naoEncontrado: true };
   }
   try {
     // Cartão nominal: dias padrão para já aparecer em Contas e Cartões / gerar fatura.
@@ -3093,11 +3313,15 @@ export async function criarCompraParcelada(params: {
   status?: string;
   /** Fatura da 1ª parcela (AAAA-MM). Vazio = a que o fechamento do cartão indicar. */
   competenciaInicial?: string | null;
+  /** Gasto de terceiro (vai para A Receber): fica Pendente até o reembolso chegar. */
+  reembolsavel?: boolean;
 }): Promise<{ compra_grupo: string; ids: number[]; parcelas: number; valor_parcela: number }> {
   const {
     walletId, categoriaId, descricao, parcelas, formaPagamentoId, dataInicio,
-    contaBancariaId, usuarioId, status = "Efetivada",
+    contaBancariaId, usuarioId,
   } = params;
+  const reembolsavel = params.reembolsavel === true;
+  const status = reembolsavel ? "Pendente" : (params.status || "Efetivada");
   const { valoresParcelas, competenciaDaCompra, competenciaMaisMeses } =
     await import("./services/fatura-core");
   const total = params.valorTotal != null
@@ -3158,11 +3382,12 @@ export async function criarCompraParcelada(params: {
     const res = await db.execute(sql`
       INSERT INTO transacoes
         (carteira_id, categoria_id, forma_pagamento_id, tipo, valor, data_transacao, descricao, status,
-         compra_grupo, parcela_num, parcela_total, conta_bancaria_id, fatura_id, competencia, movimenta_caixa)
+         compra_grupo, parcela_num, parcela_total, conta_bancaria_id, fatura_id, competencia, movimenta_caixa,
+         reembolsavel)
       VALUES
         (${walletId}, ${categoriaId}, ${formaPagamentoId ?? null}, 'Despesa', ${valorParcela.toFixed(2)},
          ${dataISO}, ${descParcela}, ${statusParcela}, ${grupo}, ${i + 1}, ${parcelas},
-         ${contaId}, ${faturaId}, ${competencia}, ${movimentaCaixa})
+         ${contaId}, ${faturaId}, ${competencia}, ${movimentaCaixa}, ${reembolsavel})
       RETURNING id
     `);
     ids.push((res as any[])[0].id);
@@ -3549,6 +3774,201 @@ export async function buscarEmpresaTransacoesPorFiltro(
   return rows as unknown as CandidatoTransacao[];
 }
 
+// ============================================
+// Conferência de fatura de cartão — SOMENTE PF, SOMENTE LEITURA.
+// O usuário dita os itens da fatura do cartão e a gente diz, item a item,
+// se já existe lançamento equivalente na competência. NADA é escrito aqui.
+// ============================================
+
+export interface ItemFaturaInformado {
+  descricao: string;
+  valor: number;
+  data?: string;
+}
+
+export type StatusConferencia =
+  | "confere"
+  | "valor_divergente"      // descrição casa, valor não
+  | "descricao_divergente"  // valor casa, descrição não
+  | "outra_competencia"     // existe, mas em outra fatura do mesmo cartão
+  | "duplicado"             // mais de um lançamento igual dentro da fatura
+  | "nao_encontrado";
+
+export interface ItemConferido {
+  informado: ItemFaturaInformado;
+  status: StatusConferencia;
+  lancamentos: CandidatoTransacao[];
+  observacao?: string;
+}
+
+// Quantos meses ao redor da competência olhamos para dizer "está lançado, mas
+// na fatura errada" em vez de simplesmente "não achei".
+const MESES_VIZINHOS_FATURA = 4;
+
+function normalizarTexto(s: string): string {
+  return (s || "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function tokensDescricao(s: string): string[] {
+  return normalizarTexto(s).split(/\s+/).filter((t) => t.length >= 3);
+}
+
+// Aqui a tolerância é MUITO menor que a da busca por filtro (5%): conferir
+// fatura é justamente achar diferença de valor. 5% deixaria 175 passar por
+// 180,50 como se conferisse. Só centavos de arredondamento são tolerados.
+const TOLERANCIA_CONFERENCIA = 0.001;
+
+function valorCasa(a: number, b: number): boolean {
+  const margem = Math.max(Math.abs(a) * TOLERANCIA_CONFERENCIA, 0.02);
+  return Math.abs(a - b) <= margem;
+}
+
+function descricaoCasa(informada: string, lancada: string): boolean {
+  const alvo = normalizarTexto(lancada);
+  const termos = tokensDescricao(informada);
+  if (termos.length === 0) return alvo.includes(normalizarTexto(informada));
+  return termos.some((t) => alvo.includes(t));
+}
+
+/**
+ * Confere uma lista de itens ditados pelo usuário contra os lançamentos do
+ * cartão na competência. Não altera nada — só compara e classifica.
+ */
+export async function conferirFaturaCartao(
+  walletId: number,
+  cartaoId: number,
+  itens: ItemFaturaInformado[],
+  mes?: number,
+  ano?: number,
+): Promise<{
+  cartao: string;
+  periodo_de: string;
+  periodo_ate: string;
+  total_lancado: number;
+  total_informado: number;
+  diferenca: number;
+  itens: ItemConferido[];
+  nao_informados: CandidatoTransacao[];
+}> {
+  const cartaoRows = await db.select().from(paymentMethods).where(eq(paymentMethods.id, cartaoId)).limit(1);
+  const cartao = cartaoRows[0];
+  if (!cartao) throw new Error("Cartão não encontrado");
+
+  const { inicio, fim } = janelaFatura(cartao.dia_fechamento || 1, mes, ano);
+
+  // Janela alargada: serve só para dizer em que outra fatura o lançamento está.
+  const desloca = (iso: string, meses: number) => {
+    const [a, m, d] = iso.split("-").map(Number);
+    const dt = new Date(a, m - 1 + meses, d);
+    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+  };
+  const inicioAmplo = desloca(inicio, -MESES_VIZINHOS_FATURA);
+  const fimAmplo = desloca(fim, MESES_VIZINHOS_FATURA);
+
+  const rows = await db.execute(sql`
+    SELECT t.id, t.descricao, t.valor::float8 AS valor, t.data_transacao::text AS data,
+           t.tipo, c.nome AS categoria
+    FROM transacoes t
+    LEFT JOIN categorias c ON c.id = t.categoria_id
+    WHERE t.carteira_id = ${walletId}
+      AND t.forma_pagamento_id = ${cartaoId}
+      AND t.tipo = 'Despesa'
+      AND t.data_transacao >= ${inicioAmplo}
+      AND t.data_transacao < ${fimAmplo}
+    ORDER BY t.data_transacao ASC, t.id ASC
+  `);
+
+  const todos = rows as unknown as CandidatoTransacao[];
+  const naFatura = todos.filter((t) => t.data >= inicio && t.data < fim);
+  const foraDaFatura = todos.filter((t) => t.data < inicio || t.data >= fim);
+
+  // Um lançamento só pode confirmar UM item ditado — senão dois itens iguais na
+  // fatura seriam ambos dados como conferidos pelo mesmo lançamento.
+  const usados = new Set<number>();
+  const conferidos: ItemConferido[] = [];
+
+  for (const item of itens) {
+    const valor = Number(item.valor);
+    const livres = naFatura.filter((t) => !usados.has(t.id));
+
+    const casamPleno = livres.filter((t) => valorCasa(valor, t.valor) && descricaoCasa(item.descricao, t.descricao));
+    if (casamPleno.length === 1) {
+      usados.add(casamPleno[0].id);
+      conferidos.push({ informado: item, status: "confere", lancamentos: casamPleno });
+      continue;
+    }
+    if (casamPleno.length > 1) {
+      casamPleno.forEach((t) => usados.add(t.id));
+      conferidos.push({
+        informado: item,
+        status: "duplicado",
+        lancamentos: casamPleno,
+        observacao: `A fatura tem 1 item, mas há ${casamPleno.length} lançamentos iguais na competência.`,
+      });
+      continue;
+    }
+
+    const soDescricao = livres.filter((t) => descricaoCasa(item.descricao, t.descricao));
+    if (soDescricao.length > 0) {
+      // Descrição batendo com um único lançamento é o mesmo item com valor
+      // errado — consome, senão ele reapareceria em 'nao_informados'. Com
+      // descrição casando em vários, não consome nada: o usuário escolhe.
+      if (soDescricao.length === 1) usados.add(soDescricao[0].id);
+      conferidos.push({
+        informado: item,
+        status: "valor_divergente",
+        lancamentos: soDescricao,
+        observacao: "Achei a descrição na competência, mas com outro valor.",
+      });
+      continue;
+    }
+
+    const soValor = livres.filter((t) => valorCasa(valor, t.valor));
+    if (soValor.length > 0) {
+      conferidos.push({
+        informado: item,
+        status: "descricao_divergente",
+        lancamentos: soValor,
+        observacao: "Achei o valor na competência, mas com outra descrição.",
+      });
+      continue;
+    }
+
+    const vizinhos = foraDaFatura.filter((t) => valorCasa(valor, t.valor) && descricaoCasa(item.descricao, t.descricao));
+    if (vizinhos.length > 0) {
+      conferidos.push({
+        informado: item,
+        status: "outra_competencia",
+        lancamentos: vizinhos,
+        observacao: "Está lançado no cartão, mas fora do período desta fatura.",
+      });
+      continue;
+    }
+
+    conferidos.push({ informado: item, status: "nao_encontrado", lancamentos: [] });
+  }
+
+  const naoInformados = naFatura.filter((t) => !usados.has(t.id));
+  const totalLancado = naFatura.reduce((s, t) => s + (Number(t.valor) || 0), 0);
+  const totalInformado = itens.reduce((s, i) => s + (Number(i.valor) || 0), 0);
+  const cent = (n: number) => Math.round(n * 100) / 100;
+
+  return {
+    cartao: cartao.nome,
+    periodo_de: inicio,
+    periodo_ate: fim,
+    total_lancado: cent(totalLancado),
+    total_informado: cent(totalInformado),
+    diferenca: cent(totalLancado - totalInformado),
+    itens: conferidos,
+    nao_informados: naoInformados,
+  };
+}
+
 // Soft delete: move a transação para a lixeira (mantém 30 dias) e remove da tabela.
 // Só afeta transação da PRÓPRIA carteira (nunca de outro usuário).
 export async function softDeleteTransacao(transacaoId: number, walletId: number, userId: number): Promise<boolean> {
@@ -3575,19 +3995,50 @@ export async function softDeleteTodasTransacoes(walletId: number, userId: number
   return n;
 }
 
-// Restaura a última transação excluída da carteira (arrependimento).
-export async function restaurarUltimaExcluida(walletId: number): Promise<{ restaurada: boolean; descricao?: string }> {
+// Exclusão em lote (PF): UMA transação no banco move tudo para a lixeira com o mesmo lote_id,
+// para o "Desfazer" restaurar o lote inteiro. Só apaga o que pertence à carteira.
+export async function softDeleteTransacoesLote(walletId: number, userId: number, ids: number[]): Promise<number> {
+  const limpos = Array.from(new Set(ids.filter((n) => Number.isInteger(n) && n > 0)));
+  if (!limpos.length) return 0;
+  const lista = sql.join(limpos.map((i) => sql`${i}`), sql`, `);
+  const lote = randomUUID();
+  return await db.transaction(async (tx: any) => {
+    await tx.execute(sql`
+      INSERT INTO transacoes_lixeira (usuario_id, carteira_id, transacao_id, dados, lote_id)
+      SELECT ${userId}, carteira_id, id, to_jsonb(t), ${lote} FROM transacoes t
+      WHERE carteira_id = ${walletId} AND id IN (${lista})
+    `);
+    const del = (await tx.execute(sql`
+      DELETE FROM transacoes WHERE carteira_id = ${walletId} AND id IN (${lista}) RETURNING id
+    `)) as any[];
+    return del.length;
+  });
+}
+
+// Restaura a última exclusão da carteira (arrependimento). Se ela veio de uma exclusão em lote,
+// restaura o lote inteiro.
+export async function restaurarUltimaExcluida(walletId: number): Promise<{ restaurada: boolean; descricao?: string; quantidade?: number }> {
   const rows = await db.execute(sql`
-    SELECT id, dados FROM transacoes_lixeira WHERE carteira_id = ${walletId}
-    ORDER BY excluida_em DESC LIMIT 1
+    SELECT id, dados, lote_id FROM transacoes_lixeira WHERE carteira_id = ${walletId}
+    ORDER BY excluida_em DESC, id DESC LIMIT 1
   `);
   const item = (rows as any[])[0];
   if (!item) return { restaurada: false };
-  // Reconstrói a linha original a partir do JSON e reinsere.
-  await db.execute(sql`INSERT INTO transacoes SELECT (jsonb_populate_record(NULL::transacoes, ${item.dados}::jsonb)).*`);
-  await db.execute(sql`DELETE FROM transacoes_lixeira WHERE id = ${item.id}`);
+  const alvo = item.lote_id
+    ? sql`carteira_id = ${walletId} AND lote_id = ${item.lote_id}`
+    : sql`id = ${item.id}`;
+  const quantidade = await db.transaction(async (tx: any) => {
+    // Reconstrói as linhas originais a partir do JSON e reinsere (ignora ids que já voltaram).
+    const ins = (await tx.execute(sql`
+      INSERT INTO transacoes
+      SELECT (jsonb_populate_record(NULL::transacoes, dados)).* FROM transacoes_lixeira WHERE ${alvo}
+      ON CONFLICT DO NOTHING RETURNING id
+    `)) as any[];
+    await tx.execute(sql`DELETE FROM transacoes_lixeira WHERE ${alvo}`);
+    return ins.length;
+  });
   const desc = (item.dados && (item.dados.descricao || item.dados["descricao"])) || undefined;
-  return { restaurada: true, descricao: desc };
+  return { restaurada: true, descricao: item.lote_id ? undefined : desc, quantidade };
 }
 
 // Backup: lista os itens na lixeira do usuário (para conferência/recuperação).
@@ -3862,13 +4313,16 @@ export async function criarExtratoMovimento(data: any): Promise<any | null> {
             ${data.data}, ${Number(data.valor).toFixed(2)}, ${data.tipo}, ${data.descricao ?? null}, ${data.memo ?? null},
             ${data.status ?? 'pendente'}, ${data.transacao_id ?? null}, ${data.conta_contabil_id ?? null},
             ${data.sugestao_conta_id ?? null}, ${data.sugestao_origem ?? null}, ${data.sugestao_confianca ?? null})
-    ON CONFLICT (conta_bancaria_id, fitid) DO NOTHING
+    -- O índice único é parcial (WHERE fitid IS NOT NULL): o ON CONFLICT precisa
+    -- repetir o predicado, senão o Postgres recusa TODO insert.
+    ON CONFLICT (conta_bancaria_id, fitid) WHERE fitid IS NOT NULL DO NOTHING
     RETURNING *
   `);
   return (r as any[])[0] || null;
 }
-export async function getMovimentos(opts: { importacaoId?: number; contaBancariaId?: number; status?: string } = {}): Promise<any[]> {
+export async function getMovimentos(opts: { importacaoId?: number; contaBancariaId?: number; empresaId?: number; status?: string } = {}): Promise<any[]> {
   const conds: any[] = [];
+  if (opts.empresaId) conds.push(sql`empresa_id = ${opts.empresaId}`);
   if (opts.importacaoId) conds.push(sql`importacao_id = ${opts.importacaoId}`);
   if (opts.contaBancariaId) conds.push(sql`conta_bancaria_id = ${opts.contaBancariaId}`);
   if (opts.status) conds.push(sql`status = ${opts.status}`);
@@ -3893,14 +4347,21 @@ export async function updateMovimento(id: number, patch: any): Promise<any> {
 // Casamento determinístico: transação PJ não conciliada, mesmo valor absoluto,
 // MESMO sentido (crédito↔Receita, débito↔Despesa) e data dentro de ±tolDias.
 // O sentido evita casar um crédito de +100 com uma despesa de 100.
-export async function buscarCandidatosConciliacao(empresaId: number, valor: number, data: string, tolDias = 3): Promise<any[]> {
+export async function buscarCandidatosConciliacao(
+  empresaId: number, valor: number, data: string, tolDias = 3, contaBancariaId?: number | null,
+): Promise<any[]> {
   const abs = Math.abs(valor).toFixed(2);
   const tipoEsperado = valor >= 0 ? "Receita" : "Despesa";
+  // Só lançamentos desta conta (ou ainda sem conta) — nunca os de outro banco.
+  const filtroConta = contaBancariaId
+    ? sql`AND (conta_bancaria_id = ${contaBancariaId} OR conta_bancaria_id IS NULL)`
+    : sql``;
   return (await db.execute(sql`
     SELECT id, descricao, valor, tipo, data_transacao
     FROM empresas_transacoes
     WHERE empresa_id = ${empresaId}
       AND conciliado = false
+      ${filtroConta}
       AND LOWER(tipo) = LOWER(${tipoEsperado})
       AND ABS(valor::numeric) = ${abs}
       AND data_transacao BETWEEN (${data}::date - ${tolDias} * INTERVAL '1 day') AND (${data}::date + ${tolDias} * INTERVAL '1 day')
@@ -3989,18 +4450,46 @@ export async function softDeleteEmpresaTransacao(transacaoId: number, empresaId:
   return true;
 }
 
-// Restaurar última transação PJ excluída da empresa.
-export async function restaurarUltimaExcluidaPJ(empresaId: number): Promise<{ restaurada: boolean; descricao?: string }> {
+// Exclusão em lote (PJ): mesmo desenho do PF (lote_id para desfazer o lote inteiro).
+export async function softDeleteEmpresaTransacoesLote(empresaId: number, userId: number, ids: number[]): Promise<number> {
+  const limpos = Array.from(new Set(ids.filter((n) => Number.isInteger(n) && n > 0)));
+  if (!limpos.length) return 0;
+  const lista = sql.join(limpos.map((i) => sql`${i}`), sql`, `);
+  const lote = randomUUID();
+  return await db.transaction(async (tx: any) => {
+    await tx.execute(sql`
+      INSERT INTO transacoes_lixeira (usuario_id, empresa_id, transacao_id, dados, lote_id)
+      SELECT ${userId}, ${empresaId}, id, to_jsonb(t), ${lote} FROM empresas_transacoes t
+      WHERE empresa_id = ${empresaId} AND id IN (${lista})
+    `);
+    const del = (await tx.execute(sql`
+      DELETE FROM empresas_transacoes WHERE empresa_id = ${empresaId} AND id IN (${lista}) RETURNING id
+    `)) as any[];
+    return del.length;
+  });
+}
+
+// Restaurar última exclusão PJ da empresa (o lote inteiro, se veio de exclusão em lote).
+export async function restaurarUltimaExcluidaPJ(empresaId: number): Promise<{ restaurada: boolean; descricao?: string; quantidade?: number }> {
   const rows = await db.execute(sql`
-    SELECT id, dados FROM transacoes_lixeira WHERE empresa_id = ${empresaId}
-    ORDER BY excluida_em DESC LIMIT 1
+    SELECT id, dados, lote_id FROM transacoes_lixeira WHERE empresa_id = ${empresaId}
+    ORDER BY excluida_em DESC, id DESC LIMIT 1
   `);
   const item = (rows as any[])[0];
   if (!item) return { restaurada: false };
-  await db.execute(sql`INSERT INTO empresas_transacoes SELECT (jsonb_populate_record(NULL::empresas_transacoes, ${item.dados}::jsonb)).*`);
-  await db.execute(sql`DELETE FROM transacoes_lixeira WHERE id = ${item.id}`);
-  const desc = item.dados?.descricao || undefined;
-  return { restaurada: true, descricao: desc };
+  const alvo = item.lote_id
+    ? sql`empresa_id = ${empresaId} AND lote_id = ${item.lote_id}`
+    : sql`id = ${item.id}`;
+  const quantidade = await db.transaction(async (tx: any) => {
+    const ins = (await tx.execute(sql`
+      INSERT INTO empresas_transacoes
+      SELECT (jsonb_populate_record(NULL::empresas_transacoes, dados)).* FROM transacoes_lixeira WHERE ${alvo}
+      ON CONFLICT DO NOTHING RETURNING id
+    `)) as any[];
+    await tx.execute(sql`DELETE FROM transacoes_lixeira WHERE ${alvo}`);
+    return ins.length;
+  });
+  return { restaurada: true, descricao: item.lote_id ? undefined : item.dados?.descricao || undefined, quantidade };
 }
 
 // Listar lixeira PJ para uma empresa.

@@ -27,26 +27,43 @@ function normalizar(s: string): string {
     .trim();
 }
 
-const REGRAS_RECEITA: { re: RegExp; codigo: string }[] = [
+/**
+ * Regras de palavra-chave: `re` testa o que o USUÁRIO escreveu; `alvos` acham a
+ * conta pelo NOME, em ordem de preferência. Casar por nome (e não por código)
+ * faz a mesma regra funcionar no plano antigo e nos modelos Base Serviços /
+ * Base Comércio, que numeram as contas de outro jeito.
+ */
+type Regra = { re: RegExp; alvos: RegExp[] };
+
+const REGRAS_RECEITA: Regra[] = [
   // Cobrir as formas verbais é essencial: o usuário escreve "vendi", não "venda".
-  { re: /\b(venda|vendas|vendi|vendeu|vendemos|vender|mercadoria vendid|faturamento|faturei|faturou)\b/, codigo: "1.01" },
-  { re: /\b(servico|servicos|consultoria|honorario|prestei|atendimento)\b/, codigo: "1.02" },
-  { re: /\b(rendimento|aplicacao|juros receb)\b/, codigo: "1.04" },
+  { re: /\b(venda|vendas|vendi|vendeu|vendemos|vender|mercadoria vendid|faturamento|faturei|faturou)\b/, alvos: [/\bvenda de mercadoria/, /\bvendas?\b/] },
+  { re: /\b(servico|servicos|consultoria|honorario|prestei|atendimento)\b/, alvos: [/\bservico/] },
+  { re: /\b(rendimento|aplicacao|juros receb)\b/, alvos: [/\brendimento/, /\bfinanceir/] },
 ];
 
-const REGRAS_DESPESA: { re: RegExp; codigo: string }[] = [
-  { re: /\b(compra|compras).{0,20}mercador|\bcmv\b|\bfornecedor\b|\bestoque\b/, codigo: "3.01" },
-  { re: /\bmateria.?prima\b|\binsumo/, codigo: "3.02" },
-  { re: /\bcomissao/, codigo: "3.03" },
-  { re: /\bfrete\b|\blogistica\b/, codigo: "3.04" },
-  { re: /\bmarketing\b|\banuncio|\btrafego\b/, codigo: "3.05" },
-  { re: /\bjuros\b|\btarifa banc|\biof\b|\btaxa banc/, codigo: "3.06" },
-  { re: /\bfolha\b|\bsalario|\bfuncionario/, codigo: "2.01" },
-  { re: /\baluguel\b/, codigo: "2.02" },
-  { re: /\benergia\b|\bluz\b|\bagua\b|\binternet\b/, codigo: "2.03" },
-  { re: /\bcontabil|\bcontador\b/, codigo: "2.04" },
-  { re: /\bimposto|\bdas\b|\bipva\b|\blicenciamento\b|\bdocumento do carro/, codigo: "2.05" },
-  { re: /\bpro.?labore\b|\bretirada\b/, codigo: "2.06" },
+const REGRAS_DESPESA: Regra[] = [
+  { re: /\b(compra|compras).{0,20}mercador|\bcmv\b|\bfornecedor\b|\bestoque\b/, alvos: [/\bcmv\b/, /\bmercadoria/] },
+  { re: /\bmateria.?prima\b|\binsumo/, alvos: [/\bmateria.?prima|\binsumo/, /\bmateriais aplicados/] },
+  { re: /\bcomissao/, alvos: [/\bcomiss/] },
+  { re: /\bfrete\b|\blogistica\b|\bentrega\b/, alvos: [/\bfretes? e entregas|\bfretes? sobre venda/, /\bfrete/] },
+  { re: /\bmarketing\b|\banuncio|\btrafego\b|\bpublicidade\b/, alvos: [/\bmarketing|\banuncio|\bpublicidade/] },
+  { re: /\bmaquininha\b|\btaxa d[oae]s? cart|\btaxas? de cartao/, alvos: [/\btaxas? de cartao|\bmeios de pagamento/, /\bfinanceir/] },
+  { re: /\btarifa banc|\btaxa banc|\btarifa/, alvos: [/\btarifa/, /\bfinanceir/] },
+  { re: /\biof\b|\bemprestimo/, alvos: [/\biof\b|\bencargos de emprestimo/, /\bfinanceir/] },
+  { re: /\bjuros\b|\bmulta por atraso/, alvos: [/\bjuros e multas pag/, /\bjuros/, /\bfinanceir/] },
+  { re: /\bfolha\b|\bsalario|\bfuncionario/, alvos: [/\bfolha|\bsalario/] },
+  { re: /\baluguel\b|\bcondominio\b/, alvos: [/\baluguel/] },
+  { re: /\benergia\b|\bluz\b|\bagua\b/, alvos: [/\benergia|\bagua/] },
+  { re: /\binternet\b|\btelefone\b|\bcelular\b/, alvos: [/\binternet|\btelefon/, /\benergia/] },
+  { re: /\bcontabil|\bcontador\b/, alvos: [/\bcontab/] },
+  { re: /\bdas\b|\bsimples nacional\b|\biss\b|\bicms\b/, alvos: [/\bsimples|\bimpostos sobre/, /\bimposto/] },
+  { re: /\bipva\b|\biptu\b|\balvara\b|\blicenciamento\b|\bdocumento do carro/, alvos: [/\balvara|\bimpostos fixos/, /\bimposto/] },
+  { re: /\bimposto/, alvos: [/\bimposto/] },
+  { re: /\bpro.?labore\b|\bretirada\b/, alvos: [/\bpro.?labore|\bretirada/] },
+  { re: /\bsistema\b|\bsoftware\b|\baplicativo\b/, alvos: [/\bsistemas/, /\bsoftware/] },
+  { re: /\bseguro\b/, alvos: [/\bseguro/] },
+  { re: /\babastec|\bcombustivel|\bgasolina|\betanol|\bdiesel/, alvos: [/\bcombustivel/, /\bveiculo/] },
 ];
 
 // CMV distorce Margem Bruta/Markup, então exige prova explícita de mercadoria.
@@ -55,8 +72,14 @@ const SINAIS_CMV = /\b(mercadoria|mercadorias|estoque|fornecedor|revenda|cmv|mat
 // Gastos que o modelo costuma confundir com "compra de mercadoria" — nunca são CMV.
 const NAO_E_CMV = /\b(abastec|combustivel|gasolina|etanol|diesel|pedagio|estacionamento|oficina|mecanic|pneu|revisao|manutencao|cartorio|despachante|multa|seguro|uber|taxi|almoco|refeicao)/;
 
-function porCodigo(contas: ContaPjRef[], tipo: string, codigo: string): ContaPjRef | undefined {
-  return contas.find((c) => c.tipo === tipo && c.codigo === codigo);
+/** Primeira conta do tipo cujo nome casa com um dos alvos (na ordem dos alvos). */
+function porAlvos(contas: ContaPjRef[], tipo: string, alvos: RegExp[]): ContaPjRef | undefined {
+  const doTipo = contas.filter((c) => c.tipo === tipo);
+  for (const alvo of alvos) {
+    const c = doTipo.find((x) => alvo.test(normalizar(x.nome)));
+    if (c) return c;
+  }
+  return undefined;
 }
 
 function outrasDoTipo(contas: ContaPjRef[], tipo: string): ContaPjRef | undefined {
@@ -88,6 +111,8 @@ function tokensFortes(nome: string): string[] {
 }
 
 function ehContaCmv(c: ContaPjRef): boolean {
+  // Só despesa: "Venda de mercadorias" é receita e não pode cair na trava do CMV.
+  if (c.tipo !== "Despesa") return false;
   return c.is_cmv === true || /\bcmv\b|mercadoria/i.test(c.nome);
 }
 
@@ -107,10 +132,11 @@ function pesoDaConta(c: ContaPjRef, texto: string): number {
   return peso;
 }
 
-/** Regra de palavra-chave associada ao código daquela conta, se houver. */
-function regraDoCodigo(tipo: string, codigo: string): RegExp | undefined {
+/** Regras cujos alvos apontam para esta conta (pelo nome). */
+function regrasDaConta(tipo: string, conta: ContaPjRef): Regra[] {
+  const nome = normalizar(conta.nome);
   const regras = tipo === "Receita" ? REGRAS_RECEITA : REGRAS_DESPESA;
-  return regras.find((r) => r.codigo === codigo)?.re;
+  return regras.filter((r) => r.alvos.some((a) => a.test(nome)));
 }
 
 /** Uma conta de CMV só passa com sinal explícito de mercadoria e sem anti-sinal. */
@@ -122,13 +148,12 @@ function cmvPermitido(conta: ContaPjRef, textoUsuario: string): boolean {
 
 /**
  * A conta informada pelo modelo tem respaldo no que o usuário escreveu?
- * Aceita respaldo pela regra de palavra-chave do código ("conta de luz" → 2.03)
+ * Aceita respaldo pela regra de palavra-chave da conta ("conta de luz" → Energia)
  * ou pelo próprio nome/sinônimos da conta ("paguei o aluguel" → Aluguel).
  */
 function corroborada(conta: ContaPjRef, tipo: string, textoUsuario: string): boolean {
   if (!textoUsuario) return false;
-  const re = regraDoCodigo(tipo, conta.codigo);
-  if (re && re.test(textoUsuario)) return true;
+  if (regrasDaConta(tipo, conta).some((r) => r.re.test(textoUsuario))) return true;
   return pesoDaConta(conta, textoUsuario) > 0;
 }
 
@@ -156,7 +181,7 @@ function candidataPelaDescricao(contas: ContaPjRef[], tipo: string, texto: strin
   const regras = tipo === "Receita" ? REGRAS_RECEITA : REGRAS_DESPESA;
   for (const r of regras) {
     if (!r.re.test(texto)) continue;
-    const c = porCodigo(contas, tipo, r.codigo);
+    const c = porAlvos(contas, tipo, r.alvos);
     if (c && cmvPermitido(c, texto)) return c;
   }
   return casarComPlanoVivo(contas, tipo, texto);
@@ -228,9 +253,9 @@ export function resolverContaPj(opts: {
   // 3) "Entrada" / "recebi" sem detalhe: comércio → vendas; serviços → serviços.
   if (tipo === "Receita" && /\b(entrada|recebi|recebimento|caiu na conta)\b/.test(texto)) {
     const seg = normalizar(segmento || "");
-    const codigo = seg.includes("comercio") ? "1.01" : seg.includes("servico") ? "1.02" : null;
-    if (codigo) {
-      const c = porCodigo(contas, tipo, codigo);
+    const alvos = seg.includes("comercio") ? [/\bvenda de mercadoria/, /\bvendas?\b/] : seg.includes("servico") ? [/\bservico/] : null;
+    if (alvos) {
+      const c = porAlvos(contas, tipo, alvos);
       if (c) return { conta: c, usouOutras: false, motivo: "segmento" };
     }
   }

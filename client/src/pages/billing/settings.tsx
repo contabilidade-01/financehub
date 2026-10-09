@@ -1,3 +1,4 @@
+import { dataBrSP, diasAteSP } from "@shared/datas-sp";
 import { useState } from 'react';
 import { useSubscription, useCancelSubscription } from '@/hooks/use-subscription';
 import { useSubscriptionStatus } from '@/hooks/use-subscription-status';
@@ -13,7 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 
 export default function BillingSettingsPage() {
   const { data, isLoading } = useSubscription();
-  const { hasActiveAccess, expirationDate, daysRemaining, isTrial } = useSubscriptionStatus();
+  const { hasActiveAccess, expirationDate, daysRemaining, isTrial, isAdmin } = useSubscriptionStatus();
   // CARTÃO NO SITE — descomente para religar
   // const updateCard = useUpdateCard();
   const cancelSub = useCancelSubscription();
@@ -87,6 +88,28 @@ export default function BillingSettingsPage() {
     }
   };
 
+  // Conta de administração não tem assinatura (a data "até 2099" é só a
+  // liberação interna). Aponta para onde se administram as assinaturas.
+  if (isAdmin) {
+    return (
+      <div className="container max-w-4xl mx-auto py-8">
+        <Card>
+          <CardHeader>
+            <CardTitle>Conta de administrador</CardTitle>
+            <CardDescription>
+              Esta conta administra o sistema e não tem assinatura nem cobrança. As assinaturas dos clientes ficam em
+              Assinaturas e vencimentos; a configuração do Asaas, multa e juros, em Cobrança.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            <Button asChild><a href="/admin/assinaturas">Assinaturas e vencimentos</a></Button>
+            <Button variant="outline" asChild><a href="/admin/payment-settings">Asaas, multa e juros</a></Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -99,7 +122,7 @@ export default function BillingSettingsPage() {
     // Sem assinatura PAGA (Asaas). Mas o usuário pode estar em degustação/
     // carência com acesso válido — nesse caso a mensagem é positiva, não "sem
     // assinatura". Fonte única: hasActiveAccess (data_expiracao no futuro).
-    const vencFmt = expirationDate ? new Date(expirationDate).toLocaleDateString('pt-BR') : null;
+    const vencFmt = dataBrSP(expirationDate);
     const diasTxt =
       daysRemaining == null
         ? null
@@ -137,9 +160,11 @@ export default function BillingSettingsPage() {
     );
   }
 
+  const diasProxima = diasAteSP(data.subscription?.currentPeriodEnd);
+
   return (
     <div className="container max-w-4xl mx-auto py-8 space-y-6">
-      <h1 className="text-3xl font-bold">Configurações de Pagamento</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Configurações de Pagamento</h1>
 
       <Card>
         <CardHeader>
@@ -153,18 +178,23 @@ export default function BillingSettingsPage() {
           <div>
             <p className="text-sm text-muted-foreground">Próxima cobrança</p>
             <p className="text-lg">
-              {new Date(data.subscription?.currentPeriodEnd || '').toLocaleDateString('pt-BR')}
-              {daysRemaining != null && daysRemaining >= 0 && (
+              {dataBrSP(data.subscription?.currentPeriodEnd)}
+              {diasProxima != null && diasProxima >= 0 && (
                 <span className="ml-2 text-sm font-normal text-muted-foreground">
-                  ({daysRemaining === 0 ? "vence hoje" : daysRemaining === 1 ? "falta 1 dia" : `faltam ${daysRemaining} dias`})
+                  ({diasProxima === 0 ? "vence hoje" : diasProxima === 1 ? "falta 1 dia" : `faltam ${diasProxima} dias`})
                 </span>
               )}
             </p>
+            {expirationDate && dataBrSP(expirationDate) !== dataBrSP(data.subscription?.currentPeriodEnd) && (
+              <p className="text-xs text-muted-foreground">
+                Acesso garantido até {dataBrSP(expirationDate)} (3 dias de tolerância para o pagamento compensar).
+              </p>
+            )}
           </div>
           <div>
             <p className="text-sm text-muted-foreground">Valor</p>
             <p className="text-lg font-semibold">
-              R$ {parseFloat(data.subscription?.plan?.priceMonthly || '0').toFixed(2)}/mês
+              {parseFloat(data.subscription?.plan?.priceMonthly || '0').toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}/mês
             </p>
           </div>
         </CardContent>
@@ -208,11 +238,11 @@ export default function BillingSettingsPage() {
 
       <Card className="border-red-200">
         <CardHeader>
-          <CardTitle className="text-red-600">Cancelar Assinatura</CardTitle>
+          <CardTitle className="text-expense">Cancelar Assinatura</CardTitle>
           <CardDescription>
             A cobrança para de renovar. Você continua com acesso até{" "}
             {expirationDate
-              ? new Date(expirationDate).toLocaleDateString("pt-BR")
+              ? dataBrSP(expirationDate)
               : "o fim do período já pago"}
             .
           </CardDescription>
@@ -228,7 +258,7 @@ export default function BillingSettingsPage() {
                 <DialogDescription>
                   A assinatura não será renovada. Você mantém o acesso até{" "}
                   {expirationDate
-                    ? new Date(expirationDate).toLocaleDateString("pt-BR")
+                    ? dataBrSP(expirationDate)
                     : "o fim do ciclo já pago"}
                   .
                 </DialogDescription>

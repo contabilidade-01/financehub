@@ -67,9 +67,9 @@ export default function ExternalCheckout() {
   // Loading
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-background to-muted/20">
+      <div className="min-h-screen bg-background">
         {/* Hero Header Skeleton */}
-        <div className="bg-gradient-to-r from-[#FF64B3]/10 via-[#00FFAA]/10 to-[#FF64B3]/10 border-b">
+        <div className="bg-card border-b">
           <div className="container mx-auto px-4 py-8">
             <div className="flex items-center justify-between">
               <Skeleton className="h-10 w-48" />
@@ -88,11 +88,11 @@ export default function ExternalCheckout() {
             className="flex flex-col items-center justify-center py-12"
           >
             <div className="relative mb-6">
-              <Loader2 className="h-16 w-16 animate-spin text-[#FF64B3]" />
-              <div className="absolute inset-0 h-16 w-16 animate-pulse rounded-full bg-[#FF64B3]/20 blur-xl" />
+              <Loader2 className="h-16 w-16 animate-spin text-primary" />
+              <div className="absolute inset-0 h-16 w-16 animate-pulse rounded-full bg-primary/20" />
             </div>
 
-            <h2 className="text-2xl font-bold mb-2 bg-gradient-to-r from-[#FF64B3] to-[#00FFAA] bg-clip-text text-transparent">
+            <h2 className="text-2xl font-bold mb-2 text-foreground">
               Verificando acesso...
             </h2>
             <p className="text-muted-foreground text-center max-w-md">
@@ -103,7 +103,7 @@ export default function ExternalCheckout() {
             <div className="mt-8 space-y-3 w-full max-w-md">
               {['Validando token', 'Carregando planos', 'Preparando checkout'].map((step, i) => (
                 <div key={i} className="flex items-center gap-3 text-sm">
-                  <div className="h-2 w-2 rounded-full bg-[#00FFAA] animate-pulse" />
+                  <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
                   <span className="text-muted-foreground">{step}</span>
                 </div>
               ))}
@@ -125,18 +125,18 @@ export default function ExternalCheckout() {
 
   // Token válido - renderizar checkout em modo externo
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-muted/20">
+    <div className="min-h-screen bg-background">
       {/* Hero Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6 }}
-        className="bg-gradient-to-r from-[#FF64B3]/10 via-[#00FFAA]/10 to-[#FF64B3]/10 border-b backdrop-blur-sm"
+        className="bg-card border-b"
       >
         <div className="container mx-auto px-4 py-8">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
-              <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-[#FF64B3] to-[#00FFAA] bg-clip-text text-transparent">
+              <h1 className="text-3xl md:text-4xl font-bold text-foreground">
                 {systemConfig.system_name}
               </h1>
               <p className="text-muted-foreground mt-1">
@@ -144,7 +144,7 @@ export default function ExternalCheckout() {
               </p>
             </div>
             <Badge variant="secondary" className="flex items-center gap-2 px-4 py-2 text-sm">
-              <Lock className="h-4 w-4 text-[#00FFAA]" />
+              <Lock className="h-4 w-4 text-primary" />
               Pagamento Seguro
             </Badge>
           </div>
@@ -158,15 +158,15 @@ export default function ExternalCheckout() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.1 }}
         >
-          <Card className="mb-8 border-2 border-[#FF64B3]/20 bg-gradient-to-br from-[#FF64B3]/5 to-[#00FFAA]/5">
+          <Card className="mb-8 border-primary/20 bg-primary/5">
             <CardContent className="pt-6">
               <div className="flex items-start gap-4">
-                <div className="p-3 rounded-full bg-gradient-to-br from-[#FF64B3] to-[#00FFAA] flex-shrink-0">
+                <div className="p-3 rounded-full bg-primary flex-shrink-0">
                   <Sparkles className="h-6 w-6 text-white" />
                 </div>
                 <div className="flex-1">
                   <h2 className="text-2xl font-bold mb-2">
-                    Olá, <span className="bg-gradient-to-r from-[#FF64B3] to-[#00FFAA] bg-clip-text text-transparent">{data.user?.nome}</span>!
+                    Olá, <span className="text-foreground">{data.user?.nome}</span>!
                   </h2>
                   <p className="text-muted-foreground">
                     Você está a um passo de desbloquear todos os recursos do {systemConfig.system_name}.
@@ -185,11 +185,11 @@ export default function ExternalCheckout() {
           transition={{ duration: 0.6, delay: 0.2 }}
           className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8"
         >
-          <Card className="border-[#00FFAA]/20 hover:border-[#00FFAA]/40 transition-all duration-300">
+          <Card className="border-primary/20 hover:border-primary/40">
             <CardContent className="pt-6">
               <div className="flex flex-col items-center text-center">
-                <div className="p-3 rounded-full bg-[#00FFAA]/10 mb-3">
-                  <Shield className="h-6 w-6 text-[#00FFAA]" />
+                <div className="p-3 rounded-full bg-primary/10 mb-3">
+                  <Shield className="h-6 w-6 text-primary" />
                 </div>
                 <h3 className="font-semibold mb-1">100% Seguro</h3>
                 <p className="text-sm text-muted-foreground">
@@ -199,11 +199,11 @@ export default function ExternalCheckout() {
             </CardContent>
           </Card>
 
-          <Card className="border-[#FF64B3]/20 hover:border-[#FF64B3]/40 transition-all duration-300">
+          <Card className="border-primary/20 hover:border-primary/40">
             <CardContent className="pt-6">
               <div className="flex flex-col items-center text-center">
-                <div className="p-3 rounded-full bg-[#FF64B3]/10 mb-3">
-                  <Zap className="h-6 w-6 text-[#FF64B3]" />
+                <div className="p-3 rounded-full bg-primary/10 mb-3">
+                  <Zap className="h-6 w-6 text-primary" />
                 </div>
                 <h3 className="font-semibold mb-1">Ativação Instantânea</h3>
                 <p className="text-sm text-muted-foreground">
@@ -213,11 +213,11 @@ export default function ExternalCheckout() {
             </CardContent>
           </Card>
 
-          <Card className="border-[#00FFAA]/20 hover:border-[#00FFAA]/40 transition-all duration-300">
+          <Card className="border-primary/20 hover:border-primary/40">
             <CardContent className="pt-6">
               <div className="flex flex-col items-center text-center">
-                <div className="p-3 rounded-full bg-[#00FFAA]/10 mb-3">
-                  <CreditCard className="h-6 w-6 text-[#00FFAA]" />
+                <div className="p-3 rounded-full bg-primary/10 mb-3">
+                  <CreditCard className="h-6 w-6 text-primary" />
                 </div>
                 <h3 className="font-semibold mb-1">Múltiplas Formas</h3>
                 <p className="text-sm text-muted-foreground">
@@ -251,7 +251,7 @@ export default function ExternalCheckout() {
         >
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-6">
             <div>
-              <h4 className="font-semibold mb-3 bg-gradient-to-r from-[#FF64B3] to-[#00FFAA] bg-clip-text text-transparent">
+              <h4 className="font-semibold mb-3 text-foreground">
                 {systemConfig.system_name}
               </h4>
               <p className="text-sm text-muted-foreground">
@@ -301,7 +301,7 @@ function NotFoundPage({ message }: { message: string }) {
   const [, setLocation] = useLocation();
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-background to-muted/20 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -323,8 +323,8 @@ function NotFoundPage({ message }: { message: string }) {
               className="flex items-center justify-center mb-6"
             >
               <div className="relative">
-                <div className="absolute inset-0 rounded-full bg-destructive/20 blur-xl animate-pulse" />
-                <div className="relative rounded-full bg-gradient-to-br from-destructive/10 to-destructive/5 p-6">
+                <div className="absolute inset-0 rounded-full bg-destructive/20 animate-pulse" />
+                <div className="relative rounded-full bg-destructive/10 p-6">
                   <AlertCircle className="h-16 w-16 text-destructive" />
                 </div>
               </div>
@@ -341,7 +341,7 @@ function NotFoundPage({ message }: { message: string }) {
           <CardContent className="space-y-3 pt-2">
             <Button
               onClick={() => setLocation('/')}
-              className="w-full h-12 text-base bg-gradient-to-r from-[#FF64B3] to-[#00FFAA] hover:opacity-90 transition-opacity"
+              className="w-full h-12 text-base bg-primary hover:opacity-90 transition-opacity"
               size="lg"
             >
               <span className="flex items-center gap-2">
@@ -353,7 +353,7 @@ function NotFoundPage({ message }: { message: string }) {
             <Button
               onClick={() => setLocation('/register')}
               variant="outline"
-              className="w-full h-12 text-base border-2 hover:border-[#FF64B3] hover:text-[#FF64B3] transition-colors"
+              className="w-full h-12 text-base border-2 hover:border-primary hover:text-primary transition-colors"
               size="lg"
             >
               Criar Nova Conta
@@ -377,7 +377,7 @@ function NotFoundPage({ message }: { message: string }) {
           <Card className="bg-muted/50">
             <CardContent className="pt-6">
               <div className="flex items-start gap-3">
-                <Shield className="h-5 w-5 text-[#00FFAA] flex-shrink-0 mt-0.5" />
+                <Shield className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
                 <div className="text-sm text-muted-foreground">
                   <strong className="text-foreground">Segurança em primeiro lugar:</strong> Links de pagamento são únicos e intransferíveis. Se você recebeu este link de alguém, certifique-se de que é legítimo.
                 </div>

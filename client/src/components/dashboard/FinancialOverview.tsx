@@ -146,12 +146,12 @@ export default function FinancialOverview({ isLoading, chartData, from, to }: Fi
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       return (
-        <div className={`${theme === 'light' ? 'bg-white text-gray-900' : 'glass'} p-2 rounded-lg text-sm`}>
+        <div className="rounded-md border bg-popover p-2 text-sm text-popover-foreground shadow-md">
           <p className="font-numeric text-xs mb-1">{viewType === "monthly" ? `${t('dashboard.overview.day', 'Dia')} ${label}` : label}</p>
-          <p className="text-secondary font-medium">
+          <p className="text-income font-medium">
             {t('dashboard.overview.income', 'Receitas')}: {formatCurrency(payload[0].value)}
           </p>
-          <p className="text-red-400 font-medium">
+          <p className="text-expense font-medium">
             {t('dashboard.overview.expenses', 'Despesas')}: {formatCurrency(payload[1].value)}
           </p>
         </div>
@@ -168,27 +168,15 @@ export default function FinancialOverview({ isLoading, chartData, from, to }: Fi
       transition={{ duration: 0.4 }}
       className="h-full"
     >
-      <Card className="relative rounded-2xl h-full overflow-hidden">
-        <div className="absolute inset-0 rounded-2xl pointer-events-none" style={{
-          border: '2px solid transparent',
-          borderRadius: '16px',
-          background: 'conic-gradient(from 0deg, #00ff99, #0099ff, #ff00cc, #ff9900, #00ff99 100%)',
-          WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
-          WebkitMaskComposite: 'xor',
-          maskComposite: 'exclude',
-          padding: '2px',
-          zIndex: 1
-        }} />
-        <div className={`${theme === 'light' ? 'bg-white shadow-md' : 'glass-card neon-border'} rounded-2xl h-full relative z-10`}>
+      <Card className="h-full">
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="font-space text-xl" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{t('dashboard.overview.title', 'Visão Geral')}</h2>
+              <h2 className="text-base font-semibold">{t('dashboard.overview.title', 'Visão Geral')}</h2>
               <div className="flex space-x-2">
                 <Button
                   size="sm"
                   variant={viewType === "monthly" ? "default" : "outline"}
                   onClick={() => setViewType("monthly")}
-                  className={viewType === "monthly" ? "bg-primary/20" : ""}
                 >
                   {t('dashboard.overview.monthly', 'Mensal')}
                 </Button>
@@ -196,7 +184,6 @@ export default function FinancialOverview({ isLoading, chartData, from, to }: Fi
                   size="sm"
                   variant={viewType === "annual" ? "default" : "outline"}
                   onClick={() => setViewType("annual")}
-                  className={viewType === "annual" ? "bg-primary/20" : ""}
                 >
                   {t('dashboard.overview.annual', 'Anual')}
                 </Button>
@@ -206,7 +193,7 @@ export default function FinancialOverview({ isLoading, chartData, from, to }: Fi
             <div className="h-[260px] w-full">
               {(isLoading || isFilteredLoading) ? (
                 <div className="w-full h-full flex items-center justify-center">
-                  <Skeleton className="h-[220px] w-full rounded-xl" />
+                  <Skeleton className="h-[220px] w-full rounded-lg" />
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
@@ -216,39 +203,42 @@ export default function FinancialOverview({ isLoading, chartData, from, to }: Fi
                   >
                     <defs>
                       <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="hsla(157, 100%, 50%, 0.3)" stopOpacity={0.8}/>
-                        <stop offset="95%" stopColor="hsla(157, 100%, 50%, 0.1)" stopOpacity={0}/>
+                        <stop offset="5%" stopColor="hsl(var(--income))" stopOpacity={0.18}/>
+                        <stop offset="95%" stopColor="hsl(var(--income))" stopOpacity={0}/>
                       </linearGradient>
                       <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="hsla(0, 100%, 67%, 0.3)" stopOpacity={0.8}/>
-                        <stop offset="95%" stopColor="hsla(0, 100%, 67%, 0.1)" stopOpacity={0}/>
+                        <stop offset="5%" stopColor="hsl(var(--expense))" stopOpacity={0.14}/>
+                        <stop offset="95%" stopColor="hsl(var(--expense))" stopOpacity={0}/>
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke={theme === 'light' ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.1)'} vertical={false} />
-                    <XAxis dataKey="month" stroke={theme === 'light' ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)'} tick={{ fill: theme === 'light' ? '#222' : '#ccc', fontFamily: 'Space Grotesk, sans-serif', fontSize: 14 }} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                    <XAxis dataKey="month" stroke="hsl(var(--border))" tickLine={false} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} />
                     <YAxis 
-                      stroke={theme === 'light' ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)'}
-                      tickFormatter={(value) => `R$${value}`}
-                      tick={{ fill: theme === 'light' ? '#222' : '#ccc', fontFamily: 'Space Grotesk, sans-serif', fontSize: 14 }}
+                      stroke="hsl(var(--border))"
+                      tickLine={false}
+                      axisLine={false}
+                      width={72}
+                      tickFormatter={(value) => Number(value).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}
+                      tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
                     />
                     <Tooltip content={<CustomTooltip />} />
                     <Area 
                       type="monotone" 
                       dataKey="income" 
-                      stroke="hsl(157, 100%, 50%)" 
+                      stroke="hsl(var(--income))" 
                       fillOpacity={1}
                       fill="url(#colorIncome)"
                       strokeWidth={2}
-                      activeDot={{ r: 6, stroke: "hsl(157, 100%, 50%)", strokeWidth: 2, fill: "hsl(157, 100%, 50%)" }}
+                      activeDot={{ r: 4, stroke: "hsl(var(--card))", strokeWidth: 2, fill: "hsl(var(--income))" }}
                     />
                     <Area 
                       type="monotone" 
                       dataKey="expense" 
-                      stroke="hsl(0, 100%, 67%)" 
+                      stroke="hsl(var(--expense))" 
                       fillOpacity={1}
                       fill="url(#colorExpense)"
                       strokeWidth={2}
-                      activeDot={{ r: 6, stroke: "hsl(0, 100%, 67%)", strokeWidth: 2, fill: "hsl(0, 100%, 67%)" }}
+                      activeDot={{ r: 4, stroke: "hsl(var(--card))", strokeWidth: 2, fill: "hsl(var(--expense))" }}
                     />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -257,16 +247,15 @@ export default function FinancialOverview({ isLoading, chartData, from, to }: Fi
             
             <div className="flex justify-center space-x-10 mt-4">
               <div className="flex items-center">
-                <div className="w-3 h-3 rounded-full bg-secondary mr-2"></div>
-                <span className={`text-sm ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>{t('dashboard.overview.income', 'Receitas')}</span>
+                <div className="w-2.5 h-2.5 rounded-full bg-income mr-2"></div>
+                <span className={`text-sm text-foreground`}>{t('dashboard.overview.income', 'Receitas')}</span>
               </div>
               <div className="flex items-center">
-                <div className="w-3 h-3 rounded-full bg-red-500 mr-2"></div>
-                <span className={`text-sm ${theme === 'light' ? 'text-gray-700' : 'text-gray-300'}`}>{t('dashboard.overview.expenses', 'Despesas')}</span>
+                <div className="w-2.5 h-2.5 rounded-full bg-expense mr-2"></div>
+                <span className={`text-sm text-foreground`}>{t('dashboard.overview.expenses', 'Despesas')}</span>
               </div>
             </div>
           </CardContent>
-        </div>
       </Card>
     </motion.div>
   );

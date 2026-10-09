@@ -9,6 +9,7 @@
  * PF e PJ compartilham a forma da resposta, mas cada um usa o seu plano de
  * contas: `categorias` (do usuário + globais) no PF, `empresas_contas` no PJ.
  */
+import { condicaoCaixaPj } from "./erp/caixa-sql";
 import { sql } from "drizzle-orm";
 import { db } from "../db";
 import type { FluxoProjetado, FluxoProjetadoLinha, FluxoProjetadoMes } from "@shared/schema";
@@ -245,8 +246,8 @@ export async function getFluxoProjetadoPJ(
       AND ${ref} >= ${janela.de}
       AND ${ref} <= ${janela.ate}
       -- Compra no cartão não é saída de caixa na data da compra (o dinheiro sai
-      -- no vencimento da fatura). Mesmo filtro do fluxo de caixa realizado.
-      AND COALESCE(t.movimenta_caixa, true) = true
+      -- no vencimento da fatura). Contas a pagar/receber pendentes entram.
+      AND ${condicaoCaixaPj("t")}
     GROUP BY t.categoria_id, to_char(${ref}, 'YYYY-MM'), t.tipo, COALESCE(t.reembolso_pessoal, false)
   `);
 
@@ -299,7 +300,7 @@ export async function getFluxoProjetadoPJ(
   const contaRows = await conn.execute(sql`
     SELECT id, codigo, nome, tipo, classificacao
     FROM empresas_contas
-    WHERE empresa_id = ${empresaId}
+    WHERE empresa_id = ${empresaId} AND sintetica = false
   `);
   const GRUPO: Record<string, string> = {
     FIXA: "Despesas Fixas",

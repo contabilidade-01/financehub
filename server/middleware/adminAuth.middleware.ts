@@ -60,10 +60,18 @@ export async function checkImpersonation(req: Request, res: Response, next: Next
       return next();
     }
 
+    // Segurança: a personificação pertence à SESSÃO do super admin. Sem a marca
+    // na sessão (ex.: o próprio usuário-alvo logado, ou chamada via API token),
+    // nunca herdar privilégios, mesmo que exista uma linha ativa no banco.
+    const sess = req.session as any;
+    if (!sess?.isImpersonating || !sess?.originalAdmin?.id) {
+      return next();
+    }
+
     // Verificar se existe uma sessão de personificação ativa para este usuário
     const activeSession = await storage.getActiveImpersonationSession(req.user.id);
     
-    if (activeSession) {
+    if (activeSession && activeSession.super_admin_id === sess.originalAdmin.id) {
       // Buscar dados do super admin original
       const originalUser = await storage.getUserById(activeSession.super_admin_id);
       

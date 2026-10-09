@@ -14,6 +14,7 @@ import * as XLSX from "xlsx";
 import { db } from "../db";
 import { sql } from "drizzle-orm";
 import { storage, resolveOuCriaFormaPagamento, cadastrarOuAtualizarCartao } from "../storage";
+import { detectarDelimitador } from "./importacao/parsers";
 
 // Formas que NÃO são cartão nominal (não viram cartão no cadastro do usuário).
 // "Cartão de Crédito/Débito" genéricos e slugs (cartao_credito) ficam como forma global —
@@ -135,8 +136,8 @@ function parseCategoria(v: any): string {
 // CSV/TSV → matriz de strings. Mantém datas como TEXTO (sem coerção de fuso do
 // XLSX) e respeita aspas com vírgula/quebra-de-linha dentro do campo.
 function parseDelimited(text: string): string[][] {
-  const delim = (text.split("\n")[0].match(/\t/g)?.length ?? 0) >
-    (text.split("\n")[0].match(/,/g)?.length ?? 0) ? "\t" : ",";
+  // ";" é o padrão dos CSVs brasileiros (Excel pt-BR); detecta ; , tab |.
+  const delim = detectarDelimitador(text);
   const linhas: string[][] = [];
   let row: string[] = [], field = "", inQ = false;
   for (let i = 0; i < text.length; i++) {

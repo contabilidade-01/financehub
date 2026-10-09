@@ -8,6 +8,7 @@
  * Este serviço apenas comunica com o Asaas, não contém lógica de negócio.
  */
 
+import { diaSP } from "../../shared/datas-sp";
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import { timingSafeEqual } from 'crypto';
 
@@ -79,11 +80,14 @@ export interface AsaasSubscriptionData {
     dueDateLimitDays?: number;
   };
   interest?: {
-    value: number;
+    value: number; // % ao mês
   };
   fine?: {
     value: number;
+    type?: 'FIXED' | 'PERCENTAGE';
   };
+  /** Na atualização: aplica também às cobranças em aberto da assinatura. */
+  updatePendingPayments?: boolean;
   creditCard?: AsaasCreditCardData;
   creditCardHolderInfo?: AsaasCreditCardHolderInfo;
   creditCardToken?: string;
@@ -124,6 +128,8 @@ export interface AsaasPaymentResponse {
   billingType: string;
   value: number;
   dueDate: string;
+  /** Vencimento original — o Asaas guarda quando o vencimento é alterado no painel. */
+  originalDueDate?: string;
   status: 'PENDING' | 'RECEIVED' | 'CONFIRMED' | 'OVERDUE' | 'REFUNDED' | 'RECEIVED_IN_CASH' | 'REFUND_REQUESTED' | 'CHARGEBACK_REQUESTED' | 'CHARGEBACK_DISPUTE' | 'AWAITING_CHARGEBACK_REVERSAL' | 'DUNNING_REQUESTED' | 'DUNNING_RECEIVED' | 'AWAITING_RISK_ANALYSIS';
   description?: string;
   invoiceUrl?: string;
@@ -517,8 +523,9 @@ export class AsaasService {
    * Obter data atual formatada para o Asaas (YYYY-MM-DD)
    * Usado para cobrar imediatamente na criação da assinatura
    */
+  /** Hoje no calendário de São Paulo (em UTC, depois das 21h já seria amanhã). */
   static getTodayForAsaas(): string {
-    return this.formatDateForAsaas(new Date());
+    return diaSP(new Date()) as string;
   }
 
   /**

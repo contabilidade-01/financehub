@@ -2,6 +2,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import PjDRE from "@/pages/pj/relatorios/dre";
 import PjFluxoCaixa from "@/pages/pj/relatorios/fluxo-caixa";
 import FluxoProjetadoView from "@/components/shared/FluxoProjetadoView";
+import { ChapterHelpButton } from "@/components/shared/ChapterHelpButton";
 
 /**
  * Relatórios PJ — abas:
@@ -11,7 +12,11 @@ import FluxoProjetadoView from "@/components/shared/FluxoProjetadoView";
  */
 export default function PjRelatorios({ empresaId }: { empresaId: number }) {
   return (
-    <div className="p-4">
+    <div>
+      <div className="mb-2 flex items-center justify-between">
+        <h1 className="text-lg font-semibold tracking-tight">Relatórios</h1>
+        <ChapterHelpButton chapter="relatorios" />
+      </div>
       <Tabs defaultValue="dre">
         <TabsList>
           <TabsTrigger value="dre">DRE (resumo)</TabsTrigger>

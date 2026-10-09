@@ -220,7 +220,7 @@ export async function checkout(req: Request, res: Response) {
     if (validatedData.planId) {
       const usuario = await storage.getUserById(userId);
       const ativos = (await storage.getActiveSubscriptionPlans()).filter((p: any) => p.active !== false);
-      const permitidos = filtrarPlanosPorTipo(ativos, (usuario as any)?.tipo_pessoa);
+      const permitidos = filtrarPlanosPorTipo(ativos, (usuario as any)?.tipo_pessoa, (usuario as any)?.porte_pj);
       if (permitidos.length && !permitidos.some((p) => p.id === validatedData.planId)) {
         return res.status(400).json({
           error: "Plano indisponível para o seu tipo de cadastro (Pessoa Física / Jurídica).",
@@ -399,6 +399,7 @@ export async function validateExternalCheckoutToken(req: Request, res: Response)
     const activePlans = filtrarPlanosPorTipo(
       plans.filter((p) => p.active),
       (user as any).tipo_pessoa,
+      (user as any).porte_pj,
     );
 
     // Retornar dados do usuário (sem informações sensíveis) e planos
@@ -432,6 +433,26 @@ export async function validateExternalCheckoutToken(req: Request, res: Response)
  * Mesma ação do admin "Gerar link de cobrança", para o usuário logado.
  * Abre a página do Asaas com os dados que já temos.
  */
+/** "Já paguei": confere no Asaas e libera o acesso se o pagamento já caiu. */
+const ultimaConferencia = new Map<number, number>();
+export async function conferirPagamento(req: Request, res: Response) {
+  try {
+    const user = (req as any).user;
+    if (!user) return res.status(401).json({ error: "Usuário não autenticado" });
+    // Uma consulta ao Asaas a cada 20s por usuário (botão clicado várias vezes).
+    const agora = Date.now();
+    if (agora - (ultimaConferencia.get(user.id) || 0) < 20_000) {
+      return res.status(429).json({ error: "Aguarde alguns segundos e tente de novo." });
+    }
+    ultimaConferencia.set(user.id, agora);
+    const r = await getSubscriptionService(storage).sincronizarPagamentosAsaas(user.id, "manual");
+    return res.json(r);
+  } catch (err: any) {
+    console.error("conferirPagamento:", err);
+    return res.status(500).json({ error: "Não consegui consultar o pagamento agora. Tente em instantes." });
+  }
+}
+
 export async function createRenewLink(req: Request, res: Response) {
   try {
     const user = (req as any).user;
@@ -829,8 +850,8 @@ export async function getBillingMetrics(req: Request, res: Response) {
     // Cada cliente entra pelo preço do SEU tipo: contar todo mundo pelo plano
     // mais barato subestimava o MRR assim que PF e PJ passaram a ter preços
     // diferentes (a lista vem ordenada por preço).
-    const precoMensalDoTipo = (tipoPessoa?: string | null): number => {
-      const doTipo = filtrarPlanosPorTipo(ativos, tipoPessoa);
+    const precoMensalDoTipo = (tipoPessoa?: string | null, portePj?: string | null): number => {
+      const doTipo = filtrarPlanosPorTipo(ativos, tipoPessoa, portePj);
       const escolhido = doTipo[0] || ativos[0];
       return escolhido ? parseFloat(escolhido.priceMonthly.toString()) : 0;
     };
@@ -842,7 +863,7 @@ export async function getBillingMetrics(req: Request, res: Response) {
       !idsComAssinaturaAtiva.has(u.id)
     );
     const mrrManual = manuaisAtivos.reduce(
-      (sum: number, u: any) => sum + precoMensalDoTipo(u.tipo_pessoa),
+      (sum: number, u: any) => sum + precoMensalDoTipo(u.tipo_pessoa, u.porte_pj),
       0,
     );
     const mrr = mrrAsaas + mrrManual;

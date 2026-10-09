@@ -111,11 +111,10 @@ export class ConciliacaoController {
     try {
       let resultado;
       if (ehOfx) {
-        let conteudo = file.buffer.toString("utf8");
-        if (/�/.test(conteudo)) conteudo = file.buffer.toString("latin1");
+        // Buffer original: o parser lê o CHARSET do cabeçalho do OFX (1252/UTF-8).
         resultado = await processarImportacaoOfx({
           empresaId: emp.id, contaBancariaId, usuarioId: (req as any).user.id,
-          arquivoNome: file.originalname, conteudo,
+          arquivoNome: file.originalname, buffer: file.buffer,
         });
       } else {
         const formato = nome.endsWith(".csv") ? "csv" : "xlsx";
@@ -186,14 +185,15 @@ export class ConciliacaoController {
   // Em lote: aceita todas as sugestões pendentes de uma importação.
   static async aceitarSugestoes(req: Request, res: Response) {
     const emp = await empresaDoUsuario(req, res); if (!emp) return;
-    const importacaoId = Number(req.body?.importacao_id);
-    if (!importacaoId) return res.status(400).json({ error: "Informe importacao_id" });
-    const movs = await getMovimentos({ importacaoId, status: "pendente" });
+    // Sem importacao_id: todas as pendências da empresa (botão "Aceitar sugestões").
+    const importacaoId = Number(req.body?.importacao_id) || undefined;
+    const movs = await getMovimentos({ importacaoId, empresaId: emp.id, status: "pendente" });
+    const contas = (await storage.getEmpresasContasByEmpresaId(emp.id)) as any[];
+    const idsValidos = new Set(contas.map((c: any) => c.id));
     let n = 0;
     for (const mov of movs) {
-      if (mov.empresa_id !== emp.id || !mov.sugestao_conta_id) continue;
+      if (mov.empresa_id !== emp.id || !mov.sugestao_conta_id || !idsValidos.has(mov.sugestao_conta_id)) continue;
       await lancarMovimentoComoTransacao(mov, mov.sugestao_conta_id);
-      const contas = await storage.getEmpresasContasByEmpresaId(emp.id) as any[];
       const nome = contas.find((c: any) => c.id === mov.sugestao_conta_id)?.nome;
       await aprenderMemoriaContaPJ((req as any).user.id, mov.descricao || "", mov.sugestao_conta_id, nome);
       n++;
