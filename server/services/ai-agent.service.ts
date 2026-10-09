@@ -10,6 +10,7 @@ import { casarCategoriaPorNome, sugerirCategoriaPorDescricao, chaveMemoria, type
 import { hidratarPendencias } from "./ia-pendencias";
 import { reconciliarLancamento, trechoDoLancamento, segmentarLancamentos, hojeSP, contextoDataParaPrompt, detectarReembolsavel } from "./nlp-br";
 import { expandirCodigosLote, normalizarCompetencia } from "./lote-codigos";
+import { resumoConferenciaFatura } from "./conferencia-fatura-texto";
 import { resolverContaPj } from "./classificar-conta-pj";
 import { atualizarTransacaoEmpresa, baixarTransacaoEmpresa } from "./empresa-transacao.service";
 import { listarCartoes as listarCartoesPj, criarCartao as criarCartaoPj, listarFaturas as listarFaturasPj, getSaldoCartaoEmpresa } from "./fatura-pj.service";
@@ -818,12 +819,12 @@ function buildTools(ctx?: ToolContext) {
       type: "function" as const,
       function: {
         name: "conferir_fatura_cartao",
-        description: "CONFERE uma fatura de cartão que o usuário ditou contra os lançamentos já registrados. SOMENTE LEITURA — nunca cria, edita nem exclui nada. Use quando pedirem 'conferir a fatura', 'ver se esses lançamentos já existem', 'validar a fatura do cartão'. Passe TODOS os itens que o usuário ditou de uma vez.",
+        description: "CONFERE uma fatura de cartão que o usuário ditou contra os lançamentos já registrados. SOMENTE LEITURA — nunca cria, edita nem exclui nada. Use quando pedirem 'conferir a fatura', 'veja qual lançamento está faltando', 'ver se esses lançamentos já existem', 'validar a fatura do cartão' — inclusive quando ele mandar SÓ uma lista de valores ('12,62; 137,42; 33,79'). Vale para qualquer cartão e qualquer fatura. Passe TODOS os itens de uma vez. NÃO pergunte forma de pagamento: o cartão é o da fatura.",
         parameters: {
           type: "object",
           properties: {
             nome_cartao: { type: "string", description: "Nome do cartão da fatura." },
-            mes: { type: "number", description: "Mês da competência da fatura (1-12). Sem ele, usa a fatura atual." },
+            mes: { type: "number", description: "Mês da fatura (1-12): 'fatura 10/2026' → 10. Sem ele, usa a fatura aberta hoje." },
             ano: { type: "number", description: "Ano da competência (ex.: 2026). Padrão: ano corrente." },
             itens: {
               type: "array",
@@ -831,11 +832,11 @@ function buildTools(ctx?: ToolContext) {
               items: {
                 type: "object",
                 properties: {
-                  descricao: { type: "string", description: "Descrição do item na fatura." },
-                  valor: { type: "number", description: "Valor do item." },
+                  descricao: { type: "string", description: "Descrição do item na fatura. Omita (ou vazio) se o usuário só passou o valor." },
+                  valor: { type: "number", description: "Valor do item ('12,62' → 12.62)." },
                   data: { type: "string", description: "AAAA-MM-DD, se o usuário informou a data. Opcional." },
                 },
-                required: ["descricao", "valor"],
+                required: ["valor"],
               },
             },
           },
@@ -2210,22 +2211,34 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         if (itens.length === 0) {
           return JSON.stringify({ error: "Nenhum item informado. Peça ao usuário a lista de lançamentos da fatura (descrição e valor)." });
         }
-        const doUsuario = await storage.getPaymentMethodsByUserId(ctx.userId);
-        const globais = await storage.getGlobalPaymentMethods();
-        const cartao = [...doUsuario, ...globais].find(c => c.nome.toLowerCase().includes(String(args.nome_cartao || "").toLowerCase()));
-        if (!cartao) return JSON.stringify({ error: `Cartão '${args.nome_cartao}' não encontrado.` });
+        // Mesmo casamento de nome do lançamento ("CC Mercado Pago" ≈ "Mercado Pago").
+        const nomeCartao = String(args.nome_cartao || "").trim();
+        let fpConf = await resolveOuCriaFormaPagamento(ctx.userId, nomeCartao, { criarCartao: false });
+        if (fpConf.naoEncontrado || !fpConf.id) {
+          const semPrefixo = nomeCartao.replace(/^(cc|cart[aã]o( de cr[eé]dito)?)\s+/i, "").trim();
+          if (semPrefixo && semPrefixo !== nomeCartao) {
+            fpConf = await resolveOuCriaFormaPagamento(ctx.userId, semPrefixo, { criarCartao: false });
+          }
+        }
+        if (fpConf.naoEncontrado || !fpConf.id) {
+          const cartoes = await getCartoesComSaldo(ctx.userId, ctx.walletId).catch(() => []);
+          const nomes = (cartoes as any[]).map((c) => c.cartao_nome || c.nome).filter(Boolean);
+          return JSON.stringify({
+            error: `Cartão '${nomeCartao}' não encontrado.`,
+            cartoes: nomes,
+            mensagem: "Pergunte qual destes cartões é o da fatura. Não peça forma de pagamento.",
+          });
+        }
 
-        const r = await conferirFaturaCartao(
-          ctx.walletId,
-          cartao.id,
-          itens.map((i: any) => ({ descricao: String(i.descricao || ""), valor: Number(i.valor), data: i.data })),
-          args.mes,
-          args.ano,
-        );
+        const itensConf = itens
+          .map((i: any) => ({ descricao: String(i.descricao || ""), valor: Number(i.valor), data: i.data }))
+          .filter((i: any) => Number.isFinite(i.valor) && i.valor > 0);
+        const r = await conferirFaturaCartao(ctx.walletId, fpConf.id, itensConf, args.mes, args.ano);
         return JSON.stringify({
           ...r,
+          resumo_texto: resumoConferenciaFatura(r),
           somente_leitura: true,
-          instrucao: "Isto é CONFERÊNCIA. Não lance, não edite e não exclua nada a partir deste resultado. Mostre o período conferido, depois os itens agrupados por status (confere / valor_divergente / descricao_divergente / outra_competencia / duplicado / nao_encontrado), depois os lançamentos em 'nao_informados' (estão no sistema e o usuário não citou) e, por fim, total lançado x total informado. Se algo faltar, apenas diga o que falta — não ofereça lançar sozinho.",
+          instrucao: "Isto é CONFERÊNCIA. Responda com o 'resumo_texto' (pode ajustar o tom, sem mudar números). Não lance, não edite e não exclua nada a partir deste resultado. Mostre o período conferido, depois os itens agrupados por status (confere / valor_divergente / descricao_divergente / outra_competencia / duplicado / nao_encontrado), depois os lançamentos em 'nao_informados' (estão no sistema e o usuário não citou) e, por fim, total lançado x total informado. Se algo faltar, apenas diga o que falta — não ofereça lançar sozinho.",
         });
       }
 
@@ -3915,11 +3928,14 @@ ${contextoDataParaPrompt()}
   let ultimaToolExecutada: string | null = null;
   let ultimoResultadoTool: string | null = null;
   const escritasNestaRodada: import("./recibo-agente").EscritaRodada[] = [];
-  const { extrairEscritaOk, finalizarRespostaAgente } = await import("./recibo-agente");
+  const { extrairEscritaOk, extrairConsulta, finalizarRespostaAgente } = await import("./recibo-agente");
 
+  const consultasNestaRodada: import("./recibo-agente").EscritaRodada[] = [];
   const registrarEscrita = (fnName: string, result: string) => {
     const e = extrairEscritaOk(fnName, result);
     if (e) escritasNestaRodada.push(e);
+    const c = extrairConsulta(fnName, result);
+    if (c) consultasNestaRodada.push(c);
   };
 
   for (let i = 0; i < maxIterations; i++) {
@@ -3943,8 +3959,8 @@ ${contextoDataParaPrompt()}
         } catch {}
       }
       // Se já gravou nesta rodada, devolve recibo em vez de falhar sem feedback.
-      if (escritasNestaRodada.length > 0) {
-        return finalizarRespostaAgente({ content: "", escritas: escritasNestaRodada, userMessage });
+      if (escritasNestaRodada.length > 0 || consultasNestaRodada.length > 0) {
+        return finalizarRespostaAgente({ content: "", escritas: escritasNestaRodada, consultas: consultasNestaRodada, userMessage });
       }
       throw chatErr;
     }
@@ -3956,8 +3972,9 @@ ${contextoDataParaPrompt()}
     // Se não há tool calls, resposta final — recibo só se houve gravação.
     if (!assistantMessage.tool_calls || assistantMessage.tool_calls.length === 0) {
       return finalizarRespostaAgente({
-        content: assistantMessage.content || "Pronto!",
+        content: assistantMessage.content || "",
         escritas: escritasNestaRodada,
+        consultas: consultasNestaRodada,
         userMessage,
       });
     }
@@ -4098,8 +4115,8 @@ ${contextoDataParaPrompt()}
     }
   }
 
-  if (escritasNestaRodada.length > 0) {
-    return finalizarRespostaAgente({ content: "", escritas: escritasNestaRodada, userMessage });
+  if (escritasNestaRodada.length > 0 || consultasNestaRodada.length > 0) {
+    return finalizarRespostaAgente({ content: "", escritas: escritasNestaRodada, consultas: consultasNestaRodada, userMessage });
   }
 
   if (ultimoResultadoTool && ultimaToolExecutada === "listar_metas") {

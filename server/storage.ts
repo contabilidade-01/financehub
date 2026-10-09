@@ -2524,38 +2524,87 @@ export function janelaFatura(diaFechamento: number, mes?: number, ano?: number):
 }
 
 /**
+ * Lançamentos de um cartão PF por COMPETÊNCIA da fatura (AAAA-MM = mês do
+ * fechamento, a mesma chave de faturas/parcelamento). "Fatura 10/2026" é a
+ * competência 2026-10. Sem mês usa a fatura aberta hoje.
+ * Lançamento com coluna competencia vale por ela; antigo sem competencia cai
+ * pela data, entre o fechamento anterior (exclusive) e o desta (inclusive).
+ * vizinhosMeses > 0 também traz as competências ao redor (marcadas fora=true).
+ */
+export async function lancamentosCartaoPorCompetencia(
+  walletId: number,
+  cartao: { id: number; dia_fechamento?: number | null; dia_vencimento?: number | null },
+  mes?: number,
+  ano?: number,
+  vizinhosMeses = 0,
+): Promise<{ competencia: string; periodo_de: string; periodo_ate: string; vencimento: string; rows: any[] }> {
+  const { competenciaDaCompra, datasDaCompetencia, competenciaMaisMeses } = await import("./services/fatura-core");
+  const fech = Number(cartao.dia_fechamento) || 1;
+  const venc = Number(cartao.dia_vencimento) || 10;
+  const hoje = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+  const comp = mes && mes >= 1 && mes <= 12
+    ? `${ano || Number(hoje.slice(0, 4))}-${String(mes).padStart(2, "0")}`
+    : competenciaDaCompra(hoje, fech, venc).competencia;
+  const atual = datasDaCompetencia(comp, fech, venc);
+  const anterior = datasDaCompetencia(competenciaMaisMeses(comp, -1), fech, venc);
+  const compIni = competenciaMaisMeses(comp, -vizinhosMeses);
+  const compFim = competenciaMaisMeses(comp, vizinhosMeses);
+  const dataIni = datasDaCompetencia(competenciaMaisMeses(compIni, -1), fech, venc).dataFech;
+  const dataFim = datasDaCompetencia(compFim, fech, venc).dataFech;
+
+  const rows = await db.execute(sql`
+    SELECT t.id, t.descricao, t.valor::float8 AS valor, t.data_transacao::text AS data,
+           t.data_transacao, t.tipo, t.reembolsavel, t.competencia, c.nome AS categoria
+    FROM transacoes t
+    LEFT JOIN categorias c ON c.id = t.categoria_id
+    WHERE t.carteira_id = ${walletId}
+      AND t.forma_pagamento_id = ${cartao.id}
+      AND t.tipo = 'Despesa'
+      AND (
+        (t.competencia IS NOT NULL AND t.competencia BETWEEN ${compIni} AND ${compFim})
+        OR (t.competencia IS NULL AND t.data_transacao > ${dataIni} AND t.data_transacao <= ${dataFim})
+      )
+    ORDER BY t.data_transacao ASC, t.id ASC
+  `);
+  const naCompetencia = (r: any) =>
+    r.competencia
+      ? r.competencia === comp
+      : String(r.data).slice(0, 10) > anterior.dataFech && String(r.data).slice(0, 10) <= atual.dataFech;
+  return {
+    competencia: comp,
+    periodo_de: anterior.dataFech,
+    periodo_ate: atual.dataFech,
+    vencimento: atual.dataVenc,
+    rows: (rows as any[]).map((r) => ({ ...r, fora: !naCompetencia(r) })),
+  };
+}
+
+/**
  * Lista transações de um cartão específico no período de uma fatura (para
  * conciliação). Sem mês/ano usa a fatura atual.
  */
 export async function getFaturaCartao(cartaoId: number, walletId: number, mes?: number, ano?: number): Promise<{
-  cartao: string; periodo_de: string; periodo_ate: string; total: number; transacoes: any[]
+  cartao: string; competencia: string; periodo_de: string; periodo_ate: string; vencimento: string; total: number; transacoes: any[]
 }> {
   const cartaoRows = await db.select().from(paymentMethods).where(eq(paymentMethods.id, cartaoId)).limit(1);
   const cartao = cartaoRows[0];
   if (!cartao) throw new Error("Cartão não encontrado");
 
-  const { inicio: inicioFatura, fim: fimFatura } = janelaFatura(cartao.dia_fechamento || 1, mes, ano);
+  const f = await lancamentosCartaoPorCompetencia(walletId, cartao as any, mes, ano);
+  const rows = f.rows
+    .map(({ fora: _f, data: _d, ...r }) => r)
+    .sort((a, b) => String(b.data_transacao).localeCompare(String(a.data_transacao)));
 
-  const rows = await db.execute(sql`
-    SELECT t.id, t.descricao, t.valor, t.data_transacao, t.reembolsavel, c.nome AS categoria
-    FROM transacoes t
-    LEFT JOIN categorias c ON t.categoria_id = c.id
-    WHERE t.carteira_id = ${walletId}
-      AND t.forma_pagamento_id = ${cartaoId}
-      AND t.tipo = 'Despesa'
-      AND t.data_transacao >= ${inicioFatura}
-      AND t.data_transacao < ${fimFatura}
-    ORDER BY t.data_transacao DESC
-  `);
-
-  const total = (rows as any[]).reduce((s, r) => s + (parseFloat(r.valor) || 0), 0);
+  const total = rows.reduce((s, r) => s + (parseFloat(r.valor) || 0), 0);
 
   return {
     cartao: cartao.nome,
-    periodo_de: inicioFatura,
-    periodo_ate: fimFatura,
+    competencia: f.competencia,
+    periodo_de: f.periodo_de,
+    periodo_ate: f.periodo_ate,
+    vencimento: f.vencimento,
     total: Math.round(total * 100) / 100,
-    transacoes: rows as any[]
+    transacoes: rows,
   };
 }
 
@@ -3846,6 +3895,7 @@ export async function conferirFaturaCartao(
   ano?: number,
 ): Promise<{
   cartao: string;
+  competencia: string;
   periodo_de: string;
   periodo_ate: string;
   total_lancado: number;
@@ -3858,33 +3908,13 @@ export async function conferirFaturaCartao(
   const cartao = cartaoRows[0];
   if (!cartao) throw new Error("Cartão não encontrado");
 
-  const { inicio, fim } = janelaFatura(cartao.dia_fechamento || 1, mes, ano);
-
-  // Janela alargada: serve só para dizer em que outra fatura o lançamento está.
-  const desloca = (iso: string, meses: number) => {
-    const [a, m, d] = iso.split("-").map(Number);
-    const dt = new Date(a, m - 1 + meses, d);
-    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
-  };
-  const inicioAmplo = desloca(inicio, -MESES_VIZINHOS_FATURA);
-  const fimAmplo = desloca(fim, MESES_VIZINHOS_FATURA);
-
-  const rows = await db.execute(sql`
-    SELECT t.id, t.descricao, t.valor::float8 AS valor, t.data_transacao::text AS data,
-           t.tipo, c.nome AS categoria
-    FROM transacoes t
-    LEFT JOIN categorias c ON c.id = t.categoria_id
-    WHERE t.carteira_id = ${walletId}
-      AND t.forma_pagamento_id = ${cartaoId}
-      AND t.tipo = 'Despesa'
-      AND t.data_transacao >= ${inicioAmplo}
-      AND t.data_transacao < ${fimAmplo}
-    ORDER BY t.data_transacao ASC, t.id ASC
-  `);
-
-  const todos = rows as unknown as CandidatoTransacao[];
-  const naFatura = todos.filter((t) => t.data >= inicio && t.data < fim);
-  const foraDaFatura = todos.filter((t) => t.data < inicio || t.data >= fim);
+  // Competência real da fatura (a mesma das faturas e do parcelamento) + vizinhas,
+  // para dizer em que outra fatura um item está.
+  const f = await lancamentosCartaoPorCompetencia(walletId, cartao as any, mes, ano, MESES_VIZINHOS_FATURA);
+  const limpa = (r: any): CandidatoTransacao =>
+    ({ id: r.id, descricao: r.descricao, valor: r.valor, data: String(r.data).slice(0, 10), tipo: r.tipo, categoria: r.categoria, competencia: r.competencia || undefined } as any);
+  const naFatura = f.rows.filter((r) => !r.fora).map(limpa);
+  const foraDaFatura = f.rows.filter((r) => r.fora).map(limpa);
 
   // Um lançamento só pode confirmar UM item ditado — senão dois itens iguais na
   // fatura seriam ambos dados como conferidos pelo mesmo lançamento.
@@ -3894,6 +3924,21 @@ export async function conferirFaturaCartao(
   for (const item of itens) {
     const valor = Number(item.valor);
     const livres = naFatura.filter((t) => !usados.has(t.id));
+
+    // Só o valor ("12,62; 137,42; …"): casa um lançamento livre por valor, um a um.
+    if (!normalizarTexto(item.descricao)) {
+      const porValor = livres.find((t) => valorCasa(valor, t.valor));
+      if (porValor) {
+        usados.add(porValor.id);
+        conferidos.push({ informado: item, status: "confere", lancamentos: [porValor] });
+        continue;
+      }
+      const vizinho = foraDaFatura.filter((t) => valorCasa(valor, t.valor));
+      conferidos.push(vizinho.length
+        ? { informado: item, status: "outra_competencia", lancamentos: vizinho, observacao: "Está lançado no cartão, mas em outra fatura." }
+        : { informado: item, status: "nao_encontrado", lancamentos: [] });
+      continue;
+    }
 
     const casamPleno = livres.filter((t) => valorCasa(valor, t.valor) && descricaoCasa(item.descricao, t.descricao));
     if (casamPleno.length === 1) {
@@ -3959,8 +4004,9 @@ export async function conferirFaturaCartao(
 
   return {
     cartao: cartao.nome,
-    periodo_de: inicio,
-    periodo_ate: fim,
+    competencia: f.competencia,
+    periodo_de: f.periodo_de,
+    periodo_ate: f.periodo_ate,
     total_lancado: cent(totalLancado),
     total_informado: cent(totalInformado),
     diferenca: cent(totalLancado - totalInformado),

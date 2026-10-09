@@ -41,6 +41,30 @@ export const TOOLS_ESCRITA = new Set([
   "excluir_meta",
 ]);
 
+/**
+ * Consultas SOMENTE LEITURA cuja resposta naturalmente fala em "lançado/registrado"
+ * ("3 lançamentos registrados nesta fatura"). Não são escrita e não podem cair na
+ * trava de falso recibo.
+ */
+export const TOOLS_CONSULTA = new Set([
+  "conferir_fatura_cartao",
+  "fatura_cartao",
+  "fatura_cartao_empresa",
+  "listar_todas_transacoes",
+  "listar_todas_transacoes_empresa",
+  "transacoes_recentes",
+  "buscar_transacao_por_filtro",
+  "buscar_transacao_empresa_por_filtro",
+]);
+
+/** Consulta que respondeu sem erro (guarda o resumo_texto do servidor, se houver). */
+export function extrairConsulta(tool: string, raw: string): EscritaRodada | null {
+  if (!TOOLS_CONSULTA.has(tool)) return null;
+  const parsed = parseSafe(raw);
+  if (!parsed || parsed.error) return null;
+  return { tool, raw, parsed };
+}
+
 /** Texto que afirma que algo foi gravado/pago/excluído. */
 export function afirmaEscrita(texto: string): boolean {
   const t = String(texto || "")
@@ -235,6 +259,7 @@ export function mensagemTravaFalsoRecibo(userMessage?: string): string {
 export function finalizarRespostaAgente(opts: {
   content: string;
   escritas: EscritaRodada[];
+  consultas?: EscritaRodada[];
   userMessage?: string;
 }): string {
   const validas = opts.escritas.filter((e) => {
@@ -252,7 +277,22 @@ export function finalizarRespostaAgente(opts: {
     return validas.map(montarReciboDeEscrita).join("\n\n");
   }
 
-  const content = String(opts.content || "").trim() || "Pronto!";
+  // Consulta (ex.: conferência de fatura): o texto do servidor vale quando o
+  // modelo não respondeu; o do modelo vale mesmo falando em "lançado".
+  const consultas = opts.consultas || [];
+  const resumoServidor = [...consultas].reverse().find((c) => c.parsed?.resumo_texto)?.parsed?.resumo_texto;
+  const bruto = String(opts.content || "").trim();
+  if (consultas.length > 0) {
+    if (!bruto && resumoServidor) return String(resumoServidor);
+    // Recibo inventado ("Despesa registrada!") continua bloqueado mesmo após consulta.
+    const reciboFalso = /(despesa|receita|compra) registrada|lancamento registrado/.test(
+      bruto.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""),
+    );
+    if (bruto && !reciboFalso) return bruto;
+    if (reciboFalso && resumoServidor) return String(resumoServidor);
+  }
+
+  const content = bruto || "Pronto!";
   if (afirmaEscrita(content)) {
     return mensagemTravaFalsoRecibo(opts.userMessage);
   }
