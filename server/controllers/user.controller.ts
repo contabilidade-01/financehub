@@ -1,9 +1,12 @@
 import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
+import { randomUUID } from "crypto";
+import { normalizarPorte } from "../../shared/modalidade";
 import { storage } from "../storage";
 import { insertUserSchema, loginUserSchema } from "../../shared/schema";
 import { z } from "zod";
 import { getNotificationService } from "../services/notification.service";
+import { loginBloqueado, registrarFalhaLogin, registrarSucessoLogin } from "../utils/login-lockout";
 
 // Função utilitária para validar telefone numérico com country code 55
 function validateTelefone(telefone: number): string | null {
@@ -21,16 +24,25 @@ export async function register(req: Request, res: Response) {
     const registerSchema = z.object({
       nome: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
       email: z.string().email("Email inválido"),
-      senha: z.string().min(6, "A senha deve ter pelo menos 6 caracteres"),
+      senha: z.string().min(8, "A senha deve ter pelo menos 8 caracteres"),
       telefone: z.union([z.string(), z.number()]).optional().refine((val) => {
         if (val === undefined || val === null || val === "") return true;
         const digits = typeof val === "number" ? val.toString() : val;
         return /^55\d{10,11}$/.test(digits);
       }, "Telefone deve ser numérico, começar com 55 e ter 12 ou 13 dígitos"),
+      // Aceito só por compatibilidade com o front antigo; o valor é IGNORADO
+      // (gerado no servidor) para ninguém reivindicar o JID de outro número.
       remoteJid: z.string().optional(),
-      tipo_usuario: z.string().optional(),
+      // PF/PJ: vem da página de vendas (?tipo). Default PF. Define qual plano
+      // (39,90 PF / 79,90 PJ) o checkout vai oferecer e cobrar no Asaas.
+      tipo_pessoa: z.enum(["fisica", "juridica"]).optional(),
+      // Porte da PJ: 'mei' (padrão) | 'me' (ERP completo). Ignorado em PF.
+      porte_pj: z.enum(["mei", "me"]).optional(),
     });
     const userData = registerSchema.parse(req.body);
+    // Segurança: o JID de WhatsApp nunca vem do cliente. Placeholder único;
+    // o vínculo real acontece pelo fluxo do WhatsApp.
+    userData.remoteJid = randomUUID();
     
     // Check if user with email already exists
     const existingUser = await storage.getUserByEmail(userData.email);
@@ -66,7 +78,10 @@ export async function register(req: Request, res: Response) {
     // Create user
     const userDataToSave = {
       ...userData,
-      telefone: telefoneNum ? telefoneNum.toString() : undefined
+      telefone: telefoneNum ? telefoneNum.toString() : undefined,
+      tipo_pessoa: userData.tipo_pessoa || "fisica", // garante tipo p/ escolher o plano certo
+      tipo_usuario: "normal", // segurança: papel nunca vem do body
+      porte_pj: userData.tipo_pessoa === "juridica" ? normalizarPorte(userData.porte_pj) : null,
     };
     const newUser = await storage.createUser(userDataToSave);
 
@@ -98,7 +113,10 @@ export async function register(req: Request, res: Response) {
     // Don't send back password
     const { senha, ...userWithoutPassword } = newUser;
 
-    // Set session
+    // Set session (nova sessão: evita fixação)
+    await new Promise<void>((resolve, reject) =>
+      req.session.regenerate((err) => (err ? reject(err) : resolve())),
+    );
     (req.session as any).userId = newUser.id;
 
     // Enviar webhook de boas-vindas com link de pagamento (async, não bloqueia resposta)
@@ -184,16 +202,22 @@ export async function register(req: Request, res: Response) {
 export async function login(req: Request, res: Response) {
   try {
     console.log("=== LOGIN ATTEMPT ===");
-    console.log("Email:", req.body.email);
     
     // Validate request body
     const loginData = loginUserSchema.parse(req.body);
     
+    // Bloqueio por conta (além do limite por IP): 10 erros em 15 min → 15 min.
+    const bloqueio = loginBloqueado(loginData.email);
+    if (bloqueio) {
+      return res.status(429).json({ message: `Muitas tentativas para esta conta. Tente novamente em ${bloqueio} minuto(s).` });
+    }
+
     // Find user by email
     const user = await storage.getUserByEmail(loginData.email);
     console.log("User found:", user ? { id: user.id, email: user.email, ativo: user.ativo } : "not found");
     
     if (!user) {
+      registrarFalhaLogin(loginData.email);
       console.log("LOGIN DENIED: User not found");
       return res.status(401).json({ message: "Usuário ou senha incorretos ou inexistentes!" });
     }
@@ -201,6 +225,7 @@ export async function login(req: Request, res: Response) {
     // Verify password first
     const isPasswordValid = await bcrypt.compare(loginData.senha, user.senha);
     if (!isPasswordValid) {
+      registrarFalhaLogin(loginData.email);
       console.log("LOGIN DENIED: Invalid password");
       return res.status(401).json({ message: "Usuário ou senha incorretos ou inexistentes!" });
     }
@@ -228,7 +253,12 @@ export async function login(req: Request, res: Response) {
     // Update last access
     await storage.updateUser(user.id, { ultimo_acesso: new Date() });
     
-    // Set session
+    registrarSucessoLogin(loginData.email);
+
+    // Nova sessão a cada login (evita fixação de sessão).
+    await new Promise<void>((resolve, reject) =>
+      req.session.regenerate((err) => (err ? reject(err) : resolve())),
+    );
     (req.session as any).userId = user.id;
     
     // Don't send back password
@@ -418,9 +448,9 @@ export async function updatePassword(req: Request, res: Response) {
     // Validate request body - aceitar ambos os formatos (camelCase e snake_case)
     const passwordSchema = z.object({
       senhaAtual: z.string().min(1, "Senha atual é obrigatória").optional(),
-      novaSenha: z.string().min(6, "A nova senha deve ter pelo menos 6 caracteres").optional(),
+      novaSenha: z.string().min(8, "A nova senha deve ter pelo menos 8 caracteres").optional(),
       senha_atual: z.string().min(1, "Senha atual é obrigatória").optional(),
-      nova_senha: z.string().min(6, "A nova senha deve ter pelo menos 6 caracteres").optional(),
+      nova_senha: z.string().min(8, "A nova senha deve ter pelo menos 8 caracteres").optional(),
     }).refine(
       (data) => (data.senhaAtual || data.senha_atual) && (data.novaSenha || data.nova_senha),
       { message: "Senha atual e nova senha são obrigatórias" }

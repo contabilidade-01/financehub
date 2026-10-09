@@ -16,7 +16,6 @@ import Loading from '@/components/shared/Loading';
 import { Reminder } from '@shared/schema';
 import { PlusIcon, CalendarIcon, Bell, CheckCircle, X } from 'lucide-react';
 import { motion } from 'framer-motion';
-import '../categories/category-modal.css';
 import { useTranslation } from '@/contexts/LocalizationContext';
 import { getMonthNames, getDayNames, getDayNamesLong } from '@/utils/localization';
 
@@ -179,7 +178,7 @@ export default function RemindersPage() {
 
   // Montar componente
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="space-y-6">
       {/* Header com estatísticas */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
@@ -188,17 +187,17 @@ export default function RemindersPage() {
         className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-6"
       >
         <div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-blue-400 bg-clip-text text-transparent">
+          <h1 className="text-3xl font-bold text-foreground">
             <CalendarIcon className="inline mr-2 h-8 w-8 text-primary" />
             {t('reminders.title', 'Lembretes')}
           </h1>
-          <p className="text-gray-400 mt-1">
+          <p className="text-muted-foreground mt-1">
             {t('reminders.subtitle', 'Gerencie seus compromissos e lembretes')}
           </p>
         </div>
         <div className="w-full md:w-auto flex flex-col gap-2 md:flex-row md:items-center md:justify-end">
           {reminders && (
-            <div className="flex gap-4 text-sm text-gray-400 w-full md:w-auto justify-between md:justify-end">
+            <div className="flex gap-4 text-sm text-muted-foreground w-full md:w-auto justify-between md:justify-end">
               <div className="flex items-center gap-1">
                 <Bell className="h-4 w-4" />
                 <span>{reminders.filter(r => !r.concluido).length} {t('reminders.pending', 'pending')}</span>
@@ -211,7 +210,7 @@ export default function RemindersPage() {
           )}
           <Button 
             onClick={() => setIsCreateModalOpen(true)}
-            className="w-full md:w-auto bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-600/90 text-white border-0"
+            className="w-full md:w-auto bg-primary text-white border-0"
           >
             <PlusIcon className="h-4 w-4 mr-2" />
             {t('reminders.new_reminder', 'Novo Lembrete')}
@@ -225,7 +224,7 @@ export default function RemindersPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3, delay: 0.1 }}
       >
-        <Card className="glass-card neon-border">
+        <Card className="border bg-card">
           <CardHeader className="pb-4">
             <CardTitle className="text-xl font-bold flex items-center gap-2">
               <CalendarIcon className="h-5 w-5 text-primary" />
@@ -237,7 +236,7 @@ export default function RemindersPage() {
               <Loading text={t('reminders.loading', 'Loading reminders...')} />
             ) : error ? (
               <div className="flex justify-center items-center h-96">
-                <p className="text-red-400">{t('reminders.error_loading', 'Error loading reminders. Please try again later.')}</p>
+                <p className="text-expense">{t('reminders.error_loading', 'Error loading reminders. Please try again later.')}</p>
               </div>
             ) : (
               <div className="h-[600px] calendar-container">

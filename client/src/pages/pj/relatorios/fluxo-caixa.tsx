@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useIsMobile } from "@/hooks/use-mobile";
 import { PeriodFilter } from "@/components/period-filter";
 import type { EmpresaFluxoCaixaMensal, EmpresaConta } from "@shared/schema";
+import { calcularIndicadores, grupoDreDaConta, somasVazias, ESTRUTURA_DRE, type GrupoDre } from "@shared/indicadores-financeiros";
 
 /**
  * Fluxo de Caixa Gerencial mensal (visão avançada/CFO): contas nas linhas,
@@ -61,11 +62,11 @@ export default function PjFluxoCaixa({ empresaId }: { empresaId: number }) {
 const model = useMemo(() => (data ? buildModel(data, empresaData) : null), [data, empresaData]);
 
   if (isLoading || !model) {
-    return <div className="p-4"><Skeleton className="h-[480px] w-full" /></div>;
+    return <div><Skeleton className="h-[480px] w-full" /></div>;
   }
   if (model.rows.length === 0) {
     return (
-      <div className="p-4">
+      <div>
         <Card><CardContent className="py-12 text-center text-muted-foreground">
           Sem lançamentos em {ano}. Registre transações PJ para ver o fluxo de caixa.
         </CardContent></Card>
@@ -74,10 +75,10 @@ const model = useMemo(() => (data ? buildModel(data, empresaData) : null), [data
   }
 
   return (
-    <div className="space-y-4 p-4">
+    <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="space-y-1">
-          <h1 className="text-2xl font-bold">Fluxo de Caixa Gerencial</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Fluxo de Caixa Gerencial</h1>
           <p className="text-sm text-muted-foreground">Contas nas linhas, meses nas colunas · linhas azuis são calculadas.</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -99,9 +100,9 @@ const model = useMemo(() => (data ? buildModel(data, empresaData) : null), [data
         {model.kpis.map((k) => (
           <Card key={k.label}>
             <CardContent className="p-3">
-              <div className="text-[10.5px] uppercase tracking-wide text-muted-foreground font-semibold">{k.label}</div>
-              <div className={`text-lg font-bold tabular-nums ${k.tone === "pos" ? "text-emerald-600" : k.tone === "neg" ? "text-rose-500" : ""}`}>{k.value}</div>
-              {k.hint && <div className="text-[10.5px] text-muted-foreground">{k.hint}</div>}
+              <div className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">{k.label}</div>
+              <div className={`text-lg font-bold tabular-nums ${k.tone === "pos" ? "text-income" : k.tone === "neg" ? "text-expense" : ""}`}>{k.value}</div>
+              {k.hint && <div className="text-xs text-muted-foreground">{k.hint}</div>}
             </CardContent>
           </Card>
         ))}
@@ -126,10 +127,10 @@ const model = useMemo(() => (data ? buildModel(data, empresaData) : null), [data
       ) : (
         <Card>
           <CardContent className="p-0 overflow-x-auto">
-            <table className="w-full text-[12.5px] border-collapse min-w-[900px]">
+            <table className="w-full text-sm border-collapse min-w-[900px]">
               <thead>
-                <tr className="bg-slate-800 text-slate-50">
-                  <th className="text-left sticky left-0 z-10 bg-slate-800 px-3 py-2 min-w-[250px]">Conta</th>
+                <tr className="bg-muted text-slate-50">
+                  <th className="text-left sticky left-0 z-10 bg-muted px-3 py-2 min-w-[250px]">Conta</th>
                   {MESES.map((m) => <th key={m} className="px-2.5 py-2 text-right font-semibold">{m}</th>)}
                   <th className="px-2.5 py-2 text-right font-semibold">Total</th>
                 </tr>
@@ -157,11 +158,11 @@ function totalDaLinha(r: Row): number {
 
 function ReportRow({ r }: { r: Row }) {
   const total = totalDaLinha(r);
-  const cell = (v: number, i: number) => <td key={i} className={`px-2.5 py-1.5 text-right tabular-nums ${v < 0 ? "text-rose-500" : ""}`}>{v === 0 ? "—" : money0(v)}</td>;
+  const cell = (v: number, i: number) => <td key={i} className={`px-2.5 py-1.5 text-right tabular-nums ${v < 0 ? "text-expense" : ""}`}>{v === 0 ? "—" : money0(v)}</td>;
   if (r.kind === "grupo") {
     return (
-      <tr className={`${r.receita ? "bg-emerald-600" : "bg-slate-700"} text-slate-50 font-bold`}>
-        <td className="text-left sticky left-0 z-10 px-3 py-1.5 uppercase text-[11px] tracking-wide" style={{ background: "inherit" }}>{r.label}</td>
+      <tr className={`${r.receita ? "bg-emerald-600" : "bg-muted"} text-slate-50 font-bold`}>
+        <td className="text-left sticky left-0 z-10 px-3 py-1.5 uppercase text-xs tracking-wide" style={{ background: "inherit" }}>{r.label}</td>
         {r.values.map(cell)}
         <td className="px-2.5 py-1.5 text-right tabular-nums">{money0(total)}</td>
       </tr>
@@ -170,7 +171,7 @@ function ReportRow({ r }: { r: Row }) {
   if (r.kind === "calc") {
     return (
       <tr className="bg-blue-50 dark:bg-blue-950/50 text-blue-800 dark:text-blue-200 font-extrabold border-y border-blue-200 dark:border-blue-800">
-        <td className="text-left sticky left-0 z-10 bg-blue-50 dark:bg-blue-950/50 px-3 py-1.5 uppercase text-[11px] tracking-wide">{r.label}</td>
+        <td className="text-left sticky left-0 z-10 bg-blue-50 dark:bg-blue-950/50 px-3 py-1.5 uppercase text-xs tracking-wide">{r.label}</td>
         {r.values.map((v, i) => <td key={i} className="px-2.5 py-1.5 text-right tabular-nums">{money0(v)}</td>)}
         <td className="px-2.5 py-1.5 text-right tabular-nums">{money0(total)}</td>
       </tr>
@@ -179,12 +180,12 @@ function ReportRow({ r }: { r: Row }) {
   if (r.kind === "saldohd") {
     return (
       <tr className="bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 font-bold">
-        <td className="text-left sticky left-0 z-10 bg-amber-50 dark:bg-amber-950/40 px-3 py-1.5 uppercase text-[11px] tracking-wide">{r.label}</td>
+        <td className="text-left sticky left-0 z-10 bg-amber-50 dark:bg-amber-950/40 px-3 py-1.5 uppercase text-xs tracking-wide">{r.label}</td>
         {/* Saldo negativo em vermelho: é a informação que o usuário procura. */}
         {r.values.map((v, i) => (
-          <td key={i} className={`px-2.5 py-1.5 text-right tabular-nums ${v < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{money0(v)}</td>
+          <td key={i} className={`px-2.5 py-1.5 text-right tabular-nums ${v < 0 ? "text-expense dark:text-rose-400" : ""}`}>{money0(v)}</td>
         ))}
-        <td className={`px-2.5 py-1.5 text-right tabular-nums ${total < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{money0(total)}</td>
+        <td className={`px-2.5 py-1.5 text-right tabular-nums ${total < 0 ? "text-expense dark:text-rose-400" : ""}`}>{money0(total)}</td>
       </tr>
     );
   }
@@ -192,7 +193,7 @@ function ReportRow({ r }: { r: Row }) {
     return (
       <tr className="border-b border-border/40">
         <td className="text-left sticky left-0 z-10 px-3 py-1.5 bg-background pl-6 text-muted-foreground">{r.label}</td>
-        {r.values.map((v, i) => <td key={i} className={`px-2.5 py-1.5 text-right tabular-nums ${v < 0 ? "text-rose-500" : ""}`}>{money0(v)}</td>)}
+        {r.values.map((v, i) => <td key={i} className={`px-2.5 py-1.5 text-right tabular-nums ${v < 0 ? "text-expense" : ""}`}>{money0(v)}</td>)}
         <td className="px-2.5 py-1.5 text-right tabular-nums font-medium">{money0(total)}</td>
       </tr>
     );
@@ -200,7 +201,7 @@ function ReportRow({ r }: { r: Row }) {
   return (
     <tr className="border-b border-border/40 hover:bg-muted/60">
       <td className="text-left sticky left-0 z-10 px-3 py-1.5 bg-background pl-8">
-        {r.code && <span className="font-mono text-muted-foreground mr-2 text-[11px]">{r.code}</span>}{r.label}
+        {r.code && <span className="font-mono text-muted-foreground mr-2 text-xs">{r.code}</span>}{r.label}
       </td>
       {r.values.map(cell)}
       <td className="px-2.5 py-1.5 text-right tabular-nums font-medium">{money0(total)}</td>
@@ -212,8 +213,8 @@ function MobileRow({ r, mes }: { r: Row; mes: number }) {
   const val = mes >= 12 ? totalDaLinha(r) : r.values[mes];
   if (r.kind === "grupo") {
     return (
-      <div className={`flex items-center justify-between px-3 py-2 ${r.receita ? "bg-emerald-600" : "bg-slate-700"} text-slate-50`}>
-        <span className="uppercase text-[11px] font-bold tracking-wide">{r.label}</span>
+      <div className={`flex items-center justify-between px-3 py-2 ${r.receita ? "bg-emerald-600" : "bg-muted"} text-slate-50`}>
+        <span className="uppercase text-xs font-bold tracking-wide">{r.label}</span>
         <span className="tabular-nums font-bold">{money0(val)}</span>
       </div>
     );
@@ -221,7 +222,7 @@ function MobileRow({ r, mes }: { r: Row; mes: number }) {
   if (r.kind === "calc") {
     return (
       <div className="flex items-center justify-between px-3 py-2 bg-blue-50 dark:bg-blue-950/50 text-blue-800 dark:text-blue-200">
-        <span className="uppercase text-[11px] font-extrabold tracking-wide">{r.label}</span>
+        <span className="uppercase text-xs font-extrabold tracking-wide">{r.label}</span>
         <span className="tabular-nums font-extrabold">{money0(val)}</span>
       </div>
     );
@@ -229,8 +230,8 @@ function MobileRow({ r, mes }: { r: Row; mes: number }) {
   if (r.kind === "saldohd") {
     return (
       <div className="flex items-center justify-between px-3 py-2 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300">
-        <span className="uppercase text-[11px] font-bold tracking-wide">{r.label}</span>
-        <span className={`tabular-nums font-bold ${val < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{money0(val)}</span>
+        <span className="uppercase text-xs font-bold tracking-wide">{r.label}</span>
+        <span className={`tabular-nums font-bold ${val < 0 ? "text-expense dark:text-rose-400" : ""}`}>{money0(val)}</span>
       </div>
     );
   }
@@ -238,34 +239,24 @@ function MobileRow({ r, mes }: { r: Row; mes: number }) {
     return (
       <div className="flex items-center justify-between px-3 py-2 pl-6">
         <span className="text-sm text-muted-foreground">{r.label}</span>
-        <span className={`tabular-nums font-medium ${val < 0 ? "text-rose-500" : ""}`}>{money0(val)}</span>
+        <span className={`tabular-nums font-medium ${val < 0 ? "text-expense" : ""}`}>{money0(val)}</span>
       </div>
     );
   }
   return (
     <div className="flex items-center justify-between px-3 py-2 pl-6">
       <span className="text-sm text-muted-foreground">{r.code && <span className="font-mono text-xs mr-1.5">{r.code}</span>}{r.label}</span>
-      <span className={`tabular-nums font-semibold ${val < 0 ? "text-rose-500" : ""}`}>{val === 0 ? "—" : money0(val)}</span>
+      <span className={`tabular-nums font-semibold ${val < 0 ? "text-expense" : ""}`}>{val === 0 ? "—" : money0(val)}</span>
     </div>
   );
 }
 
-// Deriva o grupo gerencial quando a conta não tem grupo_gerencial preenchido.
-function derivarGrupo(c: EmpresaConta): string {
-  const g = (c.grupo_gerencial || "").toLowerCase();
-  if (g) return g;
-  if (c.tipo === "Receita") return "receita";
-  const cl = (c.classificacao || "").toUpperCase();
-  if (cl === "VARIAVEL") return "custo_variavel";
-  if (cl === "FIXA") return "despesa_fixa";
-  return "outras";
-}
-const ehCmv = (c: EmpresaConta) => (c as any).is_cmv === true || /cmv|mercadoria vendida/i.test(c.nome || "");
+// Grupos de despesa entram negativos na tabela (dinheiro que saiu).
+const GRUPOS_ENTRADA: GrupoDre[] = ["receita", "financeiro_receita", "nao_operacional_entrada"];
 
 function buildModel(data: EmpresaFluxoCaixaMensal, empresaData: any) {
   const segmento = empresaData?.segmento || "servico";
-  const custoLabel = segmento.includes("comercio") ? "CMV — Custo da Mercadoria Vendida" : "CSV — Custo dos Serviços Vendidos";
-  const custoSigla = segmento.includes("comercio") ? "CMV" : "CSV";
+  const custoLabel = segmento.includes("comercio") ? "CMV — Custo da Mercadoria Vendida" : "CSP — Custo dos Serviços Prestados";
   const rows: Row[] = [];
   const contas = data.contas || [];
   if (contas.length === 0) return { rows, kpis: [] as any[] };
@@ -276,50 +267,30 @@ function buildModel(data: EmpresaFluxoCaixaMensal, empresaData: any) {
     porConta.get(a.conta_id)![a.mes - 1] = a.total;
   }
   const val = (c: EmpresaConta) => porConta.get(c.id) ?? zeros();
-  const grupo = (nome: string) => contas.filter((c) => derivarGrupo(c) === nome);
-
-  const receitaContas = grupo("receita");
-  const cmvContas = contas.filter((c) => derivarGrupo(c) === "custo_variavel" && ehCmv(c));
-  const varContas = contas.filter((c) => derivarGrupo(c) === "custo_variavel" && !ehCmv(c));
-  const fixaContas = grupo("despesa_fixa");
-  const investContas = grupo("investimento");
-  const naoOpContas = grupo("nao_operacional");
-  const outraContas = grupo("outras");
-
+  // Mesma regra da DRE gerencial e do dashboard (shared/indicadores-financeiros).
+  const doGrupo = (gs: GrupoDre[]) => contas.filter((c) => gs.includes(grupoDreDaConta(c as any)));
   const totalOf = (cs: EmpresaConta[]) => addArr(...cs.map(val), zeros());
-  const receita = totalOf(receitaContas);
-  const cmv = totalOf(cmvContas);          // negativo
-  const variaveis = totalOf(varContas);    // negativo
-  const fixas = totalOf(fixaContas);
-  const invest = totalOf(investContas);
-  const naoOp = totalOf(naoOpContas);
-  const outras = totalOf(outraContas);
 
-  const margem = addArr(receita, cmv, variaveis);
-  const lucroAntesInvest = addArr(margem, fixas, outras);
-  const lucroOperacional = addArr(lucroAntesInvest, invest);
-  const resultado = addArr(lucroOperacional, naoOp);
-
-  const temInvest = investContas.length > 0;
-  const temNaoOp = naoOpContas.length > 0;
-  const temCmv = cmvContas.length > 0;
+  // Somas positivas por grupo e mês → indicadores do mês.
+  const somasMes = Array.from({ length: 12 }, () => somasVazias());
+  for (const c of contas) {
+    const g = grupoDreDaConta(c as any);
+    val(c).forEach((v, m) => { somasMes[m][g] += GRUPOS_ENTRADA.includes(g) ? v : -v; });
+  }
+  const indMes = somasMes.map((s) => calcularIndicadores(s));
 
   const onlyMov = (cs: EmpresaConta[]) => cs.filter((c) => sumArr(val(c)) !== 0);
-  const pushGrupo = (label: string, total: number[], cs: EmpresaConta[], receitaFlag = false) => {
-    rows.push({ kind: "grupo", label, values: total, receita: receitaFlag });
-    for (const c of onlyMov(cs)) rows.push({ kind: "conta", label: c.nome, code: c.codigo, values: val(c) });
-  };
-
-  pushGrupo("Receita Bruta", receita, receitaContas, true);
-  if (temCmv) pushGrupo(`(–) ${custoLabel}`, cmv, cmvContas);
-  pushGrupo("(–) Custos / Despesas Variáveis", variaveis, varContas);
-  rows.push({ kind: "calc", label: "= Margem de Contribuição", values: margem });
-  pushGrupo("(–) Despesas Fixas", fixas, fixaContas);
-  if (outraContas.length) pushGrupo("(–) Outras Despesas", outras, outraContas);
-  if (temInvest || temNaoOp) rows.push({ kind: "calc", label: "= Lucro Operacional antes dos Investimentos", values: lucroAntesInvest });
-  if (temInvest) { pushGrupo("(–) Investimentos", invest, investContas); rows.push({ kind: "calc", label: "= Lucro Operacional", values: lucroOperacional }); }
-  if (temNaoOp) { pushGrupo("Entradas e Saídas Não Operacionais", naoOp, naoOpContas); }
-  rows.push({ kind: "calc", label: temNaoOp ? "= Resultado Líquido" : "= Lucro / Prejuízo", values: resultado });
+  for (const e of ESTRUTURA_DRE) {
+    if (e.tipo === "total") {
+      rows.push({ kind: "calc", label: e.titulo.replace("(=)", "="), values: indMes.map((i) => Number(i[e.chave] ?? 0)) });
+      continue;
+    }
+    const cs = onlyMov(doGrupo(e.grupos));
+    if (!cs.length && e.grupos[0] !== "receita") continue;
+    const titulo = e.grupos[0] === "cmv" ? `(–) ${custoLabel}` : e.titulo.replace("(−)", "(–)");
+    rows.push({ kind: "grupo", label: titulo, values: totalOf(cs), receita: e.grupos[0] === "receita" });
+    for (const c of cs) rows.push({ kind: "conta", label: c.nome, code: c.codigo, values: val(c) });
+  }
 
   // ---- Saldo do mês: o que sobra (ou falta) e passa para o mês seguinte ----
   // Vale mesmo sem conta bancária cadastrada — antes o saldo só aparecia dentro
@@ -372,21 +343,20 @@ function buildModel(data: EmpresaFluxoCaixaMensal, empresaData: any) {
     contasBanc.forEach((cb) => rows.push({ kind: "saldo", label: cb.banco, values: fimByConta.get(cb.id)!, totalCol: "fechamento" }));
   }
 
-  // KPIs anuais
-  const R = sumArr(receita), CMV = Math.abs(sumArr(cmv)), MC = sumArr(margem), RES = sumArr(resultado);
-  const DF = Math.abs(sumArr(fixas));
-  const idxMC = R ? MC / R : 0;
-  const pe = idxMC > 0 ? DF / idxMC : 0;
-  const pct = (n: number, d: number) => (d > 0 ? (n / d * 100).toFixed(1) + "%" : "—");
+  // KPIs anuais — calcularIndicadores é o mesmo usado na DRE e no dashboard.
+  const somasAno = somasVazias();
+  for (const sm of somasMes) for (const g of Object.keys(sm) as GrupoDre[]) somasAno[g] += sm[g];
+  const ind = calcularIndicadores(somasAno);
+  const pct = (n: number | null) => (n === null ? "—" : `${n.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`);
   const kpis: { label: string; value: string; tone?: "pos" | "neg"; hint?: string }[] = [];
-  kpis.push({ label: "Faturamento", value: money0(R), hint: "ano" });
-  if (temCmv) {
-    kpis.push({ label: "Margem Bruta", value: R ? pct(R - Math.abs(sumArr(cmv)), R) : "—", tone: "pos", hint: `(Rec−${custoSigla})/Rec` });
-    kpis.push({ label: "Markup", value: Math.abs(sumArr(cmv)) ? (((R - Math.abs(sumArr(cmv))) / Math.abs(sumArr(cmv))) * 100).toFixed(0) + "%" : "—", hint: "sobre o custo" });
+  kpis.push({ label: "Faturamento", value: money0(ind.receita_bruta), hint: "ano" });
+  if (ind.cmv > 0) {
+    kpis.push({ label: "Margem Bruta", value: pct(ind.margem_bruta_pct), tone: "pos", hint: "lucro bruto ÷ receita líquida" });
+    kpis.push({ label: "Markup", value: pct(ind.markup_pct), hint: ind.markup_multiplicador ? `${ind.markup_multiplicador.toLocaleString("pt-BR")}× o custo` : "sobre o custo" });
   }
-  kpis.push({ label: "Margem Contrib.", value: pct(MC, R), tone: "pos", hint: money0(MC) });
-  kpis.push({ label: "Ponto Equilíbrio", value: money0(pe), hint: "p/ zerar" });
-  kpis.push({ label: temNaoOp ? "Resultado Líq." : "Lucro / Prejuízo", value: money0(RES), tone: RES >= 0 ? "pos" : "neg", hint: pct(RES, R) });
+  kpis.push({ label: "Margem Contrib.", value: pct(ind.margem_contribuicao_pct), tone: "pos", hint: money0(ind.margem_contribuicao) });
+  kpis.push({ label: "Ponto Equilíbrio", value: ind.ponto_equilibrio === null ? "—" : money0(ind.ponto_equilibrio), hint: ind.ponto_equilibrio_atingido_pct ? `${pct(ind.ponto_equilibrio_atingido_pct)} atingido` : "receita p/ zerar" });
+  kpis.push({ label: "Lucro Líquido", value: money0(ind.lucro_liquido), tone: ind.lucro_liquido >= 0 ? "pos" : "neg", hint: pct(ind.margem_liquida_pct) });
   const saldoFinalAno = saldoFim[11];
   kpis.push({
     label: "Saldo Final",

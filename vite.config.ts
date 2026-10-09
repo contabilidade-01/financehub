@@ -31,6 +31,11 @@ export default defineConfig({
   build: {
     outDir: path.resolve(__dirname, "dist/public"),
     emptyOutDir: true,
+    // O code-splitting por rota (React.lazy em App.tsx) já reduz o bundle inicial.
+    // Não usamos manualChunks: agrupar vendors manualmente quebrava a ordem de
+    // inicialização (ex.: recharts/d3 → "Cannot access 'S' before initialization")
+    // e deixava a tela em branco. O chunking padrão do Vite é seguro.
+    chunkSizeWarningLimit: 1200,
   },
   server: {
     port: 3000,

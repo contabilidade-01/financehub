@@ -19,6 +19,8 @@ export const users = pgTable("usuarios", {
   senha: varchar("senha", { length: 255 }).notNull(),
   tipo_usuario: varchar("tipo_usuario", { length: 50 }).notNull().default("normal"),
   tipo_pessoa: varchar("tipo_pessoa", { length: 20 }).notNull().default("fisica"), // 'fisica' (PF) | 'juridica' (PJ)
+  // Porte da PJ: 'mei' | 'me' (NULL em PF; PJ antigo sem valor = MEI). Ver shared/modalidade.ts
+  porte_pj: varchar("porte_pj", { length: 10 }),
   ativo: boolean("ativo").notNull().default(true),
   data_cadastro: timestamp("data_cadastro", { withTimezone: true }).default(sql`(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')`),
   ultimo_acesso: timestamp("ultimo_acesso", { withTimezone: true }),
@@ -28,6 +30,9 @@ export const users = pgTable("usuarios", {
   data_expiracao_assinatura: timestamp("data_expiracao_assinatura", { withTimezone: true }),
   status_assinatura: varchar("status_assinatura", { length: 50 }).default("sem_assinatura"),
   ciclo_assinatura: varchar("ciclo_assinatura", { length: 12 }), // mensal | trimestral | anual | null (definido pelo admin)
+  // Plano forçado (override manual pelo admin). Quando preenchido, o checkout/renovação
+  // usa este plano em vez do padrão do tipo — ex.: PJ "com consultoria" (R$ 200).
+  plano_forcado_id: integer("plano_forcado_id"),
   // Novo campo para otimização de queries (denormalização estratégica)
   subscriptionActive: boolean("subscription_active").notNull().default(false)
 });
@@ -117,13 +122,20 @@ export const transactions = pgTable("transacoes", {
   fatura_id: integer("fatura_id"),
   competencia: varchar("competencia", { length: 7 }),
   movimenta_caixa: boolean("movimenta_caixa").notNull().default(true),
+  // Chave do extrato bancário (FITID/hash) — dedup de importação.
+  fitid: varchar("fitid", { length: 120 }),
+  // Origem do lançamento — espelha empresas_transacoes.origem: 'manual' | 'whatsapp' | 'importacao'.
+  // Usado, entre outras coisas, pelo checklist de onboarding para detectar o 1º lançamento via WhatsApp.
+  origem: varchar("origem", { length: 20 }).notNull().default("manual"),
 });
 
 // API Tokens table
 export const apiTokens = pgTable("api_tokens", {
   id: serial("id").primaryKey(),
   usuario_id: integer("usuario_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  // Guarda "sha256:<hex>" (nunca o token em texto puro). Ver server/utils/api-token-hash.ts
   token: varchar("token", { length: 255 }).notNull().unique(),
+  token_hint: varchar("token_hint", { length: 40 }), // exibição: "fin_ab12cd...9f3e"
   nome: varchar("nome", { length: 100 }).notNull(),
   descricao: text("descricao"),
   data_criacao: timestamp("data_criacao", { withTimezone: true }).default(sql`(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')`),
@@ -459,6 +471,8 @@ export const subscriptionPlans = pgTable("subscription_plans", {
   // A quem o plano se destina: 'fisica' (PF) | 'juridica' (PJ) | NULL = serve aos dois.
   // Permite preço por tipo; NULL preserva o comportamento de quem já tem plano único.
   tipoPessoa: varchar("tipo_pessoa", { length: 20 }),
+  // Porte (só PJ): 'mei' | 'me' | NULL = qualquer porte. Ex.: plano PJ ME com preço próprio.
+  portePj: varchar("porte_pj", { length: 10 }),
   features: text("features").notNull(), // JSON string com array de features
   maxTransactions: integer("max_transactions").default(0), // 0 = ilimitado
   maxWallets: integer("max_wallets").default(0), // 0 = ilimitado
@@ -772,6 +786,8 @@ export const empresasContas = pgTable("empresas_contas", {
   grupo_gerencial: varchar("grupo_gerencial", { length: 30 }),
   is_cmv: boolean("is_cmv").notNull().default(false), // custo da mercadoria vendida → habilita Margem Bruta/Markup
   parent_id: integer("parent_id"),
+  // Grupo sintético: só soma as filhas, nunca recebe lançamento.
+  sintetica: boolean("sintetica").notNull().default(false),
   icone: varchar("icone", { length: 100 }),
   cor: varchar("cor", { length: 50 }),
   descricao: text("descricao"),
@@ -814,6 +830,12 @@ export const empresasTransacoes = pgTable("empresas_transacoes", {
   itens_agrupados: integer("itens_agrupados"),
   // Legado: formas PIX/débito… O meio atual é conta_bancaria_id | cartao_id.
   empresa_forma_pagamento_id: integer("empresa_forma_pagamento_id"),
+  // Conciliação bancária (colunas criadas no auto-migrate; agora no Drizzle).
+  conciliado: boolean("conciliado").notNull().default(false),
+  fitid: varchar("fitid", { length: 120 }),
+  // ERP (PJ ME): cliente/fornecedor e centro de custo do lançamento.
+  contato_id: integer("contato_id"),
+  centro_custo_id: integer("centro_custo_id"),
 });
 
 // Formas de pagamento PJ (não-cartão). Cartões ficam em empresas_cartoes.
@@ -863,6 +885,7 @@ export const insertEmpresaContaSchema = z.object({
   grupo_gerencial: z.string().optional().nullable(),
   is_cmv: z.boolean().optional().default(false),
   parent_id: z.number().int().optional().nullable(),
+  sintetica: z.boolean().optional().default(false),
   icone: z.string().optional().nullable(),
   cor: z.string().optional().nullable(),
   descricao: z.string().optional().nullable(),
@@ -1083,6 +1106,23 @@ export const whatsappOnboardingStates = pgTable("whatsapp_onboarding_states", {
 export type WhatsAppOnboardingState = typeof whatsappOnboardingStates.$inferSelect;
 export type InsertWhatsAppOnboardingState = typeof whatsappOnboardingStates.$inferInsert;
 
+// Sequência de mensagens de boas-vindas pelo WhatsApp (dias 0/1/3) — SEPARADA
+// do whatsappOnboardingStates acima (que é só o cadastro de empresa PJ via
+// WhatsApp). Aqui é o pipeline de mensagens proativas de "como usar o
+// produto", igual em espírito ao proactive-alerts.job.ts.
+export const onboardingWhatsappSequence = pgTable("onboarding_whatsapp_sequence", {
+  id: serial("id").primaryKey(),
+  usuarioId: integer("usuario_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  // 'dia0' | 'dia1' | 'dia3'
+  etapa: varchar("etapa", { length: 20 }).notNull(),
+  enviadoEm: timestamp("enviado_em", { withTimezone: true }).default(sql`(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')`),
+}, (table) => [
+  unique().on(table.usuarioId, table.etapa),
+]);
+
+export type OnboardingWhatsappSequence = typeof onboardingWhatsappSequence.$inferSelect;
+export type InsertOnboardingWhatsappSequence = typeof onboardingWhatsappSequence.$inferInsert;
+
 export const metasFinanceiras = pgTable("metas_financeiras", {
   id: serial("id").primaryKey(),
   usuario_id: integer("usuario_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
@@ -1147,3 +1187,30 @@ export const auditoriaAdmin = pgTable("auditoria_admin", {
 
 export type AuditoriaAdmin = typeof auditoriaAdmin.$inferSelect;
 export type InsertAuditoriaAdmin = typeof auditoriaAdmin.$inferInsert;
+
+// Mensalidades — recorrências mensais (assinaturas/contas fixas) que o job gera
+// todo mês como boleto (conta a pagar) ou lançamento na fatura do cartão.
+// empresa_id NULL = PF (usa carteira_id); empresa_id preenchido = PJ.
+export const mensalidades = pgTable("mensalidades", {
+  id: serial("id").primaryKey(),
+  usuario_id: integer("usuario_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  empresa_id: integer("empresa_id").references(() => empresas.id, { onDelete: 'cascade' }),
+  carteira_id: integer("carteira_id").references(() => wallets.id),
+  descricao: varchar("descricao", { length: 255 }).notNull(),
+  valor: decimal("valor", { precision: 12, scale: 2 }).notNull(),
+  dia_vencimento: integer("dia_vencimento").notNull(), // 1–31 (limitado ao último dia do mês)
+  tipo_meio: varchar("tipo_meio", { length: 10 }).notNull(), // 'boleto' | 'cartao'
+  categoria_id: integer("categoria_id"), // PF: categorias.id | PJ: empresas_contas.id (sem FK — interpretado por contexto)
+  conta_bancaria_id: integer("conta_bancaria_id"), // boleto: conta p/ baixa (opcional)
+  forma_pagamento_id: integer("forma_pagamento_id"), // cartão PF (formas_pagamento.id)
+  cartao_id: integer("cartao_id"), // cartão PJ (empresas_cartoes.id)
+  ativo: boolean("ativo").notNull().default(true),
+  data_inicio: date("data_inicio"),
+  data_fim: date("data_fim"),
+  ultima_competencia_gerada: varchar("ultima_competencia_gerada", { length: 7 }), // 'YYYY-MM' idempotência
+  origem: varchar("origem", { length: 20 }).notNull().default('app'),
+  data_criacao: timestamp("data_criacao", { withTimezone: true }).default(sql`(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')`),
+});
+
+export type Mensalidade = typeof mensalidades.$inferSelect;
+export type InsertMensalidade = typeof mensalidades.$inferInsert;

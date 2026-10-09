@@ -15,6 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { PaymentStatusBadge } from '@/components/billing/PaymentStatusBadge';
 import { motion } from 'framer-motion';
+import { PrecoPjMeCard, descreverAsaasSync } from '@/components/admin/PrecoPjMeCard';
 
 interface SubscriptionPlan {
   id: number;
@@ -23,6 +24,8 @@ interface SubscriptionPlan {
   priceMonthly: string;
   /** 'fisica' | 'juridica' | null (null = vale para os dois) */
   tipoPessoa?: string | null;
+  /** Só PJ: 'mei' | 'me' | null (qualquer porte) */
+  portePj?: string | null;
   features: string;
   active: boolean;
 }
@@ -30,8 +33,15 @@ interface SubscriptionPlan {
 // No formulário o "sem tipo" precisa de um valor (Select não aceita ''),
 // então 'ambos' representa o NULL do banco.
 const TIPO_AMBOS = 'ambos';
-const rotuloTipo = (t?: string | null) =>
-  t === 'fisica' ? 'Pessoa Física' : t === 'juridica' ? 'Pessoa Jurídica' : 'PF e PJ';
+// Destino no formulário: 'fisica' | 'juridica' | 'juridica:mei' | 'juridica:me' | 'ambos'
+const destinoDoPlano = (p: { tipoPessoa?: string | null; portePj?: string | null }) =>
+  !p.tipoPessoa ? TIPO_AMBOS : p.tipoPessoa === 'juridica' && p.portePj ? `juridica:${p.portePj}` : p.tipoPessoa;
+const rotuloTipo = (p: { tipoPessoa?: string | null; portePj?: string | null }) =>
+  p.tipoPessoa === 'fisica'
+    ? 'Pessoa Física'
+    : p.tipoPessoa === 'juridica'
+      ? p.portePj === 'me' ? 'PJ ME' : p.portePj === 'mei' ? 'PJ MEI' : 'PJ (qualquer porte)'
+      : 'PF e PJ';
 
 interface UserSubscription {
   id: number;
@@ -85,10 +95,14 @@ export default function AdminBillingDashboard() {
   });
 
   // 'ambos' vira NULL: é assim que o servidor entende "serve para PF e PJ".
-  const payloadPlano = () => ({
-    ...planForm,
-    tipoPessoa: planForm.tipoPessoa === TIPO_AMBOS ? null : planForm.tipoPessoa,
-  });
+  const payloadPlano = () => {
+    const [tipo, porte] = planForm.tipoPessoa.split(':');
+    return {
+      ...planForm,
+      tipoPessoa: tipo === TIPO_AMBOS ? null : tipo,
+      portePj: tipo === 'juridica' && porte ? porte : null,
+    };
+  };
 
   // Fetch metrics (real-time updates via WebSocket, no polling needed)
   const { data: metrics, isLoading: metricsLoading } = useQuery<BillingMetrics>({
@@ -183,7 +197,8 @@ export default function AdminBillingDashboard() {
         throw new Error(error.error || 'Failed to update plan');
       }
 
-      toast({ title: 'Plano atualizado com sucesso!' });
+      const salvo = await response.json().catch(() => null);
+      toast({ title: 'Plano atualizado com sucesso!', description: descreverAsaasSync(salvo?.asaasSync ?? null) });
       setShowEditPlan(false);
       setSelectedPlan(null);
       refetchPlans();
@@ -274,7 +289,7 @@ export default function AdminBillingDashboard() {
       planCode: plan.planCode,
       name: plan.name,
       priceMonthly: plan.priceMonthly,
-      tipoPessoa: plan.tipoPessoa || TIPO_AMBOS,
+      tipoPessoa: destinoDoPlano(plan),
       features: plan.features,
       active: plan.active
     });
@@ -388,6 +403,8 @@ export default function AdminBillingDashboard() {
       </Card>
 
       {/* Subscription Plans */}
+      <PrecoPjMeCard plans={plans} onSaved={() => refetchPlans()} />
+
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -446,7 +463,9 @@ export default function AdminBillingDashboard() {
                       <SelectTrigger id="tipoPessoa"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="fisica">Pessoa Física (PF)</SelectItem>
-                        <SelectItem value="juridica">Pessoa Jurídica (PJ)</SelectItem>
+                        <SelectItem value="juridica:mei">PJ MEI</SelectItem>
+                        <SelectItem value="juridica:me">PJ ME (ERP)</SelectItem>
+                        <SelectItem value="juridica">PJ (qualquer porte)</SelectItem>
                         <SelectItem value={TIPO_AMBOS}>PF e PJ (preço único)</SelectItem>
                       </SelectContent>
                     </Select>
@@ -493,7 +512,7 @@ export default function AdminBillingDashboard() {
                   <TableCell className="font-mono text-sm">{plan.planCode}</TableCell>
                   <TableCell>{plan.name}</TableCell>
                   <TableCell>R$ {parseFloat(plan.priceMonthly).toFixed(2)}/mês</TableCell>
-                  <TableCell className="text-sm">{rotuloTipo(plan.tipoPessoa)}</TableCell>
+                  <TableCell className="text-sm">{rotuloTipo(plan)}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <Switch
@@ -591,7 +610,9 @@ export default function AdminBillingDashboard() {
                 <SelectTrigger id="edit-tipoPessoa"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="fisica">Pessoa Física (PF)</SelectItem>
-                  <SelectItem value="juridica">Pessoa Jurídica (PJ)</SelectItem>
+                  <SelectItem value="juridica:mei">PJ MEI</SelectItem>
+                  <SelectItem value="juridica:me">PJ ME (ERP)</SelectItem>
+                  <SelectItem value="juridica">PJ (qualquer porte)</SelectItem>
                   <SelectItem value={TIPO_AMBOS}>PF e PJ (preço único)</SelectItem>
                 </SelectContent>
               </Select>

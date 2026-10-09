@@ -4,6 +4,9 @@ import * as contas from "../services/conta-bancaria.service";
 import { db } from "../db";
 import { sql } from "drizzle-orm";
 import { storage } from "../storage";
+import { idsLimpos } from "../services/mover-meio.service";
+import { chaveGrupoParcela, expandirIdsComParcelasPf } from "../services/parcelas-grupo.service";
+import { competenciaDaCompra, competenciaMaisMeses } from "../services/fatura-core";
 
 /**
  * Contas, cartões e faturas do PF.
@@ -26,6 +29,11 @@ export async function lancamentosConta(req: Request, res: Response) {
     const contaId = Number(req.params.id);
     const de = (req.query.de as string) || undefined;
     const ate = (req.query.ate as string) || undefined;
+    // Segurança: só contas PF do próprio usuário (evita ler saldo de terceiros).
+    const minhas = await contas.listarContasPf(req.user!.id);
+    if (!minhas.some((c: any) => Number(c.id) === contaId)) {
+      return res.status(404).json({ error: "Conta não encontrada" });
+    }
     const lista = await contas.listarLancamentosContaPf(req.user!.id, contaId, de, ate);
     const mov = await contas.movimentoContaPeriodo(contaId, de, ate);
     return res.json({
@@ -71,6 +79,26 @@ export async function excluirConta(req: Request, res: Response) {
 }
 
 // ── Cartões (formas_pagamento com limite) ─────────────────────────
+
+/** GET /api/cadastros-pendentes — contas e cartões criados pela importação que o cliente ainda não completou. */
+export async function cadastrosPendentes(req: Request, res: Response) {
+  try {
+    const userId = req.user!.id;
+    const cartoes = await db.execute(sql`
+      SELECT id, nome, dia_fechamento, dia_vencimento, limite, ultimos_digitos FROM formas_pagamento
+      WHERE usuario_id = ${userId} AND COALESCE(global, false) = false AND ativo = true AND cadastro_pendente = true
+      ORDER BY nome
+    `);
+    const contasPend = await db.execute(sql`
+      SELECT id, nome, banco, numero, saldo_inicial FROM contas_bancarias
+      WHERE usuario_id = ${userId} AND empresa_id IS NULL AND ativo = true AND cadastro_pendente = true
+      ORDER BY nome
+    `);
+    return res.json({ cartoes, contas: contasPend, total: (cartoes as any[]).length + (contasPend as any[]).length });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || "Erro ao listar cadastros pendentes" });
+  }
+}
 
 export async function listarCartoes(req: Request, res: Response) {
   try {
@@ -159,10 +187,17 @@ export async function atualizarCartao(req: Request, res: Response) {
           limite = ${limite},
           bandeira = ${b.banco !== undefined || b.bandeira !== undefined ? (b.banco || b.bandeira) : cartao.bandeira},
           cor = ${b.cor !== undefined ? b.cor : cartao.cor},
-          ativo = ${b.ativo != null ? !!b.ativo : cartao.ativo}
+          ativo = ${b.ativo != null ? !!b.ativo : cartao.ativo},
+          ultimos_digitos = ${b.ultimos_digitos !== undefined ? (String(b.ultimos_digitos || "").replace(/\D/g, "").slice(-4) || null) : cartao.ultimos_digitos},
+          cadastro_pendente = ${b.dia_fechamento != null && b.dia_vencimento != null ? false : !!cartao.cadastro_pendente}
       WHERE id = ${cartaoId} AND usuario_id = ${req.user!.id}
       RETURNING *
     `);
+    // Dias mudaram (ex.: cartão criado pela importação com dias provisórios): refaz as faturas.
+    if (Number(cartao.dia_fechamento) !== diaFech || Number(cartao.dia_vencimento) !== diaVenc) {
+      const wallet = await storage.getWalletByUserId(req.user!.id);
+      if (wallet) await faturaPf.recalcularFaturasCartaoPf(req.user!.id, wallet.id, (r as any[])[0]);
+    }
     return res.json((r as any[])[0]);
   } catch (e: any) {
     return res.status(400).json({ error: e?.message || "Erro ao atualizar cartão" });
@@ -320,5 +355,231 @@ export async function listarVencimentos(req: Request, res: Response) {
     return res.json({ faturas, boletos });
   } catch (e: any) {
     return res.status(500).json({ error: e?.message || "Erro ao listar vencimentos" });
+  }
+}
+
+/**
+ * Resumo de faturas do PF — compacto e pronto para a IA (WhatsApp) responder
+ * "qual o saldo/valor da minha fatura". Autenticável por apikey (MasterToken).
+ * GET /api/cartoes/resumo
+ */
+export async function resumoFaturas(req: Request, res: Response) {
+  try {
+    const userId = req.user!.id;
+    const cartoes = await faturaPf.listarCartoesPf(userId);
+    let totalGeral = 0;
+    const out = [];
+    for (const c of cartoes as any[]) {
+      const saldo = await faturaPf.getSaldoCartaoPf(c.id);
+      const faturas = await faturaPf.listarFaturasPf(c.id);
+      const abertas = (faturas as any[])
+        .filter((f) => f.status !== "paga")
+        .map((f) => ({
+          competencia: f.competencia,
+          total: Math.round((Number(f.total) || 0) * 100) / 100,
+          vencimento: f.data_vencimento,
+          status: f.status,
+        }))
+        .sort((a, b) => String(a.competencia).localeCompare(String(b.competencia)));
+      const totalAberto = abertas.reduce((s, f) => s + f.total, 0);
+      totalGeral += totalAberto;
+      const limiteDisponivel = saldo.sem_limite
+        ? null
+        : Math.round(((Number(saldo.limite) || 0) - totalAberto) * 100) / 100;
+      out.push({
+        cartao: c.nome,
+        limite: saldo.limite,
+        sem_limite: saldo.sem_limite,
+        total_em_aberto: Math.round(totalAberto * 100) / 100,
+        limite_disponivel: limiteDisponivel,
+        proxima_fatura: abertas[0] || null,
+        faturas_abertas: abertas,
+      });
+    }
+    return res.json({
+      cartoes: out,
+      total_geral_em_aberto: Math.round(totalGeral * 100) / 100,
+    });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || "Erro ao gerar resumo de faturas" });
+  }
+}
+
+/**
+ * Preview: quais lançamentos seriam incluídos (todas as parcelas da compra).
+ * POST /api/faturas/expandir-parcelas  { transacao_ids: number[] }
+ */
+export async function expandirParcelasFatura(req: Request, res: Response) {
+  try {
+    const userId = req.user!.id;
+    const ids = idsLimpos(req.body?.transacao_ids ?? req.body?.transacao_id);
+    if (!ids.length) return res.status(400).json({ error: "Informe transacao_ids." });
+    const wallet = await storage.getWalletByUserId(userId);
+    if (!wallet) return res.status(404).json({ error: "Carteira não encontrada" });
+    const exp = await expandirIdsComParcelasPf(wallet.id, ids);
+    return res.json({
+      ids_originais: ids,
+      ids: exp.ids,
+      extra: Math.max(0, exp.ids.length - ids.length),
+      lancamentos: exp.linhas.map((l) => ({
+        id: l.id,
+        descricao: l.descricao,
+        parcela: l.parcela_num && l.parcela_total ? `${l.parcela_num}/${l.parcela_total}` : null,
+      })),
+    });
+  } catch (e: any) {
+    return res.status(400).json({ error: e?.message || "Erro ao expandir parcelas" });
+  }
+}
+
+/**
+ * Move um ou vários lançamentos de cartão para outro CARTÃO.
+ * POST /api/faturas/mover-lancamento
+ * { transacao_id | transacao_ids, cartao_id, competencia?, todas_parcelas? }
+ *
+ * competencia (YYYY-MM): vale para o item escolhido; as outras parcelas da mesma
+ * compra andam mês a mês. Se omitida, recalcula pela data + fechamento do cartão.
+ * todas_parcelas (default true): inclui irmãs da compra (grupo ou texto 4/7).
+ */
+export async function moverLancamentoFatura(req: Request, res: Response) {
+  try {
+    const userId = req.user!.id;
+    const idsIn = idsLimpos(req.body?.transacao_ids ?? req.body?.transacao_id);
+    const cartaoId = Number(req.body?.cartao_id);
+    const competenciaIn = String(req.body?.competencia || "").slice(0, 7);
+    const temComp = /^\d{4}-\d{2}$/.test(competenciaIn);
+    const todasParcelas = req.body?.todas_parcelas !== false;
+    if (!idsIn.length || !cartaoId) {
+      return res.status(400).json({ error: "Informe transacao_id(s) e cartao_id." });
+    }
+    const cartao = await faturaPf.cartaoPfDoUsuario(cartaoId, userId);
+    if (!cartao || Number((cartao as any).usuario_id) !== userId) {
+      return res.status(404).json({ error: "Cartão não encontrado" });
+    }
+    const wallet = await storage.getWalletByUserId(userId);
+    if (!wallet) return res.status(404).json({ error: "Carteira não encontrada" });
+
+    const exp = await expandirIdsComParcelasPf(wallet.id, idsIn);
+    const linhasBase = todasParcelas ? exp.linhas : exp.linhas.filter((l) => idsIn.includes(l.id));
+    if (!linhasBase.length) {
+      return res.status(404).json({ error: "Lançamento não encontrado" });
+    }
+
+    const faturaIds = linhasBase.map((l) => l.fatura_id).filter((x): x is number => !!x);
+    let ignoradosPagos = 0;
+    const pagas = new Set<number>();
+    if (faturaIds.length) {
+      const listaF = sql.join(faturaIds.map((i) => sql`${i}`), sql`, `);
+      const rPagas = (await db.execute(sql`
+        SELECT id FROM faturas WHERE id IN (${listaF}) AND status = 'paga'
+      `)) as any[];
+      for (const p of rPagas) pagas.add(Number(p.id));
+    }
+    const linhasOk = linhasBase.filter((l) => {
+      if (l.fatura_id && pagas.has(l.fatura_id)) {
+        ignoradosPagos++;
+        return false;
+      }
+      return true;
+    });
+    if (!linhasOk.length) {
+      return res.status(400).json({
+        error: "Todos os lançamentos estão em fatura já paga. Reabra a fatura antes de mover.",
+      });
+    }
+
+    const diaF = Number((cartao as any).dia_fechamento) || 1;
+    const diaV = Number((cartao as any).dia_vencimento) || 10;
+
+    const ancoraGrupo = new Map<string, { parcela: number; competencia: string }>();
+    if (temComp) {
+      const selecionadas = new Set(idsIn);
+      const porGrupo = new Map<string, typeof linhasOk>();
+      for (const l of linhasOk) {
+        const k = chaveGrupoParcela(l);
+        const arr = porGrupo.get(k) || [];
+        arr.push(l);
+        porGrupo.set(k, arr);
+      }
+      for (const [k, arr] of porGrupo) {
+        const noOrigem = arr.filter((l) => selecionadas.has(l.id) || selecionadas.has(l.origem));
+        const ancora = [...(noOrigem.length ? noOrigem : arr)].sort(
+          (a, b) => (a.parcela_num || 1) - (b.parcela_num || 1),
+        )[0];
+        ancoraGrupo.set(k, { parcela: ancora.parcela_num || 1, competencia: competenciaIn });
+      }
+    }
+
+    const faturas = new Set<string>();
+    for (const l of linhasOk) {
+      let competencia: string;
+      if (temComp) {
+        const anc = ancoraGrupo.get(chaveGrupoParcela(l));
+        if (anc && l.parcela_num && l.parcela_total) {
+          competencia = competenciaMaisMeses(anc.competencia, (l.parcela_num || 1) - anc.parcela);
+        } else {
+          competencia = competenciaIn;
+        }
+      } else {
+        const grupo = linhasOk
+          .filter((x) => chaveGrupoParcela(x) === chaveGrupoParcela(l))
+          .sort((a, b) => (a.parcela_num || 1) - (b.parcela_num || 1));
+        const primeira = grupo[0] || l;
+        const base = competenciaDaCompra(String(primeira.data_transacao).slice(0, 10), diaF, diaV).competencia;
+        if (l.parcela_num && primeira.parcela_num && l.id !== primeira.id) {
+          competencia = competenciaMaisMeses(base, (l.parcela_num || 1) - (primeira.parcela_num || 1));
+        } else {
+          competencia = competenciaDaCompra(String(l.data_transacao).slice(0, 10), diaF, diaV).competencia;
+        }
+      }
+      const { fatura, competencia: comp } = await faturaPf.resolverFaturaPfPorCompetencia(
+        userId, wallet.id, cartao as any, competencia,
+      );
+      faturas.add(comp);
+      await db.execute(sql`
+        UPDATE transacoes
+        SET forma_pagamento_id = ${cartaoId},
+            fatura_id = ${fatura.id},
+            competencia = ${comp},
+            conta_bancaria_id = NULL,
+            movimenta_caixa = false
+        WHERE id = ${l.id} AND carteira_id = ${wallet.id} AND tipo = 'Despesa'
+      `);
+    }
+
+    return res.json({
+      success: true,
+      movidos: linhasOk.length,
+      extra_parcelas: Math.max(0, (todasParcelas ? exp.ids.length : idsIn.length) - idsIn.length),
+      ignorados_pagos: ignoradosPagos,
+      competencias: Array.from(faturas).sort(),
+      ids: linhasOk.map((l) => l.id),
+    });
+  } catch (e: any) {
+    return res.status(400).json({ error: e?.message || "Erro ao mover lançamento" });
+  }
+}
+
+/**
+ * Recalcula todas as faturas de um cartão pelas datas atuais do cartão.
+ * POST /api/cartoes/:id/recalcular-faturas
+ */
+export async function recalcularFaturasCartao(req: Request, res: Response) {
+  try {
+    const userId = req.user!.id;
+    const cartaoId = Number(req.params.id);
+    const cartao = await faturaPf.cartaoPfDoUsuario(cartaoId, userId);
+    if (!cartao || Number(cartao.usuario_id) !== userId) {
+      return res.status(404).json({ error: "Cartão não encontrado" });
+    }
+    if (cartao.dia_fechamento == null || cartao.dia_vencimento == null) {
+      return res.status(400).json({ error: "Defina o dia de fechamento e de vencimento do cartão antes de recalcular." });
+    }
+    const wallet = await storage.getWalletByUserId(userId);
+    if (!wallet) return res.status(404).json({ error: "Carteira não encontrada" });
+    const r = await faturaPf.recalcularFaturasCartaoPf(userId, wallet.id, cartao as any);
+    return res.json({ success: true, ...r });
+  } catch (e: any) {
+    return res.status(400).json({ error: e?.message || "Erro ao recalcular faturas" });
   }
 }

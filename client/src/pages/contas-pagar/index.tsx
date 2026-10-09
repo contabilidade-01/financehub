@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useConfirm } from "@/components/shared/ConfirmDialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { CheckCircle2, CreditCard, FileText } from "lucide-react";
+import { ChapterHelpButton } from "@/components/shared/ChapterHelpButton";
 
 type Conta = { id: number; nome: string; banco?: string; saldo?: number; ativo?: boolean };
 
@@ -62,10 +64,10 @@ function diasAte(data: string | null | undefined): number | null {
 
 function badgeDias(dias: number | null) {
   if (dias == null) return { label: "—", className: "bg-muted text-muted-foreground" };
-  if (dias < 0) return { label: `${Math.abs(dias)}d vencido`, className: "bg-red-500/15 text-red-600" };
-  if (dias === 0) return { label: "Hoje", className: "bg-red-500/15 text-red-600" };
+  if (dias < 0) return { label: `${Math.abs(dias)}d vencido`, className: "bg-red-500/15 text-expense" };
+  if (dias === 0) return { label: "Hoje", className: "bg-red-500/15 text-expense" };
   if (dias <= 3) return { label: `${dias}d`, className: "bg-amber-500/15 text-amber-600" };
-  return { label: `${dias}d`, className: "bg-emerald-500/15 text-emerald-600" };
+  return { label: `${dias}d`, className: "bg-emerald-500/15 text-income" };
 }
 
 function fmtData(d: string | null | undefined) {
@@ -85,6 +87,8 @@ export default function ContasPagarPage() {
   const [de, setDe] = useState(mes.de);
   const [ate, setAte] = useState(mes.ate);
   const [contaPorFatura, setContaPorFatura] = useState<Record<number, string>>({});
+  const [busca, setBusca] = useState("");
+  const [filtroCartao, setFiltroCartao] = useState("todas");
 
   const { data, isLoading } = useQuery<{ faturas: FaturaVenc[]; boletos: BoletoVenc[] }>({
     queryKey: ["/api/vencimentos", tab, de, ate],
@@ -96,12 +100,40 @@ export default function ContasPagarPage() {
     queryKey: ["/api/contas"],
   });
   const contasAtivas = useMemo(() => contas.filter((c) => c.ativo !== false), [contas]);
+  const confirmar = useConfirm();
 
   const faturas = data?.faturas ?? [];
   const boletos = data?.boletos ?? [];
 
-  const totalFaturas = faturas.reduce((s, f) => s + (Number(f.total) || 0), 0);
-  const totalBoletos = boletos.reduce((s, b) => s + (Number(b.valor) || 0), 0);
+  const opcoesCartao = useMemo(() => {
+    const s = new Set<string>();
+    faturas.forEach((f) => f.cartao_nome && s.add(f.cartao_nome));
+    boletos.forEach((b) => b.forma_pagamento && s.add(b.forma_pagamento));
+    return Array.from(s);
+  }, [faturas, boletos]);
+
+  const faturasFiltradas = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    return faturas.filter((f) => {
+      if (q && !(f.cartao_nome || "").toLowerCase().includes(q)) return false;
+      if (filtroCartao !== "todas" && (f.cartao_nome || "") !== filtroCartao) return false;
+      return true;
+    });
+  }, [faturas, busca, filtroCartao]);
+
+  const boletosFiltrados = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    return boletos.filter((b) => {
+      if (q && !(b.descricao || "").toLowerCase().includes(q) && !(b.forma_pagamento || "").toLowerCase().includes(q)) return false;
+      if (filtroCartao !== "todas" && (b.forma_pagamento || "") !== filtroCartao) return false;
+      return true;
+    });
+  }, [boletos, busca, filtroCartao]);
+
+  const temFiltro = busca.trim() !== "" || filtroCartao !== "todas";
+
+  const totalFaturas = faturasFiltradas.reduce((s, f) => s + (Number(f.total) || 0), 0);
+  const totalBoletos = boletosFiltrados.reduce((s, b) => s + (Number(b.valor) || 0), 0);
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["/api/vencimentos"] });
@@ -139,14 +171,49 @@ export default function ContasPagarPage() {
     onError: (e: any) => toast({ title: "Erro", description: e?.message || e?.error, variant: "destructive" }),
   });
 
+  const reabrirFatura = useMutation({
+    mutationFn: (id: number) => apiRequest(`/api/faturas/${id}/reabrir`, { method: "POST" }),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Fatura reaberta — voltou para 'Em aberto'" });
+    },
+    onError: (e: any) => toast({ title: "Erro", description: e?.message || e?.error, variant: "destructive" }),
+  });
+
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Vencimentos</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-semibold tracking-tight">Vencimentos</h1>
+            <ChapterHelpButton chapter="outros-recursos" />
+          </div>
           <p className="text-muted-foreground">Faturas de cartão e boletos/PIX do período</p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-muted-foreground">Buscar</label>
+            <Input
+              placeholder="Descrição/cartão…"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              className="h-10 w-[200px]"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-muted-foreground">Cartão/forma</label>
+            <Select value={filtroCartao} onValueChange={setFiltroCartao}>
+              <SelectTrigger className="h-10 w-[180px]">
+                <SelectValue placeholder="Todos" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todas">Todos</SelectItem>
+                {opcoesCartao.map((o) => (
+                  <SelectItem key={o} value={o}>{o}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="flex flex-col gap-1">
             <label className="text-xs text-muted-foreground">De</label>
             <Input type="date" value={de} onChange={(e) => setDe(e.target.value)} className="h-10 w-[160px]" />
@@ -155,6 +222,11 @@ export default function ContasPagarPage() {
             <label className="text-xs text-muted-foreground">Até</label>
             <Input type="date" value={ate} onChange={(e) => setAte(e.target.value)} className="h-10 w-[160px]" />
           </div>
+          {temFiltro && (
+            <Button variant="ghost" size="sm" className="h-10" onClick={() => { setBusca(""); setFiltroCartao("todas"); }}>
+              Limpar
+            </Button>
+          )}
         </div>
       </div>
 
@@ -197,10 +269,10 @@ export default function ContasPagarPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {faturas.length === 0 ? (
+                  {faturasFiltradas.length === 0 ? (
                     <p className="text-sm text-muted-foreground py-4 text-center">Nenhuma fatura no período</p>
                   ) : (
-                    faturas.map((f) => {
+                    faturasFiltradas.map((f) => {
                       const dias = diasAte(f.data_vencimento);
                       const bd = badgeDias(dias);
                       const contaId = contaPorFatura[f.id] || (contasAtivas[0] ? String(contasAtivas[0].id) : "");
@@ -212,8 +284,8 @@ export default function ContasPagarPage() {
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="font-medium">{f.cartao_nome}</span>
-                              <Badge variant="outline" className="text-[10px]">{f.competencia}</Badge>
-                              <Badge className={`${bd.className} text-[10px]`}>{bd.label}</Badge>
+                              <Badge variant="outline" className="text-xs">{f.competencia}</Badge>
+                              <Badge className={`${bd.className} text-xs`}>{bd.label}</Badge>
                             </div>
                             <p className="text-xs text-muted-foreground mt-0.5">
                               Vence {fmtData(f.data_vencimento)}
@@ -254,7 +326,20 @@ export default function ContasPagarPage() {
                                 </Button>
                               </>
                             ) : (
-                              <Badge className="bg-emerald-500/15 text-emerald-600">Paga</Badge>
+                              <>
+                                <Badge className="bg-emerald-500/15 text-income">Paga</Badge>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={reabrirFatura.isPending}
+                                  onClick={async () => {
+                                    if (await confirmar({ title: `Reabrir a fatura de ${f.cartao_nome} (${f.competencia})?`, description: "Ela volta para 'Em aberto' e o pagamento é desfeito.", confirmText: "Reabrir" }))
+                                      reabrirFatura.mutate(f.id);
+                                  }}
+                                >
+                                  Reabrir
+                                </Button>
+                              </>
                             )}
                           </div>
                         </div>
@@ -271,12 +356,12 @@ export default function ContasPagarPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {boletos.length === 0 ? (
+                  {boletosFiltrados.length === 0 ? (
                     <p className="text-sm text-muted-foreground py-4 text-center">
                       Nenhum boleto/PIX no período
                     </p>
                   ) : (
-                    boletos.map((b) => {
+                    boletosFiltrados.map((b) => {
                       const dataRef = b.data_vencimento || b.data_transacao;
                       return (
                         <div

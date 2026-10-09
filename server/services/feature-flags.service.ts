@@ -10,6 +10,10 @@ import { db } from "../db";
 import { sql } from "drizzle-orm";
 import {
   FLAG_AGENTE_MEIO_PAGAMENTO,
+  FLAG_ORQUESTRADOR_DEEPSEEK,
+  FLAG_IMPORTACAO_EXTRATO_V2,
+  FLAG_INTEGRACAO_CORA,
+  FLAG_LEMBRETES_COBRANCA,
   FLAGS_NO_CODIGO,
   DIAS_PARA_APOSENTAR,
   avaliarFlag,
@@ -20,6 +24,10 @@ import {
 
 export {
   FLAG_AGENTE_MEIO_PAGAMENTO,
+  FLAG_ORQUESTRADOR_DEEPSEEK,
+  FLAG_IMPORTACAO_EXTRATO_V2,
+  FLAG_INTEGRACAO_CORA,
+  FLAG_LEMBRETES_COBRANCA,
   FLAGS_NO_CODIGO,
   DIAS_PARA_APOSENTAR,
   avaliarFlag,
@@ -62,6 +70,46 @@ async function garantirTabelas(): Promise<void> {
       ${FLAG_AGENTE_MEIO_PAGAMENTO},
       ${"Regras avançadas de meio (conta×cartão, ambiguidade, Inter≈Banco Inter). Desligar volta ao modo básico."},
       true
+    )
+    ON CONFLICT (chave) DO NOTHING
+  `);
+  // Orquestrador DeepSeek: nasce off — liberar por usuário no admin.
+  await db.execute(sql`
+    INSERT INTO feature_flags (chave, descricao, ativo_todos)
+    VALUES (
+      ${FLAG_ORQUESTRADOR_DEEPSEEK},
+      ${"Chat orquestrador (DeepSeek) no app. Super admin sempre acessa; demais só se marcados aqui."},
+      false
+    )
+    ON CONFLICT (chave) DO NOTHING
+  `);
+  // Importação de extrato v2: nasce off — ligar na conta de teste, depois liberar.
+  await db.execute(sql`
+    INSERT INTO feature_flags (chave, descricao, ativo_todos)
+    VALUES (
+      ${FLAG_IMPORTACAO_EXTRATO_V2},
+      ${"Importação de extrato (OFX/CSV/Excel) com sessão salva, conta bancária, classificação e conciliação. Super admin sempre acessa."},
+      false
+    )
+    ON CONFLICT (chave) DO NOTHING
+  `);
+  // Recebimentos via Cora: nasce off — liberar para os pilotos no admin.
+  await db.execute(sql`
+    INSERT INTO feature_flags (chave, descricao, ativo_todos)
+    VALUES (
+      ${FLAG_INTEGRACAO_CORA},
+      ${"Recebimentos via Cora (PJ ME): cobrança boleto/Pix emitida pelo sistema e baixa automática quando o cliente paga. Super admin sempre acessa."},
+      false
+    )
+    ON CONFLICT (chave) DO NOTHING
+  `);
+  // Lembretes de cobrança no WhatsApp: nasce off — liberar no admin.
+  await db.execute(sql`
+    INSERT INTO feature_flags (chave, descricao, ativo_todos)
+    VALUES (
+      ${FLAG_LEMBRETES_COBRANCA},
+      ${"Lembretes de cobrança no WhatsApp: fim da degustação (3, 1 e 0 dias), renovação (3 e 0 dias), atraso (1 e 3 dias) e pagamento confirmado. Nunca avisa quem já pagou."},
+      false
     )
     ON CONFLICT (chave) DO NOTHING
   `);

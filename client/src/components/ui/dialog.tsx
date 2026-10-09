@@ -2,7 +2,6 @@
 
 import * as React from "react"
 import * as DialogPrimitive from "@radix-ui/react-dialog"
-import { X } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
@@ -21,7 +20,7 @@ const DialogOverlay = React.forwardRef<
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      "fixed inset-0 z-50 bg-black/80",
+      "fixed inset-0 z-50 bg-black/50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
       className
     )}
     {...props}
@@ -38,8 +37,11 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        // Centralizada, rolagem vertical, border-radius responsivo, barra de rolagem invisível
-        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 border bg-background p-6 shadow-lg sm:rounded-lg rounded-[6px] max-h-[90vh] overflow-y-auto hide-scrollbar dialog-content",
+        // Mobile (< sm): painel inferior de largura total, com rolagem e área segura.
+        // sm+: centralizado. max-w-lg sem prefixo para que max-w-* do chamador substitua.
+        "fixed inset-x-0 bottom-0 z-50 mx-auto grid w-full max-w-lg max-h-[92dvh] gap-4 overflow-y-auto overscroll-contain rounded-t-xl border bg-background p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-lg",
+        "sm:bottom-auto sm:left-1/2 sm:right-auto sm:top-1/2 sm:mx-0 sm:max-h-[90vh] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg sm:pb-6",
+        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-bottom-4 sm:data-[state=open]:slide-in-from-left-1/2 sm:data-[state=open]:slide-in-from-top-[48%] sm:data-[state=closed]:slide-out-to-left-1/2 sm:data-[state=closed]:slide-out-to-top-[48%] sm:data-[state=open]:zoom-in-95 sm:data-[state=closed]:zoom-out-95",
         className
       )}
       {...props}

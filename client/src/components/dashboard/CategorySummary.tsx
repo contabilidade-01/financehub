@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { CategoryIcon } from "@/components/shared/CategoryIcon";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -23,7 +24,7 @@ export default function CategorySummary({ isLoading, categories }: CategorySumma
   const { t } = useTranslation();
   
   const getIconComponent = (iconName: string) => {
-    return <i className={`ri-${iconName}-line text-white`}></i>;
+    return <CategoryIcon icon={iconName} className="text-white" />;
   };
   
   return (
@@ -33,10 +34,10 @@ export default function CategorySummary({ isLoading, categories }: CategorySumma
       transition={{ duration: 0.4, delay: 0.1 }}
       className="h-full"
     >
-      <Card className="glass-card neon-border rounded-2xl h-full">
+      <Card className="border bg-card rounded-lg h-full">
         <CardContent className="p-5">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="font-space text-xl">{t('dashboard.categories.title', 'Categorias')}</h2>
+            <h2 className="text-xl">{t('dashboard.categories.title', 'Categorias')}</h2>
             <div>
               <Button 
                 variant="link" 
@@ -52,7 +53,7 @@ export default function CategorySummary({ isLoading, categories }: CategorySumma
             {isLoading ? (
               Array(5).fill(0).map((_, index) => (
                 <div key={index} className="flex items-center">
-                  <Skeleton className="w-10 h-10 rounded-xl mr-4" />
+                  <Skeleton className="w-10 h-10 rounded-lg mr-4" />
                   <div className="flex-1">
                     <div className="flex justify-between items-center mb-1">
                       <Skeleton className="h-4 w-20" />
@@ -72,22 +73,22 @@ export default function CategorySummary({ isLoading, categories }: CategorySumma
                   className="flex items-center"
                 >
                   <div 
-                    className="w-10 h-10 rounded-xl flex items-center justify-center mr-4"
-                    style={{ backgroundColor: category.color || "#6C63FF" }}
+                    className="w-10 h-10 rounded-lg flex items-center justify-center mr-4"
+                    style={{ backgroundColor: category.color || "#64748B" }}
                   >
-                    {category.icon ? getIconComponent(category.icon) : <i className="ri-price-tag-3-line text-white"></i>}
+                    {category.icon ? getIconComponent(category.icon) : <CategoryIcon className="text-white" />}
                   </div>
                   <div className="flex-1">
                     <div className="flex justify-between items-center mb-1">
                       <h3 className="text-sm font-medium">{category.name}</h3>
                       <span className="text-sm font-numeric">{formatCurrency(category.total)}</span>
                     </div>
-                    <div className="w-full h-1.5 bg-dark rounded-full overflow-hidden">
+                    <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
                       <div 
                         className="h-full rounded-full transition-all duration-500"
                         style={{ 
                           width: `${category.percentage}%`,
-                          backgroundColor: category.color || "#6C63FF"
+                          backgroundColor: category.color || "#64748B"
                         }}
                       ></div>
                     </div>
@@ -95,7 +96,7 @@ export default function CategorySummary({ isLoading, categories }: CategorySumma
                 </motion.div>
               ))
             ) : (
-              <div className="py-4 text-center text-gray-400">
+              <div className="py-4 text-center text-muted-foreground">
                 {t('dashboard.categories.no_categories', 'Nenhuma categoria encontrada')}
               </div>
             )}

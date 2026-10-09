@@ -53,11 +53,11 @@ export function NotificationsWidget() {
   const getNotificationIcon = (type: string) => {
     switch (type) {
       case 'error':
-        return <AlertCircle className="w-4 h-4 text-red-500" />
+        return <AlertCircle className="w-4 h-4 text-expense" />
       case 'warning':
         return <AlertTriangle className="w-4 h-4 text-yellow-500" />
       case 'success':
-        return <CheckCircle className="w-4 h-4 text-green-500" />
+        return <CheckCircle className="w-4 h-4 text-income" />
       default:
         return <Info className="w-4 h-4 text-blue-500" />
     }
@@ -143,7 +143,7 @@ export function NotificationsWidget() {
                 variant="ghost"
                 size="sm"
                 onClick={clearAllNotifications}
-                className="text-xs h-7 text-red-600 hover:text-red-700"
+                className="text-xs h-7 text-expense hover:text-red-700"
               >
                 <Trash2 className="w-3 h-3 mr-1" />
                 Limpar todas

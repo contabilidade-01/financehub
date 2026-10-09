@@ -56,7 +56,7 @@ export async function simularWhatsapp(req: Request, res: Response) {
   const agentContext: any = {
     userId: user.id,
     walletId: wallet.id,
-    categories: categories.map((c) => ({ id: c.id, nome: c.nome, tipo: c.tipo })),
+    categories: categories.map((c) => ({ id: c.id, nome: c.nome, tipo: c.tipo, descricao: (c as any).descricao ?? null })),
     tipoPessoa: user.tipo_pessoa || "fisica",
     empresaAtiva,
     origemMidia: false,

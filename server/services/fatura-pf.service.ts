@@ -5,7 +5,7 @@
  */
 import { db } from "../db";
 import { sql } from "drizzle-orm";
-import { competenciaDaCompra, datasDaCompetencia, ehFormaCartaoCredito, num } from "./fatura-core";
+import { competenciaDaCompra, datasDaCompetencia, competenciaMaisMeses, ehFormaCartaoCredito, num } from "./fatura-core";
 
 export { ehFormaCartaoCredito };
 
@@ -92,6 +92,101 @@ export async function resolverFaturaPfPorCompetencia(
   );
   const fatura = await getOrCreateFaturaPf(usuarioId, carteiraId, cartao.id, comp, dataFech, dataVenc);
   return { fatura, competencia: comp };
+}
+
+/**
+ * Recalcula TODAS as faturas de um cartão PF a partir das DATAS ATUAIS do cartão
+ * (dia_fechamento/dia_vencimento). Corrige o estrago de cartões que estavam sem
+ * dias (competência/vencimento errados). NÃO toca em faturas já PAGAS.
+ */
+export async function recalcularFaturasCartaoPf(
+  usuarioId: number,
+  carteiraId: number,
+  cartao: { id: number; dia_fechamento: number; dia_vencimento: number; nome: string },
+): Promise<{ movidas: number; faturasCorrigidas: number; faturasRemovidas: number }> {
+  const diaF = Number(cartao.dia_fechamento) || 1;
+  const diaV = Number(cartao.dia_vencimento) || 10;
+
+  // 1) Re-resolve cada COMPRA do cartão (ignora pagamentos de fatura).
+  //    À VISTA: pela DATA + dias do cartão.
+  //    PARCELADO: pela SEQUÊNCIA (base + i meses), espelhando a criação — a data
+  //    FIXA da parcela NÃO reaplica a regra de fechamento (senão, no fim de mês,
+  //    duas parcelas colapsavam na mesma fatura / deslocavam).
+  const txs = await db.execute(sql`
+    SELECT t.id, t.data_transacao, t.parcela_num, t.parcela_total, t.compra_grupo
+    FROM transacoes t
+    WHERE t.forma_pagamento_id = ${cartao.id}
+      AND t.carteira_id = ${carteiraId}
+      AND t.tipo = 'Despesa'
+      AND NOT EXISTS (SELECT 1 FROM faturas fp WHERE fp.transacao_pagamento_id = t.id)
+    ORDER BY t.compra_grupo NULLS LAST, t.parcela_num NULLS LAST, t.data_transacao, t.id
+  `);
+
+  // Competência-base de cada compra parcelada = a da 1ª parcela (menor parcela_num),
+  // decidida UMA vez pela data dela + dias atuais do cartão.
+  const baseGrupo = new Map<string, string>();
+  for (const t of txs as any[]) {
+    const grupo = t.compra_grupo;
+    if (!grupo || Number(t.parcela_total) <= 1) continue;
+    if (!baseGrupo.has(grupo)) {
+      baseGrupo.set(
+        grupo,
+        competenciaDaCompra(String(t.data_transacao).slice(0, 10), diaF, diaV).competencia,
+      );
+    }
+  }
+
+  let movidas = 0;
+  for (const t of txs as any[]) {
+    const ehParcelado = t.compra_grupo && Number(t.parcela_total) > 1;
+    let fatura: any;
+    let competencia: string;
+    if (ehParcelado && baseGrupo.has(t.compra_grupo)) {
+      const base = baseGrupo.get(t.compra_grupo)!;
+      const comp = competenciaMaisMeses(base, (Number(t.parcela_num) || 1) - 1);
+      const r = await resolverFaturaPfPorCompetencia(usuarioId, carteiraId, cartao, comp);
+      fatura = r.fatura;
+      competencia = r.competencia;
+    } else {
+      const r = await resolverFaturaPf(usuarioId, carteiraId, cartao, String(t.data_transacao).slice(0, 10));
+      fatura = r.fatura;
+      competencia = r.competencia;
+    }
+    await db.execute(sql`
+      UPDATE transacoes
+      SET fatura_id = ${fatura.id}, competencia = ${competencia},
+          movimenta_caixa = false, conta_bancaria_id = NULL
+      WHERE id = ${t.id}
+    `);
+    movidas++;
+  }
+
+  // 2) Corrige data_fechamento/data_vencimento das faturas NÃO pagas pelos dias atuais.
+  const faturas = await db.execute(sql`
+    SELECT id, competencia FROM faturas
+    WHERE forma_pagamento_id = ${cartao.id} AND status <> 'paga'
+  `);
+  let faturasCorrigidas = 0;
+  for (const f of faturas as any[]) {
+    const { dataFech, dataVenc } = datasDaCompetencia(String(f.competencia), diaF, diaV);
+    await db.execute(sql`
+      UPDATE faturas SET data_fechamento = ${dataFech}, data_vencimento = ${dataVenc}
+      WHERE id = ${f.id}
+    `);
+    faturasCorrigidas++;
+  }
+
+  // 3) Remove faturas NÃO pagas e VAZIAS (ex.: as de outubro que ficaram sem lançamentos).
+  const del = await db.execute(sql`
+    DELETE FROM faturas f
+    WHERE f.forma_pagamento_id = ${cartao.id}
+      AND f.status <> 'paga'
+      AND NOT EXISTS (SELECT 1 FROM transacoes t WHERE t.fatura_id = f.id)
+    RETURNING f.id
+  `);
+  const faturasRemovidas = (del as any[]).length;
+
+  return { movidas, faturasCorrigidas, faturasRemovidas };
 }
 
 export async function getFaturaTotalPf(faturaId: number): Promise<number> {
@@ -222,6 +317,8 @@ export async function pagarFaturaPf(
     UPDATE transacoes
     SET status = 'Efetivada', data_pagamento = ${dataPg}
     WHERE fatura_id = ${fatura.id} AND COALESCE(movimenta_caixa, false) = false
+      -- Reembolsável continua "A Receber" até o terceiro pagar: pagar a fatura não é receber.
+      AND COALESCE(reembolsavel, false) = false
   `);
 
   return { fatura_id: fatura.id, transacao_id: txId, total };
@@ -242,6 +339,7 @@ export async function reabrirFaturaPf(fatura: any): Promise<any> {
     UPDATE transacoes
     SET status = 'Pendente', data_pagamento = NULL
     WHERE fatura_id = ${fatura.id} AND COALESCE(movimenta_caixa, false) = false
+      AND COALESCE(reembolsavel, false) = false
   `);
 
   const r = await db.execute(sql`

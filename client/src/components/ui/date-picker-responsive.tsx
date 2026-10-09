@@ -34,7 +34,7 @@ export function DatePickerResponsive({
         <Button
           variant="outline"
           className={cn(
-            "responsive-select w-full justify-start text-left font-normal",
+            "w-full justify-start text-left font-normal",
             !date && "text-muted-foreground",
             className
           )}
@@ -45,7 +45,7 @@ export function DatePickerResponsive({
         </Button>
       </PopoverTrigger>
       <PopoverContent 
-        className="responsive-popover w-auto p-0 calendar-popover" 
+        className="w-auto p-0" 
         align="start"
         side="bottom"
         sideOffset={4}

@@ -1,19 +1,23 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ImportacaoExtrato } from "@/components/importacao/ImportacaoExtrato";
 import Importar from "./Importar";
+import { FLAG_IMPORTACAO_EXTRATO_V2, useFlag } from "@/hooks/use-flag";
 import Bancada from "./Bancada";
 import { Upload, BarChart3 } from "lucide-react";
 
 export default function ConciliacaoPage({ empresaId }: { empresaId: number }) {
   const [activeTab, setActiveTab] = useState("importar");
+  // Nova importação (sessão salva + classificação + conciliação) atrás da flag.
+  const { ativa: importacaoV2 } = useFlag(FLAG_IMPORTACAO_EXTRATO_V2);
 
   return (
-    <div className="space-y-4 p-4 md:p-6 max-w-6xl mx-auto">
+    <div className="mx-auto w-full max-w-6xl space-y-4">
       <div>
-        <h1 className="text-2xl font-bold">Conciliação bancária</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Conciliação bancária</h1>
         <p className="text-sm text-muted-foreground">
-          Importe o extrato do banco e case com os lançamentos
+          Importe o extrato do banco, classifique e concilie com os lançamentos já existentes.
         </p>
         <p className="text-xs text-muted-foreground mt-1">
           As contas bancárias agora ficam em{" "}
@@ -28,16 +32,20 @@ export default function ConciliacaoPage({ empresaId }: { empresaId: number }) {
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="importar" className="gap-2">
             <Upload className="h-4 w-4" />
-            <span className="hidden sm:inline">Importar</span>
+            <span>Importar extrato</span>
           </TabsTrigger>
           <TabsTrigger value="bancada" className="gap-2">
             <BarChart3 className="h-4 w-4" />
-            <span className="hidden sm:inline">Bancada</span>
+            <span>Movimentos anteriores</span>
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="importar" className="mt-6">
-          <Importar empresaId={empresaId} onIrParaBancada={() => setActiveTab("bancada")} />
+          {importacaoV2 ? (
+            <ImportacaoExtrato escopo="pj" empresaId={empresaId} />
+          ) : (
+            <Importar empresaId={empresaId} onIrParaBancada={() => setActiveTab("bancada")} />
+          )}
         </TabsContent>
 
         <TabsContent value="bancada" className="mt-6">

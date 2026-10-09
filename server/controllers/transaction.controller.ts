@@ -1,11 +1,12 @@
 import { Request, Response } from "express";
-import { storage, softDeleteTransacao, restaurarUltimaExcluida, listarLixeira } from "../storage";
+import { storage, softDeleteTransacao, softDeleteTransacoesLote, restaurarUltimaExcluida, listarLixeira } from "../storage";
 import { insertTransactionSchema, updateTransactionSchema, type TransactionWithDetails } from "../../shared/schema";
 import { z } from "zod";
 import { db } from "../db";
 import { sql } from "drizzle-orm";
 import { broadcastNotification } from "../websocket";
 import { formatCurrency } from "../utils";
+import { aprenderMemoriaCategoria } from "../storage";
 
 // Get all transactions for current user
 export async function getTransactions(req: Request, res: Response) {
@@ -277,6 +278,7 @@ export async function createTransaction(req: Request, res: Response) {
         contaBancariaId: isCartao ? null : (transactionData as any).conta_bancaria_id,
         usuarioId: userId,
         status: isCartao ? "Pendente" : (transactionData.status || "Efetivada"),
+        reembolsavel: transactionData.reembolsavel === true,
         competenciaInicial: typeof req.body?.competencia_inicial === "string"
           ? req.body.competencia_inicial
           : null,
@@ -494,6 +496,23 @@ export async function updateTransaction(req: Request, res: Response) {
     // Update transaction
     try {
       const updatedTransaction = await storage.updateTransaction(transactionId, transactionData);
+      // Fase 1 (IA): quando o cliente troca a categoria pela tela, a IA aprende
+      // para os próximos lançamentos com a mesma descrição (WhatsApp).
+      if (
+        updatedTransaction &&
+        (transactionData as any).categoria_id &&
+        Number((transactionData as any).categoria_id) !== Number((transaction as any)?.categoria_id) &&
+        (updatedTransaction as any).descricao
+      ) {
+        try {
+          const cat = await storage.getCategoryById(Number((transactionData as any).categoria_id));
+          if (cat) {
+            await aprenderMemoriaCategoria(userId, String((updatedTransaction as any).descricao), cat.id, cat.nome, "correcao");
+          }
+        } catch (e: any) {
+          console.warn("[Memória] não aprendeu correção:", e?.message);
+        }
+      }
       if (!updatedTransaction) {
         const errorResponse = { error: "Transação não encontrada ou não foi possível atualizar" };
         console.log('\n=== TRANSACTION UPDATE - UPDATE FAILED ===');
@@ -633,6 +652,24 @@ export async function deleteTransaction(req: Request, res: Response) {
   }
 }
 
+/** POST /api/transactions/excluir-lote — { ids: number[] } → lixeira (um "Desfazer" restaura o lote) */
+export async function excluirLotePf(req: Request, res: Response) {
+  try {
+    if (!req.user) return res.status(401).json({ error: "Não autenticado" });
+    const wallet = await storage.getWalletByUserId(req.user.id);
+    if (!wallet) return res.status(404).json({ message: "Carteira não encontrada" });
+    const { idsLimpos } = await import("../services/mover-meio.service");
+    const ids = idsLimpos(req.body?.ids ?? req.body?.transacao_ids);
+    if (!ids.length) return res.status(400).json({ message: "Selecione ao menos uma transação." });
+    if (ids.length > 1000) return res.status(400).json({ message: "Máximo de 1.000 transações por vez." });
+    const excluidas = await softDeleteTransacoesLote(wallet.id, req.user.id, ids);
+    res.json({ excluidas, solicitadas: ids.length, recuperavel: true, dias: 30 });
+  } catch (error) {
+    console.error("Error in excluirLotePf:", error);
+    res.status(500).json({ message: "Erro ao excluir transações" });
+  }
+}
+
 /** GET /api/transactions/lixeira — itens recuperáveis da carteira PF */
 export async function listarLixeiraPf(req: Request, res: Response) {
   try {
@@ -729,5 +766,27 @@ export async function getDashboardSummary(req: Request, res: Response) {
   } catch (error) {
     console.error("Error in getDashboardSummary:", error);
     res.status(500).json({ message: "Erro ao obter resumo do dashboard" });
+  }
+}
+
+/** POST /api/transactions/alterar-dia  { transacao_ids, dia, todas_parcelas? } */
+export async function alterarDiaMassa(req: Request, res: Response) {
+  try {
+    if (!req.user) return res.status(401).json({ error: "Não autenticado" });
+    const wallet = await storage.getWalletByUserId(req.user.id);
+    if (!wallet) return res.status(404).json({ error: "Carteira não encontrada" });
+    const { idsLimpos } = await import("../services/mover-meio.service");
+    const { alterarDiaTransacoesPf } = await import("../services/alterar-dia.service");
+    const ids = idsLimpos(req.body?.transacao_ids ?? req.body?.transacao_id);
+    const r = await alterarDiaTransacoesPf({
+      userId: req.user.id,
+      walletId: wallet.id,
+      ids,
+      dia: Number(req.body?.dia),
+      todasParcelas: req.body?.todas_parcelas !== false,
+    });
+    return res.json({ success: true, ...r });
+  } catch (e: any) {
+    return res.status(400).json({ error: e?.message || "Erro ao alterar o dia" });
   }
 }

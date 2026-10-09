@@ -81,9 +81,17 @@ export default function Bancada({ empresaId }: { empresaId: number }) {
     queryFn: () => apiRequest(`/api/empresas/${empresaId}/contas`),
   });
 
+  // "Bater saldo" é por conta bancária (o servidor exige conta_bancaria_id).
+  const { data: contasBancarias = [] } = useQuery<{ id: number; nome?: string | null; banco: string; tipo?: string }[]>({
+    queryKey: [`/api/empresas/${empresaId}/contas-bancarias`],
+    queryFn: () => apiRequest(`/api/empresas/${empresaId}/contas-bancarias`),
+  });
+  const [contaSaldoId, setContaSaldoId] = useState<string>("");
+  const contaSaldo = contaSaldoId || String(contasBancarias.find((c) => c.tipo !== "caixa")?.id ?? contasBancarias[0]?.id ?? "");
   const { data: saldo } = useQuery<BaterSaldoResult>({
-    queryKey: [`/api/empresas/${empresaId}/conciliacao/bater-saldo`],
-    queryFn: () => apiRequest(`/api/empresas/${empresaId}/conciliacao/bater-saldo`),
+    queryKey: [`/api/empresas/${empresaId}/conciliacao/bater-saldo`, contaSaldo],
+    enabled: !!contaSaldo,
+    queryFn: () => apiRequest(`/api/empresas/${empresaId}/conciliacao/bater-saldo?conta_bancaria_id=${contaSaldo}`),
   });
 
   const lancarMutation = useMutation({
@@ -188,7 +196,20 @@ export default function Bancada({ empresaId }: { empresaId: number }) {
       )}
 
       {/* Filtros e ações */}
-      <div className="flex gap-2 items-end">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+        {contasBancarias.length > 1 && (
+          <div className="sm:w-64">
+            <label className="text-sm font-medium">Conta para bater saldo</label>
+            <Select value={contaSaldo} onValueChange={setContaSaldoId}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {contasBancarias.map((c) => (
+                  <SelectItem key={c.id} value={String(c.id)}>{c.nome || c.banco}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
         <div className="flex-1">
           <label className="text-sm font-medium">Filtrar por Status</label>
           <Select value={statusFilter} onValueChange={setStatusFilter}>

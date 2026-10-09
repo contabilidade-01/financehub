@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -14,6 +15,7 @@ interface ImpersonationInfo {
 }
 
 export default function ImpersonationBanner() {
+  const { toast } = useToast();
   const [isStoppingImpersonation, setIsStoppingImpersonation] = useState(false);
 
   // Verificar se há uma sessão de personificação ativa
@@ -35,10 +37,10 @@ export default function ImpersonationBanner() {
         window.location.href = "/admin/dashboard";
       } else {
         const error = await response.json();
-        alert(`Erro: ${error.message || "Não foi possível encerrar a personificação"}`);
+        toast({ title: "Erro", description: error.message || "Não foi possível encerrar a personificação", variant: "destructive" });
       }
     } catch (error) {
-      alert("Erro ao encerrar personificação");
+      toast({ title: "Erro ao encerrar personificação", variant: "destructive" });
     } finally {
       setIsStoppingImpersonation(false);
     }
@@ -59,7 +61,7 @@ export default function ImpersonationBanner() {
       initial={{ opacity: 0, y: -50 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-purple-900 to-indigo-900 border-b border-purple-500"
+      className="fixed top-0 left-0 right-0 z-50 bg-slate-900 border-b border-purple-500"
     >
       <div className="container mx-auto px-4 py-3">
         <Alert className="border-purple-400 bg-purple-900/20">

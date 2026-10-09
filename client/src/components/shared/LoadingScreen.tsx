@@ -52,8 +52,8 @@ const LoadingScreen: React.FC<LoadingScreenProps> = ({ text }) => {
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-background">
       <div className="flex flex-col items-center space-y-4">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-purple-500"></div>
-        <p className="text-lg text-muted-foreground">{loadingText}</p>
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-muted border-t-primary" aria-hidden="true"></div>
+        <p className="text-sm text-muted-foreground">{loadingText}</p>
       </div>
     </div>
   );

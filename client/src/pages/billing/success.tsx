@@ -66,13 +66,13 @@ export default function BillingSuccessPage() {
 
   if (!state?.subscription) {
     return (
-      <div className="container mx-auto py-20 text-center">
+      <div className="py-20 text-center">
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.5 }}
         >
-          <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
+          <CheckCircle className="h-16 w-16 text-income mx-auto mb-4" />
           <h2 className="text-2xl font-bold">Pagamento processado!</h2>
           <p className="text-muted-foreground mt-2">Redirecionando...</p>
         </motion.div>
@@ -101,7 +101,7 @@ export default function BillingSuccessPage() {
   const progressPercentage = ((15 - countdown) / 15) * 100;
 
   return (
-    <div className="container mx-auto py-8 max-w-5xl">
+    <div className="max-w-5xl">
       {/* Header com animação de sucesso */}
       <motion.div
         initial={{ opacity: 0, y: -30 }}
@@ -117,16 +117,14 @@ export default function BillingSuccessPage() {
         >
           {isConfirmed ? (
             <>
-              <div className="absolute inset-0 bg-green-400 rounded-full blur-2xl opacity-30 animate-pulse"></div>
-              <div className="relative inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-green-400 to-green-600 shadow-2xl">
-                <CheckCircle className="h-16 w-16 text-white" strokeWidth={2.5} />
+              <div className="relative inline-flex items-center justify-center w-16 h-16 rounded-full bg-success/10 text-success">
+                <CheckCircle className="h-8 w-8" />
               </div>
             </>
           ) : (
             <>
-              <div className="absolute inset-0 bg-yellow-400 rounded-full blur-2xl opacity-30 animate-pulse"></div>
-              <div className="relative inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 shadow-2xl">
-                <Clock className="h-16 w-16 text-white" strokeWidth={2.5} />
+              <div className="relative inline-flex items-center justify-center w-16 h-16 rounded-full bg-warning/10 text-warning">
+                <Clock className="h-8 w-8" />
               </div>
             </>
           )}
@@ -139,20 +137,20 @@ export default function BillingSuccessPage() {
         >
           {isConfirmed ? (
             <>
-              <h1 className="text-5xl font-bold mb-3 bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
+              <h1 className="text-3xl font-semibold tracking-tight mb-3 text-foreground">
                 Muito Obrigado!
               </h1>
               <p className="text-2xl text-muted-foreground mb-2">
                 Seu pagamento foi confirmado com sucesso
               </p>
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-green-100 dark:bg-green-900/30 text-income">
                 <Sparkles className="h-4 w-4" />
                 <span className="font-semibold">Assinatura Ativada</span>
               </div>
             </>
           ) : (
             <>
-              <h1 className="text-5xl font-bold mb-3 bg-gradient-to-r from-yellow-600 to-orange-600 bg-clip-text text-transparent">
+              <h1 className="text-3xl font-semibold tracking-tight mb-3 text-foreground">
                 Pagamento em Processamento
               </h1>
               <p className="text-2xl text-muted-foreground mb-2">
@@ -248,12 +246,12 @@ export default function BillingSuccessPage() {
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm font-medium text-muted-foreground">Valor Pago</CardTitle>
               <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
-                <DollarSign className="h-5 w-5 text-green-600 dark:text-green-400" />
+                <DollarSign className="h-5 w-5 text-income" />
               </div>
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-green-600 dark:text-green-400">
+            <div className="text-3xl font-bold text-income">
               R$ {parseFloat(plan?.priceMonthly || '0').toFixed(2)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">Primeira cobrança</p>
@@ -314,7 +312,7 @@ export default function BillingSuccessPage() {
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Informações do Plano */}
-            <div className="p-6 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20">
+            <div className="p-6 rounded-lg bg-primary/5 border border-primary/20">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="text-2xl font-bold">{plan?.name || 'Plano Premium'}</h3>
@@ -349,8 +347,8 @@ export default function BillingSuccessPage() {
                 <div>
                   <p className="text-xs text-muted-foreground">Status do Pagamento</p>
                   <p className="font-semibold">
-                    {payment.status === 'confirmed' ? '✅ Confirmado' :
-                     payment.status === 'pending' ? '⏳ Pendente' : '🔄 Processando'}
+                    {payment.status === 'confirmed' ? 'Confirmado' :
+                     payment.status === 'pending' ? 'Pendente' : 'Processando'}
                   </p>
                 </div>
               </div>

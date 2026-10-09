@@ -1,10 +1,11 @@
 import { Request, Response } from "express";
 import { storage } from "../storage";
+import { textoDegustacaoEncerrada, textoAssinaturaVencida, linkAssinar } from "../services/lembretes-cobranca";
 import { seedPlanoContasPessoal, createIngestionEvent, getConversaRecente, appendConversa } from "../storage";
 import { uazapiService } from "../services/uazapi.service";
 import { WhatsAppOnboardingService } from "../services/whatsapp-onboarding.service";
 import { gerarLinkDefinirSenha } from "./password-reset.controller";
-import { transcribeAudio, analyzeWithGemini, runAgent } from "../services/ai-agent.service";
+import { transcribeAudio, analyzeWithGemini, runAgent, type ToolContext } from "../services/ai-agent.service";
 import { classifyAiError } from "../utils/ai-errors";
 import { limparTextoWhatsapp } from "../services/limpar-texto-whatsapp";
 import { notificarAdmin } from "../services/admin-notify";
@@ -15,6 +16,10 @@ import {
   sendWelcomeWithPasswordEmail,
 } from "../services/mailer";
 import bcrypt from "bcryptjs";
+import { autenticarWebhookUazapi } from "../utils/uazapi-webhook-auth";
+import { db } from "../db";
+import { sql } from "drizzle-orm";
+import { camposDaModalidade, detectarModalidadeTexto, ROTULO_MODALIDADE, type Modalidade } from "../../shared/modalidade";
 
 /**
  * UazAPI Webhook Controller — substitui o N8N.
@@ -31,9 +36,13 @@ import bcrypt from "bcryptjs";
 const processedMessages = new Map<string, number>();
 const DEBOUNCE_TTL = 30000; // 30 segundos
 
-function isDuplicate(messageId: string): boolean {
+/**
+ * Duplicata = mesma messageid já processada. Cache em memória (rápido) + tabela
+ * whatsapp_mensagens_processadas (sobrevive a restart e vale entre réplicas).
+ */
+async function isDuplicate(messageId: string): Promise<boolean> {
+  if (!messageId) return false;
   const now = Date.now();
-  // Limpar entradas antigas a cada 100 mensagens
   if (processedMessages.size > 100) {
     for (const [key, ts] of processedMessages) {
       if (now - ts > DEBOUNCE_TTL) processedMessages.delete(key);
@@ -41,7 +50,32 @@ function isDuplicate(messageId: string): boolean {
   }
   if (processedMessages.has(messageId)) return true;
   processedMessages.set(messageId, now);
-  return false;
+  try {
+    const ins = (await db.execute(sql`
+      INSERT INTO whatsapp_mensagens_processadas (message_id) VALUES (${messageId})
+      ON CONFLICT (message_id) DO NOTHING
+      RETURNING message_id
+    `)) as any[];
+    // Limpeza ocasional (mantém ~3 dias).
+    if (Math.random() < 0.01) {
+      db.execute(sql`DELETE FROM whatsapp_mensagens_processadas WHERE criado_em < now() - interval '3 days'`).catch(() => {});
+    }
+    return ins.length === 0;
+  } catch (err: any) {
+    console.warn("[UazAPI Webhook] dedup no banco indisponível:", err?.message);
+    return false;
+  }
+}
+
+// Mensagens do MESMO contato em sequência (evita corrida no histórico e nas
+// pendências quando o cliente manda duas mensagens seguidas).
+const filas = new Map<string, Promise<void>>();
+function enfileirarPorChat(chave: string, tarefa: () => Promise<void>): Promise<void> {
+  const anterior = filas.get(chave) || Promise.resolve();
+  const atual = anterior.catch(() => {}).then(tarefa);
+  filas.set(chave, atual);
+  atual.finally(() => { if (filas.get(chave) === atual) filas.delete(chave); }).catch(() => {});
+  return atual;
 }
 
 // ============================================
@@ -69,12 +103,8 @@ const ehNegativo = (text: string) => {
   const t = norm(text);
   return /\b(nao|não|depois|agora nao|agora não|negativo|dispensa)\b/.test(t) || t === "n" || t === "2";
 };
-const detectarTipoPessoa = (text: string): "fisica" | "juridica" | null => {
-  const t = norm(text);
-  if (/\b(pj|2|empresa|empresarial|juridica|negocio|cnpj|comercio)\b/.test(t)) return "juridica";
-  if (/\b(pf|1|pessoal|pessoa fisica|fisica|particular|eu mesmo|minhas financas)\b/.test(t)) return "fisica";
-  return null;
-};
+// PF / PJ MEI / PJ ME (ver shared/modalidade.ts)
+const detectarModalidade = (text: string): Modalidade | null => detectarModalidadeTexto(text);
 const dataTrialFim = () => new Date(Date.now() + TRIAL_DIAS * 24 * 60 * 60 * 1000);
 const fmtData = (d: Date) => d.toLocaleDateString("pt-BR");
 const primeiro = (nome?: string | null) => (nome || "").split(" ")[0] || "";
@@ -114,15 +144,16 @@ const msgEmailEmUso = () =>
 const msgOferta = (nome?: string | null) =>
   `Olá ${primeiro(nome)}! 👋 Posso liberar *${TRIAL_DIAS} dias grátis* no *${SYSTEM_NAME}* para você testar tudo — é só responder *SIM* que eu ativo agora mesmo. 😊`;
 const msgPerguntaTipo = (nome?: string | null) =>
-  `Que ótimo, ${primeiro(nome)}! 🎉\n\nÉ para suas finanças *pessoais* ou da sua *empresa*?\n\nResponda:\n*1* — Pessoal (PF)\n*2* — Empresa (PJ)`;
+  `Que ótimo, ${primeiro(nome)}! 🎉\n\nÉ para suas finanças *pessoais* ou da sua *empresa*?\n\nResponda:\n*1* — Pessoal (PF)\n*2* — Empresa MEI (PJ MEI)\n*3* — Microempresa (PJ ME)`;
 const msgAtivadoPF = (nome: string | null | undefined, fim: Date) =>
   `Prontinho, ${primeiro(nome)}! ✅ Sua degustação de *${TRIAL_DIAS} dias* está ativa até *${fmtData(fim)}*.\n\nPode começar agora: me manda suas receitas e despesas por aqui que eu registro tudo. 📊`;
 const msgAtivadoPJ = (nome: string | null | undefined, fim: Date) =>
   `Prontinho, ${primeiro(nome)}! ✅ Sua degustação *empresarial* de *${TRIAL_DIAS} dias* está ativa até *${fmtData(fim)}*.\n\nJá preparei o ambiente da sua empresa. Pode começar: me manda as entradas e saídas por aqui. 📊`;
 const msgNudge = () => `Sem problema! Quando quiser testar os *${TRIAL_DIAS} dias grátis*, é só mandar *SIM*. 😉`;
-const msgReperguntaTipo = () => `Só pra eu configurar certinho: responda *1* para *Pessoal (PF)* ou *2* para *Empresa (PJ)*.`;
-const msgExpirado = (nome?: string | null) =>
-  `Oi ${primeiro(nome)}! Seus *${TRIAL_DIAS} dias* de degustação chegaram ao fim. 🙌\n\nGostou? Nossa equipe vai entrar em contato para te ajudar a continuar. Qualquer coisa, estou por aqui!`;
+const msgReperguntaTipo = () => `Só pra eu configurar certinho: responda *1* para *Pessoal (PF)*, *2* para *PJ MEI* ou *3* para *PJ ME* (microempresa).`;
+// Degustação encerrada / assinatura vencida: já leva o link para assinar ou pagar.
+const msgExpirado = (nome?: string | null) => textoDegustacaoEncerrada(nome, linkAssinar(), TRIAL_DIAS);
+const msgAssinaturaVencida = (nome?: string | null) => textoAssinaturaVencida(nome, linkAssinar());
 const msgEmAnalise = (nome?: string | null) =>
   `Oi ${primeiro(nome)}! Sua conta está em análise no momento. Nossa equipe vai falar com você em breve para liberar o acesso. 😊`;
 
@@ -291,16 +322,16 @@ async function tratarOnboarding(user: any, text: string, chatid: string, BaseUrl
 
   // 4) Aguardando PF/PJ
   if (ehAguardandoTipo(status)) {
-    const tipo = detectarTipoPessoa(text);
-    if (!tipo) {
+    const modalidade = detectarModalidade(text);
+    if (!modalidade) {
       await uazapiService.sendText(BaseUrl, token, chatid, msgReperguntaTipo());
       return true;
     }
     const fim = dataTrialFim();
-    if (tipo === "juridica") {
-      await storage.updateUser(user.id, { ativo: true, tipo_pessoa: "juridica", status_assinatura: "degustacao", data_expiracao_assinatura: fim } as any);
+    if (modalidade !== "pf") {
+      await storage.updateUser(user.id, { ativo: true, ...camposDaModalidade(modalidade), status_assinatura: "degustacao", data_expiracao_assinatura: fim } as any);
       await uazapiService.sendText(BaseUrl, token, chatid, msgAtivadoPJ(user.nome, fim));
-      await notificarAdmin(`🆕 Nova degustação PJ: ${user.nome} (${user.telefone}) id=${user.id} — expira ${fmtData(fim)}`);
+      await notificarAdmin(`🆕 Nova degustação ${ROTULO_MODALIDADE[modalidade]}: ${user.nome} (${user.telefone}) id=${user.id} — expira ${fmtData(fim)}`);
 
       await storage.createWhatsAppOnboardingState({
         remoteJid: chatid,
@@ -311,21 +342,32 @@ async function tratarOnboarding(user: any, text: string, chatid: string, BaseUrl
       });
       await uazapiService.sendText(BaseUrl, token, chatid, "Para configurar sua empresa e começar a registrar as finanças PJ, preciso de alguns dados. 🏢\n\nQual o seu *nome completo* (responsável pela empresa)?");
     } else {
-      await storage.updateUser(user.id, { ativo: true, tipo_pessoa: "fisica", status_assinatura: "degustacao", data_expiracao_assinatura: fim } as any);
+      await storage.updateUser(user.id, { ativo: true, tipo_pessoa: "fisica", porte_pj: null, status_assinatura: "degustacao", data_expiracao_assinatura: fim } as any);
       await uazapiService.sendText(BaseUrl, token, chatid, msgAtivadoPF(user.nome, fim));
       await notificarAdmin(`🆕 Nova degustação PF: ${user.nome} (${user.telefone}) id=${user.id} — expira ${fmtData(fim)}`);
     }
     return true;
   }
 
-  // Pós-degustação (expirada) ou conta inativa → aguarda validação do admin
-  // Exceto quem ainda está no funil de cadastro (já tratado acima)
-  if (status === "degustacao_expirada" || !user.ativo) {
-    await uazapiService.sendText(BaseUrl, token, chatid, msgEmAnalise(user.nome));
+  // Pós-degustação (expirada) ou conta inativa → aguarda validação do admin.
+  // MAS: se o admin já validou (conta ativa + vencimento no futuro, ex.: pagou
+  // por fora e o admin lançou a vigência), o cliente é assinante vigente e passa
+  // — mesmo que o status antigo ainda esteja "degustacao_expirada".
+  const vencMs = user.data_expiracao_assinatura ? new Date(user.data_expiracao_assinatura).getTime() : 0;
+  const assinaturaVigente = !!user.ativo && vencMs > Date.now();
+
+  if (!assinaturaVigente && (status === "degustacao_expirada" || !user.ativo)) {
+    // Degustação acabou ou mensalidade venceu: manda o link para assinar/pagar.
+    // "Em análise" fica só para contas bloqueadas por outro motivo.
+    const texto =
+      status === "degustacao_expirada" ? msgExpirado(user.nome)
+      : status === "vencida" || status === "inativa" ? msgAssinaturaVencida(user.nome)
+      : msgEmAnalise(user.nome);
+    await uazapiService.sendText(BaseUrl, token, chatid, texto);
     return true;
   }
 
-  return false; // usuário ativo por outra via (assinante) → segue normal
+  return false; // assinante vigente / ativo por outra via → segue normal
 }
 
 interface UazapiWebhookBody {
@@ -347,9 +389,18 @@ interface UazapiWebhookBody {
 }
 
 export const handleUazapiWebhook = async (req: Request, res: Response) => {
+  const tokenValidado = autenticarWebhookUazapi(req);
+  if (!tokenValidado) {
+    console.warn(`[UazAPI Webhook] Requisição rejeitada (token/segredo inválido) de ${req.ip}`);
+    return res.status(401).json({ received: false });
+  }
+
   // Retornar 200 imediatamente para não travar o UazAPI
   res.status(200).json({ received: true });
+  await enfileirarPorChat(String(req.body?.message?.chatid || ""), () => processarMensagemUazapi(req, tokenValidado));
+};
 
+async function processarMensagemUazapi(req: Request, tokenValidado: string): Promise<void> {
   try {
     const body = req.body as UazapiWebhookBody;
 
@@ -369,12 +420,16 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
       return; // ReactionMessage, StickerMessage, etc — ignorar silenciosamente
     }
 
-    const { BaseUrl, token, message } = body;
+    const { message } = body;
+    // Segurança: nunca responder para a URL informada no body (SSRF / desvio de
+    // respostas). A URL vem do ambiente; o token é o que acabou de ser validado.
+    const BaseUrl = process.env.UAZAPI_BASE_URL || "https://nescon.uazapi.com";
+    const token = tokenValidado;
     const { chatid, messageType, messageid, senderName } = message;
     const text = limparTextoWhatsapp(message.text || "");
 
     // Debounce: ignorar mensagem duplicada
-    if (isDuplicate(messageid)) {
+    if (await isDuplicate(messageid)) {
       console.log(`[UazAPI Webhook] Mensagem duplicada ignorada: ${messageid}`);
       return;
     }
@@ -622,10 +677,10 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
     // deve confirmar antes de gravar lançamentos.
     const origemMidia = ["AudioMessage", "ImageMessage", "DocumentMessage"].includes(messageType);
 
-    const agentContext = {
+    const agentContext: ToolContext = {
       userId: user.id,
       walletId: wallet.id,
-      categories: categories.map((c) => ({ id: c.id, nome: c.nome, tipo: c.tipo })),
+      categories: categories.map((c) => ({ id: c.id, nome: c.nome, tipo: c.tipo, descricao: (c as any).descricao ?? null })),
       tipoPessoa: user.tipo_pessoa || "fisica",
       empresaAtiva,
       origemMidia,
@@ -685,6 +740,8 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
       await createIngestionEvent({
         usuario_id: user.id, remote_jid: chatid, tipo_mensagem: messageType,
         mensagem_raw: resolvedText, resultado: "sucesso", etapa: "envio",
+        decisoes: agentContext.decisoes, message_id: messageid,
+        modelo: process.env.AI_MODEL || "gpt-4o-mini",
       });
     } catch (sendErr: any) {
       console.error(`[UazAPI Webhook] ❌ Erro ao enviar resposta:`, sendErr.message);
@@ -703,11 +760,13 @@ export const handleUazapiWebhook = async (req: Request, res: Response) => {
       });
     } catch (_) { /* nunca falhar por causa do log */ }
     try {
-      const { BaseUrl, token, message } = req.body;
-      if (BaseUrl && token && message?.chatid) {
+      // Nunca responder para a URL do payload: base do ambiente + token validado.
+      const message = req.body?.message;
+      const BaseUrl = process.env.UAZAPI_BASE_URL || "https://nescon.uazapi.com";
+      if (message?.chatid) {
         await uazapiService.sendText(
           BaseUrl,
-          token,
+          tokenValidado,
           message.chatid,
           "😓 Desculpe, aconteceu um erro inesperado. Tente novamente em alguns segundos.\n\nSe persistir, envie sua mensagem como texto simples."
         );

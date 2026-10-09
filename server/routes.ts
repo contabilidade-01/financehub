@@ -5,7 +5,7 @@ import { storage, listIngestionEvents, jaConsentiuLgpd, registrarConsentimentoLg
 import { auth } from "./middleware/auth.middleware";
 import { apiKeyAuth } from "./middleware/apiKey.middleware";
 import { combinedAuth } from "./middleware/combinedAuth.middleware";
-import { authLimiter, forgotPasswordLimiter, resetPasswordLimiter } from "./middleware/security.middleware";
+import { authLimiter, forgotPasswordLimiter, resetPasswordLimiter, sensitiveLimiter, webhookLimiter } from "./middleware/security.middleware";
 import * as passwordResetController from "./controllers/password-reset.controller";
 import {
   checkImpersonation,
@@ -51,7 +51,8 @@ const upload = multer({
       } else if (file.fieldname === 'logo_dark') {
         cb(null, file.mimetype === 'image/svg+xml' ? 'logo-dark.svg' : 'logo-dark.png');
       } else {
-        cb(null, file.originalname);
+        // Nunca usar o nome enviado pelo cliente (path traversal).
+        cb(new Error('Campo de upload inválido'), '');
       }
     }
   }),
@@ -148,9 +149,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/auth/verify", auth, (req: Request, res: Response) => {
     try {
       if (req.user) {
+        const { senha: _senha, ...userSemSenha } = req.user as any;
         res.json({ 
           success: true, 
-          user: req.user,
+          user: userSemSenha,
           message: 'Sessão válida' 
         });
       } else {
@@ -178,7 +180,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // User routes
   app.get("/api/users/profile", combinedAuth, checkImpersonation, userController.getProfile);
   app.put("/api/users/profile", auth, checkImpersonation, userController.updateProfile);
-  app.put("/api/users/password", auth, checkImpersonation, userController.updatePassword);
+  app.put("/api/users/password", sensitiveLimiter, auth, checkImpersonation, userController.updatePassword);
 
   // Wallet routes
   app.get(
@@ -220,6 +222,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     combinedAuth,
     checkImpersonation,
     transactionController.restaurarLixeiraPf,
+  );
+  app.post(
+    "/api/transactions/excluir-lote",
+    combinedAuth,
+    checkImpersonation,
+    transactionController.excluirLotePf,
+  );
+  app.post(
+    "/api/transactions/alterar-dia",
+    combinedAuth,
+    checkImpersonation,
+    transactionController.alterarDiaMassa,
   );
   app.get(
     "/api/transactions/:id",
@@ -297,7 +311,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/tokens/:id", auth, checkImpersonation, apiTokenController.getApiToken);
   app.put("/api/tokens/:id", auth, checkImpersonation, apiTokenController.updateApiToken);
   app.delete("/api/tokens/:id", auth, checkImpersonation, apiTokenController.deleteApiToken);
-  app.post("/api/tokens/:id/rotate", auth, checkImpersonation, apiTokenController.rotateApiToken);
+  app.post("/api/tokens/:id/rotate", sensitiveLimiter, auth, checkImpersonation, apiTokenController.rotateApiToken);
 
   // API Guide (documentação pública de uso da API)
   app.get("/api/api-guide", apiGuideController.getApiGuide);
@@ -375,6 +389,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireSuperAdmin,
     subscriptionPlanController.updatePlan
   );
+  app.get(
+    "/api/admin/subscription-plans/:id/assinantes",
+    combinedAuth,
+    checkImpersonation,
+    requireSuperAdmin,
+    subscriptionPlanController.getPlanSubscribers
+  );
   app.delete(
     "/api/admin/subscription-plans/:id",
     combinedAuth,
@@ -428,8 +449,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/billing/environment", billingController.getAsaasEnvironment);
 
   // Rota pública para validar token de checkout externo
-  app.get("/api/billing/checkout/validate", billingController.validateExternalCheckoutToken);
-  app.get("/api/billing/checkout/validate/:token", billingController.validateExternalCheckoutToken);
+  app.get("/api/billing/checkout/validate", sensitiveLimiter, billingController.validateExternalCheckoutToken);
+  app.get("/api/billing/checkout/validate/:token", sensitiveLimiter, billingController.validateExternalCheckoutToken);
 
   // Checkout com suporte tanto para usuários autenticados quanto para checkout externo (com token)
   app.post(
@@ -463,6 +484,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     combinedAuth,
     checkImpersonation,
     billingController.createRenewLink
+  );
+  // "Já paguei": o próprio cliente pede para conferir o pagamento no Asaas.
+  app.post(
+    "/api/billing/conferir-pagamento",
+    combinedAuth,
+    checkImpersonation,
+    billingController.conferirPagamento
   );
   app.get(
     "/api/billing/subscription",
@@ -639,8 +667,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Assinaturas — ciclo (mensal/trimestral/anual) + vencimento
   app.get("/api/admin/assinaturas", combinedAuth, checkImpersonation, requireSuperAdmin, adminController.getAssinaturas);
   app.post("/api/admin/assinaturas/:id/definir", combinedAuth, checkImpersonation, requireSuperAdmin, adminController.definirAssinatura);
+  app.post("/api/admin/assinaturas/:id/consultoria", combinedAuth, checkImpersonation, requireSuperAdmin, adminController.definirConsultoria);
   app.post("/api/admin/assinaturas/:id/renovar", combinedAuth, checkImpersonation, requireSuperAdmin, adminController.renovarAssinatura);
   app.post("/api/admin/assinaturas/:id/gerar-link", combinedAuth, checkImpersonation, requireSuperAdmin, adminController.gerarLinkCobranca);
+  app.post("/api/admin/assinaturas/:id/sincronizar-asaas", combinedAuth, checkImpersonation, requireSuperAdmin, adminController.sincronizarAssinaturaAsaas);
   // Exportação CSV de relatórios administrativos
   app.get("/api/admin/export/users-csv", combinedAuth, checkImpersonation, requireSuperAdmin, adminController.exportUsersCsv);
   app.get("/api/admin/export/transactions-csv", combinedAuth, checkImpersonation, requireSuperAdmin, adminController.exportTransactionsCsv);
@@ -748,6 +778,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   ]), async (req, res) => {
     if (!req.files || (Object.keys(req.files).length === 0)) {
       return res.status(400).json({ error: 'Nenhum arquivo enviado' });
+    }
+    // SVG é servido no mesmo domínio: recusa script/handlers (XSS armazenado).
+    const arquivos = Object.values(req.files as Record<string, Express.Multer.File[]>).flat();
+    for (const f of arquivos) {
+      if (f.mimetype !== 'image/svg+xml') continue;
+      const conteudo = fs.readFileSync(f.path, 'utf8');
+      if (/<script|\bon[a-z]+\s*=|javascript:|<foreignObject|<iframe|<embed|<object/i.test(conteudo)) {
+        fs.unlinkSync(f.path);
+        return res.status(400).json({ error: 'SVG com conteúdo ativo (script/eventos) não é permitido. Envie PNG ou SVG simples.' });
+      }
     }
     // Apenas upload, não salva nada no banco
     res.json({ success: true });
@@ -882,7 +922,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/admin/welcome-messages", combinedAuth, requireSuperAdmin, welcomeMessagesController.createWelcomeMessage);
 
   // Endpoint para buscar mensagem processada para um usuário específico (com tags substituídas)
-  app.get("/api/welcome-messages/:type/user/:userId", welcomeMessagesController.getProcessedWelcomeMessage);
+  app.get("/api/welcome-messages/:type/user/:userId", combinedAuth, requireSuperAdmin, welcomeMessagesController.getProcessedWelcomeMessage);
 
   // Maintenance Routes (Super Admin only)
   app.get("/api/maintenance/categories", combinedAuth, requireSuperAdmin, MaintenanceController.getAllCategories);
@@ -995,6 +1035,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/admin/system/settings/:key", combinedAuth, requireSuperAdmin, systemSettingsController.getSystemSetting);
 
   // Payment Settings endpoints (apenas superadmin)
+  app.get("/api/admin/ia/provedores", combinedAuth, requireSuperAdmin, adminController.getProvedoresIa);
+  app.put("/api/admin/ia/provedores", combinedAuth, requireSuperAdmin, adminController.salvarProvedoresIa);
+  app.post("/api/admin/ia/provedores/:provedor/testar", combinedAuth, requireSuperAdmin, adminController.testarProvedorIa);
+  app.post("/api/admin/ia/provedores/:provedor/reativar", combinedAuth, requireSuperAdmin, adminController.reativarProvedorIa);
+  app.get("/api/admin/cobranca/encargos", combinedAuth, requireSuperAdmin, adminController.getEncargosCobranca);
+  app.put("/api/admin/cobranca/encargos", combinedAuth, requireSuperAdmin, adminController.salvarEncargosCobranca);
+  app.post("/api/admin/cobranca/encargos/aplicar", combinedAuth, requireSuperAdmin, adminController.aplicarEncargosCobranca);
   app.get("/api/admin/payment-settings", combinedAuth, requireSuperAdmin, paymentSettingsController.getPaymentSettings);
   app.put("/api/admin/payment-settings", combinedAuth, requireSuperAdmin, paymentSettingsController.updatePaymentSettings);
   app.post("/api/admin/payment-settings/test", combinedAuth, requireSuperAdmin, paymentSettingsController.testPaymentConnection);
@@ -1329,6 +1376,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (err: any) { res.status(400).json({ error: err.message }); }
   });
 
+  // Marcar vários reembolsos como recebidos de uma vez (baixa em Transações).
+  app.put("/api/reembolsos/receber-lote", combinedAuth, async (req: Request, res: Response) => {
+    try {
+      const { marcarReembolsosRecebidosLote } = await import("./storage");
+      const wallet = await storage.getWalletByUserId(req.user!.id);
+      if (!wallet) return res.status(404).json({ error: "Carteira não encontrada" });
+      const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+      const recebidos = await marcarReembolsosRecebidosLote(ids, wallet.id);
+      res.json({ success: true, recebidos });
+    } catch (err: any) { res.status(400).json({ error: err.message }); }
+  });
+
   // Marcar transação como paga
   app.put("/api/transactions/:id/pagar", combinedAuth, async (req: Request, res: Response) => {
     try {
@@ -1367,23 +1426,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/contas/:id/lancamentos", combinedAuth, checkImpersonation, contasCartoesCtrl.lancamentosConta);
   app.put("/api/contas/:id", combinedAuth, checkImpersonation, contasCartoesCtrl.atualizarConta);
   app.delete("/api/contas/:id", combinedAuth, checkImpersonation, contasCartoesCtrl.excluirConta);
+  app.get("/api/cadastros-pendentes", combinedAuth, checkImpersonation, contasCartoesCtrl.cadastrosPendentes);
   app.get("/api/cartoes", combinedAuth, checkImpersonation, contasCartoesCtrl.listarCartoes);
+  // Resumo compacto de faturas (para a IA do WhatsApp responder saldo de fatura). Antes de /:id.
+  app.get("/api/cartoes/resumo", combinedAuth, checkImpersonation, contasCartoesCtrl.resumoFaturas);
   app.post("/api/cartoes", combinedAuth, checkImpersonation, contasCartoesCtrl.criarCartao);
   app.get("/api/cartoes/:id/lancamentos", combinedAuth, checkImpersonation, contasCartoesCtrl.lancamentosCartao);
   app.put("/api/cartoes/:id", combinedAuth, checkImpersonation, contasCartoesCtrl.atualizarCartao);
   app.delete("/api/cartoes/:id", combinedAuth, checkImpersonation, contasCartoesCtrl.excluirCartao);
   app.get("/api/cartoes/:id/faturas", combinedAuth, checkImpersonation, contasCartoesCtrl.listarFaturas);
   app.get("/api/cartoes/:id/saldo", combinedAuth, checkImpersonation, contasCartoesCtrl.saldoCartao);
+  app.post("/api/cartoes/:id/recalcular-faturas", combinedAuth, checkImpersonation, contasCartoesCtrl.recalcularFaturasCartao);
+  app.post("/api/faturas/expandir-parcelas", combinedAuth, checkImpersonation, contasCartoesCtrl.expandirParcelasFatura);
+  app.post("/api/faturas/mover-lancamento", combinedAuth, checkImpersonation, contasCartoesCtrl.moverLancamentoFatura);
   app.get("/api/faturas/:id", combinedAuth, checkImpersonation, contasCartoesCtrl.detalheFatura);
   app.post("/api/faturas/:id/pagar", combinedAuth, checkImpersonation, contasCartoesCtrl.pagarFatura);
   app.post("/api/faturas/:id/reabrir", combinedAuth, checkImpersonation, contasCartoesCtrl.reabrirFatura);
   app.get("/api/vencimentos", combinedAuth, checkImpersonation, contasCartoesCtrl.listarVencimentos);
 
+  // Onboarding — checklist "Primeiros passos" (estado real, derivado dos dados)
+  const onboardingCtrl = await import("./controllers/onboarding.controller");
+  app.get("/api/onboarding/checklist", combinedAuth, checkImpersonation, onboardingCtrl.getChecklist);
+
+  // Mensalidades (recorrências mensais) — PF e PJ (empresa_id na query/body)
+  const mensalidadesCtrl = await import("./controllers/mensalidades.controller");
+  app.get("/api/mensalidades", combinedAuth, checkImpersonation, mensalidadesCtrl.listar);
+  app.post("/api/mensalidades", combinedAuth, checkImpersonation, mensalidadesCtrl.criar);
+  app.put("/api/mensalidades/:id", combinedAuth, checkImpersonation, mensalidadesCtrl.atualizar);
+  app.delete("/api/mensalidades/:id", combinedAuth, checkImpersonation, mensalidadesCtrl.excluir);
+
   // Marcar como recorrente
   app.put("/api/transactions/:id/recorrente", combinedAuth, async (req: Request, res: Response) => {
     try {
-      const { marcarRecorrente } = await import("./storage");
-      const result = await marcarRecorrente(parseInt(req.params.id), req.body.recorrente ?? true);
+      const { marcarRecorrente, transacaoPertenceAoWallet } = await import("./storage");
+      const wallet = await storage.getWalletByUserId(req.user!.id);
+      if (!wallet) return res.status(404).json({ error: "Carteira não encontrada" });
+      const id = parseInt(req.params.id);
+      if (!(await transacaoPertenceAoWallet(id, wallet.id))) {
+        return res.status(404).json({ error: "Transação não encontrada" });
+      }
+      const result = await marcarRecorrente(id, req.body.recorrente ?? true);
       if (!result) return res.status(404).json({ error: "Transação não encontrada" });
       res.json(result);
     } catch (err: any) { res.status(400).json({ error: err.message }); }
@@ -1427,6 +1509,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Plano de contas PJ
   app.get("/api/empresas/:id/contas", combinedAuth, empresaContaCtrl.listEmpresasContas);
   app.post("/api/empresas/:id/contas", combinedAuth, empresaContaCtrl.createEmpresaConta);
+  app.post("/api/empresas/:id/contas/completar-modelo", combinedAuth, empresaContaCtrl.completarComModelo);
   app.put("/api/empresas/:id/contas/:contaId", combinedAuth, empresaContaCtrl.updateEmpresaConta);
   app.delete("/api/empresas/:id/contas/:contaId", combinedAuth, empresaContaCtrl.deleteEmpresaConta);
 
@@ -1436,6 +1519,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/empresas/:id/transacoes/:transacaoId", combinedAuth, empresaTransacaoCtrl.getEmpresaTransacao);
   app.put("/api/empresas/:id/transacoes/:transacaoId", combinedAuth, empresaTransacaoCtrl.updateEmpresaTransacao);
   app.put("/api/empresas/:id/transacoes/:transacaoId/pagar", combinedAuth, empresaTransacaoCtrl.pagarEmpresaTransacao);
+  app.post("/api/empresas/:id/transacoes/excluir-lote", combinedAuth, empresaTransacaoCtrl.excluirLoteEmpresaTransacao);
+  app.post("/api/empresas/:id/transacoes/baixar-lote", combinedAuth, empresaTransacaoCtrl.baixarLoteEmpresaTransacao);
   app.put("/api/empresas/:id/transacoes/:transacaoId/reabrir", combinedAuth, empresaTransacaoCtrl.reabrirEmpresaTransacao);
   app.delete("/api/empresas/:id/transacoes/:transacaoId", combinedAuth, empresaTransacaoCtrl.deleteEmpresaTransacao);
 
@@ -1528,6 +1613,112 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const simularWaCtrl = await import("./controllers/simular-whatsapp.controller");
   app.post("/api/admin/simular-whatsapp", combinedAuth, checkImpersonation, requireSuperAdmin, simularWaCtrl.simularWhatsapp);
+  // ERP (somente modalidade PJ ME): cadastros, contas a receber e DRE gerencial.
+  const erpCtrl = await import("./controllers/erp.controller");
+  const { requireErpPj } = await import("./middleware/modalidade.middleware");
+  const erpAuth = [combinedAuth, checkImpersonation, requireErpPj];
+  app.get("/api/empresas/:id/erp/contatos", ...erpAuth, erpCtrl.listarContatos);
+  app.post("/api/empresas/:id/erp/contatos", ...erpAuth, erpCtrl.criarContato);
+  app.put("/api/empresas/:id/erp/contatos/:cid", ...erpAuth, erpCtrl.atualizarContato);
+  app.get("/api/empresas/:id/erp/contatos/:cid/ficha", ...erpAuth, erpCtrl.fichaContato);
+  app.delete("/api/empresas/:id/erp/contatos/:cid", ...erpAuth, erpCtrl.removerContato);
+  app.get("/api/empresas/:id/erp/centros-custo", ...erpAuth, erpCtrl.listarCentros);
+  app.post("/api/empresas/:id/erp/centros-custo", ...erpAuth, erpCtrl.criarCentro);
+  app.put("/api/empresas/:id/erp/centros-custo/:cid", ...erpAuth, erpCtrl.atualizarCentro);
+  app.delete("/api/empresas/:id/erp/centros-custo/:cid", ...erpAuth, erpCtrl.removerCentro);
+  app.get("/api/empresas/:id/erp/receber", ...erpAuth, erpCtrl.listarReceber);
+  app.post("/api/empresas/:id/erp/receber", ...erpAuth, erpCtrl.criarReceber);
+  app.post("/api/empresas/:id/erp/receber/:tid/baixa", ...erpAuth, erpCtrl.receber);
+  app.get("/api/empresas/:id/erp/pagar", ...erpAuth, erpCtrl.listarPagar);
+  app.post("/api/empresas/:id/erp/pagar", ...erpAuth, erpCtrl.criarPagar);
+  app.post("/api/empresas/:id/erp/baixas", ...erpAuth, erpCtrl.baixar);
+  app.post("/api/empresas/:id/erp/estornos", ...erpAuth, erpCtrl.estornar);
+  app.get("/api/empresas/:id/erp/dre", ...erpAuth, erpCtrl.dre);
+  app.get("/api/empresas/:id/erp/razao", ...erpAuth, erpCtrl.razao);
+  app.get("/api/empresas/:id/erp/analise", ...erpAuth, erpCtrl.painel);
+  app.get("/api/empresas/:id/erp/projecao", ...erpAuth, erpCtrl.projecaoCaixa);
+  app.get("/api/empresas/:id/erp/razao/:cid", ...erpAuth, erpCtrl.razaoConta);
+  app.post("/api/empresas/:id/erp/contas-plano", ...erpAuth, erpCtrl.criarContaPlano);
+  // Recebimentos via Cora (PJ ME + flag integracao_cora). Credenciais são da
+  // própria empresa, cadastradas pelo usuário no painel dele.
+  const coraCtrl = await import("./controllers/cora.controller");
+  const { flagAtiva: flagCora, FLAG_INTEGRACAO_CORA } = await import("./services/feature-flags.service");
+  const exigeCora = async (req: Request, res: Response, next: NextFunction) => {
+    const u = req.user as any;
+    if (u?.tipo_usuario === "super_admin" || (req as any).originalUser?.tipo_usuario === "super_admin") return next();
+    if (await flagCora(FLAG_INTEGRACAO_CORA, u?.id)) return next();
+    return res.status(404).json({ error: "Recurso não disponível." });
+  };
+  const coraAuth = [...erpAuth, exigeCora];
+  app.get("/api/empresas/:id/integracoes/cora", ...coraAuth, coraCtrl.obterConexao);
+  app.put("/api/empresas/:id/integracoes/cora", sensitiveLimiter, ...coraAuth, coraCtrl.salvarConexao);
+  app.delete("/api/empresas/:id/integracoes/cora", ...coraAuth, coraCtrl.removerConexao);
+  app.post("/api/empresas/:id/integracoes/cora/testar", sensitiveLimiter, ...coraAuth, coraCtrl.testarConexao);
+  app.post("/api/empresas/:id/integracoes/cora/webhook", sensitiveLimiter, ...coraAuth, coraCtrl.ativarWebhook);
+  app.put("/api/empresas/:id/integracoes/cora/modo", sensitiveLimiter, ...coraAuth, coraCtrl.definirModo);
+  app.post("/api/empresas/:id/integracoes/cora/importar", sensitiveLimiter, ...coraAuth, coraCtrl.importar);
+  app.get("/api/empresas/:id/erp/cobrancas", ...coraAuth, coraCtrl.listarCobrancas);
+  app.post("/api/empresas/:id/erp/cobrancas", ...coraAuth, coraCtrl.emitir);
+  app.post("/api/empresas/:id/erp/cobrancas/:cid/sincronizar", ...coraAuth, coraCtrl.sincronizar);
+  app.post("/api/empresas/:id/erp/cobrancas/:cid/cancelar", ...coraAuth, coraCtrl.cancelar);
+  app.post("/api/empresas/:id/erp/cobrancas/:cid/email", sensitiveLimiter, ...coraAuth, coraCtrl.enviarEmail);
+  // Webhook público do Cora: o token da URL identifica a empresa (guardado como hash).
+  app.post("/api/webhooks/cora/:token", webhookLimiter, coraCtrl.webhook);
+
+  app.get("/api/empresas/:id/erp/transferencias", ...erpAuth, erpCtrl.listarTransferencias);
+  app.post("/api/empresas/:id/erp/transferencias", ...erpAuth, erpCtrl.criarTransferencia);
+  app.delete("/api/empresas/:id/erp/transferencias/:tid", ...erpAuth, erpCtrl.removerTransferencia);
+
+  // Importação de extratos (PF e PJ) — sessão persistente com autosave.
+  const importacaoCtrl = await import("./controllers/importacao.controller");
+  const uploadExtrato = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+    fileFilter: (_req, file, cb) => {
+      if (/\.(ofx|qfx|csv|txt|xlsx|xls|xlsm|ods)$/i.test(file.originalname || "")) return cb(null, true);
+      cb(new Error("Formato não suportado. Envie OFX, CSV ou Excel."));
+    },
+  });
+  // Atrás da flag importacao_extrato_v2 (super admin sempre acessa).
+  const { flagAtiva, FLAG_IMPORTACAO_EXTRATO_V2 } = await import("./services/feature-flags.service");
+  const exigeImportacaoV2 = async (req: Request, res: Response, next: NextFunction) => {
+    const u = req.user as any;
+    if (u?.tipo_usuario === "super_admin" || (req as any).originalUser?.tipo_usuario === "super_admin") return next();
+    if (await flagAtiva(FLAG_IMPORTACAO_EXTRATO_V2, u?.id)) return next();
+    return res.status(404).json({ error: "Recurso não disponível." });
+  };
+  app.use("/api/importacoes", combinedAuth, checkImpersonation, exigeImportacaoV2);
+  app.post("/api/importacoes", combinedAuth, checkImpersonation, (req, res, next) =>
+    uploadExtrato.single("arquivo")(req, res, (err: any) =>
+      err ? res.status(400).json({ error: err.code === "LIMIT_FILE_SIZE" ? "Arquivo maior que 10 MB." : err.message }) : next(),
+    ), importacaoCtrl.criar);
+  app.get("/api/importacoes", combinedAuth, checkImpersonation, importacaoCtrl.listar);
+  app.get("/api/importacoes/:id", combinedAuth, checkImpersonation, importacaoCtrl.detalhar);
+  app.put("/api/importacoes/:id/mapeamento", combinedAuth, checkImpersonation, importacaoCtrl.mapeamento);
+  app.put("/api/importacoes/:id/conta", combinedAuth, checkImpersonation, importacaoCtrl.conta);
+  app.put("/api/importacoes/:id/cartao", combinedAuth, checkImpersonation, importacaoCtrl.cartao);
+  app.post("/api/importacoes/:id/inverter-sinal", combinedAuth, checkImpersonation, importacaoCtrl.sinal);
+  app.patch("/api/importacoes/:id/linhas", combinedAuth, checkImpersonation, importacaoCtrl.linhas);
+  app.post("/api/importacoes/:id/regra", combinedAuth, checkImpersonation, importacaoCtrl.regra);
+  app.post("/api/importacoes/:id/sugerir", combinedAuth, checkImpersonation, importacaoCtrl.sugerir);
+  app.post("/api/importacoes/:id/categorias", combinedAuth, checkImpersonation, importacaoCtrl.categoria);
+  app.post("/api/importacoes/:id/confirmar", combinedAuth, checkImpersonation, importacaoCtrl.confirmar);
+  app.delete("/api/importacoes/:id", combinedAuth, checkImpersonation, importacaoCtrl.cancelar);
+
+  const iaAuditoriaCtrl = await import("./controllers/ia-auditoria.controller");
+  app.get("/api/admin/ia/eventos", combinedAuth, checkImpersonation, requireSuperAdmin, iaAuditoriaCtrl.listarEventosIa);
+
+  // Orquestrador admin — DeepSeek (super_admin gerencia liberação; chat exige acesso)
+  const orqCtrl = await import("./controllers/orquestrador.controller");
+  app.get("/api/admin/orquestrador/status", combinedAuth, checkImpersonation, requireSuperAdmin, orqCtrl.statusOrquestrador);
+  app.get("/api/admin/orquestrador/liberados", combinedAuth, checkImpersonation, requireSuperAdmin, orqCtrl.listarLiberados);
+  app.post("/api/admin/orquestrador/liberar", combinedAuth, checkImpersonation, requireSuperAdmin, orqCtrl.liberarUsuario);
+  app.delete("/api/admin/orquestrador/liberar/:usuarioId", combinedAuth, checkImpersonation, requireSuperAdmin, orqCtrl.revogarUsuario);
+  app.post("/api/admin/orquestrador/chat", combinedAuth, checkImpersonation, requireSuperAdmin, orqCtrl.chatOrquestrador);
+
+  // Orquestrador para usuário liberado (própria carteira) — também acessível ao super_admin
+  app.get("/api/orquestrador/status", combinedAuth, checkImpersonation, orqCtrl.statusOrquestrador);
+  app.post("/api/orquestrador/chat", combinedAuth, checkImpersonation, orqCtrl.chatOrquestrador);
 
   {
     const { getAppVersion } = await import("./services/app-version");

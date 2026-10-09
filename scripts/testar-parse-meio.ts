@@ -6,6 +6,8 @@ import { detectarMeio, textoMeioDeDetect } from "../server/services/parse-meio";
 import { casaNomeMeio, classificarMatchesMeioPorNome } from "../server/services/meio-pagamento-pj";
 import { pareceLancamentoSemMeio, respostaEhSoMeio } from "../server/services/atalho-meio-pj";
 import { limparTextoWhatsapp } from "../server/services/limpar-texto-whatsapp";
+import { sugerirNomeConta } from "../server/services/confirmacao-usuario";
+import { falaDoLancamentoOfertado } from "../server/services/oferta-criar-conta-pj";
 
 let falhas = 0;
 const ok = (n: string) => console.log("ok  ", n);
@@ -183,6 +185,41 @@ else ok("resposta dinheiro");
   if (!sujo.includes("abastecimento") || /icon-hover|style/i.test(sujo)) {
     fail("limpar html", sujo);
   } else ok("limpa CSS do WhatsApp Web");
+}
+
+// Resposta "Sim" ao resumo da foto (Caixinha já combinada) não é nome de meio.
+for (const f of ["Sim", "sim", "Ok", "Pode lançar", "Sim, pode registrar", "confirmo", "isso mesmo", "👍", "Não"]) {
+  expectTipo(f, "nenhum");
+}
+if (respostaEhSoMeio("Sim") !== null) fail("so meio Sim", String(respostaEhSoMeio("Sim")));
+else ok("resposta Sim não vira meio");
+expectTipo("Itaú", "nome", "itau");
+expectTipo("Gasoliná na caixinha", "dinheiro");
+
+// Oferta de conta para combustível usa o nome que a classificação PJ procura.
+for (const d of ["Gasolina", "Etanol Comum", "Abastecimento do carro"]) {
+  const n = sugerirNomeConta(d);
+  if (n !== "Combustível") fail(`sugerir ${d}`, n);
+  else ok(`sugerir conta: ${d} → Combustível`);
+}
+if (sugerirNomeConta("Material de limpeza") !== "Material De Limpeza") {
+  fail("sugerir genérico", sugerirNomeConta("Material de limpeza"));
+} else ok("sugerir conta genérica inalterado");
+
+// Resposta à oferta "criar conta e mover" que fala do mesmo lançamento.
+{
+  const oferta = { nomeConta: "Combustível", descricao: "Gasolina" };
+  const casos: [string, boolean][] = [
+    ["Gasoliná na caixinha", true],
+    ["combustivel", true],
+    ["gasolina 50 na caixinha", false],
+    ["qual meu saldo?", false],
+  ];
+  for (const [msg, esperado] of casos) {
+    const r = falaDoLancamentoOfertado(msg, oferta);
+    if (r !== esperado) fail(`oferta "${msg}"`, `esperado ${esperado}, obtido ${r}`);
+    else ok(`oferta: "${msg}" → ${esperado ? "pergunta sim/não" : "segue"}`);
+  }
 }
 
 if (falhas) {

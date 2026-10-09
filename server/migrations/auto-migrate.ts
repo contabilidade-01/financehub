@@ -15,6 +15,24 @@ import { sql } from "drizzle-orm";
 
 type Step = { name: string; run: () => Promise<void> };
 
+/**
+ * Correção de dados que deve rodar UMA vez (os passos rodam a cada boot).
+ * Sem isso, um backfill "re-corrigiria" o que o usuário mudou depois.
+ */
+type Exec = { execute: typeof db.execute };
+
+async function umaVez(chave: string, fn: (tx: Exec) => Promise<void>): Promise<void> {
+  await db.execute(sql`CREATE TABLE IF NOT EXISTS auto_migrate_marcos (chave VARCHAR(120) PRIMARY KEY, aplicado_em TIMESTAMPTZ NOT NULL DEFAULT now())`);
+  const ja = await db.execute(sql`SELECT 1 FROM auto_migrate_marcos WHERE chave = ${chave}`);
+  if ((ja as any[]).length) return;
+  await db.transaction(async (tx: Exec) => {
+    // A marca é gravada na mesma transação da correção: ou as duas ou nenhuma.
+    const ins = await tx.execute(sql`INSERT INTO auto_migrate_marcos (chave) VALUES (${chave}) ON CONFLICT DO NOTHING RETURNING chave`);
+    if (!(ins as any[]).length) return; // outra instância chegou antes
+    await fn(tx);
+  });
+}
+
 const STEPS: Step[] = [
   {
     name: "transacoes: campos de contas a pagar / fluxo de caixa",
@@ -206,6 +224,8 @@ const STEPS: Step[] = [
       // Tabelas criadas em versões antigas não tinham empresa_id (CREATE IF NOT
       // EXISTS não altera tabela existente) — garante a coluna antes do índice.
       await db.execute(sql`ALTER TABLE transacoes_lixeira ADD COLUMN IF NOT EXISTS empresa_id INTEGER`);
+      // lote_id agrupa exclusões em lote: o "Desfazer" restaura o lote inteiro.
+      await db.execute(sql`ALTER TABLE transacoes_lixeira ADD COLUMN IF NOT EXISTS lote_id TEXT`);
       await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_lixeira_carteira ON transacoes_lixeira(carteira_id, excluida_em)`);
       await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_lixeira_empresa ON transacoes_lixeira(empresa_id, excluida_em)`);
     },
@@ -522,12 +542,15 @@ const STEPS: Step[] = [
         WHERE grupo_gerencial IS NULL
       `);
       // Marca CMV pelas contas de custo variável ligadas a mercadoria vendida.
-      await db.execute(sql`
-        UPDATE empresas_contas SET is_cmv = true
-        WHERE grupo_gerencial = 'custo_variavel'
-          AND is_cmv = false
-          AND (nome ILIKE '%CMV%' OR nome ILIKE '%mercadoria vendida%' OR codigo = '3.01')
-      `);
+      // Uma vez só: rodando a cada boot, desfazia quem desmarcou CMV na tela.
+      await umaVez("empresas_contas.is_cmv.backfill", async (tx) => {
+        await tx.execute(sql`
+          UPDATE empresas_contas SET is_cmv = true
+          WHERE grupo_gerencial = 'custo_variavel'
+            AND is_cmv = false
+            AND (nome ILIKE '%CMV%' OR nome ILIKE '%mercadoria vendida%' OR codigo = '3.01')
+        `);
+      });
     },
   },
   {
@@ -728,6 +751,25 @@ const STEPS: Step[] = [
       } catch {
         // tabela pode não existir
       }
+    },
+  },
+  {
+    name: "planos: separar PF (39,90) e PJ (79,90)",
+    run: async () => {
+      // Converte o plano único atual (tipo NULL) em plano PF de R$ 39,90.
+      // Mantém o id (preserva qualquer user_subscriptions.plan_id existente).
+      await db.execute(sql`
+        UPDATE subscription_plans
+        SET tipo_pessoa = 'fisica', price_monthly = 39.90, name = 'Plano Mensal PF', active = true
+        WHERE plan_code = 'mensal'
+      `);
+      // Cria o plano PJ de R$ 79,90 se ainda não existir.
+      await db.execute(sql`
+        INSERT INTO subscription_plans (plan_code, name, description, price_monthly, tipo_pessoa, features, active)
+        SELECT 'mensal_pj', 'Plano Mensal PJ', 'Assinatura mensal para Pessoa Jurídica',
+               79.90, 'juridica', '[]', true
+        WHERE NOT EXISTS (SELECT 1 FROM subscription_plans WHERE plan_code = 'mensal_pj')
+      `);
     },
   },
   {
@@ -962,6 +1004,479 @@ const STEPS: Step[] = [
         `);
       }
       console.log(`[AutoMigrate] PJ txs remapeadas de forma solta → conta/Caixinha: ${remapeadas}`);
+    },
+  },
+  {
+    name: "mensalidades (recorrências mensais PF/PJ)",
+    run: async () => {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS mensalidades (
+          id                        SERIAL PRIMARY KEY,
+          usuario_id                INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+          empresa_id                INTEGER REFERENCES empresas(id) ON DELETE CASCADE,
+          carteira_id               INTEGER REFERENCES carteiras(id),
+          descricao                 VARCHAR(255) NOT NULL,
+          valor                     NUMERIC(12,2) NOT NULL,
+          dia_vencimento            INTEGER NOT NULL,
+          tipo_meio                 VARCHAR(10) NOT NULL,
+          categoria_id              INTEGER,
+          conta_bancaria_id         INTEGER,
+          forma_pagamento_id        INTEGER,
+          cartao_id                 INTEGER,
+          ativo                     BOOLEAN NOT NULL DEFAULT true,
+          data_inicio               DATE,
+          data_fim                  DATE,
+          ultima_competencia_gerada VARCHAR(7),
+          origem                    VARCHAR(20) NOT NULL DEFAULT 'app',
+          data_criacao              TIMESTAMPTZ DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')
+        )
+      `);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_mensalidades_usuario ON mensalidades(usuario_id)`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_mensalidades_empresa ON mensalidades(empresa_id)`);
+    },
+  },
+  {
+    name: "PJ com consultoria (plano 200) + usuarios.plano_forcado_id",
+    run: async () => {
+      // Coluna de override de plano por usuário (manual, pelo admin).
+      await db.execute(sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS plano_forcado_id INTEGER`);
+      // Plano PJ "com consultoria" (R$ 200) — criado uma vez, se ainda não existir.
+      await db.execute(sql`
+        INSERT INTO subscription_plans (plan_code, name, description, price_monthly, tipo_pessoa, features, active)
+        SELECT 'mensal_pj_consultoria', 'Plano Mensal PJ + Consultoria',
+               'Assinatura mensal PJ com consultoria', 200.00, 'juridica', '[]', true
+        WHERE NOT EXISTS (SELECT 1 FROM subscription_plans WHERE plan_code = 'mensal_pj_consultoria')
+      `);
+    },
+  },
+  {
+    name: "modalidade PJ MEI / PJ ME (usuarios.porte_pj)",
+    run: async () => {
+      // Aditivo: PJ existentes passam a ser PJ MEI; PJ ME é a nova modalidade (ERP).
+      await db.execute(sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS porte_pj VARCHAR(10)`);
+      await db.execute(sql`
+        UPDATE usuarios SET porte_pj = 'mei'
+        WHERE tipo_pessoa = 'juridica' AND porte_pj IS NULL
+      `);
+    },
+  },
+  {
+    name: "plano PJ ME com preço próprio (subscription_plans.porte_pj)",
+    run: async () => {
+      await db.execute(sql`ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS porte_pj VARCHAR(10)`);
+      // Começa com o mesmo preço do PJ atual; o admin fixa o valor em Pagamentos.
+      await db.execute(sql`
+        INSERT INTO subscription_plans (plan_code, name, description, price_monthly, tipo_pessoa, porte_pj, features, active)
+        SELECT 'mensal_pj_me', 'Plano Mensal PJ ME', 'Assinatura mensal PJ ME (ERP)',
+               COALESCE((SELECT price_monthly FROM subscription_plans WHERE plan_code = 'mensal_pj' LIMIT 1), 79.90),
+               'juridica', 'me', '[]', true
+        WHERE NOT EXISTS (SELECT 1 FROM subscription_plans WHERE plan_code = 'mensal_pj_me')
+      `);
+    },
+  },
+  {
+    name: "tokens de API só com hash (api_tokens.token_hint + sha256)",
+    run: async () => {
+      await db.execute(sql`ALTER TABLE api_tokens ADD COLUMN IF NOT EXISTS token_hint VARCHAR(40)`);
+      // Idempotente: só converte o que ainda está em texto puro.
+      await db.execute(sql`
+        UPDATE api_tokens
+        SET token_hint = left(token, 10) || '...' || right(token, 4),
+            token = 'sha256:' || encode(sha256(convert_to(token, 'UTF8')), 'hex')
+        WHERE token NOT LIKE 'sha256:%'
+      `);
+    },
+  },
+  {
+    name: "IA: pendências da conversa e dedup de mensagens no banco",
+    run: async () => {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS ia_pendencias (
+          usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+          tipo       VARCHAR(40) NOT NULL,
+          dados      JSONB NOT NULL,
+          expira_em  TIMESTAMPTZ NOT NULL,
+          PRIMARY KEY (usuario_id, tipo)
+        )
+      `);
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS whatsapp_mensagens_processadas (
+          message_id VARCHAR(128) PRIMARY KEY,
+          criado_em  TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_wa_msg_criado ON whatsapp_mensagens_processadas(criado_em)`);
+      // Auditoria das decisões da IA (ferramentas, categoria escolhida e motivo).
+      await db.execute(sql`ALTER TABLE ingestion_events ADD COLUMN IF NOT EXISTS decisoes JSONB`);
+      await db.execute(sql`ALTER TABLE ingestion_events ADD COLUMN IF NOT EXISTS modelo VARCHAR(80)`);
+      await db.execute(sql`ALTER TABLE ingestion_events ADD COLUMN IF NOT EXISTS message_id VARCHAR(128)`);
+    },
+  },
+  {
+    name: "importação unificada: sessões persistentes (importacoes / importacao_linhas)",
+    run: async () => {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS importacoes (
+          id                    SERIAL PRIMARY KEY,
+          usuario_id            INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+          escopo                VARCHAR(2) NOT NULL,             -- 'pf' | 'pj'
+          empresa_id            INTEGER REFERENCES empresas(id) ON DELETE CASCADE,
+          conta_bancaria_id     INTEGER REFERENCES contas_bancarias(id) ON DELETE SET NULL,
+          arquivo_nome          VARCHAR(255),
+          formato               VARCHAR(10) NOT NULL,
+          hash_arquivo          VARCHAR(64),
+          cabecalho             JSONB,
+          linhas_brutas         JSONB,                           -- CSV/XLSX: p/ remapear colunas
+          mapeamento            JSONB,
+          conta_arquivo         JSONB,                           -- OFX: banco/agência/conta
+          saldo_final_informado NUMERIC(14,2),
+          data_saldo            DATE,
+          periodo_de            DATE,
+          periodo_ate           DATE,
+          status                VARCHAR(15) NOT NULL DEFAULT 'rascunho', -- rascunho | concluida | cancelada
+          sugestao_status       VARCHAR(15),                     -- processando | concluida | erro
+          sugestao_progresso    INTEGER,
+          resultado             JSONB,
+          criado_em             TIMESTAMPTZ NOT NULL DEFAULT now(),
+          atualizado_em         TIMESTAMPTZ NOT NULL DEFAULT now(),
+          concluido_em          TIMESTAMPTZ
+        )
+      `);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_importacoes_usuario ON importacoes(usuario_id, status)`);
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS importacao_linhas (
+          id                     SERIAL PRIMARY KEY,
+          importacao_id          INTEGER NOT NULL REFERENCES importacoes(id) ON DELETE CASCADE,
+          ordem                  INTEGER NOT NULL,
+          data                   DATE NOT NULL,
+          descricao              VARCHAR(255) NOT NULL,
+          valor                  NUMERIC(14,2) NOT NULL,          -- com sinal: + entrada, - saída
+          documento              VARCHAR(80),
+          chave                  VARCHAR(120) NOT NULL,           -- FITID ou hash (dedup)
+          status                 VARCHAR(12) NOT NULL DEFAULT 'pendente', -- pendente | conciliar | duplicada | ignorar | importada
+          categoria_id           INTEGER,                         -- PF: categorias.id | PJ: empresas_contas.id
+          sugestao_categoria_id  INTEGER,
+          sugestao_origem        VARCHAR(30),
+          transacao_existente_id INTEGER,                         -- conciliar com lançamento já existente
+          candidatos             JSONB,
+          transacao_criada_id    INTEGER,
+          centro_custo_id        INTEGER,
+          contato_id             INTEGER,
+          observacao             VARCHAR(255),
+          atualizado_em          TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_import_linhas ON importacao_linhas(importacao_id, ordem)`);
+      // Chave do extrato gravada no lançamento: dedup entre importações (PF e PJ).
+      await db.execute(sql`ALTER TABLE transacoes ADD COLUMN IF NOT EXISTS fitid VARCHAR(120)`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_transacoes_conta_fitid ON transacoes(conta_bancaria_id, fitid) WHERE fitid IS NOT NULL`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_emp_tx_conta_fitid ON empresas_transacoes(conta_bancaria_id, fitid) WHERE fitid IS NOT NULL`);
+    },
+  },
+  {
+    name: "importação de fatura de cartão + cadastro automático pendente (conta/cartão)",
+    run: async () => {
+      // Cadastros criados sozinhos pela importação ficam "pendentes" até o cliente completar.
+      await db.execute(sql`ALTER TABLE formas_pagamento ADD COLUMN IF NOT EXISTS cadastro_pendente BOOLEAN NOT NULL DEFAULT false`);
+      await db.execute(sql`ALTER TABLE contas_bancarias ADD COLUMN IF NOT EXISTS cadastro_pendente BOOLEAN NOT NULL DEFAULT false`);
+      await db.execute(sql`ALTER TABLE importacoes ADD COLUMN IF NOT EXISTS destino VARCHAR(6) NOT NULL DEFAULT 'conta'`);
+      await db.execute(sql`ALTER TABLE importacoes ADD COLUMN IF NOT EXISTS cartao_id INTEGER`);
+      await db.execute(sql`ALTER TABLE importacoes ADD COLUMN IF NOT EXISTS sinal_invertido BOOLEAN NOT NULL DEFAULT false`);
+      await db.execute(sql`ALTER TABLE importacoes ADD COLUMN IF NOT EXISTS destino_auto_criado BOOLEAN NOT NULL DEFAULT false`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_transacoes_cartao_fitid ON transacoes(forma_pagamento_id, fitid) WHERE fitid IS NOT NULL`);
+    },
+  },
+  {
+    name: "ERP PJ ME: clientes/fornecedores, centros de custo e vínculos no lançamento",
+    run: async () => {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS empresas_contatos (
+          id          SERIAL PRIMARY KEY,
+          empresa_id  INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+          tipo        VARCHAR(12) NOT NULL DEFAULT 'cliente',   -- cliente | fornecedor | ambos
+          nome        VARCHAR(200) NOT NULL,
+          documento   VARCHAR(20),                              -- CPF/CNPJ só dígitos
+          email       VARCHAR(200),
+          telefone    VARCHAR(30),
+          observacao  TEXT,
+          ativo       BOOLEAN NOT NULL DEFAULT true,
+          criado_em   TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_emp_contatos ON empresas_contatos(empresa_id, ativo)`);
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS empresas_centros_custo (
+          id          SERIAL PRIMARY KEY,
+          empresa_id  INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+          nome        VARCHAR(120) NOT NULL,
+          codigo      VARCHAR(20),
+          ativo       BOOLEAN NOT NULL DEFAULT true,
+          criado_em   TIMESTAMPTZ NOT NULL DEFAULT now(),
+          UNIQUE (empresa_id, nome)
+        )
+      `);
+      await db.execute(sql`ALTER TABLE empresas_transacoes ADD COLUMN IF NOT EXISTS contato_id INTEGER REFERENCES empresas_contatos(id) ON DELETE SET NULL`);
+      await db.execute(sql`ALTER TABLE empresas_transacoes ADD COLUMN IF NOT EXISTS centro_custo_id INTEGER REFERENCES empresas_centros_custo(id) ON DELETE SET NULL`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_emp_tx_contato ON empresas_transacoes(contato_id) WHERE contato_id IS NOT NULL`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_emp_tx_centro ON empresas_transacoes(centro_custo_id) WHERE centro_custo_id IS NOT NULL`);
+    },
+  },
+  {
+    name: "transferências entre contas bancárias (não entram no DRE)",
+    run: async () => {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS transferencias_bancarias (
+          id                SERIAL PRIMARY KEY,
+          usuario_id        INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+          empresa_id        INTEGER REFERENCES empresas(id) ON DELETE CASCADE,
+          conta_origem_id   INTEGER NOT NULL REFERENCES contas_bancarias(id) ON DELETE CASCADE,
+          conta_destino_id  INTEGER NOT NULL REFERENCES contas_bancarias(id) ON DELETE CASCADE,
+          valor             NUMERIC(14,2) NOT NULL CHECK (valor > 0),
+          data              DATE NOT NULL,
+          descricao         VARCHAR(255),
+          chave_origem      VARCHAR(120),   -- chave do extrato da conta de origem (dedup)
+          chave_destino     VARCHAR(120),   -- chave do extrato da conta de destino
+          criado_em         TIMESTAMPTZ NOT NULL DEFAULT now(),
+          CHECK (conta_origem_id <> conta_destino_id)
+        )
+      `);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_transf_origem ON transferencias_bancarias(conta_origem_id, data)`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_transf_destino ON transferencias_bancarias(conta_destino_id, data)`);
+      // 'transferencia' (13) não cabe em VARCHAR(12); alargar é seguro e idempotente.
+      await db.execute(sql`ALTER TABLE importacao_linhas ALTER COLUMN status TYPE VARCHAR(20)`);
+      await db.execute(sql`ALTER TABLE importacao_linhas ADD COLUMN IF NOT EXISTS transferencia_conta_id INTEGER`);
+      await db.execute(sql`ALTER TABLE importacao_linhas ADD COLUMN IF NOT EXISTS transferencia_id INTEGER`);
+    },
+  },
+  {
+    name: "plano de contas PJ: grupos sintéticos (Base Serviços / Base Comércio)",
+    run: async () => {
+      await db.execute(sql`ALTER TABLE empresas_contas ADD COLUMN IF NOT EXISTS sintetica BOOLEAN NOT NULL DEFAULT false`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_emp_contas_parent ON empresas_contas(parent_id) WHERE parent_id IS NOT NULL`);
+
+      // Defesa em profundidade: grupo sintético nunca recebe lançamento, venha
+      // de onde vier (tela, IA, importação, integração).
+      await db.execute(sql`
+        CREATE OR REPLACE FUNCTION fn_bloqueia_lanc_conta_sintetica() RETURNS trigger AS $$
+        BEGIN
+          IF NEW.categoria_id IS NOT NULL AND EXISTS (
+            SELECT 1 FROM empresas_contas c WHERE c.id = NEW.categoria_id AND c.sintetica = true
+          ) THEN
+            RAISE EXCEPTION 'Lançamento em grupo do plano de contas não é permitido; escolha uma conta.'
+              USING ERRCODE = 'check_violation';
+          END IF;
+          RETURN NEW;
+        END $$ LANGUAGE plpgsql
+      `);
+      await db.execute(sql`DROP TRIGGER IF EXISTS trg_bloqueia_lanc_conta_sintetica ON empresas_transacoes`);
+      await db.execute(sql`
+        CREATE TRIGGER trg_bloqueia_lanc_conta_sintetica
+        BEFORE INSERT OR UPDATE OF categoria_id ON empresas_transacoes
+        FOR EACH ROW EXECUTE FUNCTION fn_bloqueia_lanc_conta_sintetica()
+      `);
+
+      // Empresas com o plano antigo (1=Receita, 2=Fixas, 3=Variáveis, 4=Outras):
+      // cria os grupos sintéticos pelos prefixos, sem renumerar nada, e pendura
+      // as contas neles. Uma vez só, para respeitar o que o usuário mover depois.
+      await umaVez("empresas_contas.grupos_legado", async (tx) => {
+        const grupos: [string, string, string, string, string][] = [
+          ["1", "Receitas", "Receita", "OUTRA", "receita"],
+          ["2", "Despesas fixas", "Despesa", "FIXA", "despesa_fixa"],
+          ["3", "Custos e despesas variáveis", "Despesa", "VARIAVEL", "custo_variavel"],
+          ["4", "Outras despesas", "Despesa", "OUTRA", "outras"],
+        ];
+        // Empresas ainda sem nenhum grupo (listadas antes de inserir o primeiro).
+        const alvo = ((await tx.execute(sql`
+          SELECT DISTINCT c.empresa_id FROM empresas_contas c
+          WHERE NOT EXISTS (SELECT 1 FROM empresas_contas s WHERE s.empresa_id = c.empresa_id AND s.sintetica = true)
+        `)) as any[]).map((r) => Number(r.empresa_id));
+        if (!alvo.length) return;
+        const ids = sql.join(alvo.map((id) => sql`${id}`), sql`, `);
+        for (const [codigo, nome, tipo, classificacao, grupo] of grupos) {
+          await tx.execute(sql`
+            INSERT INTO empresas_contas (empresa_id, codigo, nome, tipo, classificacao, grupo_gerencial, sintetica, ativo)
+            SELECT DISTINCT c.empresa_id, ${codigo}, ${nome}, ${tipo}, ${classificacao}, ${grupo}, true, true
+            FROM empresas_contas c
+            WHERE c.empresa_id IN (${ids})
+              AND c.codigo LIKE ${codigo + ".%"}
+              AND NOT EXISTS (SELECT 1 FROM empresas_contas x WHERE x.empresa_id = c.empresa_id AND x.codigo = ${codigo})
+          `);
+        }
+        await tx.execute(sql`
+          UPDATE empresas_contas f SET parent_id = g.id
+          FROM empresas_contas g
+          WHERE g.empresa_id = f.empresa_id
+            AND f.empresa_id IN (${ids})
+            AND g.sintetica = true
+            AND f.sintetica = false
+            AND f.parent_id IS NULL
+            AND f.codigo LIKE g.codigo || '.%'
+            AND position('.' in substring(f.codigo from length(g.codigo) + 2)) = 0
+        `);
+      });
+    },
+  },
+  {
+    name: "Cora: integrações por empresa, cobranças, eventos de webhook e endereço de clientes",
+    run: async () => {
+      // Endereço do cliente: o banco exige para registrar boleto.
+      for (const col of ["cep VARCHAR(9)", "logradouro VARCHAR(200)", "numero VARCHAR(20)", "complemento VARCHAR(100)", "bairro VARCHAR(100)", "cidade VARCHAR(100)", "uf VARCHAR(2)"]) {
+        await db.execute(sql.raw(`ALTER TABLE empresas_contatos ADD COLUMN IF NOT EXISTS ${col}`));
+      }
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS empresas_integracoes (
+          id                 SERIAL PRIMARY KEY,
+          empresa_id         INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+          provedor           VARCHAR(20) NOT NULL,                -- 'cora'
+          ambiente           VARCHAR(10) NOT NULL DEFAULT 'stage', -- stage | producao
+          client_id          VARCHAR(200),
+          certificado_enc    TEXT,                                -- AES-256-GCM (utils/cripto-segredos)
+          chave_enc          TEXT,
+          conta_bancaria_id  INTEGER REFERENCES contas_bancarias(id) ON DELETE SET NULL,
+          webhook_token_hash VARCHAR(64),                         -- sha256 do token da URL
+          webhook_registrado BOOLEAN NOT NULL DEFAULT false,
+          status             VARCHAR(20) NOT NULL DEFAULT 'pendente', -- pendente | conectada | erro
+          ultimo_erro        TEXT,
+          multa_pct          NUMERIC(5,2) DEFAULT 2,
+          juros_mes_pct      NUMERIC(5,2) DEFAULT 1,
+          ultimo_sync_em     TIMESTAMPTZ,
+          atualizado_em      TIMESTAMPTZ NOT NULL DEFAULT now(),
+          criado_em          TIMESTAMPTZ NOT NULL DEFAULT now(),
+          UNIQUE (empresa_id, provedor)
+        )
+      `);
+      await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_integ_webhook ON empresas_integracoes(webhook_token_hash) WHERE webhook_token_hash IS NOT NULL`);
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS cobrancas (
+          id               SERIAL PRIMARY KEY,
+          empresa_id       INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+          provedor         VARCHAR(20) NOT NULL DEFAULT 'cora',
+          provedor_id      VARCHAR(80),
+          transacao_id     INTEGER REFERENCES empresas_transacoes(id) ON DELETE SET NULL,
+          contato_id       INTEGER REFERENCES empresas_contatos(id) ON DELETE SET NULL,
+          status           VARCHAR(20) NOT NULL DEFAULT 'aberta',  -- aberta | processando | paga | vencida | cancelada | erro
+          valor            NUMERIC(14,2) NOT NULL,
+          valor_pago       NUMERIC(14,2),
+          vencimento       DATE NOT NULL,
+          pago_em          DATE,
+          linha_digitavel  VARCHAR(80),
+          codigo_barras    VARCHAR(60),
+          pix_copia_cola   TEXT,
+          url_pdf          TEXT,
+          idempotency_key  VARCHAR(120) NOT NULL,
+          erro             TEXT,
+          payload          JSONB,
+          criado_em        TIMESTAMPTZ NOT NULL DEFAULT now(),
+          atualizado_em    TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `);
+      await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_cobr_provedor ON cobrancas(provedor, provedor_id) WHERE provedor_id IS NOT NULL`);
+      // Uma cobrança viva por título (evita cobrar o cliente duas vezes).
+      await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_cobr_titulo_viva ON cobrancas(transacao_id) WHERE transacao_id IS NOT NULL AND status IN ('aberta', 'processando', 'vencida')`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_cobr_empresa ON cobrancas(empresa_id, status, vencimento)`);
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS integracoes_eventos (
+          provedor     VARCHAR(20) NOT NULL,
+          evento_id    VARCHAR(120) NOT NULL,
+          recebido_em  TIMESTAMPTZ NOT NULL DEFAULT now(),
+          PRIMARY KEY (provedor, evento_id)
+        )
+      `);
+    },
+  },
+  {
+    name: "assinatura: acesso ancorado no vencimento (+3 dias de tolerância) e avisos_cobranca",
+    run: async () => {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS avisos_cobranca (
+          usuario_id  INTEGER NOT NULL,
+          chave       VARCHAR(160) NOT NULL,
+          enviado_em  TIMESTAMPTZ NOT NULL DEFAULT now(),
+          PRIMARY KEY (usuario_id, chave)
+        )
+      `);
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS asaas_conferencias (
+          usuario_id    INTEGER PRIMARY KEY,
+          conferido_em  TIMESTAMPTZ NOT NULL DEFAULT now(),
+          origem        VARCHAR(12) NOT NULL DEFAULT 'auto'
+        )
+      `);
+      // Multa e juros das mensalidades (padrão 2% + 1% a.m.; editável no admin).
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS cobranca_config (
+          id             INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+          multa_pct      NUMERIC(5,2) NOT NULL DEFAULT 2,
+          juros_mes_pct  NUMERIC(5,2) NOT NULL DEFAULT 1,
+          atualizado_em  TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `);
+      await db.execute(sql`INSERT INTO cobranca_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING`);
+      // "Próxima cobrança" (user_subscriptions.current_period_end) = acesso − 3 dias
+      // de tolerância, para assinaturas em que ficou igual ao acesso.
+      await umaVez("assinatura.periodo_sem_tolerancia", async (tx) => {
+        await tx.execute(sql`
+          UPDATE user_subscriptions s
+          SET current_period_end = ((((u.data_expiracao_assinatura AT TIME ZONE 'America/Sao_Paulo')::date - 3) + time '23:59:59.999') AT TIME ZONE 'America/Sao_Paulo')
+          FROM usuarios u
+          WHERE u.id = s.usuario_id AND s.status = 'active'
+            AND u.data_expiracao_assinatura IS NOT NULL
+            AND s.current_period_end = u.data_expiracao_assinatura
+        `);
+      });
+      // Assinantes ativos: recalcula pelo vencimento do último pagamento
+      // confirmado (vencimento + ciclo + 3 dias, fim do dia em SP). Só ESTENDE
+      // — nunca tira acesso de ninguém.
+      await umaVez("assinatura.ancorar_vencimento", async (tx) => {
+        await tx.execute(sql`
+          WITH ultimo AS (
+            SELECT DISTINCT ON (p.usuario_id) p.usuario_id, p.due_date
+            FROM payment_transactions p
+            WHERE p.status IN ('confirmed', 'received', 'received_in_cash') AND p.due_date IS NOT NULL
+            ORDER BY p.usuario_id, p.due_date DESC
+          ), calc AS (
+            SELECT u.id,
+              ((((ul.due_date + make_interval(months => CASE u.ciclo_assinatura WHEN 'anual' THEN 12 WHEN 'trimestral' THEN 3 ELSE 1 END))::date
+                 + 3) + time '23:59:59.999') AT TIME ZONE 'America/Sao_Paulo') AS nova
+            FROM usuarios u JOIN ultimo ul ON ul.usuario_id = u.id
+            WHERE u.status_assinatura = 'ativa'
+          )
+          UPDATE usuarios u SET data_expiracao_assinatura = calc.nova
+          FROM calc
+          WHERE u.id = calc.id
+            AND (u.data_expiracao_assinatura IS NULL OR u.data_expiracao_assinatura < calc.nova)
+        `);
+      });
+    },
+  },
+  {
+    name: "onboarding: origem em transacoes + sequência de boas-vindas WhatsApp",
+    run: async () => {
+      // Espelha empresas_transacoes.origem — permite ao checklist de onboarding
+      // detectar o 1º lançamento PF feito pelo WhatsApp.
+      await db.execute(sql`ALTER TABLE transacoes ADD COLUMN IF NOT EXISTS origem VARCHAR(20) NOT NULL DEFAULT 'manual'`);
+
+      // Estado de envio da sequência de boas-vindas do WhatsApp (dias 0/1/3).
+      // Idempotente: 1 linha por (usuario_id, etapa) já enviada.
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS onboarding_whatsapp_sequence (
+          id          SERIAL PRIMARY KEY,
+          usuario_id  INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+          etapa       VARCHAR(20) NOT NULL,
+          enviado_em  TIMESTAMPTZ NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo'),
+          UNIQUE (usuario_id, etapa)
+        )
+      `);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_onboarding_whatsapp_seq_usuario ON onboarding_whatsapp_sequence(usuario_id)`);
+    },
+  },
+  {
+    name: "Cora: modo de contas a receber (manual | importar da API) e resumo da última importação",
+    run: async () => {
+      // 'manual' = a empresa lança e dá baixa (pode emitir boleto pelo app);
+      // 'cora'   = os boletos emitidos na conta Cora entram sozinhos (pago → recebido, aberto → a receber).
+      await db.execute(sql`ALTER TABLE empresas_integracoes ADD COLUMN IF NOT EXISTS modo_recebimento VARCHAR(10) NOT NULL DEFAULT 'manual'`);
+      await db.execute(sql`ALTER TABLE empresas_integracoes ADD COLUMN IF NOT EXISTS ultima_importacao JSONB`);
     },
   },
 ];

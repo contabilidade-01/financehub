@@ -87,6 +87,25 @@ export function pistaCartaoNoTexto(n: string): boolean {
   return /\bcartao\b/.test(n) || /\bcredito\b/.test(n) || /^cc\s+/.test(n) || /\bcc\s+/.test(n);
 }
 
+const PALAVRAS_CONFIRMACAO = new Set([
+  "s", "ss", "sim", "simm", "ok", "okay", "blz", "beleza", "pode", "claro", "fechou",
+  "isso", "ai", "mesmo", "uhum", "aham", "yes", "positivo", "confirmo", "confirma",
+  "confirmado", "certo", "correto", "exato", "perfeito", "show", "manda", "ver", "vai",
+  "la", "lanca", "lancar", "lance", "registra", "registrar", "registre", "grava",
+  "gravar", "grave", "salva", "salvar", "quero", "faz", "faca", "por", "favor", "pf",
+  "pfv", "obrigado", "obrigada", "valeu", "e", "n", "nn", "nao", "cancela", "esquece",
+  "deixa", "negativo", "tudo", "bem", "pra", "para",
+]);
+
+/** Mensagem só com sim/não/ok/"pode lançar"/emoji — nunca é nome de meio. */
+export function ehSoConfirmacaoOuRecusa(textoNormalizado: string): boolean {
+  const palavras = normMeio(textoNormalizado)
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+  if (palavras.length === 0) return true; // só emoji/pontuação
+  return palavras.every((w) => PALAVRAS_CONFIRMACAO.has(w));
+}
+
 /**
  * Detecta o meio na frase inteira (não só resposta isolada).
  */
@@ -113,6 +132,13 @@ export function detectarMeio(texto: string): MeioDetectado {
   const isolado = stripPrepMeio(raw);
   if (/^(caixa|caixinha)$/.test(isolado)) {
     return { tipo: "dinheiro" };
+  }
+
+  // "Sim" / "pode lançar" / "ok" / "👍" respondendo a um resumo NÃO são nome de
+  // conta/cartão. Antes viravam o meio "sim" e o lançamento falhava com
+  // "não achei *sim*", mesmo com a Caixinha já combinada no resumo.
+  if (ehSoConfirmacaoOuRecusa(n)) {
+    return { tipo: "nenhum" };
   }
 
   // Pix / Pics (Whisper) / débito / TED / boleto.

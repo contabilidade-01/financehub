@@ -12,6 +12,7 @@ import { db } from "../db";
 import { sql } from "drizzle-orm";
 import { storage } from "../storage";
 import { criarCartao, listarCartoes, chaveNomeCartao } from "./fatura-pj.service";
+import { detectarDelimitador } from "./importacao/parsers";
 
 const FORMAS_GENERICAS =
   /^(boleto|d[ée]bito|cart[aã]o([_\s-]?de)?[_\s-]?d[ée]bito|cart[aã]o([_\s-]?de)?[_\s-]?cr[ée]dito|cartao_credito|cartao_debito|cart[aã]o|pix|dinheiro|transfer[êe]ncia|ted|doc|esp[ée]cie|—|-)?$/i;
@@ -118,8 +119,8 @@ function parseFormaPj(v: any): { nome: string; dia: number | null; cartao: boole
 }
 
 function parseDelimited(text: string): string[][] {
-  const delim = (text.split("\n")[0].match(/\t/g)?.length ?? 0) >
-    (text.split("\n")[0].match(/,/g)?.length ?? 0) ? "\t" : ",";
+  // ";" é o padrão dos CSVs brasileiros (Excel pt-BR); detecta ; , tab |.
+  const delim = detectarDelimitador(text);
   const linhas: string[][] = [];
   let row: string[] = [], field = "", inQ = false;
   for (let i = 0; i < text.length; i++) {

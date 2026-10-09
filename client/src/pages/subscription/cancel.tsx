@@ -74,33 +74,33 @@ export default function CancelSubscription() {
   ];
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-4xl">
+    <div className="max-w-4xl">
       <div className="space-y-6">
         <div className="text-center">
           <h1 className="text-3xl font-bold text-white mb-2 flex items-center justify-center gap-2">
-            <AlertTriangle className="h-8 w-8 text-red-500" />
+            <AlertTriangle className="h-8 w-8 text-expense" />
             {t("subscription.cancel.title", "Cancelar Assinatura")}
           </h1>
-          <p className="text-gray-400">
+          <p className="text-muted-foreground">
             {t("subscription.cancel.subtitle", "Lamentamos que você queira cancelar sua assinatura")}
           </p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Informações da Assinatura */}
-          <Card className="glass-card neon-border">
+          <Card className="border bg-card">
             <CardHeader>
               <CardTitle className="text-white flex items-center gap-2">
                 <CreditCard className="h-5 w-5" />
                 {t("subscription.cancel.current_plan.title", "Sua Assinatura Atual")}
               </CardTitle>
-              <CardDescription className="text-gray-400">
+              <CardDescription className="text-muted-foreground">
                 {t("subscription.cancel.current_plan.description", "Detalhes do seu plano atual")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
-                <span className="text-gray-300">
+                <span className="text-muted-foreground">
                   {t("subscription.cancel.current_plan.status_label", "Status")}:
                 </span>
                 <Badge variant="default">
@@ -109,7 +109,7 @@ export default function CancelSubscription() {
               </div>
               
               <div className="flex items-center justify-between">
-                <span className="text-gray-300">
+                <span className="text-muted-foreground">
                   {t("subscription.cancel.current_plan.plan_label", "Plano")}:
                 </span>
                 <span className="text-white font-medium">
@@ -118,7 +118,7 @@ export default function CancelSubscription() {
               </div>
               
               <div className="flex items-center justify-between">
-                <span className="text-gray-300">
+                <span className="text-muted-foreground">
                   {t("subscription.cancel.current_plan.renewal_label", "Renovação")}:
                 </span>
                 <span className="text-white">
@@ -126,13 +126,13 @@ export default function CancelSubscription() {
                 </span>
               </div>
               
-              <Separator className="bg-gray-700" />
+              <Separator className="bg-muted" />
               
               <div className="space-y-2">
                 <h4 className="text-white font-medium">
                   {t("subscription.cancel.current_plan.losses_title", "O que você perderá:")}
                 </h4>
-                <ul className="text-gray-300 text-sm space-y-1">
+                <ul className="text-muted-foreground text-sm space-y-1">
                   <li>• {t("subscription.cancel.current_plan.losses.reports", "Acesso a relatórios avançados")}</li>
                   <li>• {t("subscription.cancel.current_plan.losses.api", "API para integração")}</li>
                   <li>• {t("subscription.cancel.current_plan.losses.reminders", "Lembretes e notificações")}</li>
@@ -144,13 +144,13 @@ export default function CancelSubscription() {
           </Card>
 
           {/* Formulário de Cancelamento */}
-          <Card className="glass-card neon-border">
+          <Card className="border bg-card">
             <CardHeader>
               <CardTitle className="text-white flex items-center gap-2">
                 <MessageSquare className="h-5 w-5" />
                 {t("subscription.cancel.form.title", "Motivo do Cancelamento")}
               </CardTitle>
-              <CardDescription className="text-gray-400">
+              <CardDescription className="text-muted-foreground">
                 {t("subscription.cancel.form.description", "Ajude-nos a melhorar nosso serviço")}
               </CardDescription>
             </CardHeader>
@@ -167,7 +167,7 @@ export default function CancelSubscription() {
                       className={`text-left px-3 py-2 rounded-lg border transition-colors ${
                         cancellationReason === reason.label
                           ? "border-purple-500 bg-purple-500/20 text-white"
-                          : "border-gray-600 bg-gray-800/50 text-gray-300 hover:border-gray-500"
+                          : "border-border bg-muted text-muted-foreground hover:border-gray-500"
                       }`}
                     >
                       {reason.label}
@@ -185,7 +185,7 @@ export default function CancelSubscription() {
                   placeholder={t("subscription.cancel.form.details_placeholder", "Conte-nos mais sobre o motivo do cancelamento...")}
                   value={cancellationReason}
                   onChange={(e) => setCancellationReason(e.target.value)}
-                  className="bg-gray-800/50 border-gray-600 text-white placeholder-gray-400 min-h-[100px]"
+                  className="bg-muted border-border text-white placeholder-gray-400 min-h-[100px]"
                 />
               </div>
 
@@ -201,7 +201,7 @@ export default function CancelSubscription() {
               ) : (
                 <div className="space-y-3">
                   <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-4">
-                    <div className="flex items-center gap-2 text-red-400 mb-2">
+                    <div className="flex items-center gap-2 text-expense mb-2">
                       <AlertTriangle className="h-4 w-4" />
                       <span className="font-medium">
                         {t("subscription.cancel.confirmation.title", "Confirmação Necessária")}

@@ -1,6 +1,5 @@
 import { WebSocket, WebSocketServer } from 'ws'
 import { IncomingMessage } from 'http'
-import { parse } from 'url'
 import { storage } from './storage.js'
 
 // Interface para conexões ativas
@@ -36,37 +35,38 @@ interface Notification {
 
 let wss: WebSocketServer | null = null
 
+type SessionParser = (req: any, res: any, next: (err?: any) => void) => void
+let sessionParser: SessionParser | null = null
+
+/** Registrado em server/index.ts com o mesmo middleware de sessão do Express. */
+export const setWebSocketSessionParser = (parser: SessionParser) => {
+  sessionParser = parser
+}
+
 /**
- * Validar sessão do usuário usando validação interna de sessão
+ * Validar sessão do usuário pelo cookie de sessão (express-session).
+ * O parâmetro ?token= da URL é ignorado: não é prova de identidade.
  */
 const validateUserSession = async (req: IncomingMessage): Promise<{ user: any; isValid: boolean; error?: string }> => {
   try {
-    // Extrair token do query parameter
-    const parsedUrl = parse(req.url || '', true)
-    const { token } = parsedUrl.query
+    if (!sessionParser) {
+      return { user: null, isValid: false, error: 'Sessão indisponível' }
+    }
+    await new Promise<void>((resolve, reject) =>
+      sessionParser!(req, {}, (err?: any) => (err ? reject(err) : resolve())),
+    )
+    const session = (req as any).session
+    const userId = session?.isImpersonating && session?.user?.id ? session.user.id : session?.userId
 
-    if (!token) {
-      return { user: null, isValid: false, error: 'Token não fornecido' }
+    if (!userId) {
+      return { user: null, isValid: false, error: 'Não autenticado' }
     }
 
-    const userId = parseInt(token as string)
-    console.log('[WebSocket] Validando sessão diretamente para userId:', userId)
-
-    if (isNaN(userId)) {
-      return { user: null, isValid: false, error: 'User ID inválido' }
-    }
-
-    // Validar diretamente no banco de dados
-    const user = await storage.getUserById(userId)
-    
+    const user = await storage.getUserById(Number(userId))
     if (!user) {
-      console.log('[WebSocket] Usuário não encontrado no banco:', userId);
       return { user: null, isValid: false, error: 'Usuário não encontrado' }
     }
 
-    console.log('[WebSocket] ✅ Sessão válida para usuário:', user.nome, `(${user.tipo_usuario})`);
-    console.log('[WebSocket] User ID:', user.id);
-    
     return { user, isValid: true }
   } catch (error) {
     console.error('[WebSocket] Erro na validação da sessão:', error)

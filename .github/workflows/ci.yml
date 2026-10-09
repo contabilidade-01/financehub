@@ -52,6 +52,22 @@ jobs:
           npm run test:feature-flags
           npm run test:flags-ciclo
           npm run test:resumo-semanal
+          npm run test:seguranca
+          npm run test:modalidade
+          npm run test:nlp-br
+          npm run test:classificacao-pf
+          npm run test:importacao-parsers
+          npm run test:importacao-cartao
+          npm run test:erp
+          npm run test:plano-contas
+          npm run test:titulos
+          npm run test:indicadores
+          npm run test:projecao
+          npm run test:cora
+          npm run test:datas-sp
+          npm run test:atalho-pj
+          npm run test:assinatura-datas
+          npm run test:ia-fila
           npm run flags:auditar
 
       - name: Baterias com lógica pura / scripts
