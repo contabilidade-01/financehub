@@ -34,16 +34,46 @@ const DESPESA: RegExp[] = [
   /\b(abasteci|almocei|jantei|lanchei|tomei|pedi)\b/,
 ];
 
+/**
+ * Gasto de terceiro que volta para o usuário ("A Receber" no PF):
+ *  "despesa a ser reembolsada pela Nescon", "a empresa vai me reembolsar",
+ *  "coloca como a receber", "reembolsável".
+ * Não confunde com RECEBER o reembolso ("recebi o reembolso" → Receita comum).
+ */
+const REEMBOLSAVEL: RegExp[] = [
+  /\b(a ser|sera|serao|vai ser|vao ser|deve ser|devem ser|para ser|pra ser)\s+(reembolsad[oa]s?|ressarcid[oa]s?)\b/,
+  /\breembolsave(l|is)\b/,
+  /\b(vai|vao|ira|irao|vai me|vao me|ira me|irao me|me)\s+(reembolsar|reembolsa|ressarcir|ressarce)\b/,
+  /\b(reembolso|ressarcimento)\s+(pendente|a receber)\b/,
+  /\b(como|para|pra|pro|em|no|na)\s+(o\s+|a\s+)?a receber\b/,
+  /\b(conta|nome)\s+d[aeo]\s+terceir/,
+];
+
+export function detectarReembolsavel(texto: string): boolean {
+  const t = semAcento(texto);
+  if (!t.trim()) return false;
+  if (/\b(recebi|recebemos|caiu|entrou)\b[^.]*\b(reembolso|ressarcimento)\b/.test(t)) return false;
+  return REEMBOLSAVEL.some((re) => re.test(t));
+}
+
 /** Pontuação simples: sinais fortes de recebimento vencem verbos genéricos. */
 export function detectarDirecao(texto: string): Direcao | null {
-  const t = semAcento(texto);
+  let t = semAcento(texto);
   if (!t.trim()) return null;
+  // "despesa a ser reembolsada", "coloca a receber": o reembolso é do gasto,
+  // não uma entrada — tira essas palavras antes de pontuar.
+  const reembolsavel = detectarReembolsavel(t);
+  if (reembolsavel) {
+    t = t.replace(/\b(a receber|receber|reembols\w*|ressarc\w*)\b/g, " ");
+  }
   let r = 0;
   let d = 0;
   RECEITA.forEach((re, i) => { if (re.test(t)) r += i < 3 ? 3 : 2; });
   DESPESA.forEach((re, i) => { if (re.test(t)) d += i < 2 ? 2 : 1; });
   // "paguei" + "me pagou" na mesma frase: quem pagou a quem decide pelos pronomes
   if (/\b(me|nos)\s+(pagou|pagaram)\b/.test(t)) r += 2;
+  // Só o sinal de reembolso de terceiro ("coloca a receber") já é um gasto.
+  if (reembolsavel && r === 0) return "Despesa";
   if (r === d) return null;
   return r > d ? "Receita" : "Despesa";
 }

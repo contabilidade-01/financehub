@@ -2706,6 +2706,76 @@ export async function marcarReembolsosRecebidosLote(ids: number[], walletId: num
   return (result as any[]).length;
 }
 
+/**
+ * Marca (ou desmarca) despesas como "A Receber" em lote — gasto de terceiro que
+ * vai ser reembolsado. Só despesas da própria carteira.
+ * - incluirParcelas: estende para todas as parcelas da mesma compra (compra_grupo).
+ * - Marcar: fica Pendente e sem data_pagamento (= ainda não recebido), mesmo que a fatura já esteja paga.
+ * - Desmarcar: compra de cartão volta a seguir a fatura (paga → Efetivada na data do pagamento).
+ */
+export async function definirReembolsavelLote(
+  walletId: number,
+  ids: number[],
+  reembolsavel: boolean,
+  opts: { incluirParcelas?: boolean } = {},
+): Promise<{ ids: number[]; ignorados: number[]; total: number }> {
+  const limpos = Array.from(new Set((ids || []).map(Number).filter((n) => Number.isInteger(n) && n > 0)));
+  if (!limpos.length) return { ids: [], ignorados: [], total: 0 };
+  const lista = sql.join(limpos.map((n) => sql`${n}`), sql`, `);
+
+  const alvoRows = await db.execute(sql`
+    SELECT DISTINCT t.id
+    FROM transacoes t
+    WHERE t.carteira_id = ${walletId}
+      AND t.tipo = 'Despesa'
+      AND (
+        t.id IN (${lista})
+        ${opts.incluirParcelas
+          ? sql`OR (t.compra_grupo IS NOT NULL AND t.compra_grupo IN (
+                  SELECT g.compra_grupo FROM transacoes g
+                  WHERE g.carteira_id = ${walletId} AND g.id IN (${lista}) AND g.compra_grupo IS NOT NULL))`
+          : sql``}
+      )
+  `);
+  const alvo = (alvoRows as any[]).map((r) => Number(r.id)).sort((a, b) => a - b);
+  const ignorados = limpos.filter((id) => !alvo.includes(id));
+  if (!alvo.length) return { ids: [], ignorados, total: 0 };
+  const listaAlvo = sql.join(alvo.map((n) => sql`${n}`), sql`, `);
+
+  const res = reembolsavel
+    ? await db.execute(sql`
+        UPDATE transacoes
+        SET reembolsavel = true, status = 'Pendente', data_pagamento = NULL
+        WHERE carteira_id = ${walletId}
+          AND id IN (${listaAlvo})
+          AND NOT (COALESCE(reembolsavel, false) = true AND status = 'Efetivada')
+        RETURNING id, valor
+      `)
+    : await db.execute(sql`
+        UPDATE transacoes t
+        SET reembolsavel = false,
+            status = CASE
+              WHEN f.status = 'paga' THEN 'Efetivada'
+              WHEN t.fatura_id IS NOT NULL THEN 'Pendente'
+              ELSE t.status
+            END,
+            data_pagamento = CASE
+              WHEN f.status = 'paga' THEN COALESCE((f.data_pagamento AT TIME ZONE 'America/Sao_Paulo')::date, t.data_pagamento)
+              WHEN t.fatura_id IS NOT NULL THEN NULL
+              ELSE t.data_pagamento
+            END
+        FROM transacoes t2
+        LEFT JOIN faturas f ON f.id = t2.fatura_id
+        WHERE t.id = t2.id
+          AND t.carteira_id = ${walletId}
+          AND t.id IN (${listaAlvo})
+        RETURNING t.id, t.valor
+      `);
+  const rows = res as any[];
+  const total = Math.round(rows.reduce((s, r) => s + (Number(r.valor) || 0), 0) * 100) / 100;
+  return { ids: rows.map((r) => Number(r.id)).sort((a, b) => a - b), ignorados, total };
+}
+
 export async function getFluxoCaixaResumo(walletId: number, mes?: number, ano?: number): Promise<{
   renda: number;
   dizimos: number;
@@ -3243,11 +3313,15 @@ export async function criarCompraParcelada(params: {
   status?: string;
   /** Fatura da 1ª parcela (AAAA-MM). Vazio = a que o fechamento do cartão indicar. */
   competenciaInicial?: string | null;
+  /** Gasto de terceiro (vai para A Receber): fica Pendente até o reembolso chegar. */
+  reembolsavel?: boolean;
 }): Promise<{ compra_grupo: string; ids: number[]; parcelas: number; valor_parcela: number }> {
   const {
     walletId, categoriaId, descricao, parcelas, formaPagamentoId, dataInicio,
-    contaBancariaId, usuarioId, status = "Efetivada",
+    contaBancariaId, usuarioId,
   } = params;
+  const reembolsavel = params.reembolsavel === true;
+  const status = reembolsavel ? "Pendente" : (params.status || "Efetivada");
   const { valoresParcelas, competenciaDaCompra, competenciaMaisMeses } =
     await import("./services/fatura-core");
   const total = params.valorTotal != null
@@ -3308,11 +3382,12 @@ export async function criarCompraParcelada(params: {
     const res = await db.execute(sql`
       INSERT INTO transacoes
         (carteira_id, categoria_id, forma_pagamento_id, tipo, valor, data_transacao, descricao, status,
-         compra_grupo, parcela_num, parcela_total, conta_bancaria_id, fatura_id, competencia, movimenta_caixa)
+         compra_grupo, parcela_num, parcela_total, conta_bancaria_id, fatura_id, competencia, movimenta_caixa,
+         reembolsavel)
       VALUES
         (${walletId}, ${categoriaId}, ${formaPagamentoId ?? null}, 'Despesa', ${valorParcela.toFixed(2)},
          ${dataISO}, ${descParcela}, ${statusParcela}, ${grupo}, ${i + 1}, ${parcelas},
-         ${contaId}, ${faturaId}, ${competencia}, ${movimentaCaixa})
+         ${contaId}, ${faturaId}, ${competencia}, ${movimentaCaixa}, ${reembolsavel})
       RETURNING id
     `);
     ids.push((res as any[])[0].id);
