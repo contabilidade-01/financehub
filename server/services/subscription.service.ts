@@ -14,7 +14,7 @@ import { getNotificationService, NotificationService } from './notification.serv
 import type { IStorage } from '../storage';
 import { resolverPlanoDoUsuario } from './resolver-plano';
 import { obterEncargos, camposAsaas } from './cobranca-encargos';
-import { novaExpiracao, vencimentoPrimeiraCobranca, fimDoPeriodoPago, fimDoCicloPago, vencimentoDoCiclo, proximaCobrancaDoAcesso } from './assinatura-datas';
+import { novaExpiracao, vencimentoPrimeiraCobranca, fimDoPeriodoPago, fimDoCicloPago, vencimentoDoCiclo, proximaCobrancaDoAcesso, vencimentoCoberto } from './assinatura-datas';
 import { rotuloModalidade } from '../../shared/modalidade';
 import { db } from '../db';
 import { sql } from 'drizzle-orm';
@@ -400,6 +400,12 @@ export class SubscriptionService {
       }
       try {
         await this.storage.updateUserSubscription(pendente.id, { status: 'canceled' } as any);
+        // As cobranças dela somem no Asaas: não ficam "Pendente" no histórico.
+        for (const p of await this.storage.getPaymentTransactionsBySubscriptionId(pendente.id)) {
+          if (p.status === 'pending' || p.status === 'overdue') {
+            await this.storage.updatePaymentTransaction(p.id, { status: 'canceled' } as any);
+          }
+        }
       } catch (err) {
         console.warn('[SubscriptionService] Falha ao marcar assinatura antiga como cancelada:', err);
       }
@@ -716,7 +722,7 @@ export class SubscriptionService {
       // Pagamento novo para o sistema (webhook perdido): libera — sem reduzir um
       // acesso maior já concedido — e só então marca como confirmado.
       const venc = vencimentoDoCiclo(p) as string;
-      acessoAte = await this.activateUserSubscription(userId, localSub.id, venc);
+      acessoAte = await this.activateUserSubscription(userId, localSub.id, venc, p.id);
       await this.storage.updatePaymentTransaction(local.id, { status: 'confirmed', confirmedDate: new Date() } as any);
       ativado = true;
       await this.avisarPagamentoConfirmado(userId, p, acessoAte);
@@ -726,14 +732,70 @@ export class SubscriptionService {
   }
 
   /**
+   * Ciclo que o pagamento cobre, pelas cobranças locais da assinatura (ver
+   * vencimentoCoberto). Cobrança mais antiga ainda "pendente" aqui é conferida
+   * no Asaas: excluída/cancelada lá não conta. Se o Asaas não responder, ela é
+   * ignorada (vale o vencimento da fatura paga, como antes).
+   */
+  private async cicloCobertoPeloPagamento(
+    subscriptionId: number,
+    vencimento: string | null | undefined,
+    asaasPaymentId?: string | null,
+  ): Promise<string | null | undefined> {
+    if (!vencimento || !subscriptionId) return vencimento;
+    try {
+      const locais = await this.storage.getPaymentTransactionsBySubscriptionId(subscriptionId);
+      const venc = String(vencimento).slice(0, 10);
+      const cobrancas: Array<{ id: string | null; status: string; dueDate: any }> = [];
+      for (const p of locais) {
+        let status = String(p.status || '');
+        const due = (p as any).dueDate ? String((p as any).dueDate).slice(0, 10) : null;
+        const emAberto = status === 'pending' || status === 'overdue';
+        const outra = !asaasPaymentId || p.asaasPaymentId !== asaasPaymentId;
+        if (emAberto && outra && due && due < venc) {
+          status = 'canceled';
+          if (p.asaasPaymentId) {
+            try {
+              const asaas = await this.getAsaas();
+              const remoto: any = await asaas.getPayment(p.asaasPaymentId);
+              const st = String(remoto?.status || '').toUpperCase();
+              if (remoto?.deleted) {
+                await this.storage.updatePaymentTransaction(p.id, { status: 'canceled' } as any);
+              } else if (st === 'PENDING' || st === 'OVERDUE') {
+                status = 'pending';
+              } else if (['RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH', 'DUNNING_RECEIVED'].includes(st)) {
+                status = 'confirmed';
+              }
+            } catch (err: any) {
+              console.warn(`[Assinatura] Não conferiu a cobrança ${p.asaasPaymentId} no Asaas:`, err?.message);
+            }
+          }
+        }
+        cobrancas.push({ id: p.asaasPaymentId, status, dueDate: due });
+      }
+      const coberto = vencimentoCoberto(cobrancas, venc, asaasPaymentId);
+      if (coberto && coberto !== venc) {
+        console.log(`[Assinatura] sub ${subscriptionId}: pagamento da fatura ${venc} cobre o ciclo ${coberto} (há cobrança anterior em aberto)`);
+      }
+      return coberto || vencimento;
+    } catch (err: any) {
+      console.warn('[Assinatura] Falha ao calcular o ciclo coberto; usando o vencimento da fatura:', err?.message);
+      return vencimento;
+    }
+  }
+
+  /**
    * Ativar assinatura do usuário (após confirmação de pagamento)
    */
-  async activateUserSubscription(userId: number, subscriptionId: number, vencimento?: string | null): Promise<Date> {
+  async activateUserSubscription(userId: number, subscriptionId: number, vencimento?: string | null, asaasPaymentId?: string | null): Promise<Date> {
     try {
       const user = await this.storage.getUserById(userId);
       const ciclo = ((user as any)?.ciclo_assinatura as string) || 'mensal';
       const meses = CICLO_ASAAS[ciclo]?.meses || 1;
       const agora = new Date();
+      // Pagou uma fatura mais nova com outra mais antiga ainda em aberto: o
+      // pagamento cobre o ciclo mais antigo (não pula um mês de graça).
+      vencimento = await this.cicloCobertoPeloPagamento(subscriptionId, vencimento, asaasPaymentId);
       // Ancorado no VENCIMENTO da cobrança paga (+ ciclo + tolerância), não no
       // momento da confirmação: pagar antes não perde dias, pagar atrasado não
       // desalinha do Asaas, e CONFIRMED + RECEIVED (cartão) dão o mesmo resultado.

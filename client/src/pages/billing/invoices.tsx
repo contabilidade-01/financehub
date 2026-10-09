@@ -1,3 +1,4 @@
+import { dataBrSP } from '@shared/datas-sp';
 import { useInvoices } from '@/hooks/use-billing';
 import { PaymentStatusBadge } from '@/components/billing/PaymentStatusBadge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -39,7 +40,8 @@ export default function InvoicesPage() {
               {data?.payments.map((payment) => (
                 <TableRow key={payment.id}>
                   <TableCell>
-                    {new Date(payment.dueDate).toLocaleDateString('pt-BR')}
+                    {/* Vencimento é data pura: new Date() leria em UTC e mostraria o dia anterior. */}
+                    {dataBrSP(payment.dueDate)}
                   </TableCell>
                   <TableCell>{payment.description || 'Assinatura'}</TableCell>
                   <TableCell>R$ {parseFloat(payment.amount).toFixed(2)}</TableCell>
