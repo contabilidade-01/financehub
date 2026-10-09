@@ -10,7 +10,8 @@ export function PaymentStatusBadge({ status }: PaymentStatusBadgeProps) {
     pending: { label: 'Pendente', variant: 'secondary' as const, className: 'bg-yellow-500' },
     overdue: { label: 'Vencido', variant: 'destructive' as const, className: 'bg-red-500' },
     refunded: { label: 'Estornado', variant: 'outline' as const, className: 'bg-gray-500' },
-    received_in_cash: { label: 'Recebido', variant: 'success' as const, className: 'bg-green-500' }
+    received_in_cash: { label: 'Recebido', variant: 'success' as const, className: 'bg-green-500' },
+    canceled: { label: 'Cancelada', variant: 'outline' as const, className: 'text-muted-foreground' }
   };
 
   const config = statusConfig[status as keyof typeof statusConfig] || {

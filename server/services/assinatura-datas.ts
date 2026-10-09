@@ -121,3 +121,39 @@ export function proximaCobrancaDoAcesso(acessoAte: Date | string | null | undefi
   const dia = diaSP(acessoAte);
   return dia ? somarDiasISO(dia, -tolerancia) : null;
 }
+
+/** Status locais de cobrança que não contam como ciclo (cancelada/excluída no Asaas, estornada). */
+const COBRANCA_FORA = new Set(["canceled", "cancelled", "deleted", "refunded"]);
+const COBRANCA_PAGA = new Set(["confirmed", "received_in_cash"]);
+
+/**
+ * Vencimento do ciclo que um pagamento cobre, olhando as cobranças da mesma
+ * assinatura. Cada pagamento cobre o ciclo MAIS ANTIGO ainda em aberto, não o
+ * da fatura que o cliente escolheu pagar.
+ *
+ * Caso real: assinatura com cobranças 21/09 (em aberto) e 21/10. O cliente pagou
+ * a de 21/10 e o acesso ia até 24/11 (próxima cobrança 21/11), mas a de 21/09
+ * continuava devendo: o certo é próxima cobrança 21/10. Se depois ele paga a de
+ * 21/09, são 2 pagamentos e o acesso vai até 24/11.
+ *
+ * Com N cobranças pagas (contando `pagaId`), o ciclo coberto é o da N-ésima
+ * cobrança válida por vencimento. Sem cobranças locais, vale o próprio vencimento.
+ */
+export function vencimentoCoberto(
+  cobrancas: Array<{ id?: string | number | null; status?: string | null; dueDate?: string | Date | null }>,
+  vencimentoISO: string | null | undefined,
+  pagaId?: string | number | null,
+): string | null {
+  const venc = vencimentoISO && ISO.test(String(vencimentoISO).slice(0, 10)) ? String(vencimentoISO).slice(0, 10) : null;
+  const validas = cobrancas
+    .map((c) => ({
+      paga: COBRANCA_PAGA.has(String(c.status || "")) || (pagaId != null && c.id != null && String(c.id) === String(pagaId)),
+      status: String(c.status || ""),
+      venc: c.dueDate ? diaSP(c.dueDate as any) : null,
+    }))
+    .filter((c): c is { paga: boolean; status: string; venc: string } => !!c.venc && !COBRANCA_FORA.has(c.status))
+    .sort((a, b) => a.venc.localeCompare(b.venc));
+  const pagas = validas.filter((c) => c.paga).length;
+  if (!pagas || !validas.length) return venc;
+  return validas[pagas - 1].venc;
+}

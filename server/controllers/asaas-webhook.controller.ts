@@ -246,7 +246,7 @@ async function processWebhookEvent(eventType: string, paymentData: any, webhookI
         // painel do Asaas, continua sendo a fatura daquele ciclo).
         const { vencimentoDoCiclo } = await import('../services/assinatura-datas');
         const vencimento = vencimentoDoCiclo(paymentData) || vencimentoDoCiclo({ dueDate: (payment as any).dueDate });
-        const acessoAte = await subscriptionService.activateUserSubscription(payment.usuarioId, payment.subscriptionId, vencimento);
+        const acessoAte = await subscriptionService.activateUserSubscription(payment.usuarioId, payment.subscriptionId, vencimento, paymentData.id);
         // E-mail e WhatsApp de confirmação: uma vez por cobrança (CONFIRMED e
         // RECEIVED chegam os dois no cartão), respeitando a config do admin.
         if (notificationSettings.sendEmail || notificationSettings.sendWhatsApp) {
@@ -522,7 +522,18 @@ async function processWebhookEvent(eventType: string, paymentData: any, webhookI
     case 'PAYMENT_DELETED':
       // Pagamento deletado
       console.log(`[AsaasWebhook] Payment deleted: ${paymentData.id}`);
-      // Apenas logar, não tomar ação
+      // Excluída no Asaas: sai do histórico como pendente e não conta como
+      // ciclo em aberto. Paga não muda (estorno chega por outro evento).
+      if (payment.status === 'pending' || payment.status === 'overdue') {
+        await storage.updatePaymentTransaction(payment.id, { status: 'canceled', metadata: JSON.stringify(paymentData) });
+      }
+      break;
+
+    case 'PAYMENT_RESTORED':
+      console.log(`[AsaasWebhook] Payment restored: ${paymentData.id}`);
+      if (payment.status === 'canceled') {
+        await storage.updatePaymentTransaction(payment.id, { status: 'pending', metadata: JSON.stringify(paymentData) });
+      }
       break;
 
     default:

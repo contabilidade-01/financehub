@@ -10,6 +10,7 @@ import {
   vencimentoDoCiclo,
   fimDoCicloPago,
   proximaCobrancaDoAcesso,
+  vencimentoCoberto,
 } from "../server/services/assinatura-datas";
 import {
   etapaDegustacao,
@@ -82,6 +83,23 @@ console.log("Vencimento prorrogado no painel do Asaas (caso Rafael)");
   igual("próxima cobrança derivada do acesso", proximaCobrancaDoAcesso(acesso), "2026-10-21");
   igual("sem originalDueDate usa dueDate", vencimentoDoCiclo({ dueDate: "2026-10-21" }), "2026-10-21");
   igual("sem datas → null", vencimentoDoCiclo({}), null);
+}
+
+console.log("Ciclo coberto (fatura mais nova paga com a antiga em aberto)");
+{
+  const c = [
+    { id: "pay_set", status: "pending", dueDate: "2026-09-21" },
+    { id: "pay_out", status: "confirmed", dueDate: "2026-10-21" },
+  ];
+  igual("pagou 21/10 com 21/09 aberta → cobre 21/09", vencimentoCoberto(c, "2026-10-21", "pay_out"), "2026-09-21");
+  igual("→ próxima cobrança 21/10, acesso até 24/10", diaSP(fimDoPeriodoPago("2026-09-21", 1)), "2026-10-24");
+  const depois = [{ ...c[0], status: "pending" }, c[1]];
+  igual("depois paga a de 21/09 → cobre 21/10", vencimentoCoberto(depois, "2026-09-21", "pay_set"), "2026-10-21");
+  igual("em ordem não muda nada", vencimentoCoberto([{ id: "a", status: "confirmed", dueDate: "2026-09-21" }, { id: "b", status: "pending", dueDate: "2026-10-21" }], "2026-10-21", "b"), "2026-10-21");
+  igual("cobrança excluída/cancelada não conta", vencimentoCoberto([{ id: "a", status: "canceled", dueDate: "2026-09-21" }, { id: "b", status: "pending", dueDate: "2026-10-21" }], "2026-10-21", "b"), "2026-10-21");
+  igual("próxima já gerada e aberta não atrapalha", vencimentoCoberto([{ id: "a", status: "pending", dueDate: "2026-10-21" }, { id: "b", status: "pending", dueDate: "2026-11-21" }], "2026-10-21", "a"), "2026-10-21");
+  igual("sem cobranças locais usa o vencimento", vencimentoCoberto([], "2026-10-21", "x"), "2026-10-21");
+  igual("cobrança sem vencimento é ignorada", vencimentoCoberto([{ id: "a", status: "pending", dueDate: null }, { id: "b", status: "pending", dueDate: "2026-10-21" }], "2026-10-21", "b"), "2026-10-21");
 }
 
 console.log("Etapas dos lembretes");
