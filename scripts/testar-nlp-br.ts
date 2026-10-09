@@ -2,10 +2,12 @@
  * Fase 1 (IA) — frases reais do WhatsApp: valor, data, direção, vários lançamentos.
  * Sem LLM e sem banco. npm run test:nlp-br
  */
+import { expandirCodigosLote, normalizarCompetencia } from "../server/services/lote-codigos";
 import {
   extrairDataBR,
   extrairValorBR,
   detectarDirecao,
+  detectarReembolsavel,
   numeroBR,
   reconciliarLancamento,
   segmentarLancamentos,
@@ -119,6 +121,34 @@ const direcoes: [string, "Receita" | "Despesa" | null][] = [
   ["cashback 12", "Receita"],
 ];
 for (const [t, d] of direcoes) eq(`direção "${t}"`, detectarDirecao(t), d);
+
+// ---------------- despesa reembolsável (A Receber) ----------------
+const reembolsaveis: [string, boolean, "Receita" | "Despesa" | null][] = [
+  ["Registre Loft Fiança de ALuguel, despesa a ser reembolsada pela Nescon, no valor mensal de 116,60", true, "Despesa"],
+  ["paguei 300 de hotel, a empresa vai me reembolsar", true, "Despesa"],
+  ["jantar 180 no cartão, coloca como a receber", true, "Despesa"],
+  ["gastei 50 de uber reembolsável", true, "Despesa"],
+  ["comprei 90 de material, vai ser reembolsado pelo cliente", true, "Despesa"],
+  ["recebi o reembolso da Nescon 116,60", false, "Receita"],
+  ["reembolso da empresa 120", false, "Receita"],
+  ["gastei 50 no uber", false, "Despesa"],
+];
+for (const [t, r, d] of reembolsaveis) {
+  eq(`reembolsável "${t}"`, detectarReembolsavel(t), r);
+  eq(`direção reembolsável "${t}"`, detectarDirecao(t), d);
+}
+
+// ---------------- edição em massa: códigos e competência ----------------
+eq("faixa 606..620", expandirCodigosLote({ codigo_inicial: 606, codigo_final: 620 }).length, 15);
+eq("faixa invertida + lista", expandirCodigosLote({ ids: ["#700", 606], codigo_inicial: 608, codigo_final: 607 }), [606, 607, 608, 700]);
+eq("só inicial", expandirCodigosLote({ codigo_inicial: "#606" }), [606]);
+eq("faixa absurda ignorada", expandirCodigosLote({ codigo_inicial: 1, codigo_final: 999999 }), []);
+eq("vazio", expandirCodigosLote({}), []);
+eq("competência 10/2026", normalizarCompetencia("10/2026"), "2026-10");
+eq("competência 2026-10", normalizarCompetencia("2026-10"), "2026-10");
+eq("competência out/2026", normalizarCompetencia("out/2026"), "2026-10");
+eq("competência 12/27", normalizarCompetencia("12/27"), "2027-12");
+eq("competência inválida", normalizarCompetencia("13/2026"), null);
 
 // ---------------- vários lançamentos ----------------
 eq("segmentar 2", segmentarLancamentos("frete 50 e comissão 30").map((s) => s.valor), [50, 30]);

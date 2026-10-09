@@ -116,6 +116,26 @@ else ok("pergunta não afirma escrita");
   else ok("precisa_meio não é escrita");
 }
 
+// Parcelada reembolsável: descrição real + aviso de A Receber
+{
+  const raw = JSON.stringify({
+    success: true, parcelas: 15, descricao: "Loft Fiança de Aluguel (reembolso Nescon)",
+    valor_parcela: 116.6, total: 1749, forma_pagamento: "Azul Itau Gold",
+    ids: [606, 607], a_receber: true,
+  });
+  const e = extrairEscritaOk("parcelar_compra", raw);
+  const txt = e ? montarReciboDeEscrita(e) : "";
+  if (!/Loft Fiança/.test(txt) || !/A Receber/.test(txt)) fail("recibo parcelada a receber", txt);
+  else ok("recibo parcelada a receber");
+}
+// Edição em massa conta como escrita e usa a mensagem do servidor
+{
+  const raw = JSON.stringify({ success: true, a_receber: true, ids: [606, 607], mensagem: "2 lançamento(s) (#606 a #607, R$ 233,20) agora estão em A Receber." });
+  const out = finalizarRespostaAgente({ content: "", escritas: [extrairEscritaOk("marcar_a_receber", raw)!] });
+  if (!/A Receber/.test(out)) fail("recibo marcar_a_receber", out);
+  else ok("recibo marcar_a_receber");
+}
+
 if (falhas) {
   console.error(`\n${falhas} falha(s)`);
   process.exit(1);

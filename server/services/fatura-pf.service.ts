@@ -317,6 +317,8 @@ export async function pagarFaturaPf(
     UPDATE transacoes
     SET status = 'Efetivada', data_pagamento = ${dataPg}
     WHERE fatura_id = ${fatura.id} AND COALESCE(movimenta_caixa, false) = false
+      -- Reembolsável continua "A Receber" até o terceiro pagar: pagar a fatura não é receber.
+      AND COALESCE(reembolsavel, false) = false
   `);
 
   return { fatura_id: fatura.id, transacao_id: txId, total };
@@ -337,6 +339,7 @@ export async function reabrirFaturaPf(fatura: any): Promise<any> {
     UPDATE transacoes
     SET status = 'Pendente', data_pagamento = NULL
     WHERE fatura_id = ${fatura.id} AND COALESCE(movimenta_caixa, false) = false
+      AND COALESCE(reembolsavel, false) = false
   `);
 
   const r = await db.execute(sql`

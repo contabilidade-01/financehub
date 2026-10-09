@@ -26,6 +26,7 @@ export const TOOLS_ESCRITA = new Set([
   "restaurar_transacao_empresa",
   "mover_lancamentos",
   "mover_lancamentos_empresa",
+  "marcar_a_receber",
   "cadastrar_cartao",
   "cadastrar_cartao_empresa",
   "criar_conta_bancaria_empresa",
@@ -141,6 +142,7 @@ export function montarReciboDeEscrita(e: EscritaRodada): string {
       `📍 Forma: ${forma}`;
     if (p.empresa) txt += `\n🏢 ${p.empresa}`;
     txt += `\n🔍 Código: #${p.id}`;
+    if (p.a_receber) txt += `\n📥 Foi para *A Receber* (reembolso de terceiro, não conta como gasto seu).`;
     if (p.aviso_meio) txt += `\n_${p.aviso_meio}_`;
     txt += linhaOrcamento(p.orcamento);
     if (p.pendente_criar_conta?.nome_sugerido) {
@@ -158,6 +160,7 @@ export function montarReciboDeEscrita(e: EscritaRodada): string {
       `📍 Cartão: ${p.cartao || p.forma_pagamento || "—"}`;
     if (p.empresa) txt += `\n🏢 ${p.empresa}`;
     txt += `\n🔍 Códigos: #${ids}`;
+    if (p.a_receber) txt += `\n📥 Todas as parcelas foram para *A Receber* (reembolso de terceiro, não conta como gasto seu).`;
     if (p.dica) txt += `\n_${String(p.dica).slice(0, 280)}_`;
     txt += linhaOrcamento(p.orcamento);
     return txt;

@@ -8,7 +8,8 @@ import { db } from "../db";
 import { sql } from "drizzle-orm";
 import { casarCategoriaPorNome, sugerirCategoriaPorDescricao, chaveMemoria, type CategoriaPf } from "./categorizar-pf";
 import { hidratarPendencias } from "./ia-pendencias";
-import { reconciliarLancamento, trechoDoLancamento, segmentarLancamentos, hojeSP, contextoDataParaPrompt } from "./nlp-br";
+import { reconciliarLancamento, trechoDoLancamento, segmentarLancamentos, hojeSP, contextoDataParaPrompt, detectarReembolsavel } from "./nlp-br";
+import { expandirCodigosLote, normalizarCompetencia } from "./lote-codigos";
 import { resolverContaPj } from "./classificar-conta-pj";
 import { atualizarTransacaoEmpresa, baixarTransacaoEmpresa } from "./empresa-transacao.service";
 import { listarCartoes as listarCartoesPj, criarCartao as criarCartaoPj, listarFaturas as listarFaturasPj, getSaldoCartaoEmpresa } from "./fatura-pj.service";
@@ -337,6 +338,7 @@ function buildTools(ctx?: ToolContext) {
             data_transacao: { type: "string", description: "Data no formato YYYY-MM-DD" },
             categoria: { type: "string", description: "Nome da categoria (ex: Alimentação, Transporte)" },
             forma_pagamento: { type: "string", description: "OPCIONAL. Como pagou/recebeu: omita ou use 'Dinheiro'/'Caixinha' para a caixinha; ou 'Pix', 'Boleto', nome da conta, ou nome do cartão. NUNCA invente nome de cartão/banco." },
+            reembolsavel: { type: "boolean", description: "true quando a DESPESA é de terceiro e vai ser reembolsada ao usuário ('a ser reembolsada pela X', 'a empresa vai me reembolsar', 'coloca a receber'). Vai para A Receber e não conta como gasto pessoal. Coloque quem reembolsa na descrição." },
           },
           required: ["descricao", "valor", "tipo", "data_transacao", "categoria"],
         },
@@ -875,6 +877,8 @@ function buildTools(ctx?: ToolContext) {
             forma_pagamento: { type: "string", description: "Cartão/forma (nome que o usuário disse). Obrigatório. NUNCA invente." },
             categoria: { type: "string" },
             data_inicio: { type: "string", description: "AAAA-MM-DD (default hoje)" },
+            competencia_inicial: { type: "string", description: "AAAA-MM da fatura da 1ª parcela, quando o usuário disser ('a partir da fatura 10/2026' → '2026-10'). Omita para a fatura vigente." },
+            reembolsavel: { type: "boolean", description: "true quando a compra é de terceiro e vai ser reembolsada ao usuário ('a ser reembolsada pela X', 'coloca a receber'). Todas as parcelas vão para A Receber (continuam na fatura, mas não contam como gasto pessoal). Coloque quem reembolsa na descrição." },
             confirmar_sem_cartao: {
               type: "boolean",
               description: "So true depois que o usuario confirmar que o parcelamento NAO e num cartao de credito (carne, boleto parcelado).",
@@ -919,6 +923,25 @@ function buildTools(ctx?: ToolContext) {
             },
           },
           required: ["ids", "destino"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "marcar_a_receber",
+        description:
+          "Edita EM MASSA despesas JA REGISTRADAS para 'A Receber' (reembolsavel: gasto de terceiro que vai ser devolvido ao usuario) ou tira de 'A Receber' (reembolsavel=false). Use para 'coloca os lancamentos #606 a #620 a receber', 'essas parcelas sao reembolsaveis pela Nescon', 'tira do a receber'. Aceita lista de codigos e/ou faixa (codigo_inicial..codigo_final). Por padrao inclui todas as parcelas da mesma compra. Continua na fatura do cartao; so muda a classificacao.",
+        parameters: {
+          type: "object",
+          properties: {
+            ids: { type: "array", items: { type: "number" }, description: "Codigos dos lancamentos (ex.: [606, 607])." },
+            codigo_inicial: { type: "number", description: "Inicio da faixa de codigos ('de #606 a #620' → 606)." },
+            codigo_final: { type: "number", description: "Fim da faixa de codigos ('de #606 a #620' → 620)." },
+            reembolsavel: { type: "boolean", description: "true = colocar A Receber (padrao). false = tirar de A Receber (volta a ser despesa pessoal)." },
+            incluir_parcelas: { type: "boolean", description: "Padrao true: aplica a todas as parcelas da mesma compra parcelada." },
+            reembolsado_por: { type: "string", description: "Opcional: quem vai reembolsar (ex.: 'Nescon'). Entra na descricao se ainda nao estiver." },
+          },
         },
       },
     },
@@ -1330,7 +1353,8 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       (name === "insere_transacao" ||
         name === "parcelar_compra" ||
         name === "editar_ultima_compra" ||
-        name === "atualiza_transacao")
+        name === "atualiza_transacao" ||
+        name === "marcar_a_receber")
     ) {
       return JSON.stringify({
         erro: true,
@@ -1469,6 +1493,10 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           origem: "whatsapp",
         };
         if (formaPagId) txData.forma_pagamento_id = formaPagId;
+        // Gasto de terceiro: só despesa; o texto do cliente também liga ("a ser reembolsada pela X").
+        const reembolsavelIns = tipo === "Despesa" &&
+          (args.reembolsavel === true ||
+            (!ctx.origemMidia && detectarReembolsavel(trechoDoLancamento(ctx.userMessage || "", rec.valor, args.descricao))));
 
         // Mesma regra do formulário/API: cartão → fatura + sem caixa; senão → conta padrão.
         try {
@@ -1490,6 +1518,11 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         } catch (meioErr: any) {
           return JSON.stringify({ error: meioErr?.message || "Meio de pagamento inválido" });
         }
+        // Mesma regra da API: reembolsável fica Pendente (= A Receber) até o reembolso chegar.
+        if (reembolsavelIns) {
+          txData.reembolsavel = true;
+          txData.status = "Pendente";
+        }
 
         try {
           const result = await storage.createTransaction(txData as any);
@@ -1502,7 +1535,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           const orcamento = tipo === "Despesa"
             ? await getStatusOrcamentoCategoria(ctx.userId, ctx.walletId, categoriaId!)
             : null;
-          return JSON.stringify({ success: true, id: result.id, ...txData, categoria: categoriaNome || "Outros", origem_categoria: origemCategoria || undefined, ajustes_texto: rec.ajustes.length ? rec.ajustes : undefined, forma_pagamento: formaPagNome, orcamento, cartao_incompleto: cartaoIncompleto });
+          return JSON.stringify({ success: true, id: result.id, ...txData, a_receber: reembolsavelIns || undefined, categoria: categoriaNome || "Outros", origem_categoria: origemCategoria || undefined, ajustes_texto: rec.ajustes.length ? rec.ajustes : undefined, forma_pagamento: formaPagNome, orcamento, cartao_incompleto: cartaoIncompleto });
         } catch (dbErr: any) {
           // Loga a causa REAL (constraint, coluna, etc.) para diagnóstico.
           console.error(`[AI Agent] insere_transacao FALHOU no banco:`, dbErr?.message, "| payload:", JSON.stringify(txData));
@@ -2332,6 +2365,9 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           contaBancariaId = await contaPadraoPf(ctx.userId);
         }
 
+        const competenciaInicial = normalizarCompetencia(args.competencia_inicial);
+        const reembolsavelP = args.reembolsavel === true ||
+          (!ctx.origemMidia && detectarReembolsavel(ctx.userMessage || ""));
         const r = await criarCompraParcelada({
           walletId: ctx.walletId,
           categoriaId: catP!.id,
@@ -2342,12 +2378,61 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           dataInicio,
           usuarioId: ctx.userId,
           contaBancariaId,
+          competenciaInicial,
+          reembolsavel: reembolsavelP,
         });
-        const orcamentoP = await getStatusOrcamentoCategoria(ctx.userId, ctx.walletId, catP!.id);
+        // A Receber não é gasto pessoal: não consome orçamento.
+        const orcamentoP = reembolsavelP ? null : await getStatusOrcamentoCategoria(ctx.userId, ctx.walletId, catP!.id);
         return JSON.stringify({
-          success: true, compra_grupo: r.compra_grupo, parcelas: r.parcelas,
+          success: true, compra_grupo: r.compra_grupo, parcelas: r.parcelas, descricao: args.descricao || "Compra",
           valor_parcela: r.valor_parcela, total: Math.round(valorTotal * 100) / 100,
           categoria: catP?.nome, forma_pagamento: formaNome, ids: r.ids, orcamento: orcamentoP, cartao_incompleto: cartaoIncompletoP,
+          a_receber: reembolsavelP || undefined, competencia_inicial: competenciaInicial || undefined,
+        });
+      }
+
+      case "marcar_a_receber": {
+        const ids = expandirCodigosLote(args);
+        if (!ids.length) {
+          return JSON.stringify({ error: "Informe os códigos (lista ou faixa, ex.: #606 a #620)." });
+        }
+        if (ids.length > 500) {
+          return JSON.stringify({ error: `Faixa grande demais (${ids.length} códigos). Confirme os códigos com o usuário.` });
+        }
+        const marcar = args.reembolsavel !== false;
+        const { definirReembolsavelLote } = await import("../storage");
+        const r = await definirReembolsavelLote(ctx.walletId, ids, marcar, {
+          incluirParcelas: args.incluir_parcelas !== false,
+        });
+        if (!r.ids.length) {
+          return JSON.stringify({
+            success: false,
+            error: "Nenhuma despesa sua com esses códigos (só despesas da sua carteira podem ir para A Receber).",
+            ignorados: r.ignorados,
+          });
+        }
+        const quem = String(args.reembolsado_por || "").trim();
+        if (marcar && quem) {
+          await db.execute(sql`
+            UPDATE transacoes
+            SET descricao = LEFT(descricao || ' (reembolso ' || ${quem}::text || ')', 255)
+            WHERE carteira_id = ${ctx.walletId}
+              AND id IN (${sql.join(r.ids.map((n) => sql`${n}`), sql`, `)})
+              AND position(lower(${quem}::text) in lower(descricao)) = 0
+          `);
+        }
+        const faixa = r.ids.length > 1 ? `#${r.ids[0]} a #${r.ids[r.ids.length - 1]}` : `#${r.ids[0]}`;
+        const totalBR = r.total.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        return JSON.stringify({
+          success: true,
+          a_receber: marcar,
+          ids: r.ids,
+          total: r.total,
+          ignorados: r.ignorados.length ? r.ignorados : undefined,
+          mensagem: marcar
+            ? `${r.ids.length} lançamento(s) (${faixa}, R$ ${totalBR}) agora estão em A Receber${quem ? ` (reembolso ${quem})` : ""}. Continuam na fatura, mas não contam como gasto seu.` +
+              (r.ignorados.length ? ` Ignorei ${r.ignorados.map((i) => `#${i}`).join(", ")} (não é despesa sua).` : "")
+            : `${r.ids.length} lançamento(s) (${faixa}, R$ ${totalBR}) saíram de A Receber e voltaram a ser despesa sua.`,
         });
       }
 

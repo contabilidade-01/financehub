@@ -278,6 +278,7 @@ export async function createTransaction(req: Request, res: Response) {
         contaBancariaId: isCartao ? null : (transactionData as any).conta_bancaria_id,
         usuarioId: userId,
         status: isCartao ? "Pendente" : (transactionData.status || "Efetivada"),
+        reembolsavel: transactionData.reembolsavel === true,
         competenciaInicial: typeof req.body?.competencia_inicial === "string"
           ? req.body.competencia_inicial
           : null,
