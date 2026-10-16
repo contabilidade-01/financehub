@@ -9,7 +9,7 @@ import { spawnSync } from "child_process";
 import { resolve } from "path";
 
 // Rodado sempre via npm a partir da raiz do repo; process.cwd() evita
-// import.meta, que o tsconfig (module: commonjs) do projeto nao aceita.
+// depender de import.meta para achar a raiz.
 const root = process.cwd();
 const baselinePath = resolve(root, "baseline-tsc.txt");
 
