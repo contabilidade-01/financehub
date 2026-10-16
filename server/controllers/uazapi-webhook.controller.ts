@@ -18,7 +18,9 @@ import {
 import bcrypt from "bcryptjs";
 import { autenticarWebhookUazapi } from "../utils/uazapi-webhook-auth";
 import { db } from "../db";
-import { sql } from "drizzle-orm";
+import { sql, and, inArray, ne, desc } from "drizzle-orm";
+import { users } from "../../shared/schema";
+import { variantesTelefone } from "../services/telefone-whatsapp";
 import { camposDaModalidade, detectarModalidadeTexto, ROTULO_MODALIDADE, type Modalidade } from "../../shared/modalidade";
 
 /**
@@ -388,6 +390,23 @@ interface UazapiWebhookBody {
   };
 }
 
+/** Usuário já cadastrado (sem WhatsApp vinculado) cujo telefone bate com o chat. */
+async function buscarCadastroPorTelefone(chatid: string, ignorarId?: number) {
+  const variantes = variantesTelefone(chatid);
+  if (variantes.length === 0) return undefined;
+  const candidatos = await db.select().from(users)
+    .where(and(
+      inArray(users.telefone, variantes),
+      // Sem WhatsApp real vinculado (vazio, ou UUID do cadastro pelo site)
+      sql`coalesce(${users.remoteJid}, '') not like '%@%'`,
+      sql`coalesce(${users.status_assinatura}, '') <> 'aguardando_cadastro'`,
+      ignorarId ? ne(users.id, ignorarId) : undefined,
+    ))
+    .orderBy(desc(users.ativo), desc(users.id))
+    .limit(1);
+  return candidatos[0];
+}
+
 export const handleUazapiWebhook = async (req: Request, res: Response) => {
   const tokenValidado = autenticarWebhookUazapi(req);
   if (!tokenValidado) {
@@ -440,6 +459,22 @@ async function processarMensagemUazapi(req: Request, tokenValidado: string): Pro
     // 1. LOOKUP USUÁRIO
     // ============================================
     let user = await storage.getUserByRemoteJid(chatid);
+
+    // Cadastro feito pelo admin/site não tem remoteJid: vincula pelo telefone
+    // antes de criar (ou continuar) um rascunho que pediria cadastro de novo.
+    if (!user || user.status_assinatura === "aguardando_cadastro") {
+      const cadastrado = await buscarCadastroPorTelefone(chatid, user?.id);
+      if (cadastrado) {
+        await storage.updateUser(cadastrado.id, { remoteJid: chatid } as any);
+        if (user) {
+          // Rascunho criado antes do vínculo deixa de responder por este chat
+          await storage.updateUser(user.id, { remoteJid: "" } as any);
+          try { await storage.deleteWhatsAppOnboardingState(chatid); } catch { /* ok */ }
+        }
+        console.log(`[UazAPI Webhook] Chat ${chatid} vinculado ao cadastro existente user ${cadastrado.id} pelo telefone`);
+        user = { ...cadastrado, remoteJid: chatid };
+      }
+    }
 
     if (!user) {
       // Rascunho: telefone/nome do WhatsApp; e-mail e senha só após confirmação
