@@ -50,7 +50,8 @@ export async function updateSystemSettings(req: Request, res: Response) {
   const client = getClient();
 
   try {
-    const updates = req.body;
+    // Corpo: { chave: valor } — setting_value é TEXT
+    const updates: Record<string, string> = req.body;
 
     if (!updates || typeof updates !== 'object') {
       return res.status(400).json({

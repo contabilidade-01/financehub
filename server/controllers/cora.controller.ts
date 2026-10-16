@@ -95,3 +95,28 @@ export async function webhook(req: Request, res: Response) {
     return res.status(500).json({ ok: false });
   }
 }
+
+/** Carteira Nescon (parâmetro do escritório): filtro de clientes e espelho do portal. */
+export async function obterCarteira(req: Request, res: Response) {
+  try {
+    const e = await empresa(req);
+    const { obterCarteira } = await import("../services/cora/cora.carteira");
+    res.json(await obterCarteira(e.id));
+  } catch (err) { falha(res, err); }
+}
+/** PUT { filtro: 'todos' | 'carteira_nescon' } */
+export async function definirFiltroCarteira(req: Request, res: Response) {
+  try {
+    const e = await empresa(req);
+    const { definirFiltro } = await import("../services/cora/cora.carteira");
+    res.json(await definirFiltro(e.id, (req.body || {}).filtro));
+  } catch (err) { falha(res, err); }
+}
+export async function sincronizarCarteira(req: Request, res: Response) {
+  try {
+    const e = await empresa(req);
+    const { sincronizarCarteira, obterCarteira } = await import("../services/cora/cora.carteira");
+    await sincronizarCarteira(e.id);
+    res.json(await obterCarteira(e.id));
+  } catch (err) { falha(res, err); }
+}

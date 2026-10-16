@@ -12,7 +12,7 @@
 import { condicaoCaixaPj } from "./erp/caixa-sql";
 import { sql } from "drizzle-orm";
 import { db } from "../db";
-import type { FluxoProjetado, FluxoProjetadoLinha, FluxoProjetadoMes } from "@shared/schema";
+import type { FluxoProjetado, FluxoProjetadoLinha, FluxoProjetadoMes } from "../../shared/schema";
 
 export interface JanelaProjecao {
   de: string;  // YYYY-MM-DD

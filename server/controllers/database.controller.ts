@@ -82,13 +82,14 @@ export async function getDatabaseStatus(req: Request, res: Response) {
           tableInfo.recordCount = parseInt(countResult[0]?.count || '0');
 
           // Listar índices
-          const indexResult = await db.execute(sql`
+          // postgres-js: db.execute devolve as linhas direto (array), sem `.rows`
+          const indexResult: { indexname: string }[] = await db.execute(sql`
             SELECT indexname 
             FROM pg_indexes 
             WHERE tablename = ${expectedTable.name}
             AND schemaname = 'public'
           `);
-          tableInfo.indexes = indexResult.rows.map(row => row.indexname);
+          tableInfo.indexes = indexResult.map(row => row.indexname);
 
           status.totalRecords += tableInfo.recordCount;
         }
@@ -429,14 +430,14 @@ async function verifyTablesIntegrity() {
         )
       `);
 
-      if (tableExists.rows[0]?.exists) {
+      if (tableExists[0]?.exists) {
         result.tablesCreated++;
 
         // Contar registros
         const countResult = await db.execute(sql`
           SELECT COUNT(*) as count FROM ${sql.identifier(expectedTable.name)}
         `);
-        result.totalRecords += parseInt(countResult.rows[0]?.count || '0');
+        result.totalRecords += parseInt(countResult[0]?.count || '0');
       } else {
         result.missingTables.push(expectedTable.name);
       }

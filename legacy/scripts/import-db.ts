@@ -1,6 +1,6 @@
 // Import locales directly using server db connection
-import { db } from './server/db';
-import { systemLocalization, localizationStrings } from '@shared/schema';
+import { db } from '../../server/db';
+import { systemLocalization, localizationStrings } from '../../shared/schema';
 import { eq, and } from 'drizzle-orm';
 import fs from 'fs';
 import path from 'path';

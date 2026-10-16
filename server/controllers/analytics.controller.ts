@@ -1,8 +1,13 @@
 import { Request, Response } from "express";
 import { storage } from "../storage";
 import { db } from "../db";
-import { transactions, wallets, users } from "../../shared/schema";
+import { transactions, wallets, users, type Transaction, type Wallet } from "../../shared/schema";
 import { eq, sql, and, gte, lte } from "drizzle-orm";
+
+// Linhas retornadas pelas consultas abaixo (db é exportado como `any` em server/db.ts)
+type TransacaoComUsuario = Pick<Transaction, 'id' | 'valor' | 'tipo' | 'data_transacao'> & { usuario_id: Wallet['usuario_id'] };
+type CarteiraResumo = Pick<Wallet, 'id' | 'usuario_id' | 'saldo_atual'>;
+type TransacaoPorCarteira = Pick<Transaction, 'carteira_id' | 'tipo' | 'valor'>;
 
 interface AnalyticsData {
   userGrowth: Array<{ month: string; users: number; activeUsers: number }>;
@@ -29,7 +34,7 @@ export class AnalyticsController {
       const allUsers = await storage.getAllUsers();
       
       // Buscar todas as transações
-      const allTransactions = await db.select({
+      const allTransactions: TransacaoComUsuario[] = await db.select({
         id: transactions.id,
         valor: transactions.valor,
         tipo: transactions.tipo,
@@ -40,7 +45,7 @@ export class AnalyticsController {
       .innerJoin(wallets, eq(transactions.carteira_id, wallets.id));
 
       // Buscar apenas carteiras vinculadas a usuários existentes
-      const allWallets = await db.select({
+      const allWallets: CarteiraResumo[] = await db.select({
         id: wallets.id,
         usuario_id: wallets.usuario_id,
         saldo_atual: wallets.saldo_atual
@@ -121,7 +126,7 @@ export class AnalyticsController {
       });
 
       // Buscar transações por carteira para calcular saldo real
-      const transactionsByWallet = await db.select({
+      const transactionsByWallet: TransacaoPorCarteira[] = await db.select({
         carteira_id: transactions.carteira_id,
         tipo: transactions.tipo,
         valor: transactions.valor

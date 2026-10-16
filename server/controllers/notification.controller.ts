@@ -5,6 +5,9 @@ import { db } from '../db.js'
 import { users } from "../../shared/schema"
 import { broadcastNotification } from '../websocket.js'
 
+// Linha de `db.select({ id: users.id })` (db é exportado como `any` em server/db.ts)
+type UserIdRow = { id: number }
+
 // Schema para validação da notificação
 const notificationSchema = z.object({
   type: z.enum(['info', 'warning', 'error', 'success']),
@@ -88,7 +91,7 @@ export const sendNotification = async (req: Request, res: Response) => {
       autoClose: validatedData.autoClose,
       persistent: validatedData.persistent,
       from: {
-        id: req.user.id,
+        id: req.user.id.toString(),
         name: req.user.nome,
         role: req.user.tipo_usuario
       }
@@ -98,20 +101,25 @@ export const sendNotification = async (req: Request, res: Response) => {
     let targetUsers: string[] = []
 
     if (validatedData.targetUser) {
+      // targetUser chega como string; users.id é integer
+      const targetUserId = Number(validatedData.targetUser)
+      if (!Number.isInteger(targetUserId)) {
+        return res.status(400).json({ error: 'ID de usuário inválido' })
+      }
       // Verificar se o usuário existe
-      const user = await db.select().from(users).where(eq(users.id, validatedData.targetUser)).limit(1)
+      const user = await db.select().from(users).where(eq(users.id, targetUserId)).limit(1)
       if (user.length === 0) {
         return res.status(404).json({ error: 'Usuário não encontrado' })
       }
       targetUsers = [validatedData.targetUser]
     } else if (validatedData.targetRole) {
       // Buscar todos os usuários com a role específica
-      const usersWithRole = await db.select({ id: users.id }).from(users).where(eq(users.tipo_usuario, validatedData.targetRole))
-      targetUsers = usersWithRole.map(u => u.id)
+      const usersWithRole: UserIdRow[] = await db.select({ id: users.id }).from(users).where(eq(users.tipo_usuario, validatedData.targetRole))
+      targetUsers = usersWithRole.map(u => u.id.toString())
     } else {
       // Enviar para todos os SuperAdmins conectados por padrão
-      const superAdmins = await db.select({ id: users.id }).from(users).where(eq(users.tipo_usuario, 'super_admin'))
-      targetUsers = superAdmins.map(u => u.id)
+      const superAdmins: UserIdRow[] = await db.select({ id: users.id }).from(users).where(eq(users.tipo_usuario, 'super_admin'))
+      targetUsers = superAdmins.map(u => u.id.toString())
     }
 
     // Enviar notificação via WebSocket
@@ -201,7 +209,7 @@ export const broadcastNotificationToSuperAdmins = async (req: Request, res: Resp
     }
 
     // Buscar todos os SuperAdmins
-    const superAdmins = await db.select({ id: users.id }).from(users).where(eq(users.tipo_usuario, 'super_admin'))
+    const superAdmins: UserIdRow[] = await db.select({ id: users.id }).from(users).where(eq(users.tipo_usuario, 'super_admin'))
 
     const notification = {
       id: `broadcast_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -212,7 +220,7 @@ export const broadcastNotificationToSuperAdmins = async (req: Request, res: Resp
       autoClose,
       persistent: persistent || false,
       from: {
-        id: req.user.id,
+        id: req.user.id.toString(),
         name: req.user.nome,
         role: req.user.tipo_usuario
       },
@@ -220,7 +228,7 @@ export const broadcastNotificationToSuperAdmins = async (req: Request, res: Resp
     }
 
     // Enviar para todos os SuperAdmins
-    broadcastNotification(notification, superAdmins.map(u => u.id))
+    broadcastNotification(notification, superAdmins.map(u => u.id.toString()))
 
     console.log(`[BROADCAST] Enviado por ${req.user.nome} para ${superAdmins.length} SuperAdmins:`, {
       type: notification.type,
@@ -272,7 +280,7 @@ export const sendTestNotification = async (req: Request, res: Response) => {
       autoClose: 5000,
       persistent: false,
       from: {
-        id: req.user.id,
+        id: req.user.id.toString(),
         name: req.user.nome,
         role: req.user.tipo_usuario
       },
@@ -280,7 +288,7 @@ export const sendTestNotification = async (req: Request, res: Response) => {
     }
 
     // Enviar apenas para o próprio usuário
-    broadcastNotification(testNotification, [req.user.id])
+    broadcastNotification(testNotification, [req.user.id.toString()])
 
     res.json({
       success: true,

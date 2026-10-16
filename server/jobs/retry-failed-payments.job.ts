@@ -13,7 +13,7 @@ export async function retryFailedPaymentsJob() {
   console.log('[RetryJob] Starting failed payments check...');
 
   try {
-    const asaasService = getAsaasService();
+    const asaasService = await getAsaasService();
 
     // Buscar pagamentos vencidos com retry < 3
     const overduePayments = await storage.getOverduePayments();

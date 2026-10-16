@@ -18,12 +18,12 @@ import { novaExpiracao, vencimentoPrimeiraCobranca, fimDoPeriodoPago, fimDoCiclo
 import { rotuloModalidade } from '../../shared/modalidade';
 import { db } from '../db';
 import { sql } from 'drizzle-orm';
-import type {
-  User,
-  SubscriptionPlan,
-  UserSubscription,
-  PaymentTransaction,
-  AsaasCustomer,
+import {
+  type User,
+  type SubscriptionPlan,
+  type UserSubscription,
+  type PaymentTransaction,
+  type AsaasCustomer,
   SubscriptionStatus,
   PaymentStatus
 } from "../../shared/schema";
@@ -47,15 +47,16 @@ async function getSystemName(): Promise<string> {
 
   try {
     const sql = postgres(process.env.DATABASE_URL || '', { prepare: false });
-    const result = await sql`
+    const result = await sql<{ setting_value: string | null }[]>`
       SELECT setting_value FROM system_settings WHERE setting_key = 'system_name' LIMIT 1
     `;
     await sql.end();
 
-    if (result.length > 0 && result[0].setting_value) {
-      cachedSystemName = result[0].setting_value;
+    const systemName = result.length > 0 ? result[0].setting_value : null;
+    if (systemName) {
+      cachedSystemName = systemName;
       cacheTimestamp = Date.now();
-      return cachedSystemName;
+      return systemName;
     }
   } catch (error) {
     console.warn('[SubscriptionService] Erro ao buscar system_name, usando padrão:', error);
@@ -839,13 +840,13 @@ export class SubscriptionService {
       const client = postgres(process.env.DATABASE_URL || '', { prepare: false });
 
       // Buscar mensagem de ativação personalizada
-      const result = await client`
+      const result = await client<{ title: string; message: string; email_content: string | null }[]>`
         SELECT title, message, email_content
         FROM welcome_messages
         WHERE type = 'activated'
       `;
 
-      let activationMessage = {
+      let activationMessage: { title: string; message: string; email_content: string | null } = {
         title: 'Sua conta foi ativada!',
         message: 'Olá! Sua conta foi ativada com sucesso. Agora você tem acesso completo a todos os recursos da plataforma.',
         email_content: 'Sua conta foi ativada com sucesso!'
@@ -1115,15 +1116,15 @@ export class SubscriptionService {
    */
   private mapAsaasPaymentStatus(asaasStatus: string): PaymentStatus {
     const statusMap: Record<string, PaymentStatus> = {
-      'PENDING': 'pending',
-      'RECEIVED': 'confirmed',
-      'CONFIRMED': 'confirmed',
-      'OVERDUE': 'overdue',
-      'REFUNDED': 'refunded',
-      'RECEIVED_IN_CASH': 'received_in_cash'
+      'PENDING': PaymentStatus.PENDING,
+      'RECEIVED': PaymentStatus.CONFIRMED,
+      'CONFIRMED': PaymentStatus.CONFIRMED,
+      'OVERDUE': PaymentStatus.OVERDUE,
+      'REFUNDED': PaymentStatus.REFUNDED,
+      'RECEIVED_IN_CASH': PaymentStatus.RECEIVED_IN_CASH
     };
 
-    return statusMap[asaasStatus] || 'pending';
+    return statusMap[asaasStatus] || PaymentStatus.PENDING;
   }
 
   /**
@@ -1131,12 +1132,12 @@ export class SubscriptionService {
    */
   private mapAsaasSubscriptionStatus(asaasStatus: string): SubscriptionStatus {
     const statusMap: Record<string, SubscriptionStatus> = {
-      'ACTIVE': 'active',
-      'INACTIVE': 'canceled',
-      'EXPIRED': 'expired'
+      'ACTIVE': SubscriptionStatus.ACTIVE,
+      'INACTIVE': SubscriptionStatus.CANCELED,
+      'EXPIRED': SubscriptionStatus.EXPIRED
     };
 
-    return statusMap[asaasStatus] || 'active';
+    return statusMap[asaasStatus] || SubscriptionStatus.ACTIVE;
   }
 }
 

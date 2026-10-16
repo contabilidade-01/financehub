@@ -1657,6 +1657,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/empresas/:id/integracoes/cora/webhook", sensitiveLimiter, ...coraAuth, coraCtrl.ativarWebhook);
   app.put("/api/empresas/:id/integracoes/cora/modo", sensitiveLimiter, ...coraAuth, coraCtrl.definirModo);
   app.post("/api/empresas/:id/integracoes/cora/importar", sensitiveLimiter, ...coraAuth, coraCtrl.importar);
+  // Carteira Nescon: só o escritório (flag própria) filtra os boletos pelos clientes do portal.
+  const { FLAG_CORA_CARTEIRA_NESCON } = await import("./services/feature-flags.service");
+  const exigeCarteiraNescon = async (req: Request, res: Response, next: NextFunction) => {
+    const u = req.user as any;
+    if (u?.tipo_usuario === "super_admin" || (req as any).originalUser?.tipo_usuario === "super_admin") return next();
+    if (await flagCora(FLAG_CORA_CARTEIRA_NESCON, u?.id)) return next();
+    return res.status(404).json({ error: "Recurso não disponível." });
+  };
+  const carteiraAuth = [...coraAuth, exigeCarteiraNescon];
+  app.get("/api/empresas/:id/integracoes/cora/carteira", ...carteiraAuth, coraCtrl.obterCarteira);
+  app.put("/api/empresas/:id/integracoes/cora/carteira", sensitiveLimiter, ...carteiraAuth, coraCtrl.definirFiltroCarteira);
+  app.post("/api/empresas/:id/integracoes/cora/carteira/sincronizar", sensitiveLimiter, ...carteiraAuth, coraCtrl.sincronizarCarteira);
   app.get("/api/empresas/:id/erp/cobrancas", ...coraAuth, coraCtrl.listarCobrancas);
   app.post("/api/empresas/:id/erp/cobrancas", ...coraAuth, coraCtrl.emitir);
   app.post("/api/empresas/:id/erp/cobrancas/:cid/sincronizar", ...coraAuth, coraCtrl.sincronizar);

@@ -31,6 +31,8 @@ interface Notification {
   }
   broadcast?: boolean
   test?: boolean
+  // Carga livre repassada ao cliente (ex.: { event: 'transaction.created', ... })
+  data?: Record<string, unknown>
 }
 
 let wss: WebSocketServer | null = null

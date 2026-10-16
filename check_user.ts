@@ -1,6 +1,6 @@
-import { db } from './server/db.ts';
+import { db } from './server/db';
 import { eq } from 'drizzle-orm';
-import { transactions, wallets } from './shared/schema.ts';
+import { transactions, wallets } from './shared/schema';
 
 async function run() {
   try {

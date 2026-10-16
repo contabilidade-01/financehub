@@ -270,13 +270,14 @@ async function processWebhookEvent(eventType: string, paymentData: any, webhookI
         const client = postgres(process.env.DATABASE_URL || '', { prepare: false });
 
         // Buscar mensagem de ativação personalizada
-        const result = await client`
+        type ActivationMessage = { title: string; message: string; email_content: string | null };
+        const result = await client<ActivationMessage[]>`
           SELECT title, message, email_content
           FROM welcome_messages
           WHERE type = 'activated'
         `;
 
-        let activationMessage = {
+        let activationMessage: ActivationMessage = {
           title: 'Sua conta foi ativada!',
           message: 'Olá! Sua conta foi ativada com sucesso. Agora você tem acesso completo a todos os recursos da plataforma.',
           email_content: 'Sua conta foi ativada com sucesso!'

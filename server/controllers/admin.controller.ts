@@ -13,6 +13,13 @@ import { uazapiService } from "../services/uazapi.service";
 import { gerarLinkDefinirSenha } from "./password-reset.controller";
 import { normalizarPorte } from "../../shared/modalidade";
 
+// Linha da tabela welcome_messages (email_content é nullable)
+type WelcomeMessageRow = {
+  title: string;
+  message: string;
+  email_content: string | null;
+};
+
 /**
  * @swagger
  * /api/admin/stats:
@@ -509,7 +516,7 @@ export async function updateUserStatus(req: Request, res: Response) {
     const updatedUser = await storage.updateUser(userId, updateData);
 
     // Enviar notificação via webhook quando super_admin ativa usuário inativo
-    if (isActivatingInactiveUser) {
+    if (isActivatingInactiveUser && updatedUser) {
       try {
         console.log("=== ENVIANDO WEBHOOK DE ATIVAÇÃO (STATUS) ===");
         console.log(`Super Admin ${req.user?.nome} ativou usuário ${updatedUser.nome}`);
@@ -528,7 +535,7 @@ export async function updateUserStatus(req: Request, res: Response) {
         console.log(`Nova senha gerada para o usuário ${updatedUser.nome} (valor não registrado em log).`);
         
         // Buscar mensagem de ativação personalizada
-        let activationMessage = {
+        let activationMessage: WelcomeMessageRow = {
           title: 'Sua conta foi ativada!',
           message: 'Olá! Sua conta foi ativada com sucesso. Agora você tem acesso completo a todos os recursos da plataforma.',
           email_content: 'Sua conta foi ativada com sucesso!'
@@ -538,7 +545,7 @@ export async function updateUserStatus(req: Request, res: Response) {
           const postgres = (await import('postgres')).default;
           const client = postgres(process.env.DATABASE_URL || '', { prepare: false });
           
-          const result = await client`
+          const result = await client<WelcomeMessageRow[]>`
             SELECT title, message, email_content 
             FROM welcome_messages 
             WHERE type = 'activated'
@@ -1189,7 +1196,7 @@ export async function updateUser(req: Request, res: Response) {
           console.log(`Nova senha gerada para o usuário ${updatedUser.nome} (valor não registrado em log).`);
         }
 
-        let activationMessage = {
+        let activationMessage: WelcomeMessageRow = {
           title: "Sua conta foi ativada!",
           message:
             "Olá! Sua conta foi ativada com sucesso. Agora você tem acesso completo a todos os recursos da plataforma.",
@@ -1200,7 +1207,7 @@ export async function updateUser(req: Request, res: Response) {
           const postgres = (await import("postgres")).default;
           const client = postgres(process.env.DATABASE_URL || "", { prepare: false });
 
-          const result = await client`
+          const result = await client<WelcomeMessageRow[]>`
             SELECT title, message, email_content 
             FROM welcome_messages 
             WHERE type = 'activated'

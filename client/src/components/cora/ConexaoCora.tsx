@@ -12,6 +12,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useConfirm } from "@/components/shared/ConfirmDialog";
 import { useToast } from "@/hooks/use-toast";
 import { HelpVideoButton } from "@/components/shared/HelpVideoButton";
+import { CarteiraNescon } from "./CarteiraNescon";
 
 export interface Conexao {
   ambiente: "stage" | "producao";
@@ -38,6 +39,8 @@ export interface ResultadoImportacao {
   baixadas: number;
   canceladas: number;
   ignoradas: number;
+  /** Boletos de clientes fora da carteira Nescon (filtro do escritório). */
+  fora_carteira?: number;
   falhas: number;
   em: string;
 }
@@ -51,6 +54,7 @@ export function resumoImportacao(u: ResultadoImportacao | null | undefined): str
     `${u.criadas + u.vinculadas} novo(s) em Contas a receber`,
     `${u.baixadas} recebido(s)`,
     ...(u.canceladas ? [`${u.canceladas} cancelado(s)`] : []),
+    ...(u.fora_carteira ? [`${u.fora_carteira} fora da carteira Nescon`] : []),
     ...(u.falhas ? [`${u.falhas} falha(s)`] : []),
   ];
   return `Última importação${data}: ${partes.join(", ")}.`;
@@ -321,6 +325,7 @@ export function ConexaoCora({ empresaId, bancos }: { empresaId: number; bancos: 
                 </Button>
               </div>
             )}
+            {atual.modo_recebimento === "cora" && <CarteiraNescon empresaId={empresaId} />}
           </CardContent>
         </Card>
       )}
