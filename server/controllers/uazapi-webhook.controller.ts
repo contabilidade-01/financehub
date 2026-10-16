@@ -390,6 +390,9 @@ interface UazapiWebhookBody {
   };
 }
 
+const ehRascunhoWhatsapp = (u: { ativo?: boolean | null; email?: string | null; status_assinatura?: string | null }) =>
+  u.status_assinatura === "aguardando_cadastro" || (!u.ativo && isPlaceholderEmail(u.email));
+
 /** Usuário já cadastrado (sem WhatsApp vinculado) cujo telefone bate com o chat. */
 async function buscarCadastroPorTelefone(chatid: string, ignorarId?: number) {
   const variantes = variantesTelefone(chatid);
@@ -400,6 +403,7 @@ async function buscarCadastroPorTelefone(chatid: string, ignorarId?: number) {
       // Sem WhatsApp real vinculado (vazio, ou UUID do cadastro pelo site)
       sql`coalesce(${users.remoteJid}, '') not like '%@%'`,
       sql`coalesce(${users.status_assinatura}, '') <> 'aguardando_cadastro'`,
+      sql`lower(coalesce(${users.email}, '')) not like '%@tel.local'`,
       ignorarId ? ne(users.id, ignorarId) : undefined,
     ))
     .orderBy(desc(users.ativo), desc(users.id))
@@ -462,7 +466,9 @@ async function processarMensagemUazapi(req: Request, tokenValidado: string): Pro
 
     // Cadastro feito pelo admin/site não tem remoteJid: vincula pelo telefone
     // antes de criar (ou continuar) um rascunho que pediria cadastro de novo.
-    if (!user || user.status_assinatura === "aguardando_cadastro") {
+    // Rascunho = inativo com e-mail provisório, em qualquer etapa do onboarding
+    // (aguardando_cadastro, aguardando_form, aguardando_trial...).
+    if (!user || ehRascunhoWhatsapp(user)) {
       const cadastrado = await buscarCadastroPorTelefone(chatid, user?.id);
       if (cadastrado) {
         await storage.updateUser(cadastrado.id, { remoteJid: chatid } as any);
