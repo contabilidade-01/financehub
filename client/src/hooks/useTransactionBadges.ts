@@ -12,6 +12,7 @@ interface UseTransactionBadgesReturn {
   addTransactionBadge: () => void;
   dismissBadge: (id: string) => void;
   clearAllBadges: () => void;
+  markAsViewed: () => void;
   totalCount: number;
 }
 

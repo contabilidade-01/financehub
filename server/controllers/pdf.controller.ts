@@ -90,7 +90,7 @@ export async function generateReportPDF(req: Request, res: Response) {
     });
 
     // Prepare chart data matching the reports page
-    const monthlyChartData = monthlyData.map((month: any) => ({
+    const monthlyChartData: { month: string; income: number; expense: number; balance: number }[] = monthlyData.map((month: any) => ({
       month: month.mes,
       income: Number(month.receitas || 0),
       expense: Number(month.despesas || 0),

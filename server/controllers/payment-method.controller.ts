@@ -303,13 +303,14 @@ export async function updatePaymentMethod(req: Request, res: Response) {
     const updateData = insertPaymentMethodSchema.partial().parse(req.body);
 
     // Check for name conflicts if name is being updated
-    if (updateData.nome && updateData.nome !== existingMethod.nome) {
+    const novoNome = updateData.nome;
+    if (novoNome && novoNome !== existingMethod.nome) {
       const userMethods = await storage.getPaymentMethodsByUserId(req.user.id);
       const globalMethods = await storage.getGlobalPaymentMethods();
       
       const conflictingMethod = [...userMethods, ...globalMethods].find(
         method => method.id !== paymentMethodId && 
-                 method.nome.toLowerCase() === updateData.nome.toLowerCase()
+                 method.nome.toLowerCase() === novoNome.toLowerCase()
       );
 
       if (conflictingMethod) {

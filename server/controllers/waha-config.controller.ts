@@ -11,6 +11,15 @@ interface WahaConfig {
   enabled: boolean;
 }
 
+// Sessão como devolvida pela API do WAHA (formato externo, campos variam por versão)
+interface WahaSessionInfo {
+  name?: string;
+  sessionName?: string;
+  status?: string;
+  me?: { id?: string } | null;
+  engine?: string;
+}
+
 // Configuração da conexão
 const getClient = () => postgres(process.env.DATABASE_URL || '', { prepare: false });
 
@@ -181,6 +190,11 @@ export const updateWahaConfig = async (req: Request, res: Response) => {
     // Se deve regenerar o hash ou não existe, gerar novo
     if (regenerate_webhook_hash || !webhookHash) {
       webhookHash = await generateWebhookHash(session_name || 'numero-principal');
+      finalWebhookUrl = generateWebhookUrl(webhookHash);
+    }
+
+    // Sem webhook_url no corpo, deriva do hash atual (postgres.js rejeita undefined)
+    if (finalWebhookUrl === undefined) {
       finalWebhookUrl = generateWebhookUrl(webhookHash);
     }
 
@@ -793,7 +807,7 @@ async function getWahaSessionsDirect(baseUrl: string, apiKey: string) {
           } else if (data && typeof data === 'object') {
             if (data.sessions && Array.isArray(data.sessions)) {
               console.log(`📋 SESSÕES ENCONTRADAS EM data.sessions (${data.sessions.length}):`);
-              data.sessions.forEach((session, index) => {
+              data.sessions.forEach((session: WahaSessionInfo, index: number) => {
                 console.log(`  ${index + 1}. Nome: ${session.name || session.sessionName || 'N/A'}`);
                 console.log(`     Status: ${session.status || 'N/A'}`);
                 console.log(`     Conectado: ${session.me?.id || 'Não conectado'}`);

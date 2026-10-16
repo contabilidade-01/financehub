@@ -3,7 +3,7 @@ import { storage, filtrarPlanosPorTipo } from "../storage";
 import { getSubscriptionService } from "../services/subscription.service";
 import { z } from "zod";
 import { db } from "../db";
-import { paymentTransactions, users, userSubscriptions, subscriptionPlans, paymentSettings } from "../../shared/schema";
+import { paymentTransactions, users, userSubscriptions, subscriptionPlans, paymentSettings, type PaymentTransaction } from "../../shared/schema";
 import { eq } from "drizzle-orm";
 import { decodeCheckoutToken, validateCheckoutToken } from "../utils/checkout-token.utils";
 
@@ -515,8 +515,6 @@ export async function getCurrentSubscription(req: Request, res: Response) {
         status: subscription.status,
         currentPeriodStart: subscription.currentPeriodStart,
         currentPeriodEnd: subscription.currentPeriodEnd,
-        gracePeriodEndsAt: subscription.gracePeriodEndsAt,
-        cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
         plan: plan
       }
     });
@@ -826,7 +824,7 @@ export async function getBillingMetrics(req: Request, res: Response) {
     const { paymentTransactions } = await import("../../shared/schema");
     const { sql } = await import('drizzle-orm');
 
-    const payments = await db.select().from(paymentTransactions);
+    const payments: PaymentTransaction[] = await db.select().from(paymentTransactions);
 
     // Calcular receita total
     const totalRevenue = payments
@@ -1094,6 +1092,11 @@ export async function retryPayment(req: Request, res: Response) {
     const user = await storage.getUserById(payment.usuarioId);
     if (!user) {
       return res.status(404).json({ error: "Usuário não encontrado" });
+    }
+
+    // Sem vínculo com o Asaas não há o que consultar/reprocessar
+    if (!payment.asaasPaymentId) {
+      return res.status(400).json({ error: "Pagamento sem ID do Asaas vinculado" });
     }
 
     // Buscar status atual no Asaas

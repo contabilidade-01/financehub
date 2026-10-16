@@ -54,7 +54,7 @@ import {
   type InsertUserSubscription,
   type UpdateUserSubscription,
   type PaymentTransaction,
-  type InsertPaymentTransaction,
+  insertPaymentTransactionSchema,
   type UpdatePaymentTransaction,
   type AsaasWebhook,
   type InsertAsaasWebhook,
@@ -78,10 +78,19 @@ import {
   type MetaFinanceira,
   type InsertMeta,
   type UpdateMeta,
-  type MetaComProgresso
+  type MetaComProgresso,
+  auditoriaAdmin,
+  type AuditoriaAdmin,
+  type InsertAuditoriaAdmin
 } from "../shared/schema";
 import { eq, and, or, desc, gte, lte, isNull, count, sum, sql, ne } from "drizzle-orm";
 import { hashApiToken, mascararApiToken } from "./utils/api-token-hash";
+import type { z } from "zod";
+
+// Entrada de createPaymentTransaction: o storage grava direto (sem passar pelo
+// parse do Zod), então `amount` pode vir como número ou string decimal ("29.90"),
+// que é o formato nativo da coluna DECIMAL.
+type NovaPaymentTransaction = z.input<typeof insertPaymentTransactionSchema>;
 
 // Pagar a fatura do cartão é QUITAÇÃO DE DÍVIDA, não despesa nova: a compra já
 // entrou por competência no dia em que foi feita. Sem excluir o pagamento, o
@@ -292,7 +301,7 @@ export interface IStorage {
     dateFrom?: string;
     dateTo?: string;
   }, limit?: number, offset?: number): Promise<any[]>;
-  createPaymentTransaction(paymentData: InsertPaymentTransaction): Promise<PaymentTransaction>;
+  createPaymentTransaction(paymentData: NovaPaymentTransaction): Promise<PaymentTransaction>;
   updatePaymentTransaction(id: number, paymentData: UpdatePaymentTransaction): Promise<PaymentTransaction | undefined>;
 
   // Asaas Webhook methods
@@ -1523,11 +1532,13 @@ export class DbStorage implements IStorage {
     }
 
     // Filtro por data de vencimento (intervalo)
+    // due_date é coluna DATE (modo string 'YYYY-MM-DD'): comparar data com data,
+    // senão o Date vira timestamptz e o último dia do intervalo pode ficar de fora.
     if (filters.dateFrom) {
-      conditions.push(gte(paymentTransactions.dueDate, new Date(filters.dateFrom)));
+      conditions.push(gte(paymentTransactions.dueDate, new Date(filters.dateFrom).toISOString().slice(0, 10)));
     }
     if (filters.dateTo) {
-      conditions.push(lte(paymentTransactions.dueDate, new Date(filters.dateTo)));
+      conditions.push(lte(paymentTransactions.dueDate, new Date(filters.dateTo).toISOString().slice(0, 10)));
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -1562,7 +1573,7 @@ export class DbStorage implements IStorage {
       .offset(offset);
   }
 
-  async createPaymentTransaction(paymentData: InsertPaymentTransaction): Promise<PaymentTransaction> {
+  async createPaymentTransaction(paymentData: NovaPaymentTransaction): Promise<PaymentTransaction> {
     const result = await db.insert(paymentTransactions).values({
       ...paymentData,
       createdAt: new Date()
@@ -2299,7 +2310,7 @@ export async function createMeta(userId: number, metaData: InsertMeta): Promise<
 }
 
 export async function getMetasByUsuarioId(userId: number): Promise<MetaComProgresso[]> {
-  const metas = await db.select()
+  const metas: MetaFinanceira[] = await db.select()
     .from(metasFinanceiras)
     .where(and(eq(metasFinanceiras.usuario_id, userId), eq(metasFinanceiras.ativo, true)))
     .orderBy(desc(metasFinanceiras.created_at));

@@ -71,7 +71,7 @@ async function getSystemConfig(): Promise<SystemConfig> {
 // ============================================
 
 export interface EmailConfig {
-  from: string;
+  from?: string; // opcional: sendEmail usa SMTP_FROM/EMAIL_FROM como padrão
   to: string;
   subject: string;
   body: string;

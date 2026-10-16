@@ -18,7 +18,7 @@
  */
 
 import * as readline from 'readline';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import dotenv from 'dotenv';
 
 // Carregar variáveis de ambiente

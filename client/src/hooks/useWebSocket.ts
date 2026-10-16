@@ -24,6 +24,7 @@ interface NotificationData {
     transaction?: any;
     transactionId?: number;
     userId?: number;
+    isImpersonated?: boolean;
   };
 }
 

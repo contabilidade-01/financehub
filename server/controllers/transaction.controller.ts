@@ -295,7 +295,7 @@ export async function createTransaction(req: Request, res: Response) {
       id: `transaction_created_${newTransaction.id}`,
       type: 'success' as const,
       title: 'Nova Transação Criada',
-      message: `${newTransaction.tipo === 'receita' ? 'Receita' : 'Despesa'} de ${formatCurrency(newTransaction.valor)} - ${newTransaction.descricao}`,
+      message: `${newTransaction.tipo === 'receita' ? 'Receita' : 'Despesa'} de ${formatCurrency(Number(newTransaction.valor))} - ${newTransaction.descricao}`,
       timestamp: new Date().toISOString(),
       from: {
         id: req.user.id.toString(),
@@ -527,7 +527,7 @@ export async function updateTransaction(req: Request, res: Response) {
         id: `transaction_updated_${updatedTransaction.id}`,
         type: 'info' as const,
         title: 'Transação Atualizada',
-        message: `${updatedTransaction.tipo === 'receita' ? 'Receita' : 'Despesa'} de ${formatCurrency(updatedTransaction.valor)} - ${updatedTransaction.descricao}`,
+        message: `${updatedTransaction.tipo === 'receita' ? 'Receita' : 'Despesa'} de ${formatCurrency(Number(updatedTransaction.valor))} - ${updatedTransaction.descricao}`,
         timestamp: new Date().toISOString(),
         from: {
           id: req.user.id.toString(),
@@ -560,7 +560,7 @@ export async function updateTransaction(req: Request, res: Response) {
       
       return res.status(500).json({
         error: "Erro ao atualizar transação no banco de dados",
-        message: dbError.message || "Erro interno do servidor"
+        message: (dbError instanceof Error && dbError.message) || "Erro interno do servidor"
       });
     }
   } catch (error) {
@@ -578,7 +578,7 @@ export async function updateTransaction(req: Request, res: Response) {
     
     return res.status(500).json({
       error: "Erro ao atualizar transação",
-      message: error.message || "Erro interno do servidor"
+      message: (error instanceof Error && error.message) || "Erro interno do servidor"
     });
   }
 }
@@ -621,7 +621,7 @@ export async function deleteTransaction(req: Request, res: Response) {
       id: `transaction_deleted_${transactionId}`,
       type: 'warning' as const,
       title: 'Transação Excluída',
-      message: `${transaction.tipo === 'receita' ? 'Receita' : 'Despesa'} de ${formatCurrency(transaction.valor)} - ${transaction.descricao}`,
+      message: `${transaction.tipo === 'receita' ? 'Receita' : 'Despesa'} de ${formatCurrency(Number(transaction.valor))} - ${transaction.descricao}`,
       timestamp: new Date().toISOString(),
       from: {
         id: req.user.id.toString(),
