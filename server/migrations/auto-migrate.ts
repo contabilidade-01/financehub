@@ -1479,6 +1479,29 @@ const STEPS: Step[] = [
       await db.execute(sql`ALTER TABLE empresas_integracoes ADD COLUMN IF NOT EXISTS ultima_importacao JSONB`);
     },
   },
+  {
+    name: "Cora: filtro de carteira (só clientes Nescon) e espelho dos clientes do portal",
+    run: async () => {
+      // 'todos'           = importa todo boleto da conta Cora (padrão);
+      // 'carteira_nescon' = só boletos de clientes marcados 'nescon' no portal nescon-clientes.
+      await db.execute(sql`ALTER TABLE empresas_integracoes ADD COLUMN IF NOT EXISTS filtro_clientes VARCHAR(20) NOT NULL DEFAULT 'todos'`);
+      await db.execute(sql`ALTER TABLE empresas_integracoes ADD COLUMN IF NOT EXISTS carteira_sync_em TIMESTAMPTZ`);
+      await db.execute(sql`ALTER TABLE empresas_integracoes ADD COLUMN IF NOT EXISTS carteira_sync_resumo JSONB`);
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS cora_carteira_clientes (
+          empresa_id      INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+          documento       VARCHAR(14) NOT NULL,
+          nome            VARCHAR(200),
+          email           VARCHAR(200),
+          telefone        VARCHAR(20),
+          carteira        VARCHAR(10) NOT NULL,
+          inativo         BOOLEAN NOT NULL DEFAULT false,
+          sincronizado_em TIMESTAMPTZ NOT NULL DEFAULT now(),
+          PRIMARY KEY (empresa_id, documento)
+        )
+      `);
+    },
+  },
 ];
 
 export async function runAutoMigrations(): Promise<void> {

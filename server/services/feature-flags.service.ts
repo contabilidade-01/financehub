@@ -14,6 +14,7 @@ import {
   FLAG_IMPORTACAO_EXTRATO_V2,
   FLAG_INTEGRACAO_CORA,
   FLAG_LEMBRETES_COBRANCA,
+  FLAG_CORA_CARTEIRA_NESCON,
   FLAGS_NO_CODIGO,
   DIAS_PARA_APOSENTAR,
   avaliarFlag,
@@ -28,6 +29,7 @@ export {
   FLAG_IMPORTACAO_EXTRATO_V2,
   FLAG_INTEGRACAO_CORA,
   FLAG_LEMBRETES_COBRANCA,
+  FLAG_CORA_CARTEIRA_NESCON,
   FLAGS_NO_CODIGO,
   DIAS_PARA_APOSENTAR,
   avaliarFlag,
@@ -99,6 +101,16 @@ async function garantirTabelas(): Promise<void> {
     VALUES (
       ${FLAG_INTEGRACAO_CORA},
       ${"Recebimentos via Cora (PJ ME): cobrança boleto/Pix emitida pelo sistema e baixa automática quando o cliente paga. Super admin sempre acessa."},
+      false
+    )
+    ON CONFLICT (chave) DO NOTHING
+  `);
+  // Carteira Nescon no Cora: nasce off — liberar só para o usuário do escritório.
+  await db.execute(sql`
+    INSERT INTO feature_flags (chave, descricao, ativo_todos)
+    VALUES (
+      ${FLAG_CORA_CARTEIRA_NESCON},
+      ${"Cora do escritório: importa para as transações só os boletos de clientes marcados como Nescon no portal nescon-clientes (clientes pessoais do Jean ficam de fora) e sincroniza o cadastro de clientes."},
       false
     )
     ON CONFLICT (chave) DO NOTHING

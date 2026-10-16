@@ -20,6 +20,8 @@ import {
   resumoDaListagem, type ResumoCobrancaCora,
 } from "./cora.client";
 import { credenciais, sincronizarCobranca } from "./cora.service";
+import { boletoDaCarteira } from "./carteira-nescon";
+import { carregarCarteira, carteiraParaImportar, sincronizarCarteira } from "./cora.carteira";
 
 const PROVEDOR = "cora";
 const MESES = Number(process.env.CORA_IMPORT_MESES) || 6;
@@ -38,6 +40,8 @@ export interface ResultadoImportacao {
   baixadas: number;
   canceladas: number;
   ignoradas: number;
+  /** Boletos novos de clientes fora da carteira Nescon (filtro do escritório). */
+  fora_carteira: number;
   falhas: number;
   em: string;
 }
@@ -50,19 +54,22 @@ type Contexto = {
   integ: any;
   contatos: Map<string, number | null>;
   categoriaId: number | null;
+  /** Filtro do escritório: documento → carteira. null = importa todos. */
+  carteira: Map<string, string> | null;
 };
 
 /** Importa (ou atualiza) tudo que está na janela da conta Cora da empresa. */
 export async function importarCobrancas(empresaId: number): Promise<ResultadoImportacao> {
   if (emExecucao.has(empresaId)) throw new ErroErp("Já existe uma importação em andamento para esta empresa.", 409);
   emExecucao.add(empresaId);
-  const r: ResultadoImportacao = { listadas: 0, criadas: 0, vinculadas: 0, atualizadas: 0, baixadas: 0, canceladas: 0, ignoradas: 0, falhas: 0, em: new Date().toISOString() };
+  const r: ResultadoImportacao = { listadas: 0, criadas: 0, vinculadas: 0, atualizadas: 0, baixadas: 0, canceladas: 0, ignoradas: 0, fora_carteira: 0, falhas: 0, em: new Date().toISOString() };
   try {
     const { cred, integ } = await credenciais(empresaId);
     if (integ.modo_recebimento !== "cora") throw new ErroErp("Esta empresa está no modo manual: escolha 'Importar da API Cora' em Contas a receber.", 409);
     if (integ.status !== "conectada") throw new ErroErp("A conexão com o Cora não está ativa. Teste a conexão antes de importar.", 409);
 
-    const ctx: Contexto = { integ, contatos: new Map(), categoriaId: null };
+    const carteira = await carteiraParaImportar(empresaId, integ, { atualizar: true });
+    const ctx: Contexto = { integ, contatos: new Map(), categoriaId: null, carteira };
     const { start, end } = janelaImportacao(hojeSP(), MESES);
 
     for (let page = 1; page <= MAX_PAGINAS; page++) {
@@ -108,7 +115,15 @@ export async function importarUma(empresaId: number, provedorId: string) {
   const existente = await cobrancaLocal(empresaId, resumo.id);
   if (existente) return sincronizarCobranca(empresaId, Number(existente.id));
 
-  const criada = await criarCobrancaImportada(empresaId, { integ, contatos: new Map(), categoriaId: null }, resumo, detalhe);
+  // Filtro do escritório: cliente novo no portal pode ainda não estar no espelho → atualiza uma vez.
+  let carteira = await carteiraParaImportar(empresaId, integ, { atualizar: false }).catch(() => new Map<string, string>());
+  if (carteira && !boletoDaCarteira(resumo.cliente.documento, carteira)) {
+    await sincronizarCarteira(empresaId).catch(() => null);
+    carteira = await carregarCarteira(empresaId);
+    if (!boletoDaCarteira(resumo.cliente.documento, carteira)) return null;
+  }
+
+  const criada = await criarCobrancaImportada(empresaId, { integ, contatos: new Map(), categoriaId: null, carteira }, resumo, detalhe);
   if (!criada) {
     const corrida = await cobrancaLocal(empresaId, resumo.id);
     return corrida ? sincronizarCobranca(empresaId, Number(corrida.id)) : null;
@@ -145,7 +160,8 @@ async function processarItem(empresaId: number, ctx: Contexto, item: any, r: Res
     return;
   }
 
-  // criar
+  // criar — só o que é do escritório quando o filtro de carteira está ligado
+  if (ctx.carteira && !boletoDaCarteira(resumo.cliente.documento, ctx.carteira)) { r.fora_carteira++; return; }
   if (r.criadas + r.vinculadas >= MAX_NOVAS) { r.ignoradas++; return; }
   const criada = await criarCobrancaImportada(empresaId, ctx, resumo, item);
   if (!criada) { r.ignoradas++; return; } // corrida com o webhook: já entrou por lá

@@ -12,12 +12,15 @@ export const FLAG_IMPORTACAO_EXTRATO_V2 = "importacao_extrato_v2";
 export const FLAG_INTEGRACAO_CORA = "integracao_cora";
 /** Lembretes de cobrança no WhatsApp (fim da degustação, renovação, atraso, pagamento confirmado). */
 export const FLAG_LEMBRETES_COBRANCA = "lembretes_cobranca_whatsapp";
+/** Cora do escritório: só importa boletos de clientes da carteira Nescon (portal nescon-clientes). */
+export const FLAG_CORA_CARTEIRA_NESCON = "cora_carteira_nescon";
 export const FLAGS_NO_CODIGO: readonly string[] = [
   FLAG_AGENTE_MEIO_PAGAMENTO,
   FLAG_ORQUESTRADOR_DEEPSEEK,
   FLAG_IMPORTACAO_EXTRATO_V2,
   FLAG_INTEGRACAO_CORA,
   FLAG_LEMBRETES_COBRANCA,
+  FLAG_CORA_CARTEIRA_NESCON,
 ];
 
 export const DIAS_PARA_APOSENTAR = 30;
