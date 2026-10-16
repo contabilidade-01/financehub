@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -103,6 +104,9 @@ export default function AdminUsers() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedAction, setSelectedAction] = useState<string | null>(null);
   const [togglingUserId, setTogglingUserId] = useState<number | null>(null);
+  const [activeTab, setActiveTab] = useState("active");
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkRunning, setBulkRunning] = useState(false);
   
   const [createForm, setCreateForm] = useState<CreateUserForm>({
     nome: "",
@@ -144,6 +148,17 @@ export default function AdminUsers() {
   const filteredUsers = users.filter(user =>
     user.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
     user.email.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const activeUsers = filteredUsers.filter(user =>
+    user.ativo === true &&
+    user.status_assinatura !== 'cancelada' &&
+    !user.data_cancelamento
+  );
+  const inactiveUsers = filteredUsers.filter(user =>
+    user.ativo === false &&
+    user.status_assinatura !== 'cancelada' &&
+    !user.data_cancelamento
   );
 
   // Mutation para criar usuário
@@ -420,6 +435,120 @@ export default function AdminUsers() {
       deleteUserMutation.mutate(id);
     }
   };
+
+  // Seleção em lote: super_admin nunca entra (mesma regra do botão individual)
+  const isSelectable = (user: UserWithStats) => user.tipo_usuario !== 'super_admin';
+
+  const toggleSelected = (id: number, checked: boolean) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (checked) next.add(id); else next.delete(id);
+      return next;
+    });
+  };
+
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    setSelectedIds(new Set());
+  };
+
+  // Executa, usuário por usuário, a mesma chamada do botão individual
+  // (desativar na aba Ativos, exclusão definitiva na aba Inativos).
+  const handleBulkAction = async (list: UserWithStats[], mode: "deactivate" | "delete") => {
+    const alvo = list.filter(u => isSelectable(u) && selectedIds.has(u.id));
+    if (alvo.length === 0) return;
+
+    const nomes = alvo.map(u => u.nome).join(", ");
+    const ok = await confirmar(mode === "delete"
+      ? {
+          title: `Excluir permanentemente ${alvo.length} usuário(s)?`,
+          description: `Todos os dados destes usuários serão removidos e não poderão ser recuperados: ${nomes}`,
+          confirmText: "Excluir Permanentemente",
+          destructive: true,
+        }
+      : {
+          title: `Desativar ${alvo.length} usuário(s)?`,
+          description: `Usuários: ${nomes}`,
+          confirmText: "Desativar",
+          destructive: true,
+        });
+    if (!ok) return;
+
+    setBulkRunning(true);
+    const falhas: string[] = [];
+    for (const u of alvo) {
+      try {
+        const url = mode === "delete" ? `/api/admin/users/${u.id}?permanente=true` : `/api/admin/users/${u.id}`;
+        await apiRequest(url, { method: "DELETE" });
+      } catch {
+        falhas.push(u.nome);
+      }
+    }
+    setBulkRunning(false);
+    setSelectedIds(new Set());
+    queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
+
+    const sucesso = alvo.length - falhas.length;
+    const verbo = mode === "delete" ? "excluído(s) permanentemente" : "desativado(s)";
+    toast({
+      title: falhas.length === 0 ? "Concluído" : "Concluído com falhas",
+      description: `${sucesso} usuário(s) ${verbo}.` + (falhas.length ? ` Falharam: ${falhas.join(", ")}` : ""),
+      variant: falhas.length && sucesso === 0 ? "destructive" : undefined,
+    });
+  };
+
+  const renderBulkBar = (list: UserWithStats[], mode: "deactivate" | "delete") => {
+    const selectable = list.filter(isSelectable);
+    if (selectable.length === 0) return null;
+    const selectedCount = selectable.filter(u => selectedIds.has(u.id)).length;
+    const allSelected = selectedCount === selectable.length;
+    return (
+      <div className="flex items-center justify-between p-3 mb-3 border rounded-lg border-border bg-muted/30">
+        <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
+          <Checkbox
+            checked={allSelected ? true : selectedCount > 0 ? "indeterminate" : false}
+            onCheckedChange={(checked) => {
+              setSelectedIds(prev => {
+                const next = new Set(prev);
+                selectable.forEach(u => (checked === true ? next.add(u.id) : next.delete(u.id)));
+                return next;
+              });
+            }}
+            disabled={bulkRunning}
+          />
+          Selecionar todos ({selectable.length})
+          {selectedCount > 0 && <span className="text-muted-foreground">• {selectedCount} selecionado(s)</span>}
+        </label>
+        <Button
+          variant="destructive"
+          size="sm"
+          className="gap-2 bg-red-600 hover:bg-red-700"
+          disabled={selectedCount === 0 || bulkRunning}
+          onClick={() => handleBulkAction(list, mode)}
+        >
+          <Trash2 className="h-4 w-4" />
+          {bulkRunning
+            ? "Processando..."
+            : mode === "delete"
+              ? `Excluir selecionados${selectedCount ? ` (${selectedCount})` : ""}`
+              : `Desativar selecionados${selectedCount ? ` (${selectedCount})` : ""}`}
+        </Button>
+      </div>
+    );
+  };
+
+  const renderRowCheckbox = (user: UserWithStats) => (
+    isSelectable(user) ? (
+      <Checkbox
+        checked={selectedIds.has(user.id)}
+        onCheckedChange={(checked) => toggleSelected(user.id, checked === true)}
+        disabled={bulkRunning}
+        aria-label={`Selecionar ${user.nome}`}
+      />
+    ) : (
+      <div className="w-4" />
+    )
+  );
 
   const handleToggleStatus = (user: UserWithStats) => {
     toggleUserStatusMutation.mutate({
@@ -769,7 +898,7 @@ export default function AdminUsers() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="active" className="w-full">
+          <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
             <TabsList className="grid w-full grid-cols-3 mb-6">
               <TabsTrigger value="active" className="flex items-center gap-2">
                 <Users className="h-4 w-4" />
@@ -803,13 +932,11 @@ export default function AdminUsers() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {filteredUsers.filter(user => 
-                    user.ativo === true && 
-                    user.status_assinatura !== 'cancelada' && 
-                    !user.data_cancelamento
-                  ).map((user) => (
+                  {renderBulkBar(activeUsers, "deactivate")}
+                  {activeUsers.map((user) => (
                     <div key={user.id} className={`flex items-center justify-between p-4 border rounded-lg border bg-card transition-all duration-300 bg-card border-border ${togglingUserId === user.id ? 'opacity-50 bg-blue-900/20 border-blue-500' : ''}`}>
                       <div className="flex items-center gap-3">
+                        {renderRowCheckbox(user)}
                         <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold">
                           {user.nome.charAt(0).toUpperCase()}
                         </div>
@@ -1019,13 +1146,11 @@ export default function AdminUsers() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {filteredUsers.filter(user => 
-                    user.ativo === false && 
-                    user.status_assinatura !== 'cancelada' && 
-                    !user.data_cancelamento
-                  ).map((user) => (
+                  {renderBulkBar(inactiveUsers, "delete")}
+                  {inactiveUsers.map((user) => (
                     <div key={user.id} className={`flex items-center justify-between p-4 border rounded-lg border bg-card transition-all duration-300 bg-yellow-50 border-yellow-200 ${togglingUserId === user.id ? 'opacity-50 bg-blue-900/20 border-blue-500' : ''}`}>
                       <div className="flex items-center gap-3">
+                        {renderRowCheckbox(user)}
                         <div className="h-10 w-10 rounded-full bg-warning/10 flex items-center justify-center text-warning font-semibold">
                           {user.nome.charAt(0).toUpperCase()}
                         </div>
