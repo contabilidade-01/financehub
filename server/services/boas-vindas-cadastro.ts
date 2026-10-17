@@ -13,15 +13,17 @@
 import { db } from "../db";
 import { sql } from "drizzle-orm";
 import { uazapiService } from "./uazapi.service";
+import { getPublicAppUrl } from "./mailer";
 
-export function textoBoasVindasCadastro(nome: string, isPJ: boolean): string {
+export function textoBoasVindasCadastro(nome: string, isPJ: boolean, appUrl = "https://app.controledinheiro.com.br"): string {
   const primeiroNome = (nome || "").trim().split(/\s+/)[0] || "";
   const exemplo = isPJ ? "paguei 180 de fornecedor no pix" : "gastei 50 no mercado";
   return (
     `Olá${primeiroNome ? `, ${primeiroNome}` : ""}! 👋 Sua conta no Khesef foi criada e os 15 dias grátis já começaram.\n\n` +
     `Responda esta mensagem para ativar seus lançamentos por aqui. ` +
     `Depois é só mandar algo como "${exemplo}", em texto, áudio ou foto do comprovante, que eu organizo tudo.\n\n` +
-    `Tudo o que você lançar aparece na hora no painel. 🚀`
+    `Tudo o que você lançar aparece na hora no painel. 🚀\n\n` +
+    `Para entrar no sistema pela web, acesse ${appUrl} com o e-mail e a senha do seu cadastro.`
   );
 }
 
@@ -52,7 +54,7 @@ export async function enviarBoasVindasCadastroSite(user: {
 
     const isPJ = user.tipo_pessoa === "juridica";
     try {
-      await uazapiService.sendText(baseUrl, token, telefone, textoBoasVindasCadastro(user.nome || "", isPJ));
+      await uazapiService.sendText(baseUrl, token, telefone, textoBoasVindasCadastro(user.nome || "", isPJ, getPublicAppUrl() || undefined));
     } catch (err) {
       // Não chegou: libera o dia0 para a sequência mandar quando o chat for vinculado.
       await db.execute(sql`
