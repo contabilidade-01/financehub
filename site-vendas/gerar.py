@@ -4,6 +4,14 @@ import os, sys, html
 OUT = sys.argv[1] if len(sys.argv) > 1 else "public"
 APP = "https://app.controledinheiro.com.br"
 
+# Cada página de vendas tem o seu subdomínio (nginx.conf escolhe a página pela raiz do host).
+URL = {
+    "pf": "https://pf.gestaoempresa.com/",
+    "mei": "https://controle.gestaoempresa.com/",
+    "pj": "https://pj.gestaoempresa.com/",
+    "planos": "https://controle.gestaoempresa.com/planos/",
+}
+
 def cad(mod):
     return f"{APP}/register?modalidade={mod}"
 
@@ -15,11 +23,11 @@ def head(titulo, desc, url):
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{titulo}</title>
 <meta name="description" content="{html.escape(desc)}">
-<link rel="canonical" href="https://controle.gestaoempresa.com{url}">
+<link rel="canonical" href="{url}">
 <meta property="og:title" content="{titulo}">
 <meta property="og:description" content="{html.escape(desc)}">
 <meta property="og:type" content="website">
-<meta property="og:url" content="https://controle.gestaoempresa.com{url}">
+<meta property="og:url" content="{url}">
 <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
 <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -31,7 +39,7 @@ def head(titulo, desc, url):
 """
 
 def topo(ativa):
-    abas = [("/pf/", "Pessoa Física", "pf"), ("/mei/", "PJ MEI", "mei"), ("/pj/", "PJ Empresa", "pj")]
+    abas = [(URL["pf"], "Pessoa Física", "pf"), (URL["mei"], "PJ MEI", "mei"), (URL["pj"], "PJ Empresa", "pj")]
     links = "".join(f'<a class="aba{" ativa" if k == ativa else ""}" href="{h}">{t}</a>' for h, t, k in abas)
     return f"""<header class="topo"><div class="wrap">
 <a class="marca" href="/"><img src="/assets/logo-light.png" alt="">Khesef</a>
@@ -41,7 +49,7 @@ def topo(ativa):
 
 RODAPE = f"""<footer><div class="wrap">
 <span>© 2026 Khesef by XPIRIA. Todos os direitos reservados.</span>
-<span><a href="/pf/">Pessoa Física</a> · <a href="/mei/">PJ MEI</a> · <a href="/pj/">PJ Empresa</a> · <a href="{APP}/">Entrar</a></span>
+<span><a href="{URL['pf']}">Pessoa Física</a> · <a href="{URL['mei']}">PJ MEI</a> · <a href="{URL['pj']}">PJ Empresa</a> · <a href="{APP}/">Entrar</a></span>
 </div></footer>
 </body>
 </html>
@@ -173,7 +181,7 @@ PAGINAS = {
 def pagina(chave, p):
     msgs = "".join(f'<div class="msg {q}">{html.escape(t)}</div>' for q, t in p["msgs"])
     tag, nome, para, preco, itens = p["plano"]
-    s = head(p["titulo"], p["desc"], f"/{chave}/") + topo(chave)
+    s = head(p["titulo"], p["desc"], URL[chave]) + topo(chave)
     s += f"""<main>
 <section class="hero"><div class="wrap grade">
 <div>
@@ -197,7 +205,7 @@ def pagina(chave, p):
 <section id="planos"><div class="wrap">
 <div class="titulo"><h2>Plano e preço</h2><p>15 dias grátis para testar, sem compromisso.</p></div>
 <div class="planos" style="max-width:440px;margin:0 auto">{plano_card(tag, nome, para, preco, itens, p['mod'])}</div>
-<p class="nota" style="text-align:center;margin-top:20px">Não é o seu caso? Veja também <a href="/pf/">Pessoa Física</a>, <a href="/mei/">PJ MEI</a> ou <a href="/pj/">PJ Empresa</a>.</p>
+<p class="nota" style="text-align:center;margin-top:20px">Não é o seu caso? Veja também <a href="{URL['pf']}">Pessoa Física</a>, <a href="{URL['mei']}">PJ MEI</a> ou <a href="{URL['pj']}">PJ Empresa</a>.</p>
 </div></section>
 <div class="alt">{faq(FAQ_COMUM + p['faq_extra'])}</div>
 <section class="cta"><div class="wrap"><div class="caixa">
@@ -211,10 +219,10 @@ def pagina(chave, p):
 
 def inicio():
     s = head("Khesef: gestão financeira pelo WhatsApp para você e sua empresa",
-             "Controle financeiro pelo WhatsApp com IA para pessoa física, MEI e microempresa. 15 dias grátis.", "/") + topo("")
-    ops = [("/pf/", "👤", "Pessoa Física", "Minhas finanças pessoais e da família.", "R$ 39,90/mês"),
-           ("/mei/", "🧑‍💼", "PJ MEI", "Caixa do meu MEI separado das contas pessoais.", "R$ 79,90/mês"),
-           ("/pj/", "🏢", "PJ Empresa", "Gestão financeira completa da microempresa.", "R$ 79,90/mês")]
+             "Controle financeiro pelo WhatsApp com IA para pessoa física, MEI e microempresa. 15 dias grátis.", URL["planos"]) + topo("")
+    ops = [(URL["pf"], "👤", "Pessoa Física", "Minhas finanças pessoais e da família.", "R$ 39,90/mês"),
+           (URL["mei"], "🧑‍💼", "PJ MEI", "Caixa do meu MEI separado das contas pessoais.", "R$ 79,90/mês"),
+           (URL["pj"], "🏢", "PJ Empresa", "Gestão financeira completa da microempresa.", "R$ 79,90/mês")]
     cards_ = "".join(f'<a class="opcao" href="{h}"><div class="ic">{ic}</div><h3>{t}</h3><p>{d}</p><span class="de">{pr} · Ver plano →</span></a>' for h, ic, t, d, pr in ops)
     s += f"""<main>
 <section class="hero"><div class="wrap grade">
@@ -250,7 +258,7 @@ def grava(rel, conteudo):
     with open(caminho, "w", encoding="utf-8", newline="\n") as f:
         f.write(conteudo)
 
-grava("index.html", inicio())
+grava("planos/index.html", inicio())
 for k, p in PAGINAS.items():
     grava(f"{k}/index.html", pagina(k, p))
 print("ok")

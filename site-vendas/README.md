@@ -1,6 +1,12 @@
-# Site de vendas (controle.gestaoempresa.com)
+# Site de vendas (*.gestaoempresa.com)
 
-Site estático, separado do app. Páginas: `/` (escolha do plano), `/pf/`, `/mei/` e `/pj/`.
+Site estático, separado do app. Cada página tem o seu subdomínio (veja `nginx.conf`):
+
+- https://pf.gestaoempresa.com: Pessoa Física (`/pf/`)
+- https://controle.gestaoempresa.com: PJ MEI (`/mei/`)
+- https://pj.gestaoempresa.com: PJ Empresa/ME (`/pj/`)
+- https://controle.gestaoempresa.com/planos/: escolha do plano
+
 Os botões de cadastro só apontam para `https://app.controledinheiro.com.br/register?modalidade=...`;
 nada aqui altera o app.
 
