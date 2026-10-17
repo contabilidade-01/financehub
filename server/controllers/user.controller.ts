@@ -6,6 +6,7 @@ import { storage } from "../storage";
 import { insertUserSchema, loginUserSchema } from "../../shared/schema";
 import { z } from "zod";
 import { getNotificationService } from "../services/notification.service";
+import { enviarBoasVindasCadastroSite } from "../services/boas-vindas-cadastro";
 import { loginBloqueado, registrarFalhaLogin, registrarSucessoLogin } from "../utils/login-lockout";
 
 // Função utilitária para validar telefone numérico com country code 55
@@ -118,6 +119,9 @@ export async function register(req: Request, res: Response) {
       req.session.regenerate((err) => (err ? reject(err) : resolve())),
     );
     (req.session as any).userId = newUser.id;
+
+    // Boas-vindas no WhatsApp para o telefone do cadastro (flag; não bloqueia a resposta)
+    void enviarBoasVindasCadastroSite(newUser as any);
 
     // Enviar webhook de boas-vindas com link de pagamento (async, não bloqueia resposta)
     (async () => {

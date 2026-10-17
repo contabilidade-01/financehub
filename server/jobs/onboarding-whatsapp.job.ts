@@ -43,6 +43,7 @@ async function buscarCandidatos(etapa: string, diasMinimos: number): Promise<Can
     WHERE u.ativo = true
       AND u.remotejid IS NOT NULL
       AND u.remotejid != ''
+      AND u.remotejid LIKE '%@%' -- só chat real; cadastro do site guarda um UUID até vincular
       AND u.remotejid NOT LIKE '%@g.us'
       AND u.data_cadastro IS NOT NULL
       AND (u.data_cadastro AT TIME ZONE 'America/Sao_Paulo')::date <= (NOW() AT TIME ZONE 'America/Sao_Paulo')::date - (${diasMinimos})::int
