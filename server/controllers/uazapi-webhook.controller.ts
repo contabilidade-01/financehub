@@ -516,11 +516,12 @@ async function processarMensagemUazapi(req: Request, tokenValidado: string): Pro
     // expiração de trial ou conta inativa, o fluxo é tratado aqui e retornamos.
     if (await tratarOnboarding(user, text || "", chatid, BaseUrl, token)) return;
 
-    // Se o usuário é PJ mas não tem empresa com CNPJ cadastrado, iniciar/continuar onboarding para pedir CNPJ
+    // PJ sem nenhuma empresa cadastrada: iniciar/continuar onboarding da empresa pelo WhatsApp.
+    // Quem já cadastrou a empresa no app (mesmo sem CNPJ) segue direto para os lançamentos,
+    // que usam essa empresa como ativa (ver "Buscar empresa ativa" abaixo).
     if (user.tipo_pessoa === "juridica" && user.ativo) {
       const empresas = await storage.getEmpresasByUsuarioId(user.id);
-      const temCnpj = empresas.some(e => e.cnpj && e.cnpj.trim().length > 0);
-      if (!temCnpj) {
+      if (empresas.length === 0) {
         const onboardingState = await storage.getWhatsAppOnboardingState(chatid);
         if (!onboardingState) {
           await storage.createWhatsAppOnboardingState({
@@ -533,6 +534,10 @@ async function processarMensagemUazapi(req: Request, tokenValidado: string): Pro
           await uazapiService.sendText(BaseUrl, token, chatid, "Olá! Para continuar utilizando o ambiente PJ, precisamos cadastrar o CNPJ da sua empresa. 🏢\n\nQual o seu *nome completo* (responsável pela empresa)?");
           return;
         }
+      } else {
+        // Empresa já existe: encerra um cadastro de empresa que tenha ficado pela metade
+        // no WhatsApp, para não continuar perguntando dados que já estão no app.
+        try { await storage.deleteWhatsAppOnboardingState(chatid); } catch { /* ok */ }
       }
     }
 
