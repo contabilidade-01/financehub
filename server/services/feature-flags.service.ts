@@ -15,6 +15,7 @@ import {
   FLAG_INTEGRACAO_CORA,
   FLAG_LEMBRETES_COBRANCA,
   FLAG_CORA_CARTEIRA_NESCON,
+  FLAG_BOAS_VINDAS_CADASTRO_SITE,
   FLAGS_NO_CODIGO,
   DIAS_PARA_APOSENTAR,
   avaliarFlag,
@@ -30,6 +31,7 @@ export {
   FLAG_INTEGRACAO_CORA,
   FLAG_LEMBRETES_COBRANCA,
   FLAG_CORA_CARTEIRA_NESCON,
+  FLAG_BOAS_VINDAS_CADASTRO_SITE,
   FLAGS_NO_CODIGO,
   DIAS_PARA_APOSENTAR,
   avaliarFlag,
@@ -121,6 +123,16 @@ async function garantirTabelas(): Promise<void> {
     VALUES (
       ${FLAG_LEMBRETES_COBRANCA},
       ${"Lembretes de cobrança no WhatsApp: fim da degustação (3, 1 e 0 dias), renovação (3 e 0 dias), atraso (1 e 3 dias) e pagamento confirmado. Nunca avisa quem já pagou."},
+      false
+    )
+    ON CONFLICT (chave) DO NOTHING
+  `);
+  // Boas-vindas no WhatsApp após cadastro pelo site: nasce off — liberar no admin.
+  await db.execute(sql`
+    INSERT INTO feature_flags (chave, descricao, ativo_todos)
+    VALUES (
+      ${FLAG_BOAS_VINDAS_CADASTRO_SITE},
+      ${"Boas-vindas no WhatsApp logo após o cadastro pelo site: manda a mensagem para o telefone informado e, quando a pessoa responde, o chat é vinculado à conta. Conta como a mensagem do dia 0 da sequência de boas-vindas."},
       false
     )
     ON CONFLICT (chave) DO NOTHING

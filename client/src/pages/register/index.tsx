@@ -94,7 +94,8 @@ export default function Register() {
     email: z.string().email(t('validation.email_invalid', 'Email inválido')),
     senha: z.string().min(8, t('validation.password_min_length_8', 'A senha deve ter pelo menos 8 caracteres')),
     confirmarSenha: z.string().min(6, t('validation.confirm_password', 'Confirme sua senha')),
-    telefone: z.string().min(12, t('validation.phone_required', 'Telefone obrigatório')),
+    // Guarda só DDD + número (10 ou 11 dígitos); o 55 é somado no envio.
+    telefone: z.string().regex(/^\d{10,11}$/, t('validation.phone_required', 'Telefone obrigatório')),
     remoteJid: z.string(),
   }).refine((data) => data.senha === data.confirmarSenha, {
     message: t('validation.passwords_not_match', 'As senhas não coincidem'),
@@ -148,7 +149,7 @@ export default function Register() {
       email: "",
       senha: "",
       confirmarSenha: "",
-      telefone: "55",
+      telefone: "",
       remoteJid: crypto.randomUUID(), // Generate a unique ID for remoteJid
     },
   });
@@ -167,7 +168,7 @@ export default function Register() {
       });
       toast({
         title: t('register.success_title', 'Conta criada com sucesso'),
-        description: t('register.success_description', 'Você já pode fazer login no sistema.'),
+        description: t('register.success_whatsapp', 'Seus 15 dias grátis começaram. Enviamos uma mensagem no seu WhatsApp para você lançar por lá.'),
       });
       window.location.href = "/";
     } catch (error) {
