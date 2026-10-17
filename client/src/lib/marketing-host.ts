@@ -1,19 +1,32 @@
 /**
- * Domínio de marketing (apex/www) x domínio do app (app.*).
+ * Domínio de marketing x domínio do app (app.*).
  *
- * controledinheiro.com.br (e www.) abre a landing; app.controledinheiro.com.br
+ * Os hosts de marketing abrem a landing na rota /; app.controledinheiro.com.br
  * continua abrindo o login. Localhost, IPs e hosts "app." são tratados como app.
  */
-const HOSTS_MARKETING = ["controledinheiro.com.br", "www.controledinheiro.com.br"];
+const APP_URL_PADRAO = "https://app.controledinheiro.com.br";
+
+/** Host de marketing → origem do app para onde vão login e cadastro (null = app.<domínio>). */
+const HOSTS_MARKETING: Record<string, string | null> = {
+  "controledinheiro.com.br": null,
+  "www.controledinheiro.com.br": null,
+  "controle.gestaoempresa.com": APP_URL_PADRAO,
+};
+
+function hostAtual(): string {
+  return window.location.hostname.toLowerCase();
+}
 
 export function isMarketingHost(): boolean {
   if (typeof window === "undefined") return false;
-  return HOSTS_MARKETING.includes(window.location.hostname.toLowerCase());
+  return Object.prototype.hasOwnProperty.call(HOSTS_MARKETING, hostAtual());
 }
 
 /** URL do app a partir do domínio de marketing (ex.: https://app.controledinheiro.com.br). */
 export function appUrl(path = "/"): string {
-  const host = window.location.hostname.toLowerCase().replace(/^www\./, "");
+  const fixo = HOSTS_MARKETING[hostAtual()];
+  if (fixo) return `${fixo}${path}`;
+  const host = hostAtual().replace(/^www\./, "");
   return `${window.location.protocol}//app.${host}${path}`;
 }
 
