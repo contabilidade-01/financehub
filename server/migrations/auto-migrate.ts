@@ -1518,6 +1518,8 @@ const STEPS: Step[] = [
         )
       `);
       await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_reembolsos_espelhos_devedor ON reembolsos_espelhos(devedor_usuario_id)`);
+      // Último estado em que credor e devedor estavam iguais (baixa nos dois sentidos).
+      await db.execute(sql`ALTER TABLE reembolsos_espelhos ADD COLUMN IF NOT EXISTS baixado BOOLEAN NOT NULL DEFAULT false`);
     },
   },
 ];

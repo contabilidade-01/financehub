@@ -3,11 +3,12 @@
  *
  * Cada reembolso pendente no "A Receber" do credor (transacoes.reembolsavel) ganha um
  * espelho no Contas a Pagar do devedor — PF (transacoes) ou PJ (empresas_transacoes,
- * 1ª empresa ativa), conforme o tipo_pessoa do devedor. Quando o credor dá baixa
- * (recebido), o espelho é baixado na mesma data.
+ * 1ª empresa ativa), conforme o tipo_pessoa do devedor. A baixa vale nos dois
+ * sentidos: credor marca recebido → espelho baixado; devedor paga o espelho →
+ * reembolso do credor marcado como recebido (mesma data). Reabrir também espelha.
  *
- * Só toca: os reembolsos do credor (leitura) e os lançamentos que ele mesmo criou no
- * devedor (registrados em reembolsos_espelhos). Nada roda com a flag desligada.
+ * Só toca: o status/data de baixa dos reembolsos vinculados do credor e os lançamentos
+ * que o próprio serviço criou no devedor (reembolsos_espelhos). Nada roda com a flag desligada.
  */
 import { db } from "../db";
 import { sql } from "drizzle-orm";
@@ -124,13 +125,15 @@ async function sincronizarPar(credorEmail: string, devedorEmail: string): Promis
   }
 
   const espelhos = (await db.execute(sql`
-    SELECT e.id, e.destino, e.transacao_pagar_id,
+    SELECT e.id, e.destino, e.transacao_pagar_id, e.baixado,
+           p.status AS pag_status, p.data_pagamento AS pag_pago_em,
            r.id AS rec_id, r.status AS rec_status, r.data_pagamento AS rec_pago_em,
            COALESCE(r.reembolsavel, false) AS rec_reembolsavel,
            r.valor AS rec_valor, r.data_transacao AS rec_data, r.data_vencimento AS rec_venc
     FROM reembolsos_espelhos e
     LEFT JOIN transacoes r ON r.id = e.transacao_receber_id AND r.carteira_id = ${carteiraCredor}
-    WHERE e.devedor_usuario_id = ${devedor.id}
+    LEFT JOIN ${tabelaDestino(destino.tipo)} p ON p.id = e.transacao_pagar_id
+    WHERE e.devedor_usuario_id = ${devedor.id} AND e.destino = ${destino.tipo}
   `)) as any[];
 
   const hoje = new Date().toISOString().slice(0, 10);
@@ -140,15 +143,48 @@ async function sincronizarPar(credorEmail: string, devedorEmail: string): Promis
       // Reembolso excluído ou desmarcado pelo credor → some o espelho ainda pendente.
       await db.execute(sql`DELETE FROM ${tabela} WHERE id = ${e.transacao_pagar_id} AND status = 'Pendente'`);
       await db.execute(sql`DELETE FROM reembolsos_espelhos WHERE id = ${e.id}`);
+    } else if (e.pag_status && (e.rec_status === "Efetivada") !== (e.pag_status === "Efetivada")) {
+      // Os dois lados divergem. baixado = último estado em que estavam iguais:
+      // se estavam em aberto, um lado foi baixado → baixa o outro; se estavam
+      // baixados, um lado foi reaberto → reabre o outro.
+      const recBaixado = e.rec_status === "Efetivada";
+      if (!e.baixado) {
+        if (recBaixado) {
+          const data = e.rec_pago_em ? String(e.rec_pago_em).slice(0, 10) : hoje;
+          await db.execute(sql`
+            UPDATE ${tabela} SET status = 'Efetivada', data_pagamento = ${data}, movimenta_caixa = true
+            WHERE id = ${e.transacao_pagar_id} AND status = 'Pendente'
+          `);
+        } else {
+          const data = e.pag_pago_em ? String(e.pag_pago_em).slice(0, 10) : hoje;
+          await db.execute(sql`
+            UPDATE transacoes SET status = 'Efetivada', data_pagamento = ${data}
+            WHERE id = ${e.rec_id} AND carteira_id = ${carteiraCredor}
+              AND COALESCE(reembolsavel, false) = true AND status = 'Pendente'
+          `);
+        }
+        await db.execute(sql`UPDATE reembolsos_espelhos SET baixado = true WHERE id = ${e.id}`);
+      } else {
+        if (recBaixado) {
+          await db.execute(sql`
+            UPDATE transacoes SET status = 'Pendente', data_pagamento = NULL
+            WHERE id = ${e.rec_id} AND carteira_id = ${carteiraCredor}
+              AND COALESCE(reembolsavel, false) = true AND status = 'Efetivada'
+          `);
+        } else {
+          await db.execute(sql`
+            UPDATE ${tabela} SET status = 'Pendente', data_pagamento = NULL
+            WHERE id = ${e.transacao_pagar_id} AND status = 'Efetivada'
+          `);
+        }
+        await db.execute(sql`UPDATE reembolsos_espelhos SET baixado = false WHERE id = ${e.id}`);
+      }
     } else if (e.rec_status === "Efetivada") {
-      // Credor deu baixa (recebido) → baixa o contas a pagar do devedor na mesma data.
-      const data = e.rec_pago_em ? String(e.rec_pago_em).slice(0, 10) : hoje;
-      await db.execute(sql`
-        UPDATE ${tabela} SET status = 'Efetivada', data_pagamento = ${data}, movimenta_caixa = true
-        WHERE id = ${e.transacao_pagar_id} AND status = 'Pendente'
-      `);
+      // Já iguais (ambos baixados, ou espelho excluído pelo devedor): só registra.
+      if (!e.baixado) await db.execute(sql`UPDATE reembolsos_espelhos SET baixado = true WHERE id = ${e.id}`);
     } else {
       // Ainda pendente → acompanha valor e datas editados pelo credor.
+      if (e.baixado) await db.execute(sql`UPDATE reembolsos_espelhos SET baixado = false WHERE id = ${e.id}`);
       await db.execute(sql`
         UPDATE ${tabela}
         SET valor = ${e.rec_valor},
