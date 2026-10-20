@@ -16,6 +16,8 @@ export const FLAG_LEMBRETES_COBRANCA = "lembretes_cobranca_whatsapp";
 export const FLAG_CORA_CARTEIRA_NESCON = "cora_carteira_nescon";
 /** Mensagem de boas-vindas no WhatsApp logo após o cadastro pelo site. */
 export const FLAG_BOAS_VINDAS_CADASTRO_SITE = "boas_vindas_cadastro_site";
+/** Reembolso a receber de um usuário espelhado no contas a pagar de outro (pares em reembolso-vinculado.service). */
+export const FLAG_REEMBOLSO_VINCULADO = "reembolso_vinculado";
 export const FLAGS_NO_CODIGO: readonly string[] = [
   FLAG_AGENTE_MEIO_PAGAMENTO,
   FLAG_ORQUESTRADOR_DEEPSEEK,
@@ -24,6 +26,7 @@ export const FLAGS_NO_CODIGO: readonly string[] = [
   FLAG_LEMBRETES_COBRANCA,
   FLAG_CORA_CARTEIRA_NESCON,
   FLAG_BOAS_VINDAS_CADASTRO_SITE,
+  FLAG_REEMBOLSO_VINCULADO,
 ];
 
 export const DIAS_PARA_APOSENTAR = 30;

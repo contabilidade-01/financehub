@@ -1502,6 +1502,24 @@ const STEPS: Step[] = [
       `);
     },
   },
+  {
+    // Reembolso vinculado entre usuários: liga o reembolso a receber do credor
+    // (transacoes) ao lançamento que o sistema criou no contas a pagar do devedor.
+    name: "reembolsos_espelhos (reembolso a receber ↔ contas a pagar de outro usuário)",
+    run: async () => {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS reembolsos_espelhos (
+          id                   SERIAL PRIMARY KEY,
+          transacao_receber_id INTEGER NOT NULL UNIQUE,
+          devedor_usuario_id   INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+          destino              VARCHAR(2) NOT NULL,
+          transacao_pagar_id   INTEGER NOT NULL,
+          criado_em            TIMESTAMPTZ DEFAULT now()
+        )
+      `);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_reembolsos_espelhos_devedor ON reembolsos_espelhos(devedor_usuario_id)`);
+    },
+  },
 ];
 
 export async function runAutoMigrations(): Promise<void> {
