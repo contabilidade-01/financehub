@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { CheckCircle2, CreditCard, FileText, X } from "lucide-react";
+import { CheckCircle2, CreditCard, FileText, Search, X } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ChapterHelpButton } from "@/components/shared/ChapterHelpButton";
 import { ContaPlanoCombobox, usePlanoContasPj } from "@/components/shared/ContaPlanoCombobox";
@@ -119,8 +119,11 @@ export default function PjVencimentos({ empresaId }: { empresaId: number }) {
   const [sel, setSel] = useState<Set<number>>(new Set());
   const [lote, setLote] = useState({ conta_bancaria_id: "", data_pagamento: iso(new Date()) });
 
-  const faturas = data?.faturas ?? [];
-  const boletos = data?.boletos ?? [];
+  // Busca na descrição (ex.: "Reembolso a"): filtra a lista e os totais do período.
+  const [busca, setBusca] = useState("");
+  const termo = busca.trim().toLowerCase();
+  const faturas = (data?.faturas ?? []).filter((f) => !termo || String(f.cartao_nome || "").toLowerCase().includes(termo));
+  const boletos = (data?.boletos ?? []).filter((b) => !termo || String(b.descricao || "").toLowerCase().includes(termo));
   const totalFaturas = faturas.reduce((s, f) => s + (Number(f.total) || 0), 0);
   const totalBoletos = boletos.reduce((s, b) => s + (Number(b.valor) || 0), 0);
 
@@ -219,6 +222,18 @@ export default function PjVencimentos({ empresaId }: { empresaId: number }) {
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-muted-foreground">Buscar</label>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Descrição…"
+                value={busca}
+                onChange={(e) => { setBusca(e.target.value); setSel(new Set()); }}
+                className="h-10 w-[200px] pl-8"
+              />
+            </div>
+          </div>
           <div className="flex flex-col gap-1">
             <label className="text-xs text-muted-foreground">De</label>
             <Input type="date" value={de} onChange={(e) => setDe(e.target.value)} className="h-10 w-[160px]" />
@@ -376,9 +391,22 @@ export default function PjVencimentos({ empresaId }: { empresaId: number }) {
 
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <FileText className="h-4 w-4" /> Contas a pagar
-                  </CardTitle>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <FileText className="h-4 w-4" /> Contas a pagar
+                    </CardTitle>
+                    {tab === "aberta" && boletos.length > 0 && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          setSel(boletos.every((b) => sel.has(b.id)) ? new Set() : new Set(boletos.map((b) => b.id)))
+                        }
+                      >
+                        {boletos.every((b) => sel.has(b.id)) ? "Desmarcar todos" : `Selecionar todos (${boletos.length})`}
+                      </Button>
+                    )}
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {boletos.length === 0 ? (
