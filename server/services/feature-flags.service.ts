@@ -16,6 +16,7 @@ import {
   FLAG_LEMBRETES_COBRANCA,
   FLAG_CORA_CARTEIRA_NESCON,
   FLAG_BOAS_VINDAS_CADASTRO_SITE,
+  FLAG_REEMBOLSO_VINCULADO,
   FLAGS_NO_CODIGO,
   DIAS_PARA_APOSENTAR,
   avaliarFlag,
@@ -32,6 +33,7 @@ export {
   FLAG_LEMBRETES_COBRANCA,
   FLAG_CORA_CARTEIRA_NESCON,
   FLAG_BOAS_VINDAS_CADASTRO_SITE,
+  FLAG_REEMBOLSO_VINCULADO,
   FLAGS_NO_CODIGO,
   DIAS_PARA_APOSENTAR,
   avaliarFlag,
@@ -133,6 +135,16 @@ async function garantirTabelas(): Promise<void> {
     VALUES (
       ${FLAG_BOAS_VINDAS_CADASTRO_SITE},
       ${"Boas-vindas no WhatsApp logo após o cadastro pelo site: manda a mensagem para o telefone informado e, quando a pessoa responde, o chat é vinculado à conta. Conta como a mensagem do dia 0 da sequência de boas-vindas."},
+      false
+    )
+    ON CONFLICT (chave) DO NOTHING
+  `);
+  // Reembolso vinculado entre usuários: nasce off — ligar para o credor no admin.
+  await db.execute(sql`
+    INSERT INTO feature_flags (chave, descricao, ativo_todos)
+    VALUES (
+      ${FLAG_REEMBOLSO_VINCULADO},
+      ${"Reembolso vinculado: cada reembolso pendente no A Receber do usuário credor vira um lançamento no Contas a Pagar do devedor; quando o credor marca como recebido, o do devedor é baixado. Vale só para os pares cadastrados no código (closur00001 → closur00002) e só quando ligada para o credor."},
       false
     )
     ON CONFLICT (chave) DO NOTHING

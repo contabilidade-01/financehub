@@ -191,6 +191,10 @@ app.use((req, res, next) => {
       expurgarExclusoesVencidas().catch(() => {});
       setInterval(() => { expurgarExclusoesVencidas().catch(() => {}); }, 24 * 60 * 60 * 1000);
     });
+    // Reembolso vinculado entre usuários (só age com FLAG_REEMBOLSO_VINCULADO ligada).
+    import('./services/reembolso-vinculado.service').then(({ iniciarSincronizacaoReembolsosVinculados }) => {
+      iniciarSincronizacaoReembolsosVinculados();
+    }).catch(() => {});
   } catch (error) {
     console.error('❌ Falha na inicialização do banco:', error);
     console.log('⚠️ Continuando sem inicialização automática...');
