@@ -758,6 +758,24 @@ export default function Transactions() {
   const [diaOpen, setDiaOpen] = useState(false);
   const [diaValor, setDiaValor] = useState("5");
   const [diaTodasParcelas, setDiaTodasParcelas] = useState(true);
+  const [baixaLoteOpen, setBaixaLoteOpen] = useState(false);
+  const [baixaLoteData, setBaixaLoteData] = useState(() => new Date().toLocaleDateString("sv-SE"));
+
+  const pagarLote = useMutation({
+    mutationFn: (data: { ids: number[]; data_pagamento: string }) =>
+      apiRequest("/api/transactions/pagar-lote", { method: "POST", data }),
+    onSuccess: (r: any) => {
+      refetch();
+      queryClient.invalidateQueries({ queryKey: ["/api/wallet/current"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/vencimentos"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reembolsos"] });
+      setBaixaLoteOpen(false);
+      setSel(new Set());
+      toast({ title: `${r?.baixados ?? 0} lançamento(s) baixado(s)` });
+    },
+    onError: (e: any) =>
+      toast({ title: "Erro ao dar baixa", description: e?.message || e?.error, variant: "destructive" }),
+  });
 
   const alterarDia = useMutation({
     mutationFn: (data: { transacao_ids: number[]; dia: number; todas_parcelas: boolean }) =>
@@ -932,6 +950,11 @@ export default function Transactions() {
     const vb = Math.abs(Number(b.valor) || 0);
     return ordenacao === "valor_asc" ? va - vb : vb - va;
   });
+
+  // Baixa em lote: mesma regra do botão de baixa de cada linha.
+  const baixavelPf = (t: Transaction) =>
+    t.status === TransactionStatus.PENDING || t.status === TransactionStatus.SCHEDULED;
+  const selBaixaveisPf = (transactions || []).filter((t) => sel.has(t.id) && baixavelPf(t));
 
   // Subtotais do que está visível na lista (respeita todos os filtros).
   const subtotais = filteredTransactions.reduce(
@@ -1325,6 +1348,34 @@ export default function Transactions() {
             />
           </div>
 
+          {/* Seleção em lote sobre o que está filtrado (ou tudo, sem filtro). */}
+          <div className="mb-4 flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={filteredTransactions.length === 0}
+              onClick={() =>
+                setSel(
+                  filteredTransactions.every((t) => sel.has(t.id))
+                    ? new Set()
+                    : new Set(filteredTransactions.map((t) => t.id)),
+                )
+              }
+            >
+              {filteredTransactions.length > 0 && filteredTransactions.every((t) => sel.has(t.id))
+                ? "Desmarcar todos"
+                : `Marcar todos (${filteredTransactions.length})`}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!filteredTransactions.some(baixavelPf)}
+              onClick={() => setSel(new Set(filteredTransactions.filter(baixavelPf).map((t) => t.id)))}
+            >
+              <CheckCircle2 className="h-4 w-4 mr-1" /> Marcar pendentes ({filteredTransactions.filter(baixavelPf).length})
+            </Button>
+          </div>
+
           {sel.size > 0 && (
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-primary/5 px-3 py-2">
               <p className="text-sm text-muted-foreground">{sel.size} selecionado(s)</p>
@@ -1341,6 +1392,16 @@ export default function Transactions() {
                   }}
                 >
                   <CalendarDays className="h-4 w-4 mr-1" /> Alterar dia
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={selBaixaveisPf.length === 0}
+                  onClick={() => {
+                    setBaixaLoteData(new Date().toLocaleDateString("sv-SE"));
+                    setBaixaLoteOpen(true);
+                  }}
+                >
+                  <CheckCircle2 className="h-4 w-4 mr-1" /> Dar baixa ({selBaixaveisPf.length})
                 </Button>
                 <Button size="sm" variant="destructive" onClick={() => setExcluirLoteOpen(true)}>
                   <Trash2Icon className="h-4 w-4 mr-1" /> Excluir selecionadas
@@ -1624,6 +1685,36 @@ export default function Transactions() {
             />
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={baixaLoteOpen} onOpenChange={setBaixaLoteOpen}>
+        <AlertDialogContent className="border bg-card">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Dar baixa em {selBaixaveisPf.length} lançamento(s)</AlertDialogTitle>
+            <AlertDialogDescription>
+              Total: {formatCurrency(selBaixaveisPf.reduce((s, t) => s + (Number(t.valor) || 0), 0))}
+              {sel.size > selBaixaveisPf.length && ` · ${sel.size - selBaixaveisPf.length} já baixado(s) fica(m) de fora`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Input
+            type="date"
+            value={baixaLoteData}
+            onChange={(e) => setBaixaLoteData(e.target.value)}
+            aria-label="Data da baixa"
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={pagarLote.isPending || selBaixaveisPf.length === 0}
+              onClick={(e) => {
+                e.preventDefault();
+                pagarLote.mutate({ ids: selBaixaveisPf.map((t) => t.id), data_pagamento: baixaLoteData });
+              }}
+            >
+              {pagarLote.isPending ? "Baixando..." : "Dar baixa"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={!!deletingTransaction} onOpenChange={(open) => !open && setDeletingTransaction(null)}>
         <AlertDialogContent className="border bg-card">

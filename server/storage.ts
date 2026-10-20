@@ -2696,6 +2696,24 @@ export async function marcarComoPaga(transacaoId: number): Promise<any> {
   return (result as any[])[0];
 }
 
+/** Baixa em lote (Lançamentos PF): só pendentes/agendadas da própria carteira. */
+export async function marcarComoPagasLote(walletId: number, ids: number[], dataPagamento?: string): Promise<number> {
+  const limpos = Array.from(new Set((ids || []).map(Number).filter((n) => Number.isInteger(n) && n > 0)));
+  if (!limpos.length) return 0;
+  const data = dataPagamento && /^\d{4}-\d{2}-\d{2}$/.test(dataPagamento)
+    ? dataPagamento
+    : new Date().toISOString().slice(0, 10);
+  const result = await db.execute(sql`
+    UPDATE transacoes
+    SET status = 'Efetivada', data_pagamento = ${data}
+    WHERE carteira_id = ${walletId}
+      AND status IN ('Pendente', 'Agendada')
+      AND id IN (${sql.join(limpos.map((n) => sql`${n}`), sql`, `)})
+    RETURNING id
+  `);
+  return (result as any[]).length;
+}
+
 export async function reabrirTransacao(transacaoId: number): Promise<any> {
   const result = await db.execute(sql`
     UPDATE transacoes
