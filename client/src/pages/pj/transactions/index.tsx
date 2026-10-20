@@ -845,15 +845,30 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
             <span className={totais.saldo >= 0 ? "font-medium" : "font-medium text-expense"}>
               Saldo: {fmt(totais.saldo)}
             </span>
-            {filtradas.some(baixavel) && (
-              <button
-                type="button"
-                className="ml-auto text-primary hover:underline"
-                onClick={() => setSel(new Set(filtradas.filter(baixavel).map((t) => t.id)))}
-              >
-                Selecionar pendentes ({filtradas.filter(baixavel).length})
-              </button>
-            )}
+          </div>
+
+          {/* Seleção em lote sobre o que está filtrado (ou tudo, sem filtro). */}
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={filtradas.length === 0}
+              onClick={() =>
+                setSel(filtradas.every((t) => sel.has(t.id)) ? new Set() : new Set(filtradas.map((t) => t.id)))
+              }
+            >
+              {filtradas.length > 0 && filtradas.every((t) => sel.has(t.id))
+                ? "Desmarcar todos"
+                : `Marcar todos (${filtradas.length})`}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!filtradas.some(baixavel)}
+              onClick={() => setSel(new Set(filtradas.filter(baixavel).map((t) => t.id)))}
+            >
+              <CheckCircle2 className="h-4 w-4 mr-1" /> Marcar pendentes ({filtradas.filter(baixavel).length})
+            </Button>
           </div>
         </CardContent>
       </Card>
