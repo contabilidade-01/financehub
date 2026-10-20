@@ -235,6 +235,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     checkImpersonation,
     transactionController.alterarDiaMassa,
   );
+  // Baixa em lote dos lançamentos selecionados (só pendentes/agendados da carteira).
+  app.post("/api/transactions/pagar-lote", combinedAuth, checkImpersonation, async (req: Request, res: Response) => {
+    try {
+      const { marcarComoPagasLote } = await import("./storage");
+      const wallet = await storage.getWalletByUserId(req.user!.id);
+      if (!wallet) return res.status(404).json({ error: "Carteira não encontrada" });
+      const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+      if (ids.length > 1000) return res.status(400).json({ error: "Máximo de 1.000 lançamentos por vez." });
+      const baixados = await marcarComoPagasLote(wallet.id, ids, req.body?.data_pagamento);
+      res.json({ success: true, baixados });
+    } catch (err: any) { res.status(400).json({ error: err.message }); }
+  });
   app.get(
     "/api/transactions/:id",
     combinedAuth,
