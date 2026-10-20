@@ -385,6 +385,7 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
   // Filtros (client-side, sobre a lista completa já carregada)
   const [sel, setSel] = useState<Set<number>>(new Set());
   const [excluirLoteOpen, setExcluirLoteOpen] = useState(false);
+  const [baixaLote, setBaixaLote] = useState({ open: false, conta_bancaria_id: "", data_pagamento: new Date().toLocaleDateString("sv-SE") });
   const [busca, setBusca] = useState("");
   const [fTipo, setFTipo] = useState("todos");
   const [fConta, setFConta] = useState("todas");
@@ -476,6 +477,37 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
         ),
       });
     },
+  });
+
+  // Baixa em lote: só pendentes fora de cartão/fatura (mesma regra do servidor).
+  const baixavel = (t: EmpresaTransacaoWithDetails) =>
+    t.status === "Pendente" && !(t as any).cartao_id && !(t as any).fatura_id && !(t as any).reembolso_pessoal;
+  const bancosAtivos = bancos.filter((b) => b.ativo !== false);
+  const selBaixaveis = transacoes.filter((t) => sel.has(t.id) && baixavel(t));
+  const totalSelBaixaveis = selBaixaveis.reduce((s, t) => s + (Number(t.valor) || 0), 0);
+
+  const baixarLoteMut = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/empresas/${empresaId}/transacoes/baixar-lote`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ids: selBaixaveis.map((t) => t.id),
+          conta_bancaria_id: Number(baixaLote.conta_bancaria_id || bancosAtivos[0]?.id),
+          data_pagamento: baixaLote.data_pagamento,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Erro ao dar baixa");
+      return data;
+    },
+    onSuccess: (r) => {
+      invalidar();
+      setBaixaLote((b) => ({ ...b, open: false }));
+      setSel(new Set());
+      toast({ title: `${r.baixados ?? 0} lançamento(s) baixado(s)` });
+    },
+    onError: (err: any) => toast({ title: "Não foi possível dar baixa", description: err.message, variant: "destructive" }),
   });
 
   const excluirLoteMut = useMutation({
@@ -813,6 +845,15 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
             <span className={totais.saldo >= 0 ? "font-medium" : "font-medium text-expense"}>
               Saldo: {fmt(totais.saldo)}
             </span>
+            {filtradas.some(baixavel) && (
+              <button
+                type="button"
+                className="ml-auto text-primary hover:underline"
+                onClick={() => setSel(new Set(filtradas.filter(baixavel).map((t) => t.id)))}
+              >
+                Selecionar pendentes ({filtradas.filter(baixavel).length})
+              </button>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -822,12 +863,60 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
           <p className="text-sm text-muted-foreground">{sel.size} selecionada(s)</p>
           <div className="flex gap-2">
             <Button size="sm" variant="outline" onClick={() => setSel(new Set())}>Limpar</Button>
+            <Button
+              size="sm"
+              disabled={selBaixaveis.length === 0}
+              title={selBaixaveis.length === 0 ? "Nenhuma pendente (fora de cartão) na seleção" : undefined}
+              onClick={() => setBaixaLote((b) => ({ ...b, open: true }))}
+            >
+              <CheckCircle2 className="h-4 w-4 mr-1" /> Dar baixa ({selBaixaveis.length})
+            </Button>
             <Button size="sm" variant="destructive" onClick={() => setExcluirLoteOpen(true)}>
               <Trash2 className="h-4 w-4 mr-1" /> Excluir selecionadas
             </Button>
           </div>
         </div>
       )}
+
+      <Dialog open={baixaLote.open} onOpenChange={(o) => setBaixaLote((b) => ({ ...b, open: o }))}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Dar baixa em {selBaixaveis.length} lançamento(s)</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Total: <b className="text-foreground">{fmt(totalSelBaixaveis)}</b>
+              {sel.size > selBaixaveis.length && (
+                <> · {sel.size - selBaixaveis.length} selecionada(s) ficam de fora (já baixadas ou de cartão)</>
+              )}
+            </p>
+            <Select
+              value={baixaLote.conta_bancaria_id || (bancosAtivos[0] ? String(bancosAtivos[0].id) : "")}
+              onValueChange={(v) => setBaixaLote((b) => ({ ...b, conta_bancaria_id: v }))}
+            >
+              <SelectTrigger aria-label="Pagar com"><SelectValue placeholder="Pagar com..." /></SelectTrigger>
+              <SelectContent>
+                {bancosAtivos.map((b) => <SelectItem key={b.id} value={String(b.id)}>{rotuloContaBanc(b)}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Input
+              type="date"
+              value={baixaLote.data_pagamento}
+              onChange={(e) => setBaixaLote((b) => ({ ...b, data_pagamento: e.target.value }))}
+              aria-label="Data do pagamento"
+            />
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setBaixaLote((b) => ({ ...b, open: false }))}>Cancelar</Button>
+              <Button
+                disabled={baixarLoteMut.isPending || !bancosAtivos.length || selBaixaveis.length === 0}
+                onClick={() => baixarLoteMut.mutate()}
+              >
+                {baixarLoteMut.isPending ? "Baixando..." : "Dar baixa"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={excluirLoteOpen} onOpenChange={setExcluirLoteOpen}>
         <AlertDialogContent>
