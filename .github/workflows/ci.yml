@@ -68,6 +68,7 @@ jobs:
           npm run test:datas-sp
           npm run test:atalho-pj
           npm run test:assinatura-datas
+          npm run test:mensalidades-projecao
           npm run test:ia-fila
           npm run test:telefone-whatsapp
           npm run flags:auditar

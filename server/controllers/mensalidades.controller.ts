@@ -7,6 +7,8 @@ import {
   excluirMensalidade,
   carteiraDoUsuario,
   gerarMensalidadeSeDevido,
+  obterMensalidade,
+  removerProjecaoFutura,
   type MensalidadeInput,
   type TipoMeioMensalidade,
 } from "../services/mensalidades.service";
@@ -91,7 +93,7 @@ export async function criar(req: Request, res: Response) {
     };
 
     const criada = await criarMensalidade(input);
-    // Gera já o mês atual (se ainda não gerado), para aparecer de imediato.
+    // Gera já o mês atual e os próximos (projeção), para aparecer de imediato.
     let transacaoId: number | null = null;
     if (body.gerar_agora !== false) {
       transacaoId = await gerarMensalidadeSeDevido(criada.id);
@@ -121,8 +123,18 @@ export async function atualizar(req: Request, res: Response) {
     ]) {
       if (body[k] !== undefined) patch[k] = body[k];
     }
+    const antes = await obterMensalidade(id, req.user!.id);
+    if (!antes) return res.status(404).json({ error: "Mensalidade não encontrada." });
+    // Pausou ou mudou algo que entra no lançamento: tira os meses futuros em
+    // aberto (com os dados antigos) e gera a projeção de novo, se ativa.
+    const mudouLancamento = Object.keys(patch).some((k) => k !== "ativo");
+    const pausou = patch.ativo === false || patch.ativo === "false";
+    if (antes.ativo && (pausou || mudouLancamento)) {
+      await removerProjecaoFutura(antes);
+    }
     const atualizada = await atualizarMensalidade(id, req.user!.id, patch);
     if (!atualizada) return res.status(404).json({ error: "Mensalidade não encontrada." });
+    if (atualizada.ativo) await gerarMensalidadeSeDevido(id);
     return res.json(atualizada);
   } catch (e: any) {
     return res.status(400).json({ error: e?.message || "Erro ao atualizar mensalidade" });
@@ -132,6 +144,8 @@ export async function atualizar(req: Request, res: Response) {
 export async function excluir(req: Request, res: Response) {
   try {
     const id = Number(req.params.id);
+    const antes = await obterMensalidade(id, req.user!.id);
+    if (antes) await removerProjecaoFutura(antes); // meses futuros em aberto saem junto
     const ok = await excluirMensalidade(id, req.user!.id);
     if (!ok) return res.status(404).json({ error: "Mensalidade não encontrada." });
     return res.json({ success: true });

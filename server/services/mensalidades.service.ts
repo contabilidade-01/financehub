@@ -5,6 +5,10 @@
  *  - tipo_meio 'cartao' → um lançamento na fatura do cartão (Efetivada, sem caixa).
  * empresa_id NULL = PF (usa carteira_id); empresa_id preenchido = PJ.
  * Idempotente por mês via coluna ultima_competencia_gerada ('YYYY-MM').
+ * Projeção: mantém sempre MESES_PROJETADOS meses gerados (o mês atual + os
+ * seguintes), a partir do mês de criação. Cada lançamento gerado fica
+ * vinculado em mensalidades_lancamentos; pausar/excluir/editar remove os
+ * meses futuros ainda em aberto e, se ativa, gera de novo.
  */
 import { db } from "../db";
 import { sql } from "drizzle-orm";
@@ -33,9 +37,44 @@ function pad2(n: number): string {
   return String(n).padStart(2, "0");
 }
 
+/** Quantos meses ficam sempre lançados: o atual + os 2 seguintes. */
+export const MESES_PROJETADOS = 3;
+
 function compAtual(): string {
   const d = new Date();
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
+}
+
+/** Soma n meses a uma competência 'YYYY-MM'. */
+function somarMeses(comp: string, n: number): string {
+  const [ano, mes1] = comp.split("-").map(Number);
+  const total = ano * 12 + (mes1 - 1) + n;
+  return `${Math.floor(total / 12)}-${pad2((total % 12) + 1)}`;
+}
+
+/**
+ * Competências que ainda faltam gerar para a mensalidade, do mês atual até o
+ * fim da projeção. Nunca retroage (meses passados não gerados ficam de fora,
+ * como antes) e respeita data_inicio / data_fim.
+ */
+export function competenciasDevidas(
+  m: { dia_vencimento: number; data_inicio?: any; data_fim?: any; ultima_competencia_gerada?: string | null },
+  atual: string = compAtual(),
+  meses: number = MESES_PROJETADOS,
+): string[] {
+  const ultimaProj = somarMeses(atual, meses - 1);
+  const ultima = m.ultima_competencia_gerada || null;
+  let comp = ultima && ultima >= atual ? somarMeses(ultima, 1) : atual;
+  const iso = (v: any) => (v instanceof Date ? v.toISOString() : String(v)).slice(0, 10);
+  const inicio = m.data_inicio ? iso(m.data_inicio) : null;
+  const fim = m.data_fim ? iso(m.data_fim) : null;
+  const out: string[] = [];
+  for (; comp <= ultimaProj; comp = somarMeses(comp, 1)) {
+    if (inicio && dataVencimentoDaComp(comp, 31) < inicio) continue; // mês antes do início
+    if (fim && dataVencimentoDaComp(comp, Number(m.dia_vencimento) || 1) > fim) break;
+    out.push(comp);
+  }
+  return out;
 }
 
 function ultimoDiaMes(ano: number, mes0: number): number {
@@ -138,6 +177,11 @@ export async function atualizarMensalidade(
     WHERE id = ${id} AND usuario_id = ${usuarioId}
     RETURNING *
   `);
+  return (r as any[])[0] || null;
+}
+
+export async function obterMensalidade(id: number, usuarioId: number): Promise<any | null> {
+  const r = await db.execute(sql`SELECT * FROM mensalidades WHERE id = ${id} AND usuario_id = ${usuarioId}`);
   return (r as any[])[0] || null;
 }
 
@@ -264,56 +308,146 @@ export async function gerarMensalidade(m: any, comp: string): Promise<number | n
     }
   }
 
+  if (transacaoId != null) {
+    try {
+      await db.execute(sql`
+        INSERT INTO mensalidades_lancamentos (mensalidade_id, competencia, transacao_id)
+        VALUES (${m.id}, ${comp}, ${transacaoId})
+        ON CONFLICT (mensalidade_id, competencia) DO UPDATE SET transacao_id = EXCLUDED.transacao_id
+      `);
+    } catch (e: any) {
+      // Sem o vínculo o lançamento continua valendo; só não sai junto ao pausar/editar.
+      console.error(`[Mensalidades] Falha ao vincular #${m.id} ${comp}:`, e?.message || e);
+    }
+  }
   await db.execute(sql`UPDATE mensalidades SET ultima_competencia_gerada = ${comp} WHERE id = ${m.id}`);
   return transacaoId;
 }
 
+/** Gera, em ordem, as competências que faltam de UMA mensalidade. Retorna os ids criados. */
+async function gerarCompetenciasDevidas(m: any): Promise<number[]> {
+  const ids: number[] = [];
+  for (const comp of competenciasDevidas(m)) {
+    if (await competenciaJaLancada(m, comp)) {
+      await db.execute(sql`UPDATE mensalidades SET ultima_competencia_gerada = ${comp} WHERE id = ${m.id}`);
+      continue;
+    }
+    const id = await gerarMensalidade(m, comp);
+    if (id == null) break; // sem carteira etc. — não avança a projeção
+    ids.push(id);
+  }
+  return ids;
+}
+
 /**
- * Gera todas as mensalidades ativas ainda não geradas para o mês atual.
- * Chamado pelo job (diário) e opcionalmente logo após criar uma mensalidade.
+ * Gera todas as mensalidades ativas até completar a projeção (mês atual +
+ * próximos). Chamado pelo job (a cada 6h); idempotente por competência.
  */
 export async function gerarMensalidadesPendentes(): Promise<{ geradas: number; erros: number }> {
   const comp = compAtual();
+  const ultimaProj = somarMeses(comp, MESES_PROJETADOS - 1);
   const hojeISO = new Date().toISOString().slice(0, 10);
-  const fimComp = dataVencimentoDaComp(comp, 31); // último dia do mês
+  const fimProj = dataVencimentoDaComp(ultimaProj, 31); // último dia do último mês projetado
   const rows = await db.execute(sql`
     SELECT * FROM mensalidades
     WHERE ativo = true
-      AND (data_inicio IS NULL OR data_inicio <= ${fimComp})
+      AND (data_inicio IS NULL OR data_inicio <= ${fimProj})
       AND (data_fim IS NULL OR data_fim >= ${hojeISO})
-      AND (ultima_competencia_gerada IS NULL OR ultima_competencia_gerada < ${comp})
+      AND (ultima_competencia_gerada IS NULL OR ultima_competencia_gerada < ${ultimaProj})
   `);
   let geradas = 0;
   let erros = 0;
   for (const m of rows as any[]) {
     try {
-      await gerarMensalidade(m, comp);
-      geradas++;
+      geradas += (await gerarCompetenciasDevidas(m)).length;
     } catch (e: any) {
       erros++;
       console.error(`[Mensalidades] Falha ao gerar #${m.id} (${m.descricao}):`, e?.message || e);
     }
   }
   if (geradas || erros) {
-    console.log(`[Mensalidades] Competência ${comp}: ${geradas} geradas, ${erros} erros.`);
+    console.log(`[Mensalidades] Projeção ${comp}..${ultimaProj}: ${geradas} geradas, ${erros} erros.`);
   }
   return { geradas, erros };
 }
 
-/** Gera a competência atual de UMA mensalidade recém-criada, se ainda não gerada. */
+/**
+ * Gera a projeção (mês atual + próximos) de UMA mensalidade recém-criada ou
+ * editada. Retorna o id do primeiro lançamento gerado (ou null).
+ */
 export async function gerarMensalidadeSeDevido(id: number): Promise<number | null> {
-  const comp = compAtual();
-  const r = await db.execute(sql`
-    SELECT * FROM mensalidades
-    WHERE id = ${id} AND ativo = true
-      AND (ultima_competencia_gerada IS NULL OR ultima_competencia_gerada < ${comp})
-  `);
+  const r = await db.execute(sql`SELECT * FROM mensalidades WHERE id = ${id} AND ativo = true`);
   const m = (r as any[])[0];
   if (!m) return null;
   try {
-    return await gerarMensalidade(m, comp);
+    const ids = await gerarCompetenciasDevidas(m);
+    return ids[0] ?? null;
   } catch (e: any) {
     console.error(`[Mensalidades] Falha ao gerar imediata #${id}:`, e?.message || e);
     return null;
+  }
+}
+
+/**
+ * Remove os lançamentos FUTUROS (meses depois do atual) que a mensalidade já
+ * gerou e que ainda estão em aberto: boleto Pendente, ou cartão em fatura
+ * ainda aberta. O mês atual e o que já foi pago/fechado ficam como estão
+ * (e continuam vinculados, então não são gerados de novo).
+ * Depois volta ultima_competencia_gerada para o mês atual, para a projeção
+ * poder ser gerada de novo.
+ */
+export async function removerProjecaoFutura(m: any): Promise<number> {
+  const atual = compAtual();
+  const ultima = m.ultima_competencia_gerada as string | null;
+  if (!ultima || ultima <= atual) return 0;
+  const ehPj = m.empresa_id != null;
+  const vinculos = (await db.execute(sql`
+    SELECT competencia, transacao_id FROM mensalidades_lancamentos
+    WHERE mensalidade_id = ${m.id} AND competencia > ${atual}
+  `)) as any[];
+  let removidos = 0;
+  for (const v of vinculos) {
+    const tid = Number(v.transacao_id);
+    const r = ehPj
+      ? await db.execute(sql`
+          DELETE FROM empresas_transacoes t
+          WHERE t.id = ${tid} AND t.empresa_id = ${Number(m.empresa_id)}
+            AND ((t.status = 'Pendente' AND t.fatura_id IS NULL)
+              OR (t.fatura_id IS NOT NULL AND EXISTS (
+                SELECT 1 FROM empresas_faturas f WHERE f.id = t.fatura_id AND f.status = 'aberta')))
+          RETURNING t.id
+        `)
+      : await db.execute(sql`
+          DELETE FROM transacoes t
+          WHERE t.id = ${tid} AND t.carteira_id = ${Number(m.carteira_id)}
+            AND ((t.status = 'Pendente' AND t.fatura_id IS NULL)
+              OR (t.fatura_id IS NOT NULL AND EXISTS (
+                SELECT 1 FROM faturas f WHERE f.id = t.fatura_id AND f.status = 'aberta')))
+          RETURNING t.id
+        `);
+    if ((r as any[]).length) {
+      removidos++;
+      await db.execute(sql`
+        DELETE FROM mensalidades_lancamentos WHERE mensalidade_id = ${m.id} AND competencia = ${v.competencia}
+      `);
+    }
+  }
+  await db.execute(sql`UPDATE mensalidades SET ultima_competencia_gerada = ${atual} WHERE id = ${m.id}`);
+  return removidos;
+}
+
+/** A competência já tem lançamento vinculado que ainda existe (ex.: pago antes de editar)? */
+async function competenciaJaLancada(m: any, comp: string): Promise<boolean> {
+  try {
+    const tabela = m.empresa_id != null ? sql`empresas_transacoes` : sql`transacoes`;
+    const r = await db.execute(sql`
+      SELECT 1 FROM mensalidades_lancamentos v
+      JOIN ${tabela} t ON t.id = v.transacao_id
+      WHERE v.mensalidade_id = ${m.id} AND v.competencia = ${comp}
+      LIMIT 1
+    `);
+    return (r as any[]).length > 0;
+  } catch {
+    return false;
   }
 }
