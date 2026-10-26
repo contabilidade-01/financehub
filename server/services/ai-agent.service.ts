@@ -2098,7 +2098,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
           await gerarMensalidadeSeDevido(criada.id);
           return JSON.stringify({
             success: true, id: criada.id,
-            msg: `Mensalidade *${descricao}* criada — R$ ${fmtValor} todo dia ${dia} (${ehCartao ? `cartão ${cartaoNome}` : "boleto"}). Já lancei a deste mês; as próximas entram sozinhas.`,
+            msg: `Mensalidade *${descricao}* criada — R$ ${fmtValor} todo dia ${dia} (${ehCartao ? `cartão ${cartaoNome}` : "boleto"}). Já lancei este mês e os próximos 2; os demais entram sozinhos.`,
           });
         }
 
@@ -2119,7 +2119,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         await gerarMensalidadeSeDevido(criada.id);
         return JSON.stringify({
           success: true, id: criada.id,
-          msg: `Mensalidade *${descricao}* criada — R$ ${fmtValor} todo dia ${dia} (${ehCartao ? `cartão ${cartaoNome}` : "boleto"}). Já lancei a deste mês; as próximas entram sozinhas.`,
+          msg: `Mensalidade *${descricao}* criada — R$ ${fmtValor} todo dia ${dia} (${ehCartao ? `cartão ${cartaoNome}` : "boleto"}). Já lancei este mês e os próximos 2; os demais entram sozinhos.`,
         });
       }
 

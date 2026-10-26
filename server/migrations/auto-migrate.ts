@@ -1522,6 +1522,24 @@ const STEPS: Step[] = [
       await db.execute(sql`ALTER TABLE reembolsos_espelhos ADD COLUMN IF NOT EXISTS baixado BOOLEAN NOT NULL DEFAULT false`);
     },
   },
+  {
+    // Projeção de 3 meses das mensalidades: liga cada competência gerada ao
+    // lançamento (transacoes no PF, empresas_transacoes no PJ), para pausar /
+    // editar / excluir tirar só os meses futuros em aberto.
+    name: "mensalidades_lancamentos (competência gerada ↔ lançamento)",
+    run: async () => {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS mensalidades_lancamentos (
+          id             SERIAL PRIMARY KEY,
+          mensalidade_id INTEGER NOT NULL REFERENCES mensalidades(id) ON DELETE CASCADE,
+          competencia    VARCHAR(7) NOT NULL,
+          transacao_id   INTEGER NOT NULL,
+          criado_em      TIMESTAMPTZ DEFAULT now(),
+          UNIQUE (mensalidade_id, competencia)
+        )
+      `);
+    },
+  },
 ];
 
 export async function runAutoMigrations(): Promise<void> {

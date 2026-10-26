@@ -215,7 +215,7 @@ export default function MensalidadesPage({ empresaId }: { empresaId?: number }) 
                     variant="ghost"
                     size="icon"
                     title="Excluir"
-                    onClick={async () => { if (await confirmar({ title: `Excluir a mensalidade "${m.descricao}"?`, description: "Os lançamentos já gerados permanecem.", confirmText: "Excluir", destructive: true })) excluir.mutate(m.id); }}
+                    onClick={async () => { if (await confirmar({ title: `Excluir a mensalidade "${m.descricao}"?`, description: "Os meses futuros ainda em aberto saem junto; este mês e o que já foi pago permanecem.", confirmText: "Excluir", destructive: true })) excluir.mutate(m.id); }}
                   >
                     <Trash2 className="h-4 w-4 text-expense" />
                   </Button>
@@ -290,7 +290,7 @@ export default function MensalidadesPage({ empresaId }: { empresaId?: number }) 
             </div>
             {!form.id && (
               <p className="text-xs text-muted-foreground">
-                O lançamento deste mês é gerado assim que você salvar; os próximos entram sozinhos todo mês.
+                Ao salvar, já lançamos este mês e os próximos 2. A projeção de 3 meses se renova sozinha todo mês.
               </p>
             )}
           </div>
