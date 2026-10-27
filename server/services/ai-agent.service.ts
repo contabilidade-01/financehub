@@ -24,6 +24,7 @@ import {
   mensagemPedirValor,
   pareceLancamentoSemValor,
   respostaEhSoMeio,
+  lancamentoPerguntadoNoHistorico,
   respostaEhSoValor,
   pareceLancamentoCompletoPj,
   type LancamentoSemMeio,
@@ -3705,6 +3706,12 @@ export async function runAgent(
         return mensagemPedirValor(pend);
       }
       return await lancarPendente(pend, soMeio);
+    }
+    // "Caixinha dinheiro" depois de o MODELO perguntar o meio (sem pendente salvo):
+    // lança com o valor/descrição da conversa (antes caía em "Ainda não registrei nada").
+    if (!pend && soMeio && !ctx.origemMidia) {
+      const daConversa = lancamentoPerguntadoNoHistorico(history);
+      if (daConversa) return await lancarPendente(daConversa, soMeio);
     }
 
     // Mídia (foto/áudio) exige confirmação antes de gravar; vários itens na
