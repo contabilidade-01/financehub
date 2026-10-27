@@ -24,6 +24,7 @@ import {
   mensagemPedirValor,
   pareceLancamentoSemValor,
   respostaEhSoMeio,
+  lancamentoPerguntadoNoHistorico,
   respostaEhSoValor,
   pareceLancamentoCompletoPj,
   type LancamentoSemMeio,
@@ -3706,6 +3707,12 @@ export async function runAgent(
       }
       return await lancarPendente(pend, soMeio);
     }
+    // "Caixinha dinheiro" depois de o MODELO perguntar o meio (sem pendente salvo):
+    // lança com o valor/descrição da conversa (antes caía em "Ainda não registrei nada").
+    if (!pend && soMeio && !ctx.origemMidia) {
+      const daConversa = lancamentoPerguntadoNoHistorico(history);
+      if (daConversa) return await lancarPendente(daConversa, soMeio);
+    }
 
     // Mídia (foto/áudio) exige confirmação antes de gravar; vários itens na
     // mesma mensagem vão para o agente (o atalho juntaria tudo em um só).
@@ -3736,6 +3743,32 @@ export async function runAgent(
     if (completo) {
       limparPendenteMeio(ctx.userId);
       return await lancarPendente(completo, completo.meio);
+    }
+  }
+
+  // PF: "Caixinha dinheiro" depois da pergunta do meio → lança com o valor/descrição
+  // da conversa. Se a ferramenta não gravar (ex.: cartão não cadastrado), segue no modelo.
+  if (ctx.tipoPessoa !== "juridica" && !ctx.empresaAtiva && !ctx.origemMidia) {
+    const soMeioPf = respostaEhSoMeio(userMessage);
+    const daConversa = soMeioPf ? lancamentoPerguntadoNoHistorico(history) : null;
+    if (soMeioPf && daConversa) {
+      const raw = await executeTool(
+        "insere_transacao",
+        {
+          descricao: daConversa.descricao,
+          valor: daConversa.valor,
+          tipo: daConversa.tipo,
+          forma_pagamento: soMeioPf,
+          ...(daConversa.data ? { data_transacao: daConversa.data } : {}),
+        },
+        ctx,
+      );
+      let parsed: any = null;
+      try { parsed = JSON.parse(raw); } catch { parsed = null; }
+      if (parsed?.id) {
+        const { montarReciboDeEscrita } = await import("./recibo-agente");
+        return montarReciboDeEscrita({ tool: "insere_transacao", raw, parsed });
+      }
     }
   }
 

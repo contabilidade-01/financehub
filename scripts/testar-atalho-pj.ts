@@ -11,6 +11,7 @@ import {
   mensagemPedirMeio,
   mensagemPedirValor,
   pareceLancamentoCompletoPj,
+  lancamentoPerguntadoNoHistorico,
 } from "../server/services/atalho-meio-pj";
 import { detectarCodigoConta, detectarCorrecaoValor } from "../server/services/correcao-rapida-pj";
 
@@ -125,6 +126,56 @@ igual("muda o valor do #204 pra 100", detectarCorrecaoValor("muda o valor do #20
 igual("altera o valor do lançamento 204 para 99,90", detectarCorrecaoValor("altera o valor do lançamento 204 para 99,90"), { valor: 99.9, id: 204 });
 igual("'Corrige o valor' sem número → null", detectarCorrecaoValor("corrige o valor"), null);
 igual("'Corrige o valor 100' não vira lançamento", pareceLancamentoSemMeio("Corrige o valor 100,00", HOJE), null);
+
+console.log("Meio respondido depois de o modelo perguntar (sem pendente salvo)");
+const perguntaModelo =
+  "Como você gostaria de registrar a venda de R$ 453,00? \n\nPor favor, informe o meio de pagamento:\n* Caixinha (dinheiro)\n* conta bancária (ex.: pix + o banco)\n* cartão\n\nResponda só isso que eu lanço.";
+igual(
+  "venda 453 + pergunta do meio → lança com a venda",
+  lancamentoPerguntadoNoHistorico(
+    [
+      { role: "user", content: "venda de mercadoria no valor de 453" },
+      { role: "assistant", content: perguntaModelo },
+    ],
+    HOJE,
+  ),
+  { descricao: "Venda de mercadoria", valor: 453, tipo: "Receita" },
+);
+igual(
+  "despesa + 'Como foi pago?' → lança a despesa",
+  lancamentoPerguntadoNoHistorico(
+    [
+      { role: "user", content: "conta de luz 150" },
+      { role: "assistant", content: "Anotei *Conta de luz* — R$ 150,00.\n\nComo foi pago?\n• *Caixinha* (dinheiro)" },
+    ],
+    HOJE,
+  )?.valor,
+  150,
+);
+igual(
+  "último recibo (já lançado) → não relança",
+  lancamentoPerguntadoNoHistorico(
+    [
+      { role: "user", content: "venda de mercadoria no valor de 453" },
+      { role: "assistant", content: "🟢 Receita registrada!\n*Venda de mercadoria*\n📍 Forma: Caixinha\n🔍 Código: #900" },
+    ],
+    HOJE,
+  ),
+  null,
+);
+igual(
+  "pergunta não é do meio → nada",
+  lancamentoPerguntadoNoHistorico(
+    [
+      { role: "user", content: "venda de mercadoria no valor de 453" },
+      { role: "assistant", content: "É entrada ou saída?" },
+    ],
+    HOJE,
+  ),
+  null,
+);
+igual("sem histórico → nada", lancamentoPerguntadoNoHistorico([], HOJE), null);
+igual("'Caixinha dinheiro' é só o meio", respostaEhSoMeio("Caixinha dinheiro"), "dinheiro");
 
 if (falhas) {
   console.log(`\n${falhas} falha(s)`);

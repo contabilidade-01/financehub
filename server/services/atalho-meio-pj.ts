@@ -3,7 +3,7 @@
  * Não deixa o modelo inventar cartão nem "nenhum cartão cadastrado".
  */
 import { detectarMeio, textoMeioDeDetect } from "./parse-meio";
-import { detectarDirecao, extrairValorBR, extrairDataBR, hojeSP } from "./nlp-br";
+import { detectarDirecao, extrairValorBR, extrairDataBR, hojeSP, segmentarLancamentos } from "./nlp-br";
 import { criarPendencias } from "./ia-pendencias";
 
 export type LancamentoSemMeio = {
@@ -314,4 +314,29 @@ export function respostaEhSoMeio(texto: string): string | null {
   if (parseValorBR(raw) != null) return null;
   const meio = textoMeioDeDetect(det);
   return meio || null;
+}
+
+/** Última resposta do bot foi a pergunta do meio ("Como entrou? • Caixinha…"), e não um recibo. */
+function perguntouOMeio(texto: string): boolean {
+  const n = norm(texto);
+  if (/registrad|lancad|codigo: ?#|#\d+/.test(n)) return false;
+  return /meio de (pagamento|recebimento)|como (entrou|foi pago|pagou|recebeu)|caixinha/.test(n) && /\?|responda/.test(n);
+}
+
+/**
+ * "Caixinha dinheiro" sem pendente salvo (a pergunta do meio veio do modelo, não
+ * do atalho): recupera o lançamento da própria conversa — a mensagem anterior do
+ * cliente ("venda de mercadoria no valor de 453") seguida da pergunta do meio.
+ */
+export function lancamentoPerguntadoNoHistorico(
+  history: { role: string; content: string }[],
+  hoje: string = hojeSP(),
+): LancamentoSemMeio | null {
+  const h = (history || []).filter((m) => (m.role === "user" || m.role === "assistant") && m.content);
+  const pergunta = h[h.length - 1];
+  const anterior = h[h.length - 2];
+  if (!pergunta || pergunta.role !== "assistant" || !perguntouOMeio(pergunta.content)) return null;
+  if (!anterior || anterior.role !== "user") return null;
+  if (segmentarLancamentos(anterior.content).length > 1) return null;
+  return pareceLancamentoSemMeio(anterior.content, hoje);
 }
