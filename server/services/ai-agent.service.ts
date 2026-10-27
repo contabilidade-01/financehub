@@ -3746,6 +3746,32 @@ export async function runAgent(
     }
   }
 
+  // PF: "Caixinha dinheiro" depois da pergunta do meio → lança com o valor/descrição
+  // da conversa. Se a ferramenta não gravar (ex.: cartão não cadastrado), segue no modelo.
+  if (ctx.tipoPessoa !== "juridica" && !ctx.empresaAtiva && !ctx.origemMidia) {
+    const soMeioPf = respostaEhSoMeio(userMessage);
+    const daConversa = soMeioPf ? lancamentoPerguntadoNoHistorico(history) : null;
+    if (soMeioPf && daConversa) {
+      const raw = await executeTool(
+        "insere_transacao",
+        {
+          descricao: daConversa.descricao,
+          valor: daConversa.valor,
+          tipo: daConversa.tipo,
+          forma_pagamento: soMeioPf,
+          ...(daConversa.data ? { data_transacao: daConversa.data } : {}),
+        },
+        ctx,
+      );
+      let parsed: any = null;
+      try { parsed = JSON.parse(raw); } catch { parsed = null; }
+      if (parsed?.id) {
+        const { montarReciboDeEscrita } = await import("./recibo-agente");
+        return montarReciboDeEscrita({ tool: "insere_transacao", raw, parsed });
+      }
+    }
+  }
+
   let pjInstructions = "";
   if (ctx.tipoPessoa === "juridica" && (ctx as any).empresaAtiva) {
     const emp = (ctx as any).empresaAtiva as { id: number; nome: string; segmento?: string | null };
