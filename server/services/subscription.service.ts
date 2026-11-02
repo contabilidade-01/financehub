@@ -62,7 +62,7 @@ async function getSystemName(): Promise<string> {
     console.warn('[SubscriptionService] Erro ao buscar system_name, usando padrão:', error);
   }
 
-  return 'Khesef'; // Fallback
+  return 'Tudo Contado'; // Fallback
 }
 
 // ============================================

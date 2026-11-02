@@ -87,7 +87,7 @@ function enfileirarPorChat(chave: string, tarefa: () => Promise<void>): Promise<
 // Status ≤ 20 chars (coluna VARCHAR(20) em produção).
 // ============================================
 const TRIAL_DIAS = 15;
-const SYSTEM_NAME = process.env.SYSTEM_NAME || "Khesef";
+const SYSTEM_NAME = process.env.SYSTEM_NAME || "Tudo Contado";
 // Nomes curtos de propósito: 'aguardando_confirmacao' (22) e
 // 'aguardando_tipo_pessoa' (21) estouram VARCHAR(20).
 const ST_FORM = "aguardando_form";   // 15

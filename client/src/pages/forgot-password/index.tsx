@@ -100,7 +100,7 @@ export default function ForgotPassword() {
                 </div>
               )}
               <h1 className="text-3xl font-bold">
-                {systemConfig?.system_name || "Khesef"}
+                {systemConfig?.system_name || "Tudo Contado"}
               </h1>
             </div>
           </div>

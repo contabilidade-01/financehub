@@ -1540,6 +1540,43 @@ const STEPS: Step[] = [
       `);
     },
   },
+  {
+    // Nova marca. Só troca o texto quando ainda está exatamente com o nome
+    // antigo (idempotente; não mexe em nome personalizado pelo admin).
+    // O nome do tema "Padrão Khesef" fica: é chave usada pelo theme-manager.
+    name: "rebrand: Khesef → Tudo Contado (system_settings + boas-vindas)",
+    run: async () => {
+      await db.execute(sql`
+        UPDATE system_settings
+        SET setting_value = 'Tudo Contado'
+        WHERE setting_key = 'system_name' AND setting_value = 'Khesef'
+      `);
+      await db.execute(sql`
+        UPDATE system_settings
+        SET setting_value = 'tudocontado'
+        WHERE setting_key = 'system_name_short' AND lower(setting_value) = 'khesef'
+      `);
+      await db.execute(sql`
+        UPDATE system_settings
+        SET setting_value = replace(setting_value, 'Khesef', 'Tudo Contado')
+        WHERE setting_key IN ('system_description', 'system_tagline') AND setting_value LIKE '%Khesef%'
+      `);
+      try {
+        await db.execute(sql`
+          UPDATE welcome_messages
+          SET
+            title = replace(title, 'Khesef', 'Tudo Contado'),
+            message = replace(message, 'Khesef', 'Tudo Contado'),
+            email_content = replace(email_content, 'Khesef', 'Tudo Contado')
+          WHERE title LIKE '%Khesef%'
+             OR message LIKE '%Khesef%'
+             OR email_content LIKE '%Khesef%'
+        `);
+      } catch {
+        // tabela pode não existir
+      }
+    },
+  },
 ];
 
 export async function runAutoMigrations(): Promise<void> {

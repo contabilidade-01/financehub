@@ -7,11 +7,11 @@ import { requireSuperAdmin } from './middleware/adminAuth.middleware';
 const swaggerDocument = {
   openapi: '3.0.0',
   info: {
-    title: 'Khesef - API Completa de Controle Financeiro',
+    title: 'Tudo Contado - API Completa de Controle Financeiro',
     version: '2.0.0',
     description: 'API completa para gerenciamento de finanças pessoais com suporte a transações, categorias, métodos de pagamento, relatórios, gráficos e administração',
     contact: {
-      name: 'Suporte Khesef',
+      name: 'Suporte Tudo Contado',
       email: 'support@xpiria.com'
     }
   },

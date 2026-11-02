@@ -63,7 +63,7 @@ export async function sendPasswordResetEmail(opts: {
     throw new Error("SMTP não configurado");
   }
 
-  const systemName = opts.systemName || "Khesef";
+  const systemName = opts.systemName || "Tudo Contado";
   const from = smtpFrom()!;
   const transport = createTransport();
   const subject = `Redefinição de senha — ${systemName}`;
@@ -103,7 +103,7 @@ export async function sendWelcomeWithPasswordEmail(opts: {
     throw new Error("SMTP não configurado");
   }
 
-  const systemName = opts.systemName || "Khesef";
+  const systemName = opts.systemName || "Tudo Contado";
   const loginUrl = (opts.loginUrl || getPublicAppUrl() || "").replace(/\/+$/, "");
   const from = smtpFrom()!;
   const transport = createTransport();

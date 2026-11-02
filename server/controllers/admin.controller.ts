@@ -1275,7 +1275,7 @@ export async function updateUser(req: Request, res: Response) {
         if (UAZAPI_TOKEN && updatedUser.remoteJid) {
           const primeiroNome = (updatedUser.nome || "").split(" ")[0];
           const texto =
-            `Olá ${primeiroNome}! 🎉 Sua conta no *Khesef* foi *ativada*!` +
+            `Olá ${primeiroNome}! 🎉 Sua conta no *Tudo Contado* foi *ativada*!` +
             (emailReal ? `\n\n*Login:* ${updatedUser.email}` : "");
           try {
             if (linkSenha) {
@@ -1286,7 +1286,7 @@ export async function updateUser(req: Request, res: Response) {
                 texto + `\n\nToque no botão para criar sua senha de acesso.`,
                 "Criar senha",
                 linkSenha,
-                "Khesef"
+                "Tudo Contado"
               );
             } else {
               await uazapiService.sendText(
@@ -1731,7 +1731,7 @@ export async function exportUsersCsv(req: Request, res: Response) {
       csv += `"${u.id}","${u.nome || ''}","${u.email || ''}","${u.telefone || ''}","${u.tipo_usuario}","${(u as any).tipo_pessoa || 'fisica'}","${u.ativo}","${u.status_assinatura || ''}","${u.data_cadastro || ''}"\n`;
     }
     res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename="usuarios_khesef.csv"');
+    res.setHeader('Content-Disposition', 'attachment; filename="usuarios_tudo_contado.csv"');
     return res.send(csv);
   } catch (err) {
     console.error("exportUsersCsv:", err);
@@ -1757,7 +1757,7 @@ export async function exportTransactionsCsv(req: Request, res: Response) {
       }
     }
     res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename="transacoes_khesef.csv"');
+    res.setHeader('Content-Disposition', 'attachment; filename="transacoes_tudo_contado.csv"');
     return res.send(csv);
   } catch (err) {
     console.error("exportTransactionsCsv:", err);
