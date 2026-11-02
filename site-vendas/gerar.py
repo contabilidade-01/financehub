@@ -28,12 +28,12 @@ def head(titulo, desc, url):
 <meta property="og:description" content="{html.escape(desc)}">
 <meta property="og:type" content="website">
 <meta property="og:url" content="{url}">
-<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
-<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png?v=2">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png?v=2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/assets/style.css">
+<link rel="stylesheet" href="/assets/style.css?v=2">
 </head>
 <body>
 """
@@ -42,13 +42,13 @@ def topo(ativa):
     abas = [(URL["pf"], "Pessoa Física", "pf"), (URL["mei"], "PJ MEI", "mei"), (URL["pj"], "PJ Empresa", "pj")]
     links = "".join(f'<a class="aba{" ativa" if k == ativa else ""}" href="{h}">{t}</a>' for h, t, k in abas)
     return f"""<header class="topo"><div class="wrap">
-<a class="marca" href="/"><img src="/assets/logo-light.png" alt="">Khesef</a>
+<a class="marca" href="/" aria-label="Tudo Contado"><img src="/assets/logo-tudo-contado.png?v=2" alt="Tudo Contado" width="194" height="36"></a>
 <nav class="menu">{links}<a class="btn btn-contorno btn-pequeno" href="{APP}/">Entrar</a></nav>
 </div></header>
 """
 
 RODAPE = f"""<footer><div class="wrap">
-<span>© 2026 Khesef by XPIRIA. Todos os direitos reservados.</span>
+<span>© 2026 Tudo Contado by XPIRIA. Todos os direitos reservados.</span>
 <span><a href="{URL['pf']}">Pessoa Física</a> · <a href="{URL['mei']}">PJ MEI</a> · <a href="{URL['pj']}">PJ Empresa</a> · <a href="{APP}/">Entrar</a></span>
 </div></footer>
 </body>
@@ -101,7 +101,7 @@ def plano_card(tag, nome, para, preco, itens, mod, destaque=True):
 PAGINAS = {
     "pf": dict(
         mod="pf",
-        titulo="Khesef Pessoa Física: suas finanças pelo WhatsApp",
+        titulo="Tudo Contado Pessoa Física: suas finanças pelo WhatsApp",
         desc="Organize receitas, despesas, cartões e metas mandando mensagem no WhatsApp. 15 dias grátis.",
         selo="Para você, pessoa física",
         h1="Sua vida financeira organizada direto pelo WhatsApp",
@@ -126,7 +126,7 @@ PAGINAS = {
     ),
     "mei": dict(
         mod="pj_mei",
-        titulo="Khesef PJ MEI: o financeiro do seu MEI pelo WhatsApp",
+        titulo="Tudo Contado PJ MEI: o financeiro do seu MEI pelo WhatsApp",
         desc="Controle o caixa do seu MEI, separe as contas pessoais das da empresa e acompanhe contas a pagar pelo WhatsApp. 15 dias grátis.",
         selo="Para Microempreendedor Individual",
         h1="O financeiro do seu MEI em dia, sem planilha",
@@ -152,7 +152,7 @@ PAGINAS = {
     ),
     "pj": dict(
         mod="pj_me",
-        titulo="Khesef PJ Empresa: gestão financeira completa da sua empresa",
+        titulo="Tudo Contado PJ Empresa: gestão financeira completa da sua empresa",
         desc="Gestão financeira completa para microempresas: contas a pagar e a receber, conciliação bancária, centros de custo e DRE, com lançamentos pelo WhatsApp. 15 dias grátis.",
         selo="Para microempresas (ME)",
         h1="A gestão financeira completa da sua empresa, com lançamento pelo WhatsApp",
@@ -218,7 +218,7 @@ def pagina(chave, p):
     return s + RODAPE
 
 def inicio():
-    s = head("Khesef: gestão financeira pelo WhatsApp para você e sua empresa",
+    s = head("Tudo Contado: gestão financeira pelo WhatsApp para você e sua empresa",
              "Controle financeiro pelo WhatsApp com IA para pessoa física, MEI e microempresa. 15 dias grátis.", URL["planos"]) + topo("")
     ops = [(URL["pf"], "👤", "Pessoa Física", "Minhas finanças pessoais e da família.", "R$ 39,90/mês"),
            (URL["mei"], "🧑‍💼", "PJ MEI", "Caixa do meu MEI separado das contas pessoais.", "R$ 79,90/mês"),
@@ -233,7 +233,7 @@ def inicio():
 <div class="acoes"><a class="btn btn-primario" href="#planos">Escolher meu plano</a><a class="btn btn-contorno" href="{APP}/">Já tenho conta</a></div>
 <p class="nota">15 dias grátis em todos os planos. Sem cartão de crédito para começar.</p>
 </div>
-<div class="zap" aria-hidden="true"><div class="zap-topo"><div class="av">K</div><div><b>Khesef</b><small>online</small></div></div><div class="zap-corpo">
+<div class="zap" aria-hidden="true"><div class="zap-topo"><div class="av">TC</div><div><b>Tudo Contado</b><small>online</small></div></div><div class="zap-corpo">
 <div class="msg eu">Almoço R$ 42 no débito</div><div class="msg bot">Lançado ✅ Alimentação · Débito</div>
 <div class="msg eu">📎 nota-fornecedor.pdf</div><div class="msg bot">Conta a pagar de R$ 1.240 criada na empresa.</div>
 </div></div>
