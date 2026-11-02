@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Khesef by XPIRIA** — SaaS completo de gestão financeira pessoal (PF) e empresarial (PJ). Sistema multi-tenant com autenticação, pagamentos via Asaas, WhatsApp via UazAPI/WAHA, e automações que substituíram N8N por pipeline interno.
+**Tudo Contado by XPIRIA** (antigo Khesef) — SaaS completo de gestão financeira pessoal (PF) e empresarial (PJ). Sistema multi-tenant com autenticação, pagamentos via Asaas, WhatsApp via UazAPI/WAHA, e automações que substituíram N8N por pipeline interno.
 
 ## Essential Commands
 

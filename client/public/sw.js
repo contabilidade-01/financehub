@@ -1,11 +1,11 @@
 /*
- * Service worker mínimo do Khesef (PWA instalável).
+ * Service worker mínimo do Tudo Contado (PWA instalável).
  *
  * - Guarda em cache SOMENTE arquivos estáticos com hash (/assets/*), ícones e fontes.
  * - NUNCA intercepta /api, WebSocket, uploads nem a navegação (index.html):
  *   dados financeiros e a versão do app sempre vêm da rede.
  */
-const CACHE = "khesef-static-v1";
+const CACHE = "tudocontado-static-v2";
 
 self.addEventListener("install", () => {
   self.skipWaiting();

@@ -57,7 +57,7 @@ export default function SalesPage({ tipo }: { tipo: Tipo }) {
   }
   if (!features.length) features = BENEFICIOS[tipo];
 
-  const nomeSistema = systemConfig?.system_name || "Khesef";
+  const nomeSistema = systemConfig?.system_name || "Tudo Contado";
 
   const irAssinar = () => {
     if (isAuthenticated) navigate("/subscription/renew");

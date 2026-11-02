@@ -1,4 +1,4 @@
-# Khesef by XPIRIA
+# Tudo Contado by XPIRIA (antigo Khesef)
 
 Sistema SaaS completo de gestão financeira pessoal e empresarial.
 

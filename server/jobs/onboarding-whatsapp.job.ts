@@ -75,7 +75,7 @@ function textoDia0(nome: string, isPJ: boolean): string {
   const primeiroNome = (nome || "").split(" ")[0] || "";
   const exemplo = isPJ ? "paguei 180 de fornecedor no pix" : "gastei 50 no mercado";
   return (
-    `Olá${primeiroNome ? `, ${primeiroNome}` : ""}! 👋 Bem-vindo ao Khesef.\n\n` +
+    `Olá${primeiroNome ? `, ${primeiroNome}` : ""}! 👋 Bem-vindo ao Tudo Contado.\n\n` +
     `O jeito mais rápido de começar é lançar por aqui mesmo, no WhatsApp. ` +
     `Manda uma mensagem tipo "${exemplo}" e eu já organizo tudo pra você.\n\n` +
     `Depois é só dar uma olhada no site — o lançamento aparece na hora. 🚀`
@@ -97,7 +97,7 @@ function textoDia1(): string {
 function textoDia3(isPJ: boolean): string {
   const recurso = isPJ ? "os relatórios e a DRE gerencial da empresa" : "os relatórios com gráficos dos seus gastos";
   return (
-    `E aí, como está sendo usar o Khesef? 🙂\n\n` +
+    `E aí, como está sendo usar o Tudo Contado? 🙂\n\n` +
     `Se já lançou algumas coisas, vale dar uma olhada em ${recurso} — é tudo calculado sozinho a partir do que você já mandou.\n\n` +
     `Qualquer dúvida, é só me chamar por aqui mesmo.`
   );

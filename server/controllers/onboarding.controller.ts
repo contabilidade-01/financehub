@@ -64,7 +64,7 @@ async function montarChecklistPF(userId: number): Promise<ChecklistItem[]> {
     {
       id: "lancamento_whatsapp",
       titulo: "1º lançamento pelo WhatsApp",
-      descricao: "Mande uma mensagem tipo \"gastei 50 no mercado\" pro WhatsApp do Khesef.",
+      descricao: "Mande uma mensagem tipo \"gastei 50 no mercado\" pro WhatsApp do Tudo Contado.",
       concluido: lancamentoWhatsapp,
       ctaLabel: "Ver transações",
       ctaHref: "/transactions",

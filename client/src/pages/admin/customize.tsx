@@ -158,7 +158,7 @@ function SystemConfigSection() {
             id="system_name"
             value={formData.system_name}
             onChange={(e) => handleChange('system_name', e.target.value)}
-            placeholder="Khesef"
+            placeholder="Tudo Contado"
             maxLength={100}
           />
           <p className="text-xs text-muted-foreground">
@@ -175,7 +175,7 @@ function SystemConfigSection() {
             id="system_name_short"
             value={formData.system_name_short}
             onChange={(e) => handleChange('system_name_short', e.target.value.toLowerCase())}
-            placeholder="khesef"
+            placeholder="tudocontado"
             maxLength={50}
             pattern="[a-z0-9_-]+"
           />
@@ -2362,7 +2362,7 @@ export default function CustomizePage() {
                           <label className="block text-sm font-medium mb-2 text-green-800 dark:text-green-200">{t('admin.customize.message_title', 'Título da Mensagem')}</label>
                           <input 
                             type="text" 
-                            placeholder={t('admin.customize.placeholders.welcome_title', 'Bem-vindo ao Khesef!')} 
+                            placeholder={t('admin.customize.placeholders.welcome_title', 'Bem-vindo ao Tudo Contado!')} 
                             className="w-full px-3 py-2 border border-green-300 rounded-md bg-white dark:bg-gray-800"
                             value={welcomeMessages.new_user?.title || ''}
                             onChange={(e) => setWelcomeMessages(prev => ({
@@ -2374,7 +2374,7 @@ export default function CustomizePage() {
                       <div>
                         <label className="block text-sm font-medium mb-2 text-green-800 dark:text-green-200">{t('admin.customize.message_content', 'Conteúdo da Mensagem')}</label>
                         <textarea 
-                          placeholder="Olá {nome}! Seja bem-vindo ao Khesef. Estamos felizes em tê-lo conosco. Aqui você encontrará todas as ferramentas necessárias para gerenciar suas finanças de forma eficiente e organizada."
+                          placeholder="Olá {nome}! Seja bem-vindo ao Tudo Contado. Estamos felizes em tê-lo conosco. Aqui você encontrará todas as ferramentas necessárias para gerenciar suas finanças de forma eficiente e organizada."
                           rows={6}
                           className="w-full px-3 py-2 border border-green-300 rounded-md bg-white dark:bg-gray-800"
                           value={welcomeMessages.new_user?.message || ''}
@@ -2390,7 +2390,7 @@ export default function CustomizePage() {
                       <div>
                         <label className="block text-sm font-medium mb-2 text-green-800 dark:text-green-200">{t('admin.customize.welcome_email', 'Email de Boas Vindas')}</label>
                         <textarea 
-                          placeholder="Olá {nome}, seja bem-vindo ao Khesef! Sua conta foi criada com sucesso. Acesse nossa plataforma para começar a gerenciar suas finanças de forma inteligente."
+                          placeholder="Olá {nome}, seja bem-vindo ao Tudo Contado! Sua conta foi criada com sucesso. Acesse nossa plataforma para começar a gerenciar suas finanças de forma inteligente."
                           rows={4}
                           className="w-full px-3 py-2 border border-green-300 rounded-md bg-white dark:bg-gray-800"
                           value={welcomeMessages.new_user?.email_content || ''}
@@ -2446,7 +2446,7 @@ export default function CustomizePage() {
                       <div>
                         <label className="block text-sm font-medium mb-2 text-orange-800 dark:text-orange-200">{t('admin.customize.message_content', 'Conteúdo da Mensagem')}</label>
                         <textarea 
-                          placeholder="Olá {nome}! Sua conta foi criada com sucesso, mas ainda não está ativa. Para acessar todos os recursos do Khesef, você precisa ativar sua assinatura. Clique no botão abaixo para efetuar o pagamento e começar a usar nossa plataforma."
+                          placeholder="Olá {nome}! Sua conta foi criada com sucesso, mas ainda não está ativa. Para acessar todos os recursos do Tudo Contado, você precisa ativar sua assinatura. Clique no botão abaixo para efetuar o pagamento e começar a usar nossa plataforma."
                           rows={6}
                           className="w-full px-3 py-2 border border-orange-300 rounded-md bg-white dark:bg-gray-800"
                           value={welcomeMessages.inactive_user?.message || ''}
@@ -2478,7 +2478,7 @@ export default function CustomizePage() {
                       <div>
                         <label className="block text-sm font-medium mb-2 text-orange-800 dark:text-orange-200">Email de Ativação</label>
                         <textarea 
-                          placeholder="Olá {nome}, sua conta no Khesef foi criada com sucesso! Para começar a usar todos os recursos, você precisa ativar sua assinatura. Acesse o link abaixo para efetuar o pagamento: {link_pagamento}"
+                          placeholder="Olá {nome}, sua conta no Tudo Contado foi criada com sucesso! Para começar a usar todos os recursos, você precisa ativar sua assinatura. Acesse o link abaixo para efetuar o pagamento: {link_pagamento}"
                           rows={4}
                           className="w-full px-3 py-2 border border-orange-300 rounded-md bg-white dark:bg-gray-800"
                           value={welcomeMessages.inactive_user?.email_content || ''}
@@ -2535,7 +2535,7 @@ export default function CustomizePage() {
                       <div>
                         <label className="block text-sm font-medium mb-2 text-blue-800 dark:text-blue-200">{t('admin.customize.message_content', 'Conteúdo da Mensagem')}</label>
                         <textarea 
-                          placeholder="Olá {nome}! Temos uma ótima notícia: sua conta no Khesef foi ativada com sucesso! Agora você tem acesso completo a todos os recursos da plataforma."
+                          placeholder="Olá {nome}! Temos uma ótima notícia: sua conta no Tudo Contado foi ativada com sucesso! Agora você tem acesso completo a todos os recursos da plataforma."
                           rows={6}
                           className="w-full px-3 py-2 border border-blue-300 rounded-md bg-white dark:bg-gray-800"
                           value={welcomeMessages.activated?.message || ''}
@@ -2551,7 +2551,7 @@ export default function CustomizePage() {
                       <div>
                         <label className="block text-sm font-medium mb-2 text-blue-800 dark:text-blue-200">Conteúdo do Email</label>
                         <textarea 
-                          placeholder="Olá {nome}!\n\nSua conta no Khesef foi ativada com sucesso!\n\nAgora você tem acesso completo a todos os nossos recursos."
+                          placeholder="Olá {nome}!\n\nSua conta no Tudo Contado foi ativada com sucesso!\n\nAgora você tem acesso completo a todos os nossos recursos."
                           rows={4}
                           className="w-full px-3 py-2 border border-blue-300 rounded-md bg-white dark:bg-gray-800"
                           value={welcomeMessages.activated?.email_content || ''}
@@ -2722,7 +2722,7 @@ export default function CustomizePage() {
                         <label className="block text-sm font-medium mb-2">Nome da Sessão</label>
                         <input
                           type="text"
-                          placeholder="khesef"
+                          placeholder="tudocontado"
                           className="w-full px-3 py-2 border border-border rounded-md bg-white dark:bg-gray-800"
                           value={wahaConfig.session_name || ''}
                           onChange={(e) => setWahaConfig(prev => ({ ...prev, session_name: e.target.value }))}

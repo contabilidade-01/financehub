@@ -247,7 +247,7 @@ export default function AdminDashboard() {
       <div>
         <h1 className={`text-3xl font-bold mb-2 flex items-center gap-2 text-foreground`}> 
           <Shield className="h-8 w-8 text-purple-500" />
-          {t("admin.dashboard.header.title", "Dashboard SaaS - Khesef")}
+          {t("admin.dashboard.header.title", "Dashboard SaaS - Tudo Contado")}
         </h1>
         <p className={`text-muted-foreground`}>
           {t("admin.dashboard.header.subtitle", "Visão geral administrativa da plataforma")}

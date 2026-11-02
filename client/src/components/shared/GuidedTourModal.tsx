@@ -57,7 +57,7 @@ function buildChapters(isPJ: boolean): TourChapter[] {
       label: "Boas-vindas",
       steps: [
         {
-          title: `Bem-vindo ao Khesef${isPJ ? " — modo empresa" : ""}`,
+          title: `Bem-vindo ao Tudo Contado${isPJ ? " — modo empresa" : ""}`,
           description: isPJ
             ? "Gestão financeira da sua empresa (PJ) sem planilha. Vamos te mostrar o essencial em poucos passos — nada aqui é obrigatório, você decide o ritmo."
             : "Gestão financeira pessoal sem esforço. Vamos te mostrar o essencial em poucos passos — nada aqui é obrigatório, você decide o ritmo.",
@@ -65,14 +65,14 @@ function buildChapters(isPJ: boolean): TourChapter[] {
         },
         {
           title: "1º passo: lance algo pelo WhatsApp",
-          description: `Abra a conversa do Khesef no seu WhatsApp e mande uma mensagem como "${exemploGasto}". Pode ser texto, áudio ou até foto do cupom fiscal — a IA entende e organiza pra você.`,
-          where: "No WhatsApp, na conversa com o Khesef",
+          description: `Abra a conversa do Tudo Contado no seu WhatsApp e mande uma mensagem como "${exemploGasto}". Pode ser texto, áudio ou até foto do cupom fiscal — a IA entende e organiza pra você.`,
+          where: "No WhatsApp, na conversa com o Tudo Contado",
           icon: <MessageSquare className="h-6 w-6" />,
           core: true,
         },
         {
           title: "2º passo: veja aparecer aqui no sistema",
-          description: "Depois de mandar a mensagem, volte aqui e confira: o lançamento já aparece no Dashboard e no extrato, na hora. É essa ponte WhatsApp ↔ sistema que faz o Khesef valer a pena no dia a dia.",
+          description: "Depois de mandar a mensagem, volte aqui e confira: o lançamento já aparece no Dashboard e no extrato, na hora. É essa ponte WhatsApp ↔ sistema que faz o Tudo Contado valer a pena no dia a dia.",
           where: isPJ ? "No menu lateral, em Transações" : "No Dashboard ou no menu lateral, em Transações",
           icon: <CheckCircle2 className="h-6 w-6" />,
           core: true,

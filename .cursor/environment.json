@@ -1,5 +1,5 @@
 {
-  "name": "Khesef (financehub)",
+  "name": "Tudo Contado (financehub)",
   "install": "bash .cursor/install.sh",
   "start": "bash .cursor/start.sh",
   "terminals": [

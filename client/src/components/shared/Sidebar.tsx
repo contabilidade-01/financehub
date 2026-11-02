@@ -26,7 +26,7 @@ import { openGuidedTour } from "@/lib/guided-tour-bus";
 function BrandLogo({ size = "md" }: { size?: "sm" | "md" }) {
   const { resolvedTheme } = useTheme();
   const { config: systemConfig } = useSystemConfig();
-  const nomeSistema = systemConfig.system_name || "Khesef";
+  const nomeSistema = systemConfig.system_name || "Tudo Contado";
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [checked, setChecked] = useState(false);
 

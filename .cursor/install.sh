@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bootstrap idempotente para o ambiente de desenvolvimento do Khesef (financehub).
+# Bootstrap idempotente para o ambiente de desenvolvimento do Tudo Contado (financehub).
 # Roda depois do checkout do repositório. Deve ser seguro rodar mais de uma vez.
 set -euo pipefail
 

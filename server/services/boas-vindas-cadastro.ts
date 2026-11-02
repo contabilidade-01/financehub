@@ -19,7 +19,7 @@ export function textoBoasVindasCadastro(nome: string, isPJ: boolean, appUrl = "h
   const primeiroNome = (nome || "").trim().split(/\s+/)[0] || "";
   const exemplo = isPJ ? "paguei 180 de fornecedor no pix" : "gastei 50 no mercado";
   return (
-    `Olá${primeiroNome ? `, ${primeiroNome}` : ""}! 👋 Sua conta no Khesef foi criada e os 15 dias grátis já começaram.\n\n` +
+    `Olá${primeiroNome ? `, ${primeiroNome}` : ""}! 👋 Sua conta no Tudo Contado foi criada e os 15 dias grátis já começaram.\n\n` +
     `Responda esta mensagem para ativar seus lançamentos por aqui. ` +
     `Depois é só mandar algo como "${exemplo}", em texto, áudio ou foto do comprovante, que eu organizo tudo.\n\n` +
     `Tudo o que você lançar aparece na hora no painel. 🚀\n\n` +
