@@ -473,6 +473,9 @@ export const subscriptionPlans = pgTable("subscription_plans", {
   tipoPessoa: varchar("tipo_pessoa", { length: 20 }),
   // Porte (só PJ): 'mei' | 'me' | NULL = qualquer porte. Ex.: plano PJ ME com preço próprio.
   portePj: varchar("porte_pj", { length: 10 }),
+  // true = plano só de quem está vinculado a ele (usuarios.plano_forcado_id), ex.:
+  // PF que assinou a R$ 39,90 antes da redução. Não aparece para cliente novo.
+  somenteVinculados: boolean("somente_vinculados").notNull().default(false),
   features: text("features").notNull(), // JSON string com array de features
   maxTransactions: integer("max_transactions").default(0), // 0 = ilimitado
   maxWallets: integer("max_wallets").default(0), // 0 = ilimitado

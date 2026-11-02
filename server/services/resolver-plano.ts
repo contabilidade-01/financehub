@@ -8,7 +8,7 @@
  */
 import { filtrarPlanosPorTipo } from "../storage";
 
-type PlanoBase = { id: number; planCode: string; active?: boolean | null; tipoPessoa?: string | null; portePj?: string | null };
+type PlanoBase = { id: number; planCode: string; active?: boolean | null; tipoPessoa?: string | null; portePj?: string | null; somenteVinculados?: boolean | null };
 type UsuarioPlano = { id?: number; tipo_pessoa?: string | null; porte_pj?: string | null; plano_forcado_id?: number | null };
 
 export function resolverPlanoDoUsuario<T extends PlanoBase>(user: UsuarioPlano | any, plans: T[]): T | undefined {
@@ -25,4 +25,15 @@ export function resolverPlanoDoUsuario<T extends PlanoBase>(user: UsuarioPlano |
     }
   }
   return plan;
+}
+
+/**
+ * Planos que o usuário pode ver/escolher no checkout. Quem está vinculado a um
+ * plano "só de vinculados" (ex.: PF que assinou a 39,90) vê só esse — o preço
+ * mostrado tem que ser o cobrado. Os demais seguem filtrarPlanosPorTipo.
+ */
+export function planosVisiveisAoUsuario<T extends PlanoBase>(user: UsuarioPlano | any, plans: T[]): T[] {
+  const plan = resolverPlanoDoUsuario(user, plans);
+  if (plan?.somenteVinculados) return [plan];
+  return filtrarPlanosPorTipo(plans, user?.tipo_pessoa, user?.porte_pj);
 }

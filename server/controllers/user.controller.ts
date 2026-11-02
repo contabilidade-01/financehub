@@ -35,7 +35,7 @@ export async function register(req: Request, res: Response) {
       // (gerado no servidor) para ninguém reivindicar o JID de outro número.
       remoteJid: z.string().optional(),
       // PF/PJ: vem da página de vendas (?tipo). Default PF. Define qual plano
-      // (39,90 PF / 79,90 PJ) o checkout vai oferecer e cobrar no Asaas.
+      // (29,90 PF / 79,90 PJ) o checkout vai oferecer e cobrar no Asaas.
       tipo_pessoa: z.enum(["fisica", "juridica"]).optional(),
       // Porte da PJ: 'mei' (padrão) | 'me' (ERP completo). Ignorado em PF.
       porte_pj: z.enum(["mei", "me"]).optional(),

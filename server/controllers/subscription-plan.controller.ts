@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { storage, filtrarPlanosPorTipo } from "../storage";
+import { planosVisiveisAoUsuario } from "../services/resolver-plano";
 import { insertSubscriptionPlanSchema, updateSubscriptionPlanSchema } from "../../shared/schema";
 import { z } from "zod";
 import { camposDaModalidade, modalidadeDeParametros } from "../../shared/modalidade";
@@ -30,10 +31,12 @@ export async function getActivePlans(req: Request, res: Response) {
     // ou de ?tipo=. Mesma regra usada para escolher o plano da cobrança, para
     // o cliente nunca ver um preço e ser cobrado outro.
     // Modalidade: usuário logado, ou ?tipo=juridica&porte=me / ?modalidade=pj_me / ?tipo=me.
-    const u = (req as any).user as { tipo_pessoa?: string; porte_pj?: string } | undefined;
+    const u = (req as any).user as { id?: number; tipo_pessoa?: string; porte_pj?: string } | undefined;
     const temQuery = req.query.tipo || req.query.porte || req.query.modalidade;
     if (u?.tipo_pessoa) {
-      return res.json(filtrarPlanosPorTipo(plans, u.tipo_pessoa, u.porte_pj));
+      // Lê do banco: a sessão pode não trazer plano_forcado_id (assinante antigo).
+      const doBanco = u.id ? await storage.getUserById(u.id).catch(() => undefined) : undefined;
+      return res.json(planosVisiveisAoUsuario(doBanco || u, plans));
     }
     if (temQuery) {
       const m = modalidadeDeParametros({
