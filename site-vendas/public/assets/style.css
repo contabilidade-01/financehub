@@ -1,13 +1,13 @@
 :root {
-  --bg: hsl(210 20% 98%);
-  --fg: hsl(222 47% 11%);
-  --muted: hsl(215 16% 42%);
+  --bg: hsl(45 30% 96%); /* creme da marca Tudo Contado */
+  --fg: hsl(160 30% 10%);
+  --muted: hsl(160 10% 36%);
   --card: #fff;
-  --border: hsl(214 25% 88%);
-  --primary: hsl(200 60% 32%);
-  --primary-strong: hsl(200 64% 26%);
-  --primary-soft: hsl(200 60% 32% / 0.1);
-  --accent: hsl(152 55% 38%);
+  --border: hsl(45 18% 86%);
+  --primary: hsl(164 51% 18%); /* verde #17463A */
+  --primary-strong: hsl(164 55% 13%);
+  --primary-soft: hsl(164 51% 18% / 0.1);
+  --accent: hsl(41 79% 50%); /* dourado #E3A21A */
   --radius: 14px;
   --shadow: 0 10px 30px -12px hsl(222 47% 11% / 0.18);
   color-scheme: light;
@@ -28,10 +28,10 @@ a { color: inherit; }
 .wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px; }
 
 /* Topo */
-.topo { position: sticky; top: 0; z-index: 10; background: hsl(210 20% 98% / 0.92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); }
+.topo { position: sticky; top: 0; z-index: 10; background: hsl(45 30% 96% / 0.92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); }
 .topo .wrap { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 64px; }
 .marca { display: flex; align-items: center; gap: 10px; font-weight: 800; text-decoration: none; font-size: 1.1rem; }
-.marca img { width: 34px; height: 34px; border-radius: 8px; }
+.marca img { height: 36px; width: auto; }
 .menu { display: flex; gap: 6px; align-items: center; }
 .menu a.aba { text-decoration: none; font-size: .9rem; font-weight: 600; color: var(--muted); padding: 8px 10px; border-radius: 8px; }
 .menu a.aba:hover, .menu a.aba.ativa { color: var(--primary); background: var(--primary-soft); }
@@ -61,7 +61,7 @@ h1 { font-size: clamp(2rem, 5vw, 3.1rem); line-height: 1.12; letter-spacing: -0.
 .zap-topo .av { width: 34px; height: 34px; border-radius: 50%; background: hsl(0 0% 100% / .2); display: grid; place-items: center; font-weight: 800; font-size: .8rem; }
 .zap-topo b { display: block; font-size: .95rem; }
 .zap-topo small { opacity: .8; font-size: .75rem; }
-.zap-corpo { padding: 16px; display: flex; flex-direction: column; gap: 10px; background: hsl(210 25% 95%); min-height: 260px; }
+.zap-corpo { padding: 16px; display: flex; flex-direction: column; gap: 10px; background: hsl(45 22% 92%); min-height: 260px; }
 .msg { max-width: 82%; padding: 9px 12px; border-radius: 14px; font-size: .9rem; }
 .msg.eu { align-self: flex-end; background: var(--primary); color: #fff; border-top-right-radius: 4px; }
 .msg.bot { align-self: flex-start; background: var(--card); border: 1px solid var(--border); border-top-left-radius: 4px; }
