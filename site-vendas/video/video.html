@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Vídeo: finanças cristãs com Tudo Contado</title>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,600;1,500&display=swap" rel="stylesheet">
+<style>
+  :root { --verde:#17463A; --verde2:#0f3329; --ouro:#E3A21A; --creme:#F6F4EE; --tinta:#13241f; --mudo:#55665f; --borda:#e3ddcf; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1080px; height: 1080px; overflow: hidden; }
+  body { font-family: "Inter", system-ui, sans-serif; background: var(--creme); color: var(--tinta); position: relative; }
+  .camada { position: absolute; inset: 0; }
+
+  /* Legenda do passo */
+  #legenda { position: absolute; left: 60px; right: 60px; top: 46px; height: 260px; }
+  .chip { display: inline-block; background: var(--ouro); color: var(--verde2); font-weight: 800; font-size: 26px; letter-spacing: .06em; padding: 8px 18px; border-radius: 999px; }
+  #titulo { font-size: 66px; line-height: 1.08; font-weight: 800; color: var(--verde); letter-spacing: -0.02em; margin-top: 18px; }
+  #sub { font-size: 33px; line-height: 1.3; color: var(--mudo); margin-top: 12px; max-width: 940px; }
+
+  /* Janela do WhatsApp */
+  #janela { position: absolute; left: 60px; right: 60px; top: 330px; bottom: 44px; border-radius: 36px; overflow: hidden; background: #fff; box-shadow: 0 30px 70px -30px rgba(10,40,30,.45); border: 2px solid var(--borda); }
+  .zap-topo { height: 104px; background: var(--verde); color: #fff; display: flex; align-items: center; gap: 20px; padding: 0 30px; }
+  .zap-topo .av { width: 66px; height: 66px; border-radius: 50%; background: #fff url(logo-light.png) center/78% no-repeat; }
+  .zap-topo b { font-size: 34px; display: block; }
+  .zap-topo small { font-size: 24px; opacity: .8; }
+  #corpo { position: absolute; top: 104px; left: 0; right: 0; bottom: 0; background: #ece5d8; padding: 0 28px 26px; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden;
+    background-image: radial-gradient(rgba(23,70,58,.06) 2px, transparent 2px); background-size: 34px 34px; }
+  .linha { display: grid; grid-template-rows: 0fr; }
+  .linha > div { overflow: hidden; display: flex; flex-direction: column; }
+  .msg { max-width: 80%; font-size: 33px; line-height: 1.32; padding: 16px 22px; border-radius: 24px; margin-top: 16px; box-shadow: 0 2px 0 rgba(0,0,0,.06); white-space: pre-line; }
+  .eu .msg { align-self: flex-end; background: #d6f0c9; border-top-right-radius: 6px; }
+  .bot .msg { align-self: flex-start; background: #fff; border-top-left-radius: 6px; }
+  .hora { display: block; text-align: right; font-size: 21px; color: #7b8a83; margin-top: 4px; }
+  .digitando { display: flex; gap: 10px; padding: 24px 26px; }
+  .digitando i { width: 14px; height: 14px; border-radius: 50%; background: #8a9a92; display: block; }
+  .audio { display: flex; align-items: center; gap: 18px; min-width: 470px; }
+  .audio .play { width: 54px; height: 54px; border-radius: 50%; background: var(--verde); display: grid; place-items: center; }
+  .audio .play::after { content: ""; border-left: 20px solid #fff; border-top: 13px solid transparent; border-bottom: 13px solid transparent; margin-left: 6px; }
+  .ondas { display: flex; align-items: center; gap: 5px; height: 50px; }
+  .ondas span { width: 6px; border-radius: 3px; background: #9bb8a8; }
+  .ondas span.on { background: var(--verde); }
+  .cupom { width: 300px; background: #fff; border-radius: 12px; padding: 20px 22px; font-family: "DejaVu Sans Mono", monospace; font-size: 19px; line-height: 1.5; color: #333; box-shadow: inset 0 0 0 2px #eee; transform: rotate(-2deg); }
+  .cupom b { display: block; text-align: center; font-size: 21px; }
+  .cupom hr { border: 0; border-top: 2px dashed #ccc; margin: 8px 0; }
+
+  /* Painel */
+  #painel { position: absolute; top: 104px; left: 0; right: 0; bottom: 0; background: var(--creme); padding: 30px 34px; opacity: 0; }
+  #painel h4 { font-size: 30px; color: var(--verde); margin-bottom: 20px; }
+  .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .kpi { background: #fff; border: 2px solid var(--borda); border-radius: 20px; padding: 16px 18px; }
+  .kpi small { font-size: 22px; color: var(--mudo); display: block; }
+  .kpi b { font-size: 33px; letter-spacing: -0.01em; }
+  .barras { background: #fff; border: 2px solid var(--borda); border-radius: 20px; padding: 18px 22px; margin-top: 16px; }
+  .barras .t { font-size: 23px; font-weight: 700; color: var(--mudo); margin-bottom: 8px; }
+  .barra { display: grid; grid-template-columns: 290px 1fr 150px; align-items: center; gap: 14px; font-size: 23px; height: 42px; }
+  .barra .trilho { height: 20px; background: #efeadf; border-radius: 10px; overflow: hidden; }
+  .barra .enche { height: 100%; background: var(--verde); border-radius: 10px; width: 0; }
+  .barra.ouro .enche { background: var(--ouro); }
+  .barra .v { text-align: right; font-weight: 700; }
+  .meta { background: #fff; border: 2px solid var(--borda); border-radius: 20px; padding: 16px 22px; margin-top: 16px; font-size: 23px; }
+  .meta .trilho { height: 20px; background: #efeadf; border-radius: 10px; overflow: hidden; margin-top: 10px; }
+  .meta .enche { height: 100%; background: var(--ouro); width: 0; }
+
+  /* Abertura e fechamento */
+  #abertura, #fim { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 90px; }
+  #abertura { background: var(--creme); }
+  #abertura img { width: 560px; }
+  #abertura .lema { font-size: 40px; font-weight: 700; color: var(--ouro); margin-top: 26px; letter-spacing: .02em; }
+  .verso { font-family: "Lora", Georgia, serif; font-style: italic; font-weight: 500; font-size: 42px; line-height: 1.38; margin-top: 60px; color: var(--tinta); }
+  .ref { font-family: "Lora", Georgia, serif; font-weight: 600; font-size: 30px; color: var(--mudo); margin-top: 18px; }
+  #fim { background: var(--verde); color: #fff; opacity: 0; }
+  #fim .verso { color: #fff; margin-top: 0; }
+  #fim .ref { color: #c9d8d1; }
+  #fim .oferta { margin-top: 70px; font-size: 54px; font-weight: 800; }
+  #fim .oferta em { font-style: normal; color: var(--ouro); }
+  #fim .preco { font-size: 34px; margin-top: 12px; opacity: .9; }
+  #fim .botao { margin-top: 44px; background: var(--ouro); color: var(--verde2); font-weight: 800; font-size: 36px; padding: 22px 44px; border-radius: 20px; }
+  #fim img { width: 120px; margin-bottom: 50px; border-radius: 26px; background: #fff; padding: 8px; }
+</style>
+</head>
+<body>
+<div id="legenda">
+  <span class="chip" id="chip"></span>
+  <div id="titulo"></div>
+  <div id="sub"></div>
+</div>
+
+<div id="janela">
+  <div class="zap-topo"><div class="av"></div><div><b>Tudo Contado</b><small id="status">online</small></div></div>
+  <div id="corpo"></div>
+  <div id="painel">
+    <h4>Painel · Outubro</h4>
+    <div class="kpis">
+      <div class="kpi"><small>Receitas</small><b style="color:#1f7a4d">R$ 3.500,00</b></div>
+      <div class="kpi"><small>Despesas</small><b style="color:#b4472f">R$ 2.140,30</b></div>
+      <div class="kpi"><small>Saldo</small><b>R$ 1.359,70</b></div>
+    </div>
+    <div class="barras">
+      <div class="t">Despesas por categoria</div>
+      <div class="barra"><span>🍔 Alimentação</span><div class="trilho"><div class="enche" data-p="1"></div></div><span class="v">812,40</span></div>
+      <div class="barra"><span>🏠 Moradia</span><div class="trilho"><div class="enche" data-p=".8"></div></div><span class="v">650,00</span></div>
+      <div class="barra ouro"><span>🙏 Dízimos e Ofertas</span><div class="trilho"><div class="enche" data-p=".431"></div></div><span class="v">350,00</span></div>
+      <div class="barra"><span>🚌 Transporte</span><div class="trilho"><div class="enche" data-p=".324"></div></div><span class="v">263,00</span></div>
+      <div class="barra"><span>💊 Saúde</span><div class="trilho"><div class="enche" data-p=".08"></div></div><span class="v">64,90</span></div>
+    </div>
+    <div class="meta"><b>🎯 Reserva de emergência</b> · R$ 200 de R$ 2.400 (8%)<div class="trilho"><div class="enche" data-p=".08"></div></div></div>
+  </div>
+</div>
+
+<div class="camada" id="abertura">
+  <img src="logo-tudo-contado.png" alt="">
+  <div class="lema">Finanças com propósito</div>
+  <div class="verso">“Pois qual de vós, querendo edificar uma torre, não se assenta primeiro a fazer as contas dos gastos?”</div>
+  <div class="ref">Lucas 14:28</div>
+</div>
+
+<div class="camada" id="fim">
+  <img src="logo-light.png" alt="">
+  <div class="verso">“Quem é fiel no mínimo também é fiel no muito.”</div>
+  <div class="ref">Lucas 16:10</div>
+  <div class="oferta">Teste <em>15 dias grátis</em></div>
+  <div class="preco">Depois, R$ 29,90 por mês. Sem cartão para começar.</div>
+  <div class="botao">Crie sua conta pelo link desta página</div>
+</div>
+
+<script>
+const CENAS = [
+  { t0: 6,  chip: "PASSO 1 DE 6", titulo: "Crie sua conta grátis", sub: "15 dias para testar, sem cartão. Seu WhatsApp fica ligado à sua conta." },
+  { t0: 11, chip: "PASSO 2 DE 6", titulo: "Mande seus lançamentos", sub: "Escreva ou grave um áudio como você fala. A IA entende valor, categoria e forma de pagamento." },
+  { t0: 24, chip: "PASSO 3 DE 6", titulo: "Ou mande a foto do cupom", sub: "Tirou a foto, mandou, está lançado." },
+  { t0: 32, chip: "PASSO 4 DE 6", titulo: "Peça seus resumos", sub: "Pergunte quanto entrou, quanto saiu e para onde foi o dinheiro." },
+  { t0: 42, chip: "PASSO 5 DE 6", titulo: "Planeje e guarde", sub: "Crie metas, caixinhas e a sua reserva de emergência." },
+  { t0: 50, chip: "PASSO 6 DE 6", titulo: "Veja tudo no painel", sub: "No computador ou no celular, com gráficos sempre atualizados." },
+];
+const ONDAS = Array.from({ length: 30 }, (_, i) => 12 + Math.round(36 * Math.abs(Math.sin(i * 1.7) * Math.cos(i * .6))));
+const audio = `<div class="audio"><div class="play"></div><div class="ondas">${ONDAS.map(h => `<span style="height:${h}px"></span>`).join("")}</div><span style="font-size:24px;color:#55665f">0:06</span></div>`;
+const cupom = `<div class="cupom"><b>FARMÁCIA SÃO JOSÉ</b><hr>DIPIRONA 500MG  12,90<br>VITAMINA C      32,00<br>PROTETOR LABIAL 20,00<hr><b>TOTAL R$ 64,90</b></div>`;
+const MSGS = [
+  { t: 7.2,  q: "bot", h: "Olá, Maria! 👋 Sua conta *Tudo Contado* está pronta.\nÉ só me mandar seus lançamentos por aqui." },
+  { t: 12.2, q: "eu",  h: "Dízimo R$ 350 no Pix" },
+  { t: 14.0, q: "bot", h: "✅ *Lançado!* R$ 350,00\n🙏 Dízimos e Ofertas · Pix" },
+  { t: 16.4, q: "eu",  h: "Mercado 187,40 no débito" },
+  { t: 18.2, q: "bot", h: "✅ *Lançado!* R$ 187,40\n🍔 Alimentação · Débito" },
+  { t: 20.2, q: "eu",  h: audio, audio: true },
+  { t: 22.4, q: "bot", h: "✅ *Receita lançada!* R$ 3.500,00\n💼 Salário" },
+  { t: 25.0, q: "eu",  h: cupom },
+  { t: 27.6, q: "bot", h: "📷 Li o cupom: Farmácia São José\n✅ *Lançado!* R$ 64,90 · 💊 Saúde" },
+  { t: 33.0, q: "eu",  h: "Resumo do mês" },
+  { t: 35.2, q: "bot", h: "📊 *Resumo de outubro*\n💰 Receitas: R$ 3.500,00\n💸 Despesas: R$ 2.140,30\n💵 Saldo: *R$ 1.359,70*\n\n🍔 Alimentação R$ 812,40\n🏠 Moradia R$ 650,00\n🙏 Dízimos e Ofertas R$ 350,00" },
+  { t: 43.0, q: "eu",  h: "Quero guardar R$ 200 por mês para a reserva de emergência" },
+  { t: 45.4, q: "bot", h: "🎯 *Meta criada!*\n*Reserva de emergência*\n💰 R$ 0 / R$ 2.400 (0%)\n💸 Guardando: R$ 200 / mês" },
+  { t: 47.6, q: "eu",  h: "Guardei 200" },
+  { t: 49.0, q: "bot", h: "🎯 Reserva de emergência\n█░░░░░░░░░ 8% · R$ 200 de R$ 2.400" },
+];
+const FIM0 = 58, TOTAL = 66;
+
+const corpo = document.getElementById("corpo");
+const fmt = s => s.replace(/\*([^*\n]+)\*/g, "<b>$1</b>");
+const hh = ["09:12", "09:12", "09:13", "12:40", "12:40", "18:05", "18:05", "19:30", "19:30", "20:10", "20:10", "20:15", "20:15", "20:16", "20:16"];
+MSGS.forEach((m, i) => {
+  const l = document.createElement("div");
+  l.className = "linha " + m.q;
+  l.innerHTML = `<div><div class="msg">${fmt(m.h)}<span class="hora">${hh[i]}${m.q === "eu" ? " ✓✓" : ""}</span></div></div>`;
+  corpo.appendChild(l); m.el = l;
+});
+const dig = document.createElement("div");
+dig.className = "linha bot";
+dig.innerHTML = `<div><div class="msg digitando"><i></i><i></i><i></i></div></div>`;
+corpo.appendChild(dig);
+
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const ease = x => 1 - Math.pow(1 - clamp(x), 3);
+const $ = id => document.getElementById(id);
+
+function aparecer(el, p) {
+  el.style.gridTemplateRows = ease(p) + "fr";
+  const inner = el.firstElementChild;
+  inner.style.opacity = clamp(p * 1.6);
+  inner.style.transform = `translateY(${(1 - ease(p)) * 24}px)`;
+}
+
+window.render = function (t) {
+  // Abertura e fechamento
+  $("abertura").style.opacity = 1 - clamp((t - 5.3) / 0.7);
+  const fim = clamp((t - FIM0) / 0.8);
+  $("fim").style.opacity = fim;
+
+  // Legenda do passo (troca com fade)
+  let i = -1; CENAS.forEach((c, k) => { if (t >= c.t0) i = k; });
+  const c = CENAS[Math.max(i, 0)];
+  const prox = CENAS[i + 1] ? CENAS[i + 1].t0 : FIM0;
+  const op = clamp((t - c.t0) / 0.5) * clamp((prox - t) / 0.35);
+  $("chip").textContent = c.chip; $("titulo").textContent = c.titulo; $("sub").textContent = c.sub;
+  $("legenda").style.opacity = i < 0 ? 0 : op;
+  $("legenda").style.transform = `translateY(${(1 - ease((t - c.t0) / 0.5)) * 16}px)`;
+
+  // Mensagens
+  let digitando = false;
+  MSGS.forEach(m => {
+    aparecer(m.el, (t - m.t) / 0.4);
+    if (m.q === "bot" && t >= m.t - 1.3 && t < m.t) digitando = true;
+    if (m.audio) {
+      const pr = clamp((t - m.t - 0.4) / 1.6);
+      m.el.querySelectorAll(".ondas span").forEach((s, k) => s.classList.toggle("on", k / ONDAS.length < pr));
+    }
+  });
+  dig.style.gridTemplateRows = digitando ? "1fr" : "0fr";
+  dig.firstElementChild.style.opacity = digitando ? 1 : 0;
+  dig.querySelectorAll("i").forEach((d, k) => d.style.transform = `translateY(${Math.sin(t * 9 - k * 0.9) * -6}px)`);
+  $("status").textContent = digitando ? "digitando…" : "online";
+
+  // Painel
+  const pp = clamp((t - CENAS[5].t0) / 0.6);
+  $("painel").style.opacity = pp;
+  document.querySelectorAll("#painel .enche").forEach((e, k) => {
+    e.style.width = (ease((t - CENAS[5].t0 - 0.6 - k * 0.15) / 1.0) * parseFloat(e.dataset.p) * 100) + "%";
+  });
+};
+window.TOTAL = TOTAL;
+render(0);
+</script>
+</body>
+</html>

@@ -150,3 +150,26 @@ footer a:hover { color: var(--primary); }
   .menu a.aba { display: none; }
   .acoes .btn { width: 100%; }
 }
+
+/* Página de finanças cristãs */
+.cristao blockquote { font-family: "Lora", Georgia, serif; font-style: italic; margin: 0; }
+.cristao cite { display: block; font-style: normal; font-weight: 600; font-size: .85rem; color: var(--muted); margin-top: 6px; font-family: "Lora", Georgia, serif; }
+.verso-destaque { margin: 0; background: var(--primary); color: #fff; border-radius: 22px; padding: 36px 30px; box-shadow: var(--shadow); position: relative; }
+.verso-destaque::before { content: "“"; position: absolute; top: -18px; left: 22px; font-family: "Lora", Georgia, serif; font-size: 6rem; line-height: 1; color: var(--accent); }
+.verso-destaque blockquote { font-size: 1.45rem; line-height: 1.45; }
+.verso-destaque figcaption { margin-top: 16px; font-family: "Lora", Georgia, serif; font-weight: 600; color: hsl(41 79% 70%); }
+.principio blockquote { font-size: 1rem; line-height: 1.5; color: var(--fg); border-left: 3px solid var(--accent); padding-left: 12px; margin: 10px 0 12px; }
+.video-grade { display: grid; gap: 24px; align-items: start; }
+.video-caixa { border-radius: 22px; overflow: hidden; border: 1px solid var(--border); box-shadow: var(--shadow); background: var(--primary); max-width: 560px; width: 100%; margin: 0 auto; }
+.video-caixa video { width: 100%; height: auto; display: block; aspect-ratio: 1; }
+.passos-lista { gap: 10px; }
+.passos-lista .card { padding: 14px 18px; }
+.passos-lista .card h3 { font-size: 1rem; }
+.trilha { list-style: none; counter-reset: t; padding: 0; margin: 0 auto; max-width: 760px; display: grid; gap: 12px; }
+.trilha li { counter-increment: t; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px 18px 66px; position: relative; }
+.trilha li::before { content: counter(t); position: absolute; left: 18px; top: 16px; width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: var(--primary-strong); font-weight: 800; display: grid; place-items: center; }
+.trilha li span { display: inline-block; margin-top: 8px; background: #d6f0c9; border-radius: 12px; border-top-right-radius: 4px; padding: 6px 12px; font-size: .92rem; }
+.cristao .cta h2 { font-family: "Lora", Georgia, serif; font-style: italic; font-weight: 500; }
+@media (min-width: 900px) {
+  .video-grade { grid-template-columns: 1.1fr .9fr; }
+}

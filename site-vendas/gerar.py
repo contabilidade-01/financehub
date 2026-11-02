@@ -10,12 +10,13 @@ URL = {
     "mei": "https://controle.gestaoempresa.com/",
     "pj": "https://pj.gestaoempresa.com/",
     "planos": "https://controle.gestaoempresa.com/planos/",
+    "cristao": "https://pf.gestaoempresa.com/financas-cristas/",
 }
 
 def cad(mod):
     return f"{APP}/register?modalidade={mod}"
 
-def head(titulo, desc, url):
+def head(titulo, desc, url, extra=""):
     return f"""<!doctype html>
 <html lang="pt-BR">
 <head>
@@ -33,8 +34,8 @@ def head(titulo, desc, url):
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/assets/style.css?v=2">
-</head>
+<link rel="stylesheet" href="/assets/style.css?v=3">
+{extra}</head>
 <body>
 """
 
@@ -252,6 +253,94 @@ def inicio():
 """
     return s + RODAPE
 
+PRINCIPIOS = [
+    ("🙏", "Honre a Deus primeiro", "Honra ao Senhor com a tua fazenda e com as primícias de toda a tua renda.", "Provérbios 3:9",
+     "Lance dízimos e ofertas assim que receber. Eles ficam na categoria Dízimos e Ofertas, separados do resto."),
+    ("🧮", "Planeje antes de gastar", "Pois qual de vós, querendo edificar uma torre, não se assenta primeiro a fazer as contas dos gastos?", "Lucas 14:28",
+     "Peça um resumo no WhatsApp e saiba quanto entrou, quanto saiu e quanto ainda sobra no mês."),
+    ("👨‍👩‍👧", "Conheça o estado da sua casa", "Procura conhecer o estado das tuas ovelhas; põe o teu coração sobre o gado.", "Provérbios 27:23",
+     "Veja no painel para onde vai cada real, por categoria e por forma de pagamento."),
+    ("🌾", "Guarde com sabedoria", "Tesouro desejável e azeite há na casa do sábio, mas o homem insensato o devora.", "Provérbios 21:20",
+     "Crie metas e caixinhas, como a reserva de emergência, e acompanhe o progresso."),
+    ("⛓️", "Fuja das dívidas", "O rico domina sobre os pobres, e o que toma emprestado é servo do que empresta.", "Provérbios 22:7",
+     "Acompanhe cartões, parcelas e faturas para não ser pego de surpresa."),
+    ("🤝", "Dê com alegria", "Cada um contribua segundo propôs no seu coração, não com tristeza ou por necessidade; porque Deus ama ao que dá com alegria.", "2 Coríntios 9:7",
+     "Com as contas em ordem, sobra espaço para ajudar quem precisa sem apertar a família."),
+]
+
+PASSOS_CRISTAO = [
+    ("Crie sua conta", "15 dias grátis, sem cartão. Seu número de WhatsApp fica ligado à sua conta."),
+    ("Mande seus lançamentos", "Escreva ou grave um áudio como você fala: “Dízimo R$ 350 no Pix”, “Mercado 187,40 no débito”."),
+    ("Ou mande a foto do cupom", "A IA lê o cupom ou o PDF e lança com valor e categoria."),
+    ("Peça seus resumos", "“Resumo do mês”, “quanto gastei com mercado?”: a resposta chega na hora."),
+    ("Planeje e guarde", "“Quero guardar R$ 200 por mês para a reserva”: a meta é criada e acompanhada."),
+    ("Veja tudo no painel", "No computador ou no celular, com gráficos sempre atualizados."),
+]
+
+FAQ_CRISTAO = [
+    ("Consigo ver quanto dei de dízimo e ofertas?", "Sim. Ao mandar “dízimo” ou “oferta”, o lançamento vai para a categoria Dízimos e Ofertas. Você pode perguntar no WhatsApp quanto contribuiu no mês ou no ano, ou ver no painel."),
+    ("O sistema ensina finanças bíblicas?", "Ele é uma ferramenta para colocar os princípios em prática no dia a dia: registrar, planejar e acompanhar. O ensino continua com a Palavra, a sua igreja e a sua família."),
+    ("Serve para a tesouraria da igreja ou de um ministério?", "Esta página é para as finanças pessoais e da família. Para um CNPJ, veja os planos PJ MEI e PJ Empresa."),
+]
+
+def cristao():
+    extra = '<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,600;1,500&display=swap" rel="stylesheet">\n'
+    desc = "Organize suas finanças com princípios bíblicos: dízimos e ofertas, planejamento, reserva e fuga das dívidas, tudo pelo WhatsApp com o Tudo Contado. 15 dias grátis."
+    s = head("Finanças cristãs: organize sua vida financeira com propósito | Tudo Contado", desc, URL["cristao"], extra) + topo("")
+    principios = "".join(
+        f'<div class="card principio"><div class="ic">{ic}</div><h3>{t}</h3><blockquote>“{html.escape(v)}”<cite>{ref}</cite></blockquote><p>{html.escape(d)}</p></div>'
+        for ic, t, v, ref, d in PRINCIPIOS)
+    passos = "".join(
+        f'<div class="card"><div class="passo">Passo {i+1}</div><h3>{t}</h3><p>{html.escape(d)}</p></div>'
+        for i, (t, d) in enumerate(PASSOS_CRISTAO))
+    tag, nome, para, preco, itens = PAGINAS["pf"]["plano"]
+    s += f"""<main class="cristao">
+<section class="hero"><div class="wrap grade">
+<div>
+<span class="selo">Para irmãos e famílias cristãs</span>
+<h1>Organize suas finanças com fé, propósito e mordomia</h1>
+<p class="sub">Tudo o que temos vem de Deus, e Ele nos chama a cuidar bem disso. O Tudo Contado é uma forma simples de colocar esse cuidado em prática: você registra dízimos, ofertas e gastos pelo WhatsApp e acompanha tudo organizado.</p>
+<div class="acoes"><a class="btn btn-primario" href="{cad('pf')}">Começar com 15 dias grátis</a><a class="btn btn-contorno" href="#video">Ver como funciona</a></div>
+<p class="nota">Sem cartão de crédito para começar. Cancele quando quiser.</p>
+</div>
+<figure class="verso-destaque"><blockquote>“Pois qual de vós, querendo edificar uma torre, não se assenta primeiro a fazer as contas dos gastos, para ver se tem com que a acabar?”</blockquote><figcaption>Lucas 14:28</figcaption></figure>
+</div></section>
+{CONFIANCA}
+<section><div class="wrap">
+<div class="titulo"><h2>Princípios bíblicos para as suas finanças</h2><p>E como o Tudo Contado ajuda você a vivê-los no dia a dia.</p></div>
+<div class="cards c3">{principios}</div>
+<p class="nota" style="text-align:center;margin-top:20px">Citações bíblicas na versão Almeida Revista e Corrigida.</p>
+</div></section>
+<section class="alt" id="video"><div class="wrap">
+<div class="titulo"><h2>Veja em 1 minuto como funciona</h2><p>Do WhatsApp ao painel, passo a passo.</p></div>
+<div class="video-grade">
+<div class="video-caixa"><video src="/assets/video-financas-cristas.mp4" poster="/assets/video-financas-cristas-capa.jpg" controls muted playsinline preload="metadata" width="1080" height="1080"></video></div>
+<div class="cards passos-lista">{passos}</div>
+</div>
+</div></section>
+<section><div class="wrap">
+<div class="titulo"><h2>Um jeito simples de começar</h2><p>O sistema é uma ferramenta; o caminho é de fidelidade, um mês de cada vez.</p></div>
+<ol class="trilha">
+<li><b>Primícias.</b> Ao receber, separe e lance o dízimo e as ofertas. <span>“Dízimo R$ 350 no Pix”</span></li>
+<li><b>Necessidades da casa.</b> Registre moradia, mercado, contas e transporte conforme forem acontecendo. <span>“Conta de luz 180 no boleto”</span></li>
+<li><b>Reserva.</b> Crie uma meta para a reserva de emergência e guarde todo mês. <span>“Quero guardar R$ 200 por mês para a reserva”</span></li>
+<li><b>Revisão em família.</b> Peça o resumo no fim do mês e converse sobre o que ajustar. <span>“Resumo do mês”</span></li>
+</ol>
+</div></section>
+<section id="planos" class="alt"><div class="wrap">
+<div class="titulo"><h2>Plano e preço</h2><p>15 dias grátis para testar, sem compromisso.</p></div>
+<div class="planos" style="max-width:440px;margin:0 auto">{plano_card(tag, nome, para, preco, itens, 'pf')}</div>
+</div></section>
+{faq(FAQ_CRISTAO + FAQ_COMUM)}
+<section class="cta"><div class="wrap"><div class="caixa">
+<h2>“Quem é fiel no mínimo também é fiel no muito.”</h2>
+<p>Lucas 16:10 · Comece hoje com 15 dias grátis, sem cartão de crédito.</p>
+<div class="acoes"><a class="btn btn-primario" href="{cad('pf')}">Começar agora</a><a class="btn btn-contorno" href="{APP}/">Já tenho conta</a></div>
+</div></div></section>
+</main>
+"""
+    return s + RODAPE
+
 def grava(rel, conteudo):
     caminho = os.path.join(OUT, rel)
     os.makedirs(os.path.dirname(caminho), exist_ok=True)
@@ -259,6 +348,7 @@ def grava(rel, conteudo):
         f.write(conteudo)
 
 grava("planos/index.html", inicio())
+grava("financas-cristas/index.html", cristao())
 for k, p in PAGINAS.items():
     grava(f"{k}/index.html", pagina(k, p))
 print("ok")
