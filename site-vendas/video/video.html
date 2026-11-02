@@ -99,7 +99,7 @@
       <div class="t">Despesas por categoria</div>
       <div class="barra"><span>🍔 Alimentação</span><div class="trilho"><div class="enche" data-p="1"></div></div><span class="v">812,40</span></div>
       <div class="barra"><span>🏠 Moradia</span><div class="trilho"><div class="enche" data-p=".8"></div></div><span class="v">650,00</span></div>
-      <div class="barra ouro"><span>🙏 Dízimos e Ofertas</span><div class="trilho"><div class="enche" data-p=".431"></div></div><span class="v">350,00</span></div>
+      <div class="barra ouro"><span id="cat3">🙏 Dízimos e Ofertas</span><div class="trilho"><div class="enche" data-p=".431"></div></div><span class="v">350,00</span></div>
       <div class="barra"><span>🚌 Transporte</span><div class="trilho"><div class="enche" data-p=".324"></div></div><span class="v">263,00</span></div>
       <div class="barra"><span>💊 Saúde</span><div class="trilho"><div class="enche" data-p=".08"></div></div><span class="v">64,90</span></div>
     </div>
@@ -109,15 +109,15 @@
 
 <div class="camada" id="abertura">
   <img src="logo-tudo-contado.png" alt="">
-  <div class="lema">Finanças com propósito</div>
-  <div class="verso">“Pois qual de vós, querendo edificar uma torre, não se assenta primeiro a fazer as contas dos gastos?”</div>
-  <div class="ref">Lucas 14:28</div>
+  <div class="lema" id="lema">Finanças com propósito</div>
+  <div class="verso" id="verso1">“Pois qual de vós, querendo edificar uma torre, não se assenta primeiro a fazer as contas dos gastos?”</div>
+  <div class="ref" id="ref1">Lucas 14:28</div>
 </div>
 
 <div class="camada" id="fim">
   <img src="logo-light.png" alt="">
-  <div class="verso">“Quem é fiel no mínimo também é fiel no muito.”</div>
-  <div class="ref">Lucas 16:10</div>
+  <div class="verso" id="verso2">“Quem é fiel no mínimo também é fiel no muito.”</div>
+  <div class="ref" id="ref2">Lucas 16:10</div>
   <div class="oferta">Teste <em>15 dias grátis</em></div>
   <div class="preco">Depois, R$ 29,90 por mês. Sem cartão para começar.</div>
   <div class="botao">Crie sua conta pelo link desta página</div>
@@ -153,6 +153,22 @@ const MSGS = [
   { t: 49.0, q: "bot", h: "🎯 Reserva de emergência\n█░░░░░░░░░ 8% · R$ 200 de R$ 2.400" },
 ];
 const FIM0 = 58, TOTAL = 66;
+
+// Versão geral (sem linguagem cristã): video.html?v=geral
+const GERAL = new URLSearchParams(location.search).get("v") === "geral";
+if (GERAL) {
+  MSGS[1].h = "Escola das crianças R$ 350 no Pix";
+  MSGS[2].h = "✅ *Lançado!* R$ 350,00\n🎓 Educação · Pix";
+  MSGS[10].h = MSGS[10].h.replace("🙏 Dízimos e Ofertas", "🎓 Educação");
+  document.getElementById("cat3").textContent = "🎓 Educação";
+  document.getElementById("lema").textContent = "Seu dinheiro organizado pelo WhatsApp";
+  document.getElementById("verso1").textContent = "Saiba para onde vai cada real, sem planilha e sem complicação.";
+  document.getElementById("verso1").style.fontFamily = "Inter, sans-serif";
+  document.getElementById("verso1").style.fontStyle = "normal";
+  document.getElementById("ref1").remove();
+  document.getElementById("verso2").textContent = "Comece hoje a cuidar melhor do seu dinheiro.";
+  document.getElementById("ref2").remove();
+}
 
 const corpo = document.getElementById("corpo");
 const fmt = s => s.replace(/\*([^*\n]+)\*/g, "<b>$1</b>");
