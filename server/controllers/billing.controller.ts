@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { storage, filtrarPlanosPorTipo } from "../storage";
+import { planosVisiveisAoUsuario } from "../services/resolver-plano";
 import { getSubscriptionService } from "../services/subscription.service";
 import { z } from "zod";
 import { db } from "../db";
@@ -220,7 +221,7 @@ export async function checkout(req: Request, res: Response) {
     if (validatedData.planId) {
       const usuario = await storage.getUserById(userId);
       const ativos = (await storage.getActiveSubscriptionPlans()).filter((p: any) => p.active !== false);
-      const permitidos = filtrarPlanosPorTipo(ativos, (usuario as any)?.tipo_pessoa, (usuario as any)?.porte_pj);
+      const permitidos = planosVisiveisAoUsuario(usuario, ativos);
       if (permitidos.length && !permitidos.some((p) => p.id === validatedData.planId)) {
         return res.status(400).json({
           error: "Plano indisponível para o seu tipo de cadastro (Pessoa Física / Jurídica).",
@@ -396,11 +397,7 @@ export async function validateExternalCheckoutToken(req: Request, res: Response)
     // Só o plano do TIPO deste usuário: PF nunca vê o preço de PJ e vice-versa.
     // O token já identifica quem é, e a cobrança sai por este mesmo critério
     // (createHostedCheckout) — o preço mostrado tem que ser o preço cobrado.
-    const activePlans = filtrarPlanosPorTipo(
-      plans.filter((p) => p.active),
-      (user as any).tipo_pessoa,
-      (user as any).porte_pj,
-    );
+    const activePlans = planosVisiveisAoUsuario(user, plans.filter((p) => p.active));
 
     // Retornar dados do usuário (sem informações sensíveis) e planos
     res.json({

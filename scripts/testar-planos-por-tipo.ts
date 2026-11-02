@@ -2,15 +2,15 @@
 // É a mesma função usada para LISTAR planos ao cliente e para ESCOLHER o plano
 // da cobrança — se ela errar, o cliente vê um preço e é cobrado outro.
 import { filtrarPlanosPorTipo } from "../server/storage";
-import { resolverPlanoDoUsuario } from "../server/services/resolver-plano";
+import { resolverPlanoDoUsuario, planosVisiveisAoUsuario } from "../server/services/resolver-plano";
 import { podeReaproveitarCobranca } from "../server/services/subscription.service";
 
-type Plano = { planCode: string; priceMonthly: string; tipoPessoa?: string | null; portePj?: string | null };
+type Plano = { planCode: string; priceMonthly: string; tipoPessoa?: string | null; portePj?: string | null; somenteVinculados?: boolean };
 
 // Ordenados por preço, como vêm do banco (orderBy priceMonthly).
-// Os valores são os reais do negócio: PF 39,90 e PJ 79,90.
+// Os valores são os reais do negócio: PF 29,90 e PJ 79,90.
 const GENERICO: Plano = { planCode: "basico", priceMonthly: "49.00", tipoPessoa: null };
-const PF: Plano = { planCode: "pf", priceMonthly: "39.90", tipoPessoa: "fisica" };
+const PF: Plano = { planCode: "pf", priceMonthly: "29.90", tipoPessoa: "fisica" };
 const PJ: Plano = { planCode: "pj", priceMonthly: "79.90", tipoPessoa: "juridica" };
 
 type Caso = {
@@ -64,11 +64,11 @@ for (const c of CASOS) {
     "|", JSON.stringify(obtido),
   );
 }
-// --- Preço que cada tipo vê e paga (regra de negócio: PF 39,90 / PJ 79,90) ---
+// --- Preço que cada tipo vê e paga (regra de negócio: PF 29,90 / PJ 79,90) ---
 // Cobre o caminho inteiro: é a mesma função que alimenta a lista do checkout,
 // o checkout externo por link e a escolha do plano da cobrança no Asaas.
 const PRECOS: { nome: string; tipo: string; esperado: string }[] = [
-  { nome: "PF assina/renova → 39,90", tipo: "fisica", esperado: "39.90" },
+  { nome: "PF assina/renova → 29,90", tipo: "fisica", esperado: "29.90" },
   { nome: "PJ assina/renova → 79,90", tipo: "juridica", esperado: "79.90" },
 ];
 for (const p of PRECOS) {
@@ -110,6 +110,18 @@ eq2("resolver: PJ MEI → pj (mais barato)", resolverPlanoDoUsuario({ tipo_pesso
 eq2("resolver: consultoria forçada vale para MEI", resolverPlanoDoUsuario({ tipo_pessoa: "juridica", porte_pj: "mei", plano_forcado_id: idDe("mensal_pj_consultoria") }, comId)?.planCode, "mensal_pj_consultoria");
 eq2("resolver: consultoria forçada vale para ME", resolverPlanoDoUsuario({ tipo_pessoa: "juridica", porte_pj: "me", plano_forcado_id: idDe("mensal_pj_consultoria") }, comId)?.planCode, "mensal_pj_consultoria");
 eq2("resolver: forçado de outro tipo é ignorado", resolverPlanoDoUsuario({ tipo_pessoa: "fisica", plano_forcado_id: idDe("mensal_pj_me") }, comId)?.planCode, "pf");
+
+// PF 29,90 só para novos: assinante antigo fica no plano legado (39,90) vinculado.
+const PF_LEGADO: Plano = { planCode: "mensal_pf_legado", priceMonthly: "39.90", tipoPessoa: "fisica", somenteVinculados: true };
+const comLegado = [PF, PF_LEGADO, PJ].map((p, i) => ({ ...p, id: 100 + i, active: true }));
+const idLegado = comLegado.find((p) => p.planCode === "mensal_pf_legado")!.id;
+eq2("legado: PF novo não vê o 39,90", filtrarPlanosPorTipo(comLegado, "fisica").map((p) => p.planCode), ["pf"]);
+eq2("legado: PF novo é cobrado 29,90", resolverPlanoDoUsuario({ tipo_pessoa: "fisica" }, comLegado)?.priceMonthly, "29.90");
+eq2("legado: PF antigo continua 39,90", resolverPlanoDoUsuario({ tipo_pessoa: "fisica", plano_forcado_id: idLegado }, comLegado)?.priceMonthly, "39.90");
+eq2("legado: PF antigo vê só o 39,90", planosVisiveisAoUsuario({ tipo_pessoa: "fisica", plano_forcado_id: idLegado }, comLegado).map((p) => p.planCode), ["mensal_pf_legado"]);
+eq2("legado: PF novo vê só o 29,90", planosVisiveisAoUsuario({ tipo_pessoa: "fisica" }, comLegado).map((p) => p.planCode), ["pf"]);
+eq2("legado: PJ não é afetado", planosVisiveisAoUsuario({ tipo_pessoa: "juridica" }, comLegado).map((p) => p.planCode), ["pj"]);
+eq2("legado: consultoria segue listando os PJ", planosVisiveisAoUsuario({ tipo_pessoa: "juridica", porte_pj: "mei", plano_forcado_id: idDe("mensal_pj_consultoria") }, comId).map((p) => p.planCode), ["pj", "mensal_pj_consultoria"]);
 
 // Link de cobrança: reaproveitar pendência só se valor certo e ainda não vencida.
 const hojeT = "2026-09-25";

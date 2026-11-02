@@ -120,11 +120,14 @@ const NAO_E_PAGAMENTO_FATURA_PF = sql`NOT EXISTS (
  *   2. Se não existe, valem os planos sem tipo (NULL = serve aos dois), que é
  *      o caso de quem ainda tem um plano único.
  */
-export function filtrarPlanosPorTipo<T extends { tipoPessoa?: string | null; portePj?: string | null }>(
-  planos: T[],
+export function filtrarPlanosPorTipo<T extends { tipoPessoa?: string | null; portePj?: string | null; somenteVinculados?: boolean | null }>(
+  todosPlanos: T[],
   tipoPessoa: string | null | undefined,
   portePj?: string | null,
 ): T[] {
+  // Plano "só de vinculados" (ex.: PF antigo a 39,90) nunca é oferecido a quem
+  // não está nele; esse cliente chega ao plano via plano_forcado_id.
+  const planos = todosPlanos.filter((p) => !p.somenteVinculados);
   // Sem tipo definido → tratar como PF (evita cliente antigo/nulo ficar sem plano
   // depois que o plano único NULL vira tipado). Ver plano de separação PF/PJ.
   const t = tipoPessoa || "fisica";

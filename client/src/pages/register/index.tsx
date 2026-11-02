@@ -79,7 +79,7 @@ export default function Register() {
   const { config: systemConfig } = useSystemConfig();
 
   // Tipo de pessoa vindo da página de vendas: /register?tipo=juridica (default PF).
-  // Define qual plano (PF 39,90 / PJ 79,90) o checkout vai oferecer e cobrar no Asaas.
+  // Define qual plano (PF 29,90 / PJ 79,90) o checkout vai oferecer e cobrar no Asaas.
   const tipoParam = typeof window !== "undefined"
     ? new URLSearchParams(window.location.search).get("tipo")
     : null;

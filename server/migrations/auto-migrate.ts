@@ -761,8 +761,10 @@ const STEPS: Step[] = [
       await db.execute(sql`
         UPDATE subscription_plans
         SET tipo_pessoa = 'fisica', price_monthly = 39.90, name = 'Plano Mensal PF', active = true
-        WHERE plan_code = 'mensal'
+        WHERE plan_code = 'mensal' AND tipo_pessoa IS NULL
       `);
+      // ^ Só converte uma vez (plano ainda sem tipo). Antes rodava a cada boot e
+      //   desfazia o preço/ativo que o admin tivesse mudado no plano PF.
       // Cria o plano PJ de R$ 79,90 se ainda não existir.
       await db.execute(sql`
         INSERT INTO subscription_plans (plan_code, name, description, price_monthly, tipo_pessoa, features, active)
@@ -1575,6 +1577,55 @@ const STEPS: Step[] = [
       } catch {
         // tabela pode não existir
       }
+    },
+  },
+  {
+    // 2026-11: PF cai de 39,90 para 29,90 só para cliente NOVO. Quem já assina
+    // fica num plano "PF 39,90 (assinantes antigos)" via plano_forcado_id, que
+    // não aparece para mais ninguém. Roda uma única vez: só quando o plano
+    // marco (umaVez), tudo numa transação. Não chama o Asaas — o valor das
+    // assinaturas existentes continua 39,90 e as novas saem a 29,90.
+    name: "PF 29,90 para novos; assinantes PF atuais mantêm 39,90",
+    run: async () => {
+      await db.execute(sql`ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS somente_vinculados BOOLEAN NOT NULL DEFAULT false`);
+      await umaVez("pf_2990_novos_2026_11", async (tx) => {
+        await tx.execute(sql`
+          INSERT INTO subscription_plans (plan_code, name, description, price_monthly, tipo_pessoa, features, active, somente_vinculados)
+          SELECT 'mensal_pf_legado', 'Plano Mensal PF (assinantes antigos)',
+                 'Preço de quem assinou PF antes da redução para 29,90',
+                 COALESCE((SELECT price_monthly FROM subscription_plans WHERE plan_code = 'mensal' AND tipo_pessoa = 'fisica' LIMIT 1), 39.90),
+                 'fisica', '[]', true, true
+          WHERE NOT EXISTS (SELECT 1 FROM subscription_plans WHERE plan_code = 'mensal_pf_legado')
+        `);
+        const leg = (await tx.execute(sql`SELECT id FROM subscription_plans WHERE plan_code = 'mensal_pf_legado'`)) as any[];
+        const legadoId = Number(leg?.[0]?.id);
+        if (!legadoId) throw new Error("plano mensal_pf_legado não foi criado");
+
+        // Assinantes PF atuais (assinatura ativa/pendente no Asaas) ficam no legado.
+        const fixados = (await tx.execute(sql`
+          UPDATE usuarios u SET plano_forcado_id = ${legadoId}
+          WHERE COALESCE(u.tipo_pessoa, 'fisica') = 'fisica'
+            AND u.plano_forcado_id IS NULL
+            AND EXISTS (
+              SELECT 1 FROM user_subscriptions us
+              WHERE us.usuario_id = u.id
+                AND us.asaas_subscription_id IS NOT NULL
+                AND us.status IN ('active', 'pending', 'past_due')
+            )
+          RETURNING u.id
+        `)) as any[];
+        await tx.execute(sql`
+          UPDATE user_subscriptions SET plan_id = ${legadoId}
+          WHERE status IN ('active', 'pending', 'past_due')
+            AND usuario_id IN (SELECT id FROM usuarios WHERE plano_forcado_id = ${legadoId})
+        `);
+        // Preço novo do plano PF padrão (o que cliente novo vê e paga).
+        await tx.execute(sql`
+          UPDATE subscription_plans SET price_monthly = 29.90, updated_at = NOW()
+          WHERE plan_code = 'mensal' AND tipo_pessoa = 'fisica'
+        `);
+        console.log(`[AutoMigrate] PF 29,90: ${fixados.length} assinante(s) PF mantidos a 39,90 no plano ${legadoId}.`);
+      });
     },
   },
 ];

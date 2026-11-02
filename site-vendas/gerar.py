@@ -119,7 +119,7 @@ PAGINAS = {
                   ("🎯", "Metas financeiras", "Acompanhe quanto falta para cada objetivo."),
                   ("🔔", "Lembretes", "Aviso das contas antes do vencimento."),
                   ("📈", "Relatórios e gráficos", "Visão por período, categoria e forma de pagamento.")],
-        plano=("Plano Pessoa Física", "Pessoa Física", "Para organizar as finanças pessoais e da família.", "39,90",
+        plano=("Plano Pessoa Física", "Pessoa Física", "Para organizar as finanças pessoais e da família.", "29,90",
                ["Lançamentos por WhatsApp (texto, áudio, foto e PDF)", "Carteiras, cartões e categorias ilimitados", "Metas e lembretes de contas", "Relatórios e gráficos", "Exportação dos lançamentos", "15 dias de degustação grátis"]),
         faq_extra=[("E se eu tiver MEI ou empresa?", "O plano Pessoa Física é para as finanças pessoais. Para o financeiro do seu CNPJ, veja os planos PJ MEI e PJ Empresa.")],
         cta="Comece a organizar sua vida financeira hoje",
@@ -220,7 +220,7 @@ def pagina(chave, p):
 def inicio():
     s = head("Tudo Contado: gestão financeira pelo WhatsApp para você e sua empresa",
              "Controle financeiro pelo WhatsApp com IA para pessoa física, MEI e microempresa. 15 dias grátis.", URL["planos"]) + topo("")
-    ops = [(URL["pf"], "👤", "Pessoa Física", "Minhas finanças pessoais e da família.", "R$ 39,90/mês"),
+    ops = [(URL["pf"], "👤", "Pessoa Física", "Minhas finanças pessoais e da família.", "R$ 29,90/mês"),
            (URL["mei"], "🧑‍💼", "PJ MEI", "Caixa do meu MEI separado das contas pessoais.", "R$ 79,90/mês"),
            (URL["pj"], "🏢", "PJ Empresa", "Gestão financeira completa da microempresa.", "R$ 79,90/mês")]
     cards_ = "".join(f'<a class="opcao" href="{h}"><div class="ic">{ic}</div><h3>{t}</h3><p>{d}</p><span class="de">{pr} · Ver plano →</span></a>' for h, ic, t, d, pr in ops)
