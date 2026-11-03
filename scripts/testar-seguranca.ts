@@ -3,7 +3,7 @@
  * npm run test:seguranca
  */
 import path from "path";
-import { resolverArquivoSeguro } from "../server/utils/safe-path";
+import { resolverArquivoSeguro, tokenArquivo, nomeComToken } from "../server/utils/safe-path";
 import { autenticarWebhookUazapi } from "../server/utils/uazapi-webhook-auth";
 
 let falhas = 0;
@@ -23,6 +23,15 @@ for (const ruim of ["../../.env", "..%2F.env", "../.env", "/etc/passwd", "a/b.pn
   check(resolverArquivoSeguro(base, ruim) === null, `bloqueia ${JSON.stringify(ruim)}`);
 }
 check(resolverArquivoSeguro(base, 123 as any) === null, "bloqueia não-string");
+
+// ---- Nome de relatório/gráfico não adivinhável ----
+const tk = tokenArquivo();
+check(/^[0-9a-f]{32}$/.test(tk) && tk !== tokenArquivo(), "token de arquivo tem 128 bits aleatórios");
+check(nomeComToken(`relatorio-financeiro-2026-11-03-${tk}.pdf`), "aceita relatório com token");
+check(nomeComToken(`chart-receitas-despesas-2026-11-03-123456-${tk}-novo.png`), "aceita gráfico com token");
+const antigo = `relatorio-financeiro-2026-11-03-${Buffer.from("35-1762200000000").toString("base64").substring(0, 8)}.pdf`;
+check(!nomeComToken(antigo), "recusa nome antigo derivado do id do usuário");
+check(!nomeComToken(123 as any), "recusa não-string");
 
 // ---- Token de checkout assinado ----
 (async () => {
