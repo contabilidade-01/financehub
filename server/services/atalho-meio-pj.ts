@@ -5,6 +5,7 @@
 import { detectarMeio, textoMeioDeDetect } from "./parse-meio";
 import { detectarDirecao, extrairValorBR, extrairDataBR, hojeSP, segmentarLancamentos } from "./nlp-br";
 import { criarPendencias } from "./ia-pendencias";
+import { falaDeMeta } from "./metas-alvo";
 
 export type LancamentoSemMeio = {
   descricao: string;
@@ -44,6 +45,8 @@ function parseValorBR(texto: string): number | null {
 
 function pareceConsultaOuComando(n: string): boolean {
   return (
+    // Guardar/tirar dinheiro de meta/caixinha/reserva vai para a IA (não é despesa nem receita).
+    falaDeMeta(n) ||
     /\b(quanto|saldo|resumo|extrato|apaga|exclui|delete|edita|corrige|corrigir|corrija|desfaz|restaura|ola|oi\b|menu|ajuda)\b/.test(n) ||
     // "Código 3.07" / "conta 3.07" = conta do plano, não um lançamento de R$ 3,07.
     /\b(codigo|cod|categoria|classifica\w*)\b/.test(n) ||

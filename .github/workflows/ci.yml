@@ -83,3 +83,4 @@ jobs:
           npm run test:planos
           npm run test:isolamento-contas
           npm run test:backup
+          npm run test:lembretes-metas

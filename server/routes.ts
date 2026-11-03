@@ -1307,7 +1307,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/metas", combinedAuth, async (req: Request, res: Response) => {
     try {
       const { createMeta } = await import("./storage");
-      const meta = await createMeta(req.user!.id, req.body);
+      // Empresa/dono/estado são definidos no servidor (nunca pelo corpo):
+      // impede ligar uma meta à empresa de outro cliente e ler os gastos dela.
+      const { id: _id, usuario_id: _u, empresa_id: _e, ativo: _a, created_at: _c, ...dados } = req.body || {};
+      const meta = await createMeta(req.user!.id, dados);
       res.status(201).json(meta);
     } catch (err: any) { res.status(400).json({ error: err.message }); }
   });
@@ -1326,8 +1329,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const id = parseInt(req.params.id);
       if (!(await metaDoUsuario(id, req.user!.id))) return res.status(404).json({ error: "Meta não encontrada" });
       const { updateMeta } = await import("./storage");
-      // Não deixa trocar o dono nem reativar via update.
-      const { usuario_id, ...patch } = req.body || {};
+      // Só campos editáveis: não troca dono, empresa, id nem reativa.
+      const PERMITIDOS = ["titulo", "tipo", "valor_alvo", "valor_atual", "prazo", "categoria_id", "conta_id", "recorrencia", "valor_recorrencia"];
+      const corpo = req.body || {};
+      const patch: any = {};
+      for (const k of PERMITIDOS) if (k in corpo) patch[k] = corpo[k];
       const meta = await updateMeta(id, patch);
       res.json(meta);
     } catch (err: any) { res.status(400).json({ error: err.message }); }

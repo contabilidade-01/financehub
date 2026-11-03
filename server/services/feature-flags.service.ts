@@ -17,6 +17,7 @@ import {
   FLAG_CORA_CARTEIRA_NESCON,
   FLAG_BOAS_VINDAS_CADASTRO_SITE,
   FLAG_REEMBOLSO_VINCULADO,
+  FLAG_LEMBRETES_CONTAS_PAGAR,
   FLAGS_NO_CODIGO,
   DIAS_PARA_APOSENTAR,
   avaliarFlag,
@@ -34,6 +35,7 @@ export {
   FLAG_CORA_CARTEIRA_NESCON,
   FLAG_BOAS_VINDAS_CADASTRO_SITE,
   FLAG_REEMBOLSO_VINCULADO,
+  FLAG_LEMBRETES_CONTAS_PAGAR,
   FLAGS_NO_CODIGO,
   DIAS_PARA_APOSENTAR,
   avaliarFlag,
@@ -145,6 +147,16 @@ async function garantirTabelas(): Promise<void> {
     VALUES (
       ${FLAG_REEMBOLSO_VINCULADO},
       ${"Reembolso vinculado: cada reembolso pendente no A Receber do usuário credor vira um lançamento no Contas a Pagar do devedor; quando o credor marca como recebido, o do devedor é baixado. Vale só para os pares cadastrados no código (closur00001 → closur00002) e só quando ligada para o credor."},
+      false
+    )
+    ON CONFLICT (chave) DO NOTHING
+  `);
+  // Contas a vencer no WhatsApp: nasce off — ligar para teste no admin.
+  await db.execute(sql`
+    INSERT INTO feature_flags (chave, descricao, ativo_todos)
+    VALUES (
+      ${FLAG_LEMBRETES_CONTAS_PAGAR},
+      ${"Lembrete no WhatsApp das contas a pagar (PF e PJ) que vencem hoje e amanhã, uma mensagem por dia na rodada das 9h. Fora: compras no cartão e reembolsáveis."},
       false
     )
     ON CONFLICT (chave) DO NOTHING

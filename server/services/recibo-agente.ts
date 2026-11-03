@@ -39,6 +39,16 @@ export const TOOLS_ESCRITA = new Set([
   "deleteMeta",
   "deletar_meta",
   "excluir_meta",
+  // Nomes reais que faltavam (sem eles, um "saque registrado" verdadeiro caía na
+  // trava e virava "Ainda não registrei nada" — o cliente repetia e duplicava).
+  "sacar_meta",
+  "ajustar_saldo_meta",
+  "insere_lembrete",
+  "concluir_lembrete",
+  "criar_conta_pagar",
+  "pagar_conta",
+  "editar_ultima_compra",
+  "marcar_recorrente",
 ]);
 
 /**
