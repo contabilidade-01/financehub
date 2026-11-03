@@ -83,8 +83,11 @@ const app = express();
 const isProduction = process.env.NODE_ENV === 'production';
 
 // Necessário para cookie 'secure' funcionar atrás de proxy/HTTPS (EasyPanel).
+// TRUST_PROXY = nº de proxies na frente do app (padrão 1 = EasyPanel). Com o
+// proxy da Cloudflare ligado, use 2 para o rate limit enxergar o IP do cliente.
 if (isProduction) {
-  app.set('trust proxy', 1);
+  const saltos = Number(process.env.TRUST_PROXY || 1);
+  app.set('trust proxy', Number.isInteger(saltos) && saltos > 0 && saltos <= 5 ? saltos : 1);
 }
 
 // Cabeçalhos de segurança (helmet)

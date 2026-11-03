@@ -39,29 +39,16 @@ export class WahaWebhookController {
     try {
       const webhookHash = req.params.hash;
       
-      // Logs detalhados da requisição
-      console.log('\n' + '='.repeat(80));
-      console.log('[WAHA Webhook] 📨 NOVA REQUISIÇÃO RECEBIDA');
-      console.log('='.repeat(80));
-      console.log(`🕒 Timestamp: ${new Date().toISOString()}`);
-      console.log(`🌐 URL: ${req.method} ${req.originalUrl}`);
-      console.log(`🔑 Hash: ${webhookHash || 'SEM HASH'}`);
-      console.log(`📍 IP: ${req.ip || req.connection.remoteAddress}`);
-      console.log(`🏷️  User-Agent: ${req.headers['user-agent'] || 'N/A'}`);
-      
-      // Headers da requisição
-      console.log('\n📋 HEADERS:');
-      Object.entries(req.headers).forEach(([key, value]) => {
-        if (key.toLowerCase().includes('content') || key.toLowerCase().includes('auth') || key.toLowerCase().includes('x-')) {
-          console.log(`   ${key}: ${value}`);
-        }
-      });
-      
-      // Payload completo
-      console.log('\n📦 PAYLOAD RECEBIDO:');
-      console.log(JSON.stringify(req.body, null, 2));
-      console.log('='.repeat(80));
-      
+      // Log enxuto: sem cabeçalhos de autenticação nem o corpo (contém PII).
+      console.log(`[WAHA Webhook] ${req.method} ${req.path.replace(/\/webhook\/.+$/, '/webhook/:hash')} evento=${req.body?.event || '?'} sessão=${req.body?.session || '?'} ip=${req.ip}`);
+
+      // Sem hash, qualquer um poderia forjar eventos. Rota legada só aceita se
+      // WAHA_WEBHOOK_SEM_HASH=true estiver definido no ambiente.
+      if (!webhookHash && process.env.WAHA_WEBHOOK_SEM_HASH !== 'true') {
+        console.warn('[WAHA Webhook] ❌ Requisição sem hash rejeitada');
+        return res.status(401).json({ error: 'Hash obrigatório' });
+      }
+
       // Validar hash se fornecido
       let validatedSessionName = null;
       if (webhookHash) {
@@ -118,7 +105,6 @@ export class WahaWebhookController {
         success: true, 
         message: 'Evento processado com sucesso',
         receivedAt: new Date().toISOString(),
-        webhookHash: webhookHash || 'sem-hash',
         sessionName: event.session,
         validatedSessionName: validatedSessionName
       });
@@ -128,10 +114,9 @@ export class WahaWebhookController {
       console.error('[WAHA Webhook] ❌ ERRO AO PROCESSAR EVENTO');
       console.log('='.repeat(80));
       console.error(`🕒 Timestamp: ${new Date().toISOString()}`);
-      console.error(`🌐 URL: ${req.method} ${req.originalUrl}`);
-      console.error(`🔑 Hash: ${req.params.hash || 'SEM HASH'}`);
-      console.error('📦 Payload que causou erro:');
-      console.error(JSON.stringify(req.body, null, 2));
+      console.error(`🌐 Método: ${req.method}`);
+      console.error(`🔑 Hash: ${req.params.hash ? 'presente' : 'SEM HASH'}`);
+      console.error(`📦 Evento: ${req.body?.event || '?'} sessão: ${req.body?.session || '?'}`);
       console.error('\n💥 Detalhes do erro:');
       console.error(error);
       console.log('='.repeat(80) + '\n');
