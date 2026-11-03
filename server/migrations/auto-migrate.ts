@@ -1628,6 +1628,41 @@ const STEPS: Step[] = [
       });
     },
   },
+  {
+    // 2026-11: domínio novo. Troca o endereço do app gravado no banco
+    // (URL do sistema e textos/links das mensagens de boas-vindas) de
+    // app.controledinheiro.com.br para app.tudocontado.com.br. Só roda quando
+    // BASE_URL/PUBLIC_APP_URL já aponta para o domínio novo; idempotente.
+    // E-mails (@controledinheiro.com.br) não são tocados.
+    name: "domínio: app.controledinheiro.com.br → app.tudocontado.com.br (URLs no banco)",
+    run: async () => {
+      const base = (process.env.PUBLIC_APP_URL || process.env.BASE_URL || "").trim();
+      let host = "";
+      try { host = new URL(base).host.toLowerCase(); } catch { return; }
+      if (host !== "app.tudocontado.com.br") return;
+      await db.execute(sql`
+        UPDATE system_settings
+        SET setting_value = replace(setting_value, 'app.controledinheiro.com.br', 'app.tudocontado.com.br')
+        WHERE setting_value LIKE '%app.controledinheiro.com.br%'
+      `);
+      try {
+        await db.execute(sql`
+          UPDATE welcome_messages
+          SET
+            title = replace(title, 'app.controledinheiro.com.br', 'app.tudocontado.com.br'),
+            message = replace(message, 'app.controledinheiro.com.br', 'app.tudocontado.com.br'),
+            email_content = replace(email_content, 'app.controledinheiro.com.br', 'app.tudocontado.com.br'),
+            payment_link = replace(payment_link, 'app.controledinheiro.com.br', 'app.tudocontado.com.br')
+          WHERE title LIKE '%app.controledinheiro.com.br%'
+             OR message LIKE '%app.controledinheiro.com.br%'
+             OR email_content LIKE '%app.controledinheiro.com.br%'
+             OR payment_link LIKE '%app.controledinheiro.com.br%'
+        `);
+      } catch {
+        // tabela pode não existir
+      }
+    },
+  },
 ];
 
 export async function runAutoMigrations(): Promise<void> {

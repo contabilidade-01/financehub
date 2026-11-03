@@ -141,12 +141,25 @@ footer a:hover { color: var(--primary); }
   .cards.c4 { grid-template-columns: repeat(2, 1fr); }
   .confianca .wrap { grid-template-columns: repeat(3, 1fr); }
   .planos.dois { grid-template-columns: repeat(2, 1fr); max-width: 820px; margin: 0 auto; }
-  .escolha { grid-template-columns: repeat(3, 1fr); }
+  .escolha { grid-template-columns: repeat(2, 1fr); }
 }
 @media (min-width: 980px) {
   .cards.c4 { grid-template-columns: repeat(4, 1fr); }
+  .escolha { grid-template-columns: repeat(4, 1fr); }
 }
 @media (max-width: 560px) {
   .menu a.aba { display: none; }
   .acoes .btn { width: 100%; }
 }
+
+/* Linha Mordomia: creme mais quente, dourado e títulos serifados (família de marcas). */
+.tema-mordomia {
+  --bg: hsl(38 52% 91%); /* #F3EADB */
+  --border: hsl(36 30% 80%);
+  --primary: hsl(36 87% 29%); /* dourado escuro #8A560A */
+  --primary-strong: hsl(36 87% 22%);
+  --primary-soft: hsl(36 87% 29% / 0.1);
+  --muted: hsl(34 28% 28%); /* #5A4A33 */
+}
+.tema-mordomia .topo { background: hsl(38 52% 91% / 0.92); }
+.tema-mordomia h1, .tema-mordomia h2, .tema-mordomia .plano h3 { font-family: "Fraunces", Georgia, serif; letter-spacing: -0.01em; }

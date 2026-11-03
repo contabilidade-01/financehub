@@ -571,7 +571,7 @@ export async function updateUserStatus(req: Request, res: Response) {
         const webhookData = {
           evento: "usuario_ativado",
           timestamp: new Date().toISOString(),
-          dominio: process.env.BASE_URL || 'https://app.controledinheiro.com.br',
+          dominio: process.env.BASE_URL || 'https://app.tudocontado.com.br',
           id: updatedUser.id,
           nome: updatedUser.nome,
           email: updatedUser.email,
@@ -1238,7 +1238,7 @@ export async function updateUser(req: Request, res: Response) {
         const webhookData = {
           evento: "usuario_ativado",
           timestamp: new Date().toISOString(),
-          dominio: process.env.BASE_URL || "https://app.controledinheiro.com.br",
+          dominio: process.env.BASE_URL || "https://app.tudocontado.com.br",
           id: updatedUser.id,
           nome: updatedUser.nome,
           email: updatedUser.email,

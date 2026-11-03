@@ -303,7 +303,7 @@ async function processWebhookEvent(eventType: string, paymentData: any, webhookI
         const webhookData = {
           evento: "usuario_ativado",
           timestamp: new Date().toISOString(),
-          dominio: process.env.BASE_URL || 'https://app.controledinheiro.com.br',
+          dominio: process.env.BASE_URL || 'https://app.tudocontado.com.br',
           id: user.id,
           nome: user.nome,
           email: user.email,

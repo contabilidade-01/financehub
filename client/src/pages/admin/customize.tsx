@@ -211,7 +211,7 @@ function SystemConfigSection() {
             type="url"
             value={formData.system_url}
             onChange={(e) => handleChange('system_url', e.target.value)}
-            placeholder="https://app.controledinheiro.com.br"
+            placeholder="https://app.tudocontado.com.br"
           />
           <p className="text-xs text-muted-foreground">
             {t('admin.customize.system_url_help', 'URL principal do sistema')}

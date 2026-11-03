@@ -34,7 +34,7 @@ const DEFAULT_CONFIG: SystemConfig = {
   system_name_short: 'tudocontado',
   system_tagline: 'Gestão financeira inteligente e moderna',
   support_email: 'suporte@controledinheiro.com.br',
-  system_url: 'https://app.controledinheiro.com.br',
+  system_url: 'https://app.tudocontado.com.br',
   system_description: 'Tudo Contado - Gestão financeira pessoal e empresarial. Acompanhe receitas, despesas, contas e relatórios em um só lugar.'
 };
 
