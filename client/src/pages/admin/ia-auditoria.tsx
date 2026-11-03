@@ -30,6 +30,14 @@ function corResultado(r: string): "default" | "secondary" | "destructive" | "out
   return "outline";
 }
 
+const NOME_PROVEDOR: Record<string, string> = {
+  anthropic: "Claude",
+  openai: "OpenAI",
+  deepseek: "DeepSeek",
+  gemini: "Gemini",
+  groq: "Groq",
+};
+
 /** Resumo legível do resultado de uma ferramenta (categoria, valor, ajustes, erro). */
 function resumoResultado(d: Decisao): string {
   try {
@@ -128,6 +136,11 @@ export default function IaAuditoriaPage() {
                 <span>·</span>
                 <span>{e.usuario_nome || (e.usuario_id ? `#${e.usuario_id}` : "sem usuário")}</span>
                 {e.tipo_mensagem && <span>· {e.tipo_mensagem}</span>}
+                {(e.provider || e.modelo) && (
+                  <span title="Provedor e modelo que responderam">
+                    · {[NOME_PROVEDOR[e.provider || ""] || e.provider, e.modelo].filter(Boolean).join(" · ")}
+                  </span>
+                )}
                 <Badge variant={corResultado(e.resultado)} className="ml-auto">{e.resultado}</Badge>
               </div>
               {e.mensagem_raw && <p className="mt-2 whitespace-pre-wrap break-words text-sm">{e.mensagem_raw}</p>}
