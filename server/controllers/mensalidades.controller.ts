@@ -11,7 +11,19 @@ import {
   removerProjecaoFutura,
   type MensalidadeInput,
   type TipoMeioMensalidade,
+  type TipoMensalidade,
 } from "../services/mensalidades.service";
+import { db } from "../db";
+import { sql } from "drizzle-orm";
+
+/** Cliente/fornecedor precisa ser da empresa (nunca confiar no id vindo do cliente). */
+async function contatoDaEmpresa(empresaId: number | null, raw: unknown): Promise<number | null> {
+  const id = raw != null && raw !== "" ? Number(raw) : null;
+  if (!id || !empresaId) return null;
+  const r = (await db.execute(sql`SELECT 1 FROM empresas_contatos WHERE id = ${id} AND empresa_id = ${empresaId}`)) as any[];
+  if (!r.length) throw new Error("Cliente/fornecedor inválido.");
+  return id;
+}
 
 /**
  * Mensalidades (recorrências mensais) — PF e PJ.
@@ -67,9 +79,13 @@ export async function criar(req: Request, res: Response) {
     if (esc.empresaId == null && !esc.carteiraId) {
       return res.status(400).json({ error: "Carteira do usuário não encontrada." });
     }
-    const tipoMeio: TipoMeioMensalidade = body.tipo_meio === "cartao" ? "cartao" : "boleto";
+    // A receber: só PJ (cliente paga a empresa) e sempre como conta a receber (nunca cartão).
+    const tipo: TipoMensalidade = body.tipo === "receber" ? "receber" : "pagar";
+    if (tipo === "receber" && esc.empresaId == null) return res.status(400).json({ error: "Recorrência a receber é só para empresa." });
+    const tipoMeio: TipoMeioMensalidade = tipo === "receber" ? "boleto" : body.tipo_meio === "cartao" ? "cartao" : "boleto";
     const erro = validarPayload(body, tipoMeio, esc.empresaId);
     if (erro) return res.status(400).json({ error: erro });
+    const contatoId = await contatoDaEmpresa(esc.empresaId, body.contato_id);
 
     const input: MensalidadeInput = {
       usuario_id: req.user!.id,
@@ -90,6 +106,9 @@ export async function criar(req: Request, res: Response) {
         tipoMeio === "cartao" && esc.empresaId != null && body.cartao_id ? Number(body.cartao_id) : null,
       data_fim: body.data_fim || null,
       origem: "app",
+      tipo,
+      contato_id: contatoId,
+      valor_variavel: body.valor_variavel === true || body.valor_variavel === "true",
     };
 
     const criada = await criarMensalidade(input);
@@ -120,11 +139,14 @@ export async function atualizar(req: Request, res: Response) {
       "cartao_id",
       "data_fim",
       "ativo",
+      "valor_variavel",
     ]) {
       if (body[k] !== undefined) patch[k] = body[k];
     }
     const antes = await obterMensalidade(id, req.user!.id);
     if (!antes) return res.status(404).json({ error: "Mensalidade não encontrada." });
+    if (body.contato_id !== undefined) patch.contato_id = await contatoDaEmpresa(antes.empresa_id ?? null, body.contato_id);
+    if (patch.valor_variavel !== undefined) patch.valor_variavel = patch.valor_variavel === true || patch.valor_variavel === "true";
     // Pausou ou mudou algo que entra no lançamento: tira os meses futuros em
     // aberto (com os dados antigos) e gera a projeção de novo, se ativa.
     const mudouLancamento = Object.keys(patch).some((k) => k !== "ativo");

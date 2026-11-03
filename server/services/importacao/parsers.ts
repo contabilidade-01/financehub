@@ -291,36 +291,65 @@ export function lerCsv(texto: string): string[][] {
 /** XLSX/XLS → linhas de texto (datas em ISO, números com ponto decimal). */
 export function lerPlanilha(buffer: Buffer): string[][] {
   const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  if (!ws) return [];
-  const rows: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: "" });
-  return rows.map((r) =>
-    (Array.isArray(r) ? r : []).map((c) => {
-      if (c instanceof Date) return dataDeCelula(c) || "";
-      if (typeof c === "number") return Number.isInteger(c) ? String(c) : c.toFixed(2);
-      return String(c ?? "").trim();
-    }),
-  );
+  const converter = (ws: XLSX.WorkSheet): string[][] => {
+    const rows: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: "" });
+    return rows.map((r) =>
+      (Array.isArray(r) ? r : []).map((c) => {
+        if (c instanceof Date) return dataDeCelula(c) || "";
+        if (typeof c === "number") return Number.isInteger(c) ? String(c) : c.toFixed(2);
+        return String(c ?? "").trim();
+      }),
+    );
+  };
+  // Várias abas (capa, resumo, lançamentos…): fica com a que tem mais linhas datadas.
+  let melhor: string[][] = [];
+  let melhorPontos = -1;
+  for (const nome of wb.SheetNames) {
+    const ws = wb.Sheets[nome];
+    if (!ws) continue;
+    const linhas = converter(ws);
+    const pontos = linhas.filter((l) => l.some((c) => !!dataDeCelula(c))).length;
+    if (pontos > melhorPontos) { melhor = linhas; melhorPontos = pontos; }
+  }
+  return melhor;
 }
 
 // ----------------------------------------------------------------------------
 // Cabeçalho e mapeamento de colunas
 // ----------------------------------------------------------------------------
 
+/**
+ * Nomes de coluna dos extratos de mercado (Itaú, Bradesco, BB, Caixa, Santander,
+ * Nubank, Inter, C6, Sicoob, Sicredi, Mercado Pago, PagBank, Stone, Cora, Safra,
+ * BTG, PicPay, Neon…). Os aliases vêm em ordem de prioridade: quando a planilha
+ * tem "Histórico" e "Descrição" (Inter), a "Descrição" é o texto útil.
+ */
 const ALIASES: Record<keyof Mapeamento, string[]> = {
-  data: ["data", "dt", "data lancamento", "data do lancamento", "data movimento", "data mov", "data operacao", "date", "data transacao", "dia"],
-  descricao: ["descricao", "historico", "lancamento", "detalhes", "detalhe", "memo", "estabelecimento", "titulo", "descricao do lancamento", "complemento", "description", "movimentacao", "identificacao"],
-  valor: ["valor", "valor r$", "valor (r$)", "montante", "quantia", "amount", "valor lancamento", "valor do lancamento"],
-  debito: ["debito", "debitos", "saida", "saidas", "valor debito", "debito r$", "debito (r$)"],
-  credito: ["credito", "creditos", "entrada", "entradas", "valor credito", "credito r$", "credito (r$)"],
-  saldo: ["saldo", "saldo r$", "saldo (r$)", "saldo do dia", "saldo final", "balance"],
-  documento: ["documento", "doc", "n documento", "no documento", "numero documento", "nr doc", "id", "fitid", "identificador"],
-  natureza: ["tipo", "d/c", "c/d", "natureza", "dc", "cd", "operacao"],
+  data: ["data", "data lancamento", "data do lancamento", "data de lancamento", "data movimento", "data mov", "data da movimentacao", "data operacao", "data da operacao", "data transacao", "data da transacao", "data e hora", "data/hora", "data hora", "dt", "dt lancamento", "dia", "date", "data de pagamento", "data pagamento", "data compra", "data da compra"],
+  descricao: ["descricao", "descricao do lancamento", "descricao da transacao", "historico", "lancamento", "lancamentos", "detalhes", "detalhe", "memo", "estabelecimento", "titulo", "complemento", "description", "movimentacao", "identificacao", "nome", "favorecido", "beneficiario", "transacao", "tipo de transacao", "informacoes", "informacao", "observacao", "referencia", "nome do destinatario", "destinatario", "origem/destino", "contraparte"],
+  valor: ["valor", "valor r$", "valor (r$)", "valor em r$", "valor da transacao", "valor transacao", "valor lancamento", "valor do lancamento", "valor liquido", "valor bruto", "montante", "quantia", "amount", "vlr", "vl"],
+  debito: ["debito", "debitos", "debito r$", "debito (r$)", "valor debito", "saida", "saidas", "saida (r$)", "saidas (r$)", "saida r$", "retirada", "retiradas", "pagamento", "pagamentos", "gasto"],
+  credito: ["credito", "creditos", "credito r$", "credito (r$)", "valor credito", "entrada", "entradas", "entrada (r$)", "entradas (r$)", "entrada r$", "deposito", "depositos", "recebimento", "recebimentos"],
+  saldo: ["saldo", "saldo r$", "saldo (r$)", "saldo em r$", "saldo do dia", "saldo final", "saldo atual", "saldo apos", "saldo apos lancamento", "saldo disponivel", "balance"],
+  documento: ["documento", "doc", "dcto", "n documento", "no documento", "numero documento", "numero do documento", "nr doc", "nr documento", "num doc", "id", "id da transacao", "id transacao", "identificador", "fitid", "codigo", "codigo da transacao", "autenticacao", "numero"],
+  natureza: ["tipo", "d/c", "c/d", "natureza", "dc", "cd", "operacao", "tipo de operacao", "tipo lancamento", "tipo de lancamento", "entrada/saida", "sinal", "deb/cred", "debito/credito"],
 };
 
+/** Texto do cabeçalho normalizado: sem acento, minúsculo, pontuação vira espaço. */
+const normCabecalho = (celula: string) =>
+  semAcento(celula).replace(/\(/g, " (").replace(/[^a-z0-9/() $]/g, " ").replace(/\s+/g, " ").trim();
+
 function casaAlias(celula: string, aliases: string[]): boolean {
-  const c = semAcento(celula).replace(/[^a-z0-9/() $]/g, " ").replace(/\s+/g, " ").trim();
+  const c = normCabecalho(celula);
   return aliases.some((a) => c === a || c.startsWith(`${a} `));
+}
+
+/** Primeira coluna livre que casa um alias, na ordem de prioridade dos aliases (exato antes de prefixo). */
+function colunaPorAlias(cabecalho: string[], aliases: string[], usadas: Set<number>): number {
+  const norm = cabecalho.map(normCabecalho);
+  for (const a of aliases) { const i = norm.findIndex((c, idx) => !usadas.has(idx) && c === a); if (i >= 0) return i; }
+  for (const a of aliases) { const i = norm.findIndex((c, idx) => !usadas.has(idx) && c.startsWith(`${a} `)); if (i >= 0) return i; }
+  return -1;
 }
 
 export function mapeamentoVazio(): Mapeamento {
@@ -333,11 +362,18 @@ export function mapeamentoCompleto(m: Mapeamento): boolean {
 
 /** Linha do cabeçalho: primeira (entre as 30 primeiras) com data + (valor|débito|crédito). */
 export function encontrarCabecalho(linhas: string[][]): number {
-  for (let i = 0; i < Math.min(30, linhas.length); i++) {
+  const max = Math.min(60, linhas.length);
+  for (let i = 0; i < max; i++) {
     const l = linhas[i] || [];
     const temData = l.some((c) => casaAlias(c, ALIASES.data));
     const temValor = l.some((c) => casaAlias(c, ALIASES.valor) || casaAlias(c, ALIASES.debito) || casaAlias(c, ALIASES.credito));
     if (temData && temValor) return i;
+  }
+  // Sem coluna de valor nomeada ("Data; Histórico; 1.234,56"): data + descrição numa linha só de texto já serve.
+  for (let i = 0; i < max; i++) {
+    const l = linhas[i] || [];
+    const soTexto = l.filter((c) => String(c).trim()).every((c) => valorDeCelula(c) == null && !dataDeCelula(c));
+    if (soTexto && l.some((c) => casaAlias(c, ALIASES.data)) && l.some((c) => casaAlias(c, ALIASES.descricao))) return i;
   }
   return -1;
 }
@@ -352,8 +388,14 @@ export function detectarMapeamento(cabecalho: string[], dados: string[][]): Mape
   const usadas = new Set<number>();
   const ordem: (keyof Mapeamento)[] = ["saldo", "debito", "credito", "data", "valor", "documento", "natureza", "descricao"];
   for (const campo of ordem) {
-    const idx = cabecalho.findIndex((c, i) => !usadas.has(i) && casaAlias(c, ALIASES[campo]));
+    const idx = colunaPorAlias(cabecalho, ALIASES[campo], usadas);
     if (idx >= 0) { m[campo] = idx; usadas.add(idx); }
+  }
+  // "Tipo" só é natureza (C/D) se o conteúdo for isso; "Pix enviado"/"Compra" vai para a descrição.
+  if (m.natureza >= 0) {
+    const vals = dados.slice(0, 50).map((l) => semAcento(l[m.natureza] ?? "")).filter(Boolean);
+    const ehCD = vals.length > 0 && vals.filter((v) => /^(d|c|db|cr|deb|cred|debito|credito|saida|entrada|-|\+|e|s)$/.test(v)).length / vals.length > 0.8;
+    if (!ehCD) { usadas.delete(m.natureza); if (m.descricao < 0) m.descricao = m.natureza; m.natureza = -1; }
   }
   const amostra = dados.slice(0, 50);
   const ncol = Math.max(cabecalho.length, ...amostra.map((l) => l.length), 0);
@@ -394,9 +436,10 @@ export function aplicarMapeamento(linhas: string[][], m: Mapeamento): MovimentoB
     if (m.valor >= 0) {
       valor = valorDeCelula(l[m.valor]);
       if (valor != null && m.natureza >= 0) {
-        const nat = semAcento(l[m.natureza] || "");
-        if (/^(d|debito|saida|-)/.test(nat)) valor = -Math.abs(valor);
-        else if (/^(c|credito|entrada|\+)/.test(nat)) valor = Math.abs(valor);
+        // Só tokens inteiros: "Depósito" não pode virar débito por começar com "d".
+        const nat = semAcento(l[m.natureza] || "").replace(/[.\s]/g, "");
+        if (/^(d|db|deb|debito|debitos|saida|saidas|s|-)$/.test(nat)) valor = -Math.abs(valor);
+        else if (/^(c|cr|cred|credito|creditos|entrada|entradas|e|\+)$/.test(nat)) valor = Math.abs(valor);
       }
     } else {
       const deb = m.debito >= 0 ? valorDeCelula(l[m.debito]) : null;
@@ -405,7 +448,7 @@ export function aplicarMapeamento(linhas: string[][], m: Mapeamento): MovimentoB
     }
     if (valor == null || valor === 0) continue;
     const descricao = (m.descricao >= 0 ? String(l[m.descricao] || "") : "").replace(/\s+/g, " ").trim() || "Lançamento";
-    if (/^(saldo|total|saldo anterior|saldo do dia|saldo final)\b/i.test(semAcento(descricao))) continue;
+    if (/^(saldo|s a l d o|total|totais|subtotal|saldo anterior|saldo do dia|saldo final|saldo inicial|saldo em conta|saldo bloqueado|saldo disponivel|limite)\b/i.test(semAcento(descricao))) continue;
     out.push({
       data,
       valor: Math.round(valor * 100) / 100,

@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { Loader2, Pencil, Plus, Repeat, Trash2 } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { FormMensalidadeCampos, freshForm, payloadMensalidade, validarFormMensalidade, type FormMensalidade } from "@/pages/mensalidades";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -76,6 +79,8 @@ function Contatos({ empresaId }: { empresaId: number }) {
   const [removendo, setRemovendo] = useState<Contato | null>(null);
   const [fichaId, setFichaId] = useState<number | null>(null);
   const [salvando, setSalvando] = useState(false);
+  // Recorrência mensal (a receber do cliente / a pagar ao fornecedor) a partir do cadastro.
+  const [recorrencia, setRecorrencia] = useState<Contato | null>(null);
 
   const salvar = async () => {
     if (!editando) return;
@@ -110,7 +115,7 @@ function Contatos({ empresaId }: { empresaId: number }) {
     <div className="mx-auto w-full max-w-6xl space-y-6">
       <CabecalhoPagina
         titulo="Clientes e fornecedores"
-        descricao="Cadastro usado em contas a receber, contas a pagar e relatórios."
+        descricao="Cadastro usado em contas a receber, contas a pagar e relatórios. Em cada cadastro, crie a recorrência mensal (fixa ou variável) que gera os títulos sozinha."
         acoes={<Button onClick={() => setEditando({ ...VAZIO })}><Plus className="mr-2 h-4 w-4" />Novo cadastro</Button>}
       />
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -141,7 +146,7 @@ function Contatos({ empresaId }: { empresaId: number }) {
                     <th className="px-2 py-2 text-left font-medium">Contato</th>
                     <th className="px-2 py-2 text-right font-medium">A receber</th>
                     <th className="px-2 py-2 text-right font-medium">A pagar</th>
-                    <th className="w-24 px-4 py-2" />
+                    <th className="w-32 px-4 py-2" />
                   </tr>
                 </thead>
                 <tbody>
@@ -157,6 +162,7 @@ function Contatos({ empresaId }: { empresaId: number }) {
                       <td className="px-2 py-2 text-right tabular-nums">{Number(c.a_receber) ? brl(c.a_receber) : "—"}</td>
                       <td className="px-2 py-2 text-right tabular-nums">{Number(c.a_pagar) ? brl(c.a_pagar) : "—"}</td>
                       <td className="px-4 py-2 text-right">
+                        <Button variant="ghost" size="icon" aria-label="Recorrência mensal" title={c.tipo === "fornecedor" ? "Conta a pagar todo mês" : "Valor a receber todo mês"} onClick={() => setRecorrencia(c)}><Repeat className="h-4 w-4" /></Button>
                         <Button variant="ghost" size="icon" aria-label="Editar" onClick={() => setEditando(paraEdicao(c))}><Pencil className="h-4 w-4" /></Button>
                         <Button variant="ghost" size="icon" aria-label="Excluir" onClick={() => setRemovendo(c)}><Trash2 className="h-4 w-4" /></Button>
                       </td>
@@ -270,7 +276,10 @@ function Contatos({ empresaId }: { empresaId: number }) {
         id={fichaId}
         onFechar={() => setFichaId(null)}
         onEditar={(c) => { setFichaId(null); setEditando(paraEdicao(c)); }}
+        onRecorrencia={(c) => { setFichaId(null); setRecorrencia(c); }}
       />
+
+      <RecorrenciaDialog empresaId={empresaId} contato={recorrencia} onFechar={() => setRecorrencia(null)} />
 
       <AlertDialog open={!!removendo} onOpenChange={(o) => !o && setRemovendo(null)}>
         <AlertDialogContent>
@@ -298,7 +307,7 @@ interface Ficha {
 const ROTULO_COBRANCA: Record<string, string> = { aberta: "Em aberto", processando: "Processando", paga: "Paga", vencida: "Vencida", cancelada: "Cancelada" };
 
 /** Ficha do cliente/fornecedor: quanto já pagou, quanto deve, atraso médio e histórico. */
-function FichaContato({ empresaId, id, onFechar, onEditar }: { empresaId: number; id: number | null; onFechar: () => void; onEditar: (c: Contato) => void }) {
+function FichaContato({ empresaId, id, onFechar, onEditar, onRecorrencia }: { empresaId: number; id: number | null; onFechar: () => void; onEditar: (c: Contato) => void; onRecorrencia: (c: Contato) => void }) {
   const url = `/api/empresas/${empresaId}/erp/contatos/${id}/ficha`;
   const { data, isLoading } = useQuery<Ficha>({ queryKey: [url], queryFn: () => apiErp(url), enabled: !!id });
   const c = data?.contato;
@@ -315,7 +324,10 @@ function FichaContato({ empresaId, id, onFechar, onEditar }: { empresaId: number
         ) : (
           <div className="mt-4 space-y-5">
             <div className="text-sm text-muted-foreground">{endereco || "Sem endereço cadastrado."}</div>
-            <Button variant="outline" size="sm" onClick={() => onEditar(data.contato)}><Pencil className="mr-2 h-4 w-4" />Editar cadastro</Button>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={() => onEditar(data.contato)}><Pencil className="mr-2 h-4 w-4" />Editar cadastro</Button>
+              <Button variant="outline" size="sm" onClick={() => onRecorrencia(data.contato)}><Repeat className="mr-2 h-4 w-4" />{c?.tipo === "fornecedor" ? "Conta a pagar mensal" : "Valor a receber mensal"}</Button>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               {[
                 { r: "Já recebido", v: brl(data.totais.recebido) },
@@ -364,5 +376,83 @@ function FichaContato({ empresaId, id, onFechar, onEditar }: { empresaId: number
         )}
       </SheetContent>
     </Sheet>
+  );
+}
+
+type Opcao = { id: number; nome: string; codigo?: string | null; tipo?: string | null };
+
+/**
+ * Recorrência mensal a partir do cadastro: cliente → conta a receber todo mês
+ * (fixa ou variável); fornecedor → conta a pagar todo mês. Usa o mesmo motor
+ * das Mensalidades (gera 3 meses à frente e se renova sozinha).
+ */
+function RecorrenciaDialog({ empresaId, contato, onFechar }: { empresaId: number; contato: Contato | null; onFechar: () => void }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const aberto = !!contato;
+  const receber = contato?.tipo !== "fornecedor";
+  const [form, setForm] = useState<FormMensalidade>(freshForm());
+  const [ultimoId, setUltimoId] = useState<number | null>(null);
+  // Reinicia o formulário quando muda o cadastro (sem efeito: derivado do id).
+  if (contato && ultimoId !== contato.id) {
+    setUltimoId(contato.id);
+    setForm(freshForm({
+      tipo: receber ? "receber" : "pagar",
+      contato_id: String(contato.id),
+      descricao: receber ? `Honorários — ${contato.nome}` : contato.nome,
+    }));
+  }
+  const { data: categorias = [] } = useQuery<Opcao[]>({ queryKey: [`/api/empresas/${empresaId}/contas`], enabled: aberto });
+  const { data: cartoes = [] } = useQuery<Opcao[]>({ queryKey: [`/api/empresas/${empresaId}/cartoes`], enabled: aberto });
+  const { data: contas = [] } = useQuery<Opcao[]>({ queryKey: [`/api/empresas/${empresaId}/contas-bancarias`], enabled: aberto });
+  const catLabel = (c: Opcao) => (c.codigo ? `${c.codigo} — ${c.nome}` : c.nome);
+  const categoriasDoTipo = categorias.filter((c) => (receber ? /receita/i.test(String(c.tipo)) : !c.tipo || /despesa/i.test(String(c.tipo))));
+
+  const salvar = useMutation({
+    mutationFn: (payload: any) => apiRequest("/api/mensalidades", { method: "POST", data: payload }),
+    onSuccess: () => {
+      toast({ title: receber ? "Recorrência a receber criada" : "Conta a pagar mensal criada", description: "Este mês e os próximos 2 já estão lançados. Veja em Mensalidades e em Contas a " + (receber ? "receber." : "pagar.") });
+      qc.invalidateQueries({ predicate: (q) => String(q.queryKey[0] || "").includes(`/api/empresas/${empresaId}/`) || String(q.queryKey[0] || "").startsWith("/api/mensalidades") });
+      onFechar();
+    },
+    onError: (e: any) => toast({ title: "Não foi possível salvar", description: e?.message || e?.error, variant: "destructive" }),
+  });
+
+  const submit = () => {
+    const erro = validarFormMensalidade(form, true);
+    if (erro) { toast({ title: erro, variant: "destructive" }); return; }
+    salvar.mutate(payloadMensalidade(form, true, empresaId));
+  };
+
+  return (
+    <Dialog open={aberto} onOpenChange={(o) => !o && onFechar()}>
+      <DialogContent className="max-w-md max-h-[90dvh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{receber ? "Valor a receber todo mês" : "Conta a pagar todo mês"}</DialogTitle>
+          <DialogDescription>
+            {contato?.nome}. {receber
+              ? "Gera uma conta a receber deste cliente em cada mês, no dia escolhido. Fixo: mesmo valor sempre. Variável: valor de referência, a confirmar."
+              : "Gera uma conta a pagar a este fornecedor em cada mês, no dia escolhido."}
+          </DialogDescription>
+        </DialogHeader>
+        <FormMensalidadeCampos
+          form={form}
+          setForm={setForm}
+          pj
+          erp
+          cartoes={cartoes}
+          contas={contas}
+          categorias={categoriasDoTipo}
+          contatos={contato ? [{ id: contato.id, nome: contato.nome }] : []}
+          catLabel={catLabel}
+          travarTipo
+          travarContato
+        />
+        <DialogFooter>
+          <Button variant="outline" onClick={onFechar}>Cancelar</Button>
+          <Button onClick={submit} disabled={salvar.isPending}>{salvar.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Salvar</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

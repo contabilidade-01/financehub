@@ -4,8 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Upload, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Upload, AlertCircle, CheckCircle2, Plus } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface ContaBancaria {
   id: number;
@@ -34,10 +36,23 @@ export default function Importar({
   const [file, setFile] = useState<File | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [dragActive, setDragActive] = useState(false);
+  const qc = useQueryClient();
+  // Conta nova na hora: o extrato pode ser de uma conta que ainda não foi cadastrada.
+  const [novaConta, setNovaConta] = useState<null | { nome: string; banco: string; agencia: string; numero: string }>(null);
 
   const { data: contas = [] } = useQuery<ContaBancaria[]>({
     queryKey: [`/api/empresas/${empresaId}/contas-bancarias`],
     queryFn: () => apiRequest(`/api/empresas/${empresaId}/contas-bancarias`),
+  });
+
+  const criarConta = useMutation({
+    mutationFn: (c: { nome: string; banco: string; agencia: string; numero: string }) =>
+      apiRequest(`/api/empresas/${empresaId}/contas-bancarias`, { method: "POST", data: { nome: c.nome.trim(), banco: (c.banco || c.nome).trim(), agencia: c.agencia || null, numero: c.numero || null, tipo: "corrente" } }),
+    onSuccess: (conta: any) => {
+      qc.invalidateQueries({ queryKey: [`/api/empresas/${empresaId}/contas-bancarias`] });
+      if (conta?.id) setSelectedContaId(String(conta.id));
+      setNovaConta(null);
+    },
   });
 
   const importMutation = useMutation({
@@ -108,8 +123,27 @@ export default function Importar({
                 ))}
               </SelectContent>
             </Select>
-            {contas.length === 0 && (
-              <p className="text-sm text-destructive mt-1">Nenhuma conta bancária encontrada. Crie uma primeira.</p>
+            {contas.length === 0 && !novaConta && (
+              <p className="text-sm text-destructive mt-1">Nenhuma conta bancária encontrada. Crie uma abaixo.</p>
+            )}
+            {!novaConta ? (
+              <Button type="button" variant="link" size="sm" className="h-auto px-0 pt-1" onClick={() => setNovaConta({ nome: "", banco: "", agencia: "", numero: "" })}>
+                <Plus className="mr-1 h-3.5 w-3.5" />Criar conta nova para este extrato
+              </Button>
+            ) : (
+              <div className="mt-2 grid gap-2 rounded-md border bg-muted/30 p-3 sm:grid-cols-4">
+                <Input placeholder="Nome (ex.: Itaú empresa)" value={novaConta.nome} onChange={(e) => setNovaConta({ ...novaConta, nome: e.target.value })} className="sm:col-span-2" />
+                <Input placeholder="Banco" value={novaConta.banco} onChange={(e) => setNovaConta({ ...novaConta, banco: e.target.value })} />
+                <Input placeholder="Agência" value={novaConta.agencia} onChange={(e) => setNovaConta({ ...novaConta, agencia: e.target.value })} />
+                <Input placeholder="Conta" value={novaConta.numero} onChange={(e) => setNovaConta({ ...novaConta, numero: e.target.value })} />
+                <div className="flex gap-2 sm:col-span-3">
+                  <Button type="button" size="sm" disabled={novaConta.nome.trim().length < 2 || criarConta.isPending} onClick={() => criarConta.mutate(novaConta)}>
+                    {criarConta.isPending ? "Criando…" : "Criar e usar esta conta"}
+                  </Button>
+                  <Button type="button" size="sm" variant="ghost" onClick={() => setNovaConta(null)}>Cancelar</Button>
+                </div>
+                {criarConta.isError && <p className="text-xs text-destructive sm:col-span-4">{(criarConta.error as any)?.message || "Não foi possível criar a conta."}</p>}
+              </div>
             )}
           </div>
 

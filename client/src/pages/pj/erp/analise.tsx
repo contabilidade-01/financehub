@@ -4,7 +4,7 @@ import { AlertTriangle, ArrowRight, Loader2 } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FiltroBar, periodoPreset, useFiltrosUrl } from "@/components/shared/FiltroBar";
+import { FiltroBar, periodoPreset, PRESETS_PERIODO, useFiltrosUrl } from "@/components/shared/FiltroBar";
 import { cn } from "@/lib/utils";
 import { ROTULO_GRUPO_DRE, type GrupoDre, type Indicadores, type SomasDre } from "@shared/indicadores-financeiros";
 import { apiErp, brl, CabecalhoPagina, dataBr, SomenteErp } from "./comum";
@@ -13,6 +13,8 @@ import { COR, EIXO, Legenda, rotuloMes, TooltipPadrao, valorCurto } from "./graf
 import type { CentroCusto } from "./centros-custo";
 
 type Aging = Record<"a_vencer" | "1_30" | "31_60" | "61_90" | "90_mais", number>;
+/** Títulos em aberto com vencimento dentro do período filtrado. */
+type NoPeriodo = { total_aberto: number; vencido: number; qtd: number };
 interface Painel {
   periodo: { de: string; ate: string };
   anterior: { de: string; ate: string };
@@ -25,8 +27,8 @@ interface Painel {
   evolucao_saldo: { mes: string; saldo: number }[];
   top_clientes: { id: number; nome: string; total: number }[];
   top_fornecedores: { id: number; nome: string; total: number }[];
-  receber: { resumo: { total_aberto: number; vencido: number; vence_7_dias: number }; aging: Aging };
-  pagar: { resumo: { total_aberto: number; vencido: number; vence_7_dias: number }; aging: Aging };
+  receber: { resumo: { total_aberto: number; vencido: number; vence_7_dias: number }; aging: Aging; no_periodo: NoPeriodo };
+  pagar: { resumo: { total_aberto: number; vencido: number; vence_7_dias: number }; aging: Aging; no_periodo: NoPeriodo };
   proximos_7_dias: { id: number; descricao: string; valor: number; tipo: "Receita" | "Despesa"; vencimento: string; contato: string | null }[];
   projecao: { periodos: { inicio: string; rotulo: string; saldo_final: number }[]; primeiro_negativo: { data: string; saldo: number } | null; saldo_final: number; menor_saldo: { data: string; saldo: number } };
 }
@@ -52,6 +54,9 @@ function Analise({ empresaId }: { empresaId: number }) {
   const { data: bancos = [] } = useQuery<any[]>({ queryKey: [`/api/empresas/${empresaId}/contas-bancarias`], queryFn: () => apiErp(`/api/empresas/${empresaId}/contas-bancarias`) });
 
   const filtroRazao = `de=${f.de}&ate=${f.ate}&regime=${f.regime}${f.centro_custo_id ? `&centro_custo_id=${f.centro_custo_id}` : ""}`;
+  // Contas a pagar/receber abrem com o mesmo período e centro de custo desta tela.
+  const filtroTitulos = `periodo=${f.periodo || "personalizado"}&de=${f.de}&ate=${f.ate}${f.centro_custo_id ? `&centro_custo_id=${f.centro_custo_id}` : ""}`;
+  const rotuloPeriodo = f.periodo === "mes" ? "Mês atual" : PRESETS_PERIODO.find((p) => p.valor === f.periodo)?.rotulo || "Período";
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6">
@@ -87,15 +92,28 @@ function Analise({ empresaId }: { empresaId: number }) {
       ) : data && (
         <>
           <p className="-mt-3 text-xs text-muted-foreground">
-            {dataBr(data.periodo.de)} a {dataBr(data.periodo.ate)}, comparado com {dataBr(data.anterior.de)} a {dataBr(data.anterior.ate)}
+            <span className="font-medium text-foreground">{rotuloPeriodo}:</span> {dataBr(data.periodo.de)} a {dataBr(data.periodo.ate)}, comparado com {dataBr(data.anterior.de)} a {dataBr(data.anterior.ate)}.
+            Resultado, margens e contas a pagar/receber seguem este período; saldo em bancos e projeção são de hoje em diante.
           </p>
 
           <PainelIndicadores ind={data.indicadores} anterior={data.indicadores_anterior} />
 
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <Resumo titulo="Saldo em bancos" valor={data.saldo_bancos.total} sinal detalhe={`${data.saldo_bancos.bancos.length} conta(s)`} href="/p/contas-bancarias" />
-            <Resumo titulo="A receber em aberto" valor={data.receber.resumo.total_aberto} detalhe={data.receber.resumo.vencido ? `${brl(data.receber.resumo.vencido)} vencido` : "nada vencido"} alerta={data.receber.resumo.vencido > 0} href="/p/contas-receber" />
-            <Resumo titulo="A pagar em aberto" valor={data.pagar.resumo.total_aberto} detalhe={data.pagar.resumo.vencido ? `${brl(data.pagar.resumo.vencido)} vencido` : "nada vencido"} alerta={data.pagar.resumo.vencido > 0} href="/p/contas-pagar" />
+            <Resumo
+              titulo={`A receber ${f.periodo === "mes" ? "no mês" : "no período"}`}
+              valor={data.receber.no_periodo.total_aberto}
+              detalhe={data.receber.resumo.vencido ? `${brl(data.receber.resumo.vencido)} vencido no total` : `${brl(data.receber.resumo.total_aberto)} em aberto no total`}
+              alerta={data.receber.resumo.vencido > 0}
+              href={`/p/contas-receber?${filtroTitulos}`}
+            />
+            <Resumo
+              titulo={`A pagar ${f.periodo === "mes" ? "no mês" : "no período"}`}
+              valor={data.pagar.no_periodo.total_aberto}
+              detalhe={data.pagar.resumo.vencido ? `${brl(data.pagar.resumo.vencido)} vencido no total` : `${brl(data.pagar.resumo.total_aberto)} em aberto no total`}
+              alerta={data.pagar.resumo.vencido > 0}
+              href={`/p/contas-pagar?${filtroTitulos}`}
+            />
             <Resumo
               titulo="Saldo em 90 dias"
               valor={data.projecao.saldo_final}

@@ -1,0 +1,4 @@
+vencimento;descricao;cliente;valor;conta_receita;competencia;data_recebimento;documento;centro_custo
+10/11/2026;Honorários contábeis 11/2026;Padaria Pão Quente Ltda;850,00;Prestação de serviços;01/11/2026;;NF 1234;
+15/11/2026;Mensalidade do plano 11/2026;João da Silva;199,90;Prestação de serviços;01/11/2026;;;
+20/11/2026;Venda de mercadorias;Mercado Central;2.350,00;Venda de mercadorias;20/11/2026;20/11/2026;NF 1235;Loja

@@ -1643,6 +1643,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/empresas/:id/erp/receber/:tid/baixa", ...erpAuth, erpCtrl.receber);
   app.get("/api/empresas/:id/erp/pagar", ...erpAuth, erpCtrl.listarPagar);
   app.post("/api/empresas/:id/erp/pagar", ...erpAuth, erpCtrl.criarPagar);
+  // Importação de títulos por planilha: analisar (lê e sugere colunas) → importar (simular ou gravar).
+  app.post("/api/empresas/:id/erp/titulos/importar/analisar", ...erpAuth, uploadMemoria.single("arquivo"), erpCtrl.analisarImportacaoTitulos);
+  app.post("/api/empresas/:id/erp/titulos/importar", ...erpAuth, erpCtrl.importarTitulos);
   app.post("/api/empresas/:id/erp/baixas", ...erpAuth, erpCtrl.baixar);
   app.post("/api/empresas/:id/erp/estornos", ...erpAuth, erpCtrl.estornar);
   app.get("/api/empresas/:id/erp/dre", ...erpAuth, erpCtrl.dre);

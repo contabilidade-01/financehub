@@ -1628,6 +1628,17 @@ const STEPS: Step[] = [
       });
     },
   },
+  {
+    name: "mensalidades: recorrências a receber (cliente/fornecedor, valor variável)",
+    run: async () => {
+      // 'pagar' (padrão, como sempre foi) | 'receber' (PJ ME: honorário/mensalidade de cliente)
+      await db.execute(sql`ALTER TABLE mensalidades ADD COLUMN IF NOT EXISTS tipo VARCHAR(10) NOT NULL DEFAULT 'pagar'`);
+      await db.execute(sql`ALTER TABLE mensalidades ADD COLUMN IF NOT EXISTS contato_id INTEGER REFERENCES empresas_contatos(id) ON DELETE SET NULL`);
+      // Valor variável: o lançamento nasce com o valor de referência e fica marcado para confirmar.
+      await db.execute(sql`ALTER TABLE mensalidades ADD COLUMN IF NOT EXISTS valor_variavel BOOLEAN NOT NULL DEFAULT false`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_mensalidades_contato ON mensalidades(contato_id) WHERE contato_id IS NOT NULL`);
+    },
+  },
 ];
 
 export async function runAutoMigrations(): Promise<void> {

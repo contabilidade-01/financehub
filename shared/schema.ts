@@ -1207,6 +1207,9 @@ export const mensalidades = pgTable("mensalidades", {
   conta_bancaria_id: integer("conta_bancaria_id"), // boleto: conta p/ baixa (opcional)
   forma_pagamento_id: integer("forma_pagamento_id"), // cartão PF (formas_pagamento.id)
   cartao_id: integer("cartao_id"), // cartão PJ (empresas_cartoes.id)
+  tipo: varchar("tipo", { length: 10 }).notNull().default('pagar'), // 'pagar' | 'receber' (PJ ME)
+  contato_id: integer("contato_id"), // PJ ME: cliente (receber) ou fornecedor (pagar) — empresas_contatos.id
+  valor_variavel: boolean("valor_variavel").notNull().default(false), // valor de referência; confirmar a cada mês
   ativo: boolean("ativo").notNull().default(true),
   data_inicio: date("data_inicio"),
   data_fim: date("data_fim"),

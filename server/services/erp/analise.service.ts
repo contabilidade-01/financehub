@@ -396,6 +396,20 @@ export async function painelAnalise(empresaId: number, f: FiltrosAnalise) {
 
   const receber = await listarTitulos(empresaId, "Receita", { status: "aberto" });
   const pagar = await listarTitulos(empresaId, "Despesa", { status: "aberto" });
+  // Recorte do período (vencimento dentro de "de..ate", mesmo centro de custo):
+  // é o que o cliente "bate o olho" no mês; o aging continua sobre tudo em aberto.
+  const noPeriodo = (l: { linhas: any[] }) => {
+    const r = { total_aberto: 0, vencido: 0, qtd: 0 };
+    for (const t of l.linhas) {
+      const v = String(t.data_vencimento || t.data_transacao).slice(0, 10);
+      if (v < atual.base.de || v > atual.base.ate) continue;
+      if (atual.base.centro && Number(t.centro_custo_id) !== atual.base.centro) continue;
+      r.total_aberto = r2(r.total_aberto + Number(t.valor));
+      r.qtd++;
+      if (v < hoje) r.vencido = r2(r.vencido + Number(t.valor));
+    }
+    return r;
+  };
   const em7 = (l: any) => {
     const v = String(l.data_vencimento || l.data_transacao).slice(0, 10);
     return v >= hoje && v <= somarDias(hoje, 7);
@@ -422,8 +436,8 @@ export async function painelAnalise(empresaId: number, f: FiltrosAnalise) {
     evolucao_saldo: evolucaoSaldo,
     top_clientes: top("Receita"),
     top_fornecedores: top("Despesa"),
-    receber: { resumo: receber.resumo, aging: receber.aging },
-    pagar: { resumo: pagar.resumo, aging: pagar.aging },
+    receber: { resumo: receber.resumo, aging: receber.aging, no_periodo: noPeriodo(receber) },
+    pagar: { resumo: pagar.resumo, aging: pagar.aging, no_periodo: noPeriodo(pagar) },
     proximos_7_dias: proximos,
     projecao: { periodos: projecao.periodos, primeiro_negativo: projecao.primeiro_negativo, saldo_final: projecao.saldo_final, menor_saldo: projecao.menor_saldo },
   };

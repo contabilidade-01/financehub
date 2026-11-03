@@ -167,6 +167,64 @@ CHARSET:1252
   eq("sem cabeçalho: valor x saldo", m.map((x) => x.valor), [-150.3, 5000]);
 }
 
+// ---------------- Inter: "Histórico" (tipo) + "Descrição" (texto útil) ----------------
+{
+  const csv = `Extrato Conta Corrente
+Conta: 12345-6
+Data Lançamento;Histórico;Descrição;Valor;Saldo
+01/10/2026;Pix recebido;JOAO DA SILVA - 123.456.789-00;1.000,00;1.000,00
+02/10/2026;Pagamento efetuado;ENERGISA;-250,00;750,00`;
+  const a = lerArquivoExtrato(Buffer.from(csv, "utf8"), "inter.csv");
+  const m = aplicarMapeamento(a.tabela!.linhas, a.tabela!.mapeamento);
+  eq("inter: descrição útil", m.map((x) => x.descricao), ["JOAO DA SILVA - 123.456.789-00", "ENERGISA"]);
+  eq("inter: valores", m.map((x) => x.valor), [1000, -250]);
+}
+
+// ---------------- Bradesco: Crédito (R$) / Débito (R$), capa longa ----------------
+{
+  const capa = Array.from({ length: 40 }, (_, i) => `Linha de capa ${i}`).join("\n");
+  const csv = `${capa}
+Data;Lançamento;Dcto.;Crédito (R$);Débito (R$);Saldo (R$)
+03/10/2026;TED RECEBIDA;001;2.500,00;;2.500,00
+04/10/2026;PAG BOLETO;002;;1.200,50;1.299,50
+;SALDO ANTERIOR;;;;0,00`;
+  const a = lerArquivoExtrato(Buffer.from(csv, "latin1"), "bradesco.csv");
+  const m = aplicarMapeamento(a.tabela!.linhas, a.tabela!.mapeamento);
+  eq("bradesco: 2 movimentos", m.length, 2);
+  eq("bradesco: sinais", m.map((x) => x.valor), [2500, -1200.5]);
+  eq("bradesco: documento", m[0].documento, "001");
+}
+
+// ---------------- C6: Entrada(R$)/Saída(R$) e coluna "Tipo" com texto (não é C/D) ----------------
+{
+  const csv = `Data Lançamento;Título;Descrição;Tipo;Entrada(R$);Saída(R$);Saldo
+05/10/2026;Pix;Transferência recebida;Depósito;300,00;;300,00
+06/10/2026;Compra;Mercado;Pagamento;;80,00;220,00`;
+  const a = lerArquivoExtrato(Buffer.from(csv, "utf8"), "c6.csv");
+  const m = aplicarMapeamento(a.tabela!.linhas, a.tabela!.mapeamento);
+  eq("c6: valores", m.map((x) => x.valor), [300, -80]);
+  eq("c6: 'Tipo' textual não vira natureza", a.tabela!.mapeamento.natureza, -1);
+}
+
+// ---------------- Coluna C/D com "Depósito" por extenso não é débito ----------------
+{
+  const csv = `Data;Historico;Valor;Tipo
+07/10/2026;DEPOSITO EM DINHEIRO;500,00;C
+08/10/2026;TARIFA;12,00;D`;
+  const m = movs(Buffer.from(csv, "utf8"), "cd.csv");
+  eq("c/d: sinais", m.map((x) => x.valor), [500, -12]);
+}
+
+// ---------------- Excel com várias abas: usa a aba dos lançamentos ----------------
+{
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Resumo"], ["Saldo", "100"]]), "Capa");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Data", "Descrição", "Valor"], ["09/10/2026", "PIX", "-10,00"], ["10/10/2026", "TED", "20,00"]]), "Lançamentos");
+  const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
+  const m = movs(buf, "extrato.xlsx");
+  eq("xlsx multi-aba: 2 movimentos", m.map((x) => x.valor), [-10, 20]);
+}
+
 // Código de conta nova: coberto em scripts/testar-plano-contas-pj.ts (regra única no storage).
 console.log(`\n${total - falhas}/${total} cenários OK`);
 if (falhas) process.exit(1);

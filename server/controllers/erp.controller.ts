@@ -3,6 +3,7 @@ import * as erp from "../services/erp/erp.service";
 import * as titulos from "../services/erp/titulos.service";
 import * as analise from "../services/erp/analise.service";
 import * as projecao from "../services/erp/projecao.service";
+import * as importarTit from "../services/erp/importar-titulos.service";
 
 /** Rotas do ERP (PJ ME). requireErpPj já garantiu a modalidade; aqui, a empresa do usuário. */
 function falha(res: Response, err: any) {
@@ -185,4 +186,45 @@ export async function criarTransferencia(req: Request, res: Response) {
 }
 export async function removerTransferencia(req: Request, res: Response) {
   try { const e = await empresa(req); res.json(await erp.removerTransferencia(e.id, Number(req.params.tid))); } catch (err) { falha(res, err); }
+}
+
+// ----------------------------------------------------------------------------
+// Importação de contas a pagar/receber por planilha (mapeamento de colunas)
+// ----------------------------------------------------------------------------
+
+const tipoTitulo = (v: unknown): titulos.TipoTitulo => (v === "Receita" || v === "receber" ? "Receita" : "Despesa");
+
+/** Lê o arquivo e devolve colunas, linhas e o mapeamento sugerido; nada é gravado. */
+export async function analisarImportacaoTitulos(req: Request, res: Response) {
+  try {
+    await empresa(req);
+    const file = (req as any).file;
+    if (!file?.buffer) throw new erp.ErroErp("Envie um arquivo .xlsx, .xls ou .csv no campo 'arquivo'.");
+    const tipo = tipoTitulo(req.body?.tipo ?? req.query.tipo);
+    const t = importarTit.lerTabelaTitulos(file.buffer, String(file.originalname || ""), tipo);
+    if (!t.linhas.length) throw new erp.ErroErp("A planilha está vazia ou não tem linhas de dados.");
+    if (t.linhas.length > 3000) throw new erp.ErroErp("Arquivo muito grande: no máximo 3.000 linhas por importação.");
+    const sugestao = importarTit.sugerirMapeamentoTitulos(t.cabecalho, t.linhas, tipo);
+    const previa = importarTit.aplicarMapeamentoTitulos(t.linhas, sugestao, t.linha_cabecalho + 2);
+    res.json({
+      tipo, cabecalho: t.cabecalho, linhas: t.linhas, linha_cabecalho: t.linha_cabecalho,
+      campos: importarTit.camposTitulo(tipo), sugestao,
+      previa: { itens: previa.itens.length, erros: previa.erros.length },
+    });
+  } catch (err) { falha(res, err); }
+}
+
+/** Simula (simular=true) ou grava os títulos já mapeados pelo cliente. */
+export async function importarTitulos(req: Request, res: Response) {
+  try {
+    const e = await empresa(req);
+    const b = req.body || {};
+    res.json(await importarTit.importarTitulos(e.id, tipoTitulo(b.tipo), b.itens, {
+      simular: b.simular === true || b.simular === "true",
+      criar_contatos: b.criar_contatos !== false,
+      criar_contas: b.criar_contas === true,
+      categoria_padrao_id: b.categoria_padrao_id,
+      conta_bancaria_id: b.conta_bancaria_id,
+    }));
+  } catch (err) { falha(res, err); }
 }

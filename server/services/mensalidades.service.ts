@@ -15,6 +15,8 @@ import { sql } from "drizzle-orm";
 import { storage } from "../storage";
 
 export type TipoMeioMensalidade = "boleto" | "cartao";
+/** 'pagar' = conta a pagar (PF e PJ); 'receber' = conta a receber de cliente (PJ ME). */
+export type TipoMensalidade = "pagar" | "receber";
 
 export type MensalidadeInput = {
   usuario_id: number;
@@ -28,6 +30,9 @@ export type MensalidadeInput = {
   conta_bancaria_id: number | null;
   forma_pagamento_id: number | null; // cartão PF
   cartao_id: number | null; // cartão PJ
+  tipo?: TipoMensalidade;
+  contato_id?: number | null; // PJ ME: cliente/fornecedor
+  valor_variavel?: boolean; // valor de referência, a confirmar todo mês
   data_inicio?: string | null;
   data_fim?: string | null;
   origem?: string;
@@ -92,11 +97,12 @@ function dataVencimentoDaComp(comp: string, dia: number): string {
 /** Categoria/conta de Despesa padrão quando a mensalidade não define uma (campo é NOT NULL). */
 async function categoriaPadrao(m: any): Promise<number | null> {
   if (m.empresa_id != null) {
+    const tipoConta = m.tipo === "receber" ? "Receita" : "Despesa";
     const r = await db.execute(sql`
       SELECT id FROM empresas_contas
-      WHERE empresa_id = ${Number(m.empresa_id)} AND tipo = 'Despesa'
+      WHERE empresa_id = ${Number(m.empresa_id)} AND tipo = ${tipoConta}
         AND sintetica = false AND ativo = true
-      ORDER BY (nome ILIKE 'outr%') DESC, id LIMIT 1
+      ORDER BY (nome ILIKE 'outr%') DESC, (nome ILIKE '%servi%') DESC, id LIMIT 1
     `);
     const row = (r as any[])[0];
     return row ? Number(row.id) : null;
@@ -129,9 +135,11 @@ export async function listarMensalidades(
           ORDER BY ativo DESC, dia_vencimento ASC, id DESC
         `)
       : await db.execute(sql`
-          SELECT * FROM mensalidades
-          WHERE usuario_id = ${usuarioId} AND empresa_id = ${empresaId}
-          ORDER BY ativo DESC, dia_vencimento ASC, id DESC
+          SELECT m.*, c.nome AS contato_nome
+          FROM mensalidades m
+          LEFT JOIN empresas_contatos c ON c.id = m.contato_id
+          WHERE m.usuario_id = ${usuarioId} AND m.empresa_id = ${empresaId}
+          ORDER BY m.ativo DESC, m.dia_vencimento ASC, m.id DESC
         `);
   return rows as any[];
 }
@@ -140,12 +148,14 @@ export async function criarMensalidade(input: MensalidadeInput): Promise<any> {
   const r = await db.execute(sql`
     INSERT INTO mensalidades
       (usuario_id, empresa_id, carteira_id, descricao, valor, dia_vencimento, tipo_meio,
-       categoria_id, conta_bancaria_id, forma_pagamento_id, cartao_id, data_inicio, data_fim, origem)
+       categoria_id, conta_bancaria_id, forma_pagamento_id, cartao_id, data_inicio, data_fim, origem,
+       tipo, contato_id, valor_variavel)
     VALUES
       (${input.usuario_id}, ${input.empresa_id}, ${input.carteira_id}, ${input.descricao},
        ${input.valor}, ${input.dia_vencimento}, ${input.tipo_meio}, ${input.categoria_id},
        ${input.conta_bancaria_id}, ${input.forma_pagamento_id}, ${input.cartao_id},
-       ${input.data_inicio ?? null}, ${input.data_fim ?? null}, ${input.origem || "app"})
+       ${input.data_inicio ?? null}, ${input.data_fim ?? null}, ${input.origem || "app"},
+       ${input.tipo === "receber" ? "receber" : "pagar"}, ${input.contato_id ?? null}, ${!!input.valor_variavel})
     RETURNING *
   `);
   return (r as any[])[0];
@@ -166,6 +176,9 @@ export async function atualizarMensalidade(
   if (patch.conta_bancaria_id !== undefined) push(sql`conta_bancaria_id = ${patch.conta_bancaria_id}`);
   if (patch.forma_pagamento_id !== undefined) push(sql`forma_pagamento_id = ${patch.forma_pagamento_id}`);
   if (patch.cartao_id !== undefined) push(sql`cartao_id = ${patch.cartao_id}`);
+  if (patch.tipo !== undefined) push(sql`tipo = ${patch.tipo === "receber" ? "receber" : "pagar"}`);
+  if (patch.contato_id !== undefined) push(sql`contato_id = ${patch.contato_id}`);
+  if (patch.valor_variavel !== undefined) push(sql`valor_variavel = ${!!patch.valor_variavel}`);
   if (patch.data_fim !== undefined) push(sql`data_fim = ${patch.data_fim}`);
   if (patch.ativo !== undefined) push(sql`ativo = ${patch.ativo}`);
   if (!sets.length) {
@@ -201,11 +214,33 @@ export async function gerarMensalidade(m: any, comp: string): Promise<number | n
   // categoria_id é NOT NULL nas tabelas de transação — resolve um padrão se faltar.
   const categoriaId = m.categoria_id != null ? Number(m.categoria_id) : await categoriaPadrao(m);
   if (!categoriaId) {
-    throw new Error("Sem categoria/plano de contas de Despesa para lançar a mensalidade.");
+    throw new Error(`Sem categoria/plano de contas de ${m.tipo === "receber" ? "Receita" : "Despesa"} para lançar a mensalidade.`);
   }
   m = { ...m, categoria_id: categoriaId };
+  // Valor variável: o título nasce com o valor de referência e avisa que precisa ser confirmado.
+  const descricao = m.valor_variavel ? `${m.descricao} (valor a confirmar)` : m.descricao;
 
   let transacaoId: number | null = null;
+
+  // PJ ME: recorrência A RECEBER de um cliente — vira conta a receber (Receita Pendente) com o cliente vinculado.
+  if (ehPj && m.tipo === "receber") {
+    const criada = await storage.createEmpresaTransacao({
+      empresa_id: Number(m.empresa_id),
+      categoria_id: m.categoria_id,
+      descricao,
+      valor,
+      tipo: "Receita",
+      data_transacao: dueDate,
+      data_vencimento: dueDate,
+      status: "Pendente",
+      origem: "mensalidade",
+      conta_bancaria_id: m.conta_bancaria_id ?? null,
+      contato_id: m.contato_id ?? null,
+      movimenta_caixa: false,
+      empresa_forma_pagamento_id: null,
+    } as any);
+    transacaoId = criada.id;
+  } else
 
   if (!ehPj) {
     // ----- PF -----
@@ -293,7 +328,7 @@ export async function gerarMensalidade(m: any, comp: string): Promise<number | n
       const criada = await storage.createEmpresaTransacao({
         empresa_id: empresaId,
         categoria_id: m.categoria_id,
-        descricao: m.descricao,
+        descricao,
         valor,
         tipo: "Despesa",
         data_transacao: dueDate,
@@ -301,6 +336,7 @@ export async function gerarMensalidade(m: any, comp: string): Promise<number | n
         status: "Pendente",
         origem: "mensalidade",
         conta_bancaria_id: m.conta_bancaria_id ?? null,
+        contato_id: m.contato_id ?? null,
         movimenta_caixa: false,
         empresa_forma_pagamento_id: null,
       } as any);

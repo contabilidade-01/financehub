@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronsUpDown, Loader2, Plus, RotateCcw, X } from "lucide-react";
+import { Check, ChevronsUpDown, FileUp, Loader2, Plus, RotateCcw, X } from "lucide-react";
+import { ImportarTitulosDialog, LinkModelo } from "./importar-titulos";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -164,6 +165,7 @@ function Titulos({ empresaId, tipo }: { empresaId: number; tipo: TipoTitulo }) {
   };
 
   const [novo, setNovo] = useState<Novo | null>(null);
+  const [importando, setImportando] = useState(false);
   const [baixa, setBaixa] = useState<null | { itens: Titulo[]; conta_bancaria_id: string; data_pagamento: string; valor_pago: string }>(null);
   const [salvando, setSalvando] = useState(false);
 
@@ -288,8 +290,17 @@ function Titulos({ empresaId, tipo }: { empresaId: number; tipo: TipoTitulo }) {
       <CabecalhoPagina
         titulo={tx.titulo}
         descricao={tx.descricao}
-        acoes={<Button onClick={abrirNovo}><Plus className="mr-2 h-4 w-4" />{tx.novo}</Button>}
+        acoes={
+          <>
+            <Button variant="outline" onClick={() => setImportando(true)}><FileUp className="mr-2 h-4 w-4" />Importar planilha</Button>
+            <Button onClick={abrirNovo}><Plus className="mr-2 h-4 w-4" />{tx.novo}</Button>
+          </>
+        }
       />
+      <div className="-mt-4 text-xs text-muted-foreground">
+        Tem tudo numa planilha? Importe qualquer modelo (.xlsx ou .csv) apontando o que é cada coluna, ou <LinkModelo tipo={tipo} />.
+      </div>
+      <ImportarTitulosDialog empresaId={empresaId} tipo={tipo} aberto={importando} onFechar={() => setImportando(false)} onImportado={invalidar} />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[

@@ -1,0 +1,4 @@
+vencimento;descricao;fornecedor;valor;conta_despesa;competencia;data_pagamento;documento;centro_custo
+05/11/2026;Aluguel da loja 11/2026;Imobiliária Centro;1.800,00;Aluguel;01/11/2026;;Contrato 77;Loja
+10/11/2026;Energia elétrica 10/2026;Companhia de Energia;432,10;Energia elétrica;01/10/2026;;;
+25/11/2026;Internet e telefone;Operadora Telecom;189,90;Internet e telefone;01/11/2026;25/11/2026;Fatura 5566;Administrativo
