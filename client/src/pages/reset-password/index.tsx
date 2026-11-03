@@ -16,7 +16,6 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { VersionDisplay } from "@/components/shared/VersionDisplay";
 import { useTranslation } from "@/contexts/LocalizationContext";
 import { ArrowLeft } from "lucide-react";
 import { camposDaModalidade, modalidadeDe } from "@shared/modalidade";
@@ -450,9 +449,6 @@ function ResetFormCard({ token, info }: { token: string; info: TokenInfo }) {
             </Button>
           </CardFooter>
         </Card>
-        <div className="mt-6 text-center">
-          <VersionDisplay />
-        </div>
       </div>
     </div>
   );

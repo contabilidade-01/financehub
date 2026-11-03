@@ -16,7 +16,6 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { VersionDisplay } from "@/components/shared/VersionDisplay";
 import { useTheme } from "next-themes";
 import { useEffect } from "react";
 import { useTranslation } from "@/contexts/LocalizationContext";
@@ -166,10 +165,6 @@ export default function ForgotPassword() {
             </Button>
           </CardFooter>
         </Card>
-
-        <div className="mt-6 text-center">
-          <VersionDisplay />
-        </div>
       </div>
     </div>
   );
