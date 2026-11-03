@@ -31,9 +31,6 @@ interface WahaSession {
   config?: any;
 }
 
-/** Valor externo seguro para log: sem quebra de linha (evita forjar linhas no log) e curto. */
-const paraLog = (v: unknown) => String(v ?? "?").replace(/[\r\n\t\x00-\x1f]/g, " ").slice(0, 80);
-
 export class WahaWebhookController {
   /**
    * Receber eventos do WAHA via webhook (com hash de segurança)
@@ -43,7 +40,7 @@ export class WahaWebhookController {
       const webhookHash = req.params.hash;
       
       // Log enxuto: sem cabeçalhos de autenticação nem o corpo (contém PII).
-      console.log(`[WAHA Webhook] ${paraLog(req.method)} /api/waha/webhook${webhookHash ? '/:hash' : ''} evento=${paraLog(req.body?.event)} sessão=${paraLog(req.body?.session)} ip=${paraLog(req.ip)}`);
+      console.log(`[WAHA Webhook] requisição recebida (${webhookHash ? 'com' : 'sem'} hash)`);
 
       // Sem hash, qualquer um poderia forjar eventos. Rota legada só aceita se
       // WAHA_WEBHOOK_SEM_HASH=true estiver definido no ambiente.
@@ -117,9 +114,7 @@ export class WahaWebhookController {
       console.error('[WAHA Webhook] ❌ ERRO AO PROCESSAR EVENTO');
       console.log('='.repeat(80));
       console.error(`🕒 Timestamp: ${new Date().toISOString()}`);
-      console.error(`🌐 Método: ${paraLog(req.method)}`);
       console.error(`🔑 Hash: ${req.params.hash ? 'presente' : 'SEM HASH'}`);
-      console.error(`📦 Evento: ${paraLog(req.body?.event)} sessão: ${paraLog(req.body?.session)}`);
       console.error('\n💥 Detalhes do erro:');
       console.error(error);
       console.log('='.repeat(80) + '\n');
