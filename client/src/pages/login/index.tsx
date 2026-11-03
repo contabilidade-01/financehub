@@ -18,7 +18,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { LoginUser } from "@shared/schema";
-import { VersionDisplay } from "@/components/shared/VersionDisplay";
 import { useTheme } from "next-themes";
 import { useEffect } from "react";
 import { useTranslation } from "@/contexts/LocalizationContext";
@@ -207,11 +206,6 @@ export default function Login() {
             </p>
           </CardFooter>
         </Card>
-        
-        {/* Version Display in Footer */}
-        <div className="mt-6 text-center">
-          <VersionDisplay />
-        </div>
       </div>
     </div>
   );
