@@ -499,13 +499,13 @@ function buildTools(ctx?: ToolContext) {
       type: "function" as const,
       function: {
         name: "insere_lembrete",
-        description: "Cria um lembrete para o usuário.",
+        description: "Cria um lembrete que o app envia no WhatsApp na data/hora pedida (uma vez, não repete). Para conta que vence todo mês use criar_conta_pagar/criar_mensalidade. Se o cliente não disser a hora, use 09:00.",
         parameters: {
           type: "object",
           properties: {
             titulo: { type: "string", description: "Título do lembrete" },
             descricao: { type: "string", description: "Descrição formatada p/ WhatsApp" },
-            data_lembrete: { type: "string", description: "Data/hora ISO (ex: 2026-08-20T09:00:00-03:00)" },
+            data_lembrete: { type: "string", description: "Data/hora ISO no horário de Brasília (ex: 2026-08-20T09:00:00-03:00). Precisa ser no futuro." },
           },
           required: ["titulo", "data_lembrete"],
         },
@@ -515,8 +515,22 @@ function buildTools(ctx?: ToolContext) {
       type: "function" as const,
       function: {
         name: "busca_lembretes",
-        description: "Busca todos os lembretes do usuário.",
+        description: "Lista os lembretes pendentes (ainda não enviados/concluídos) do usuário, com id e data.",
         parameters: { type: "object", properties: {} },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "concluir_lembrete",
+        description: "Conclui/cancela um lembrete (não será mais enviado). Use quando o cliente pedir para apagar, cancelar ou marcar um lembrete como feito. Informe o id (de busca_lembretes) ou o título.",
+        parameters: {
+          type: "object",
+          properties: {
+            id: { type: "number", description: "Id do lembrete" },
+            titulo: { type: "string", description: "Título (ou parte) do lembrete, se não souber o id" },
+          },
+        },
       },
     },
     {
@@ -647,7 +661,7 @@ function buildTools(ctx?: ToolContext) {
             tipo: { type: "string", enum: ["caixinha", "sonho", "reserva", "limite_categoria"], description: "Tipo da meta" },
             valor_alvo: { type: "number", description: "Valor alvo em R$" },
             prazo: { type: "string", description: "Data de prazo opcional YYYY-MM-DD" },
-            categoria: { type: "string", description: "Nome da categoria (obrigatório se tipo for limite_categoria)" }
+            categoria: { type: "string", description: "Para limite_categoria: nome da categoria de despesa (PF) ou da conta do plano (PJ). Vazio ou 'geral' = limite do total de despesas do mês." }
           },
           required: ["titulo", "tipo", "valor_alvo"],
         },
@@ -671,7 +685,7 @@ function buildTools(ctx?: ToolContext) {
       type: "function" as const,
       function: {
         name: "depositar_meta",
-        description: "Adiciona/deposita um valor em uma meta/caixinha existente. Use quando o usuário disser 'deposita X na caixinha', 'guardei X no sonho', etc.",
+        description: "Coloca dinheiro numa meta/caixinha/reserva existente (guardei, depositei, coloquei, separei X na meta Y). Passe em titulo o nome que o cliente disse. Se responder precisa_escolher_meta, PERGUNTE qual meta — não escolha sozinho.",
         parameters: {
           type: "object",
           properties: {
@@ -1324,7 +1338,7 @@ function buildTools(ctx?: ToolContext) {
       type: "function" as const,
       function: {
         name: "sacar_meta",
-        description: "Retira um valor de uma meta/sonho/caixinha. Use quando o usuário disser 'tirei X da meta Y', 'usei R$ Z da poupança'.",
+        description: "Retira um valor de uma meta/sonho/caixinha/reserva (tirei, resgatei, saquei, usei, peguei X da meta Y). Valor sempre positivo. Se responder precisa_escolher_meta ou saldo_insuficiente, PERGUNTE ao cliente.",
         parameters: {
           type: "object",
           properties: {
@@ -1728,20 +1742,54 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       }
 
       case "insere_lembrete": {
-        // Converter string para Date (Drizzle precisa de objeto Date para timestamp)
-        const dataLembrete = new Date(args.data_lembrete || new Date().toISOString());
+        // Data validada: sem fuso = horário de SP; data passada é recusada (lembrete
+        // no passado nunca seria enviado). O job envia na hora marcada.
+        const { interpretarDataLembrete } = await import("./limites-gasto");
+        const quando = interpretarDataLembrete(args.data_lembrete);
+        if (!quando.ok) return JSON.stringify({ success: false, error: quando.erro });
         const reminder = await storage.createReminder({
           usuario_id: ctx.userId,
-          titulo: args.titulo || "Lembrete",
+          titulo: String(args.titulo || "Lembrete").trim().slice(0, 255),
           descricao: args.descricao || "",
-          data_lembrete: dataLembrete,
+          data_lembrete: quando.data,
         } as any);
-        return JSON.stringify({ success: true, id: reminder.id, ...args });
+        const dataBR = new Intl.DateTimeFormat("pt-BR", {
+          timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+        }).format(quando.data);
+        return JSON.stringify({
+          success: true,
+          id: reminder.id,
+          titulo: reminder.titulo,
+          msg: `Lembrete *${reminder.titulo}* agendado para ${dataBR}. Vou te avisar por aqui.`,
+        });
       }
 
       case "busca_lembretes": {
-        const reminders = await storage.getRemindersByUserId(ctx.userId);
-        return JSON.stringify(reminders);
+        const reminders = (await storage.getRemindersByUserId(ctx.userId)) as any[];
+        const fmt = new Intl.DateTimeFormat("pt-BR", {
+          timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+        });
+        const pendentes = reminders
+          .filter((r) => !r.concluido && !r.notificado_em)
+          .map((r) => ({ id: r.id, titulo: r.titulo, descricao: r.descricao || undefined, quando: fmt.format(new Date(r.data_lembrete)) }));
+        return JSON.stringify({ lembretes: pendentes, total: pendentes.length });
+      }
+
+      case "concluir_lembrete": {
+        const { semAcento } = await import("./limites-gasto");
+        const reminders = ((await storage.getRemindersByUserId(ctx.userId)) as any[]).filter((r) => !r.concluido);
+        let alvo = args.id ? reminders.find((r) => Number(r.id) === Number(args.id)) : undefined;
+        if (!alvo && args.titulo) {
+          const t = semAcento(String(args.titulo));
+          const achados = reminders.filter((r) => semAcento(r.titulo).includes(t) || t.includes(semAcento(r.titulo)));
+          if (achados.length > 1) {
+            return JSON.stringify({ success: false, error: "Mais de um lembrete com esse nome. Qual deles?", opcoes: achados.map((r) => ({ id: r.id, titulo: r.titulo })) });
+          }
+          alvo = achados[0];
+        }
+        if (!alvo) return JSON.stringify({ success: false, error: "Não encontrei esse lembrete entre os pendentes." });
+        await db.execute(sql`UPDATE lembretes SET concluido = true WHERE id = ${alvo.id} AND usuario_id = ${ctx.userId}`);
+        return JSON.stringify({ success: true, id: alvo.id, msg: `Lembrete *${alvo.titulo}* concluído. Não vou mais avisar.` });
       }
 
       case "resumo_periodo": {
@@ -1849,20 +1897,46 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
 
       case "criar_meta": {
         // Limite de despesa: PF liga a categoria (categorias); PJ liga a conta do
-        // plano de contas da empresa (empresas_contas). Se não achar a conta PJ,
-        // conta_id fica null = limite do TOTAL de despesas da empresa.
+        // plano de contas da empresa (empresas_contas). Categoria vazia ou
+        // "geral/total" = limite do TOTAL de despesas do mês. Nome que não bate
+        // com nenhuma categoria/conta → erro com as opções (nunca salva um limite
+        // "solto", que nada acompanharia). Limite repetido do mesmo alvo → atualiza.
         let categoriaId: number | null = null;
         let contaId: number | null = null;
-        if (args.tipo === "limite_categoria" && args.categoria) {
-          if (ctx.empresaAtiva) {
-            const contas = await storage.getEmpresasContasByEmpresaId(ctx.empresaAtiva.id);
-            const alvo = args.categoria.toLowerCase();
-            const conta = contas.find(c => c.nome.toLowerCase() === alvo)
-              || contas.find(c => c.nome.toLowerCase().includes(alvo) || alvo.includes(c.nome.toLowerCase()));
-            contaId = conta?.id ?? null;
-          } else {
-            const cat = ctx.categories.find(c => c.nome.toLowerCase() === args.categoria.toLowerCase());
-            categoriaId = cat?.id || null;
+        if (args.tipo === "limite_categoria") {
+          const { resolverAlvoLimite } = await import("./limites-gasto");
+          const opcoes = ctx.empresaAtiva
+            ? (await storage.getEmpresasContasByEmpresaId(ctx.empresaAtiva.id))
+                .filter((c: any) => !c.tipo || /despesa/i.test(String(c.tipo)))
+                .map((c: any) => ({ id: c.id, nome: c.nome }))
+            : ctx.categories.filter((c) => c.tipo === "Despesa").map((c) => ({ id: c.id, nome: c.nome }));
+          const alvo = resolverAlvoLimite(args.categoria, opcoes);
+          if (alvo.erro) {
+            return JSON.stringify({
+              success: false,
+              error: alvo.erro,
+              opcoes: opcoes.map((o) => o.nome).slice(0, 40),
+            });
+          }
+          if (ctx.empresaAtiva) contaId = alvo.id ?? null; else categoriaId = alvo.id ?? null;
+
+          const empresaId = ctx.empresaAtiva?.id ?? null;
+          const existente = (await db.execute(sql`
+            SELECT id FROM metas_financeiras
+            WHERE usuario_id = ${ctx.userId} AND tipo = 'limite_categoria' AND ativo = true
+              AND empresa_id IS NOT DISTINCT FROM ${empresaId}::int
+              AND categoria_id IS NOT DISTINCT FROM ${categoriaId}::int
+              AND conta_id IS NOT DISTINCT FROM ${contaId}::int
+            ORDER BY id LIMIT 1
+          `)) as any[];
+          if (existente.length) {
+            const valor = Number(args.valor_alvo);
+            if (!(valor > 0)) return JSON.stringify({ success: false, error: "Informe um valor de limite maior que zero." });
+            await db.execute(sql`
+              UPDATE metas_financeiras SET valor_alvo = ${valor.toFixed(2)}, titulo = ${String(args.titulo || alvo.nome)}
+              WHERE id = ${existente[0].id}
+            `);
+            return JSON.stringify({ success: true, id: existente[0].id, titulo: args.titulo || alvo.nome, tipo: "limite_categoria", valor_alvo: valor, atualizado: true, alvo: alvo.nome, msg: `Limite de *${alvo.nome}* atualizado para R$ ${valor.toFixed(2).replace(".", ",")} por mês.` });
           }
         }
 
@@ -1879,167 +1953,69 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         return JSON.stringify({ success: true, id: meta.id, titulo: meta.titulo, tipo: meta.tipo, valor_alvo: args.valor_alvo });
       }
 
-      case "depositar_meta": {
-        const metas = await getMetasByUsuarioId(ctx.userId);
-        let targetId = args.meta_id;
-
-        if (args.titulo) {
-          const found = metas.find(m => m.titulo.toLowerCase().includes(args.titulo.toLowerCase()) || args.titulo.toLowerCase().includes(m.titulo.toLowerCase()));
-          if (found) targetId = found.id;
-        } else if (!targetId) {
-          const textoUsuario = (ctx.userMessage || "").toLowerCase();
-          const matchContexto = metas.find(m => {
-            const palavras = m.titulo.toLowerCase().split(/\s+/);
-            return palavras.some(p => p.length > 3 && textoUsuario.includes(p));
-          });
-          if (matchContexto) targetId = matchContexto.id;
-        }
-
-        if (!targetId && metas.length === 1) {
-          targetId = metas[0].id;
-        }
-
-        // Isolamento: só age em meta do próprio usuário (nunca id cru vindo do modelo).
-        if (targetId != null && !metas.some(m => m.id === Number(targetId))) targetId = undefined;
-
-        if (!targetId) {
-          return JSON.stringify({
-            error: "Meta não encontrada. Por favor, forneça o nome exato ou o ID da meta.",
-            metas_disponiveis: metas.map(m => ({ id: m.id, titulo: m.titulo }))
-          });
-        }
-
-        const meta = await depositarMeta(targetId, args.valor);
-        if (!meta) return JSON.stringify({ error: "Erro ao processar depósito: Meta não encontrada no banco de dados." });
-
-        const alvo = parseFloat(meta.valor_alvo as string) || 0;
-        const atual = parseFloat(meta.valor_atual as string) || 0;
-        const pct = alvo > 0 ? Math.round((atual / alvo) * 100) : 0;
-
-        return JSON.stringify({
-          success: true,
-          id: meta.id,
-          titulo: meta.titulo,
-          valor_depositado: args.valor,
-          valor_atual: atual,
-          valor_alvo: alvo,
-          progresso_pct: pct,
-          msg: `Depósito de R$ ${args.valor} realizado com sucesso na meta ${meta.titulo}.`
-        });
-      }
-
-      case "sacar_meta": {
-        const metas = await getMetasByUsuarioId(ctx.userId);
-        let targetId = args.meta_id;
-
-        if (args.titulo) {
-          const found = metas.find(m => m.titulo.toLowerCase().includes(args.titulo.toLowerCase()) || args.titulo.toLowerCase().includes(m.titulo.toLowerCase()));
-          if (found) targetId = found.id;
-        } else if (!targetId) {
-          const textoUsuario = (ctx.userMessage || "").toLowerCase();
-          const matchContexto = metas.find(m => {
-            const palavras = m.titulo.toLowerCase().split(/\s+/);
-            return palavras.some(p => p.length > 3 && textoUsuario.includes(p));
-          });
-          if (matchContexto) targetId = matchContexto.id;
-        }
-
-        if (!targetId && metas.length === 1) {
-          targetId = metas[0].id;
-        }
-
-        // Isolamento: só age em meta do próprio usuário (nunca id cru vindo do modelo).
-        if (targetId != null && !metas.some(m => m.id === Number(targetId))) targetId = undefined;
-
-        if (!targetId) {
-          return JSON.stringify({
-            error: "Meta não encontrada. Por favor, forneça o nome exato ou o ID da meta.",
-            metas_disponiveis: metas.map(m => ({ id: m.id, titulo: m.titulo }))
-          });
-        }
-
-        const meta = await sacarMeta(targetId, args.valor);
-        if (!meta) return JSON.stringify({ error: "Erro ao processar saque: Meta não encontrada no banco de dados." });
-
-        const alvo = parseFloat(meta.valor_alvo as string) || 0;
-        const atual = parseFloat(meta.valor_atual as string) || 0;
-        const pct = alvo > 0 ? Math.round((atual / alvo) * 100) : 0;
-
-        return JSON.stringify({
-          success: true,
-          id: meta.id,
-          titulo: meta.titulo,
-          valor_sacado: args.valor,
-          valor_atual: atual,
-          valor_alvo: alvo,
-          progresso_pct: pct,
-          msg: `Saque de R$ ${args.valor} realizado com sucesso da meta ${meta.titulo}.`
-        });
-      }
-
+      case "depositar_meta":
+      case "sacar_meta":
       case "ajustar_saldo_meta": {
+        // Uma regra só para escolher a meta (nunca chuta) e validar o valor.
+        const { resolverMetaAlvo, parseValorMeta, reciboMeta, moedaBR } = await import("./metas-alvo");
+        const op = name === "depositar_meta" ? "deposito" : name === "sacar_meta" ? "saque" : "ajuste";
         const metas = await getMetasByUsuarioId(ctx.userId);
-        let targetId = args.meta_id;
-
-        if (args.titulo) {
-          const found = metas.find(m => m.titulo.toLowerCase().includes(args.titulo.toLowerCase()) || args.titulo.toLowerCase().includes(m.titulo.toLowerCase()));
-          if (found) targetId = found.id;
-        } else if (!targetId) {
-          const textoUsuario = (ctx.userMessage || "").toLowerCase();
-          const matchContexto = metas.find(m => {
-            const palavras = m.titulo.toLowerCase().split(/\s+/);
-            return palavras.some(p => p.length > 3 && textoUsuario.includes(p));
-          });
-          if (matchContexto) targetId = matchContexto.id;
+        const alvo = resolverMetaAlvo(metas as any, args, ctx.userMessage || "");
+        if ("erro" in alvo) {
+          return JSON.stringify({ error: alvo.erro, precisa_escolher_meta: true, metas_disponiveis: alvo.opcoes });
         }
-
-        if (!targetId && metas.length === 1) {
-          targetId = metas[0].id;
+        const valor = parseValorMeta(args.valor, { permitirZero: op === "ajuste" });
+        if (valor == null) {
+          return JSON.stringify({ error: `Valor inválido (${JSON.stringify(args.valor ?? null)}). Pergunte ao cliente o valor em reais.`, precisa_valor: true });
         }
-
-        // Isolamento: só age em meta do próprio usuário (nunca id cru vindo do modelo).
-        if (targetId != null && !metas.some(m => m.id === Number(targetId))) targetId = undefined;
-
-        if (!targetId) {
-          return JSON.stringify({
-            error: "Meta não encontrada. Por favor, forneça o nome exato ou o ID da meta.",
-            metas_disponiveis: metas.map(m => ({ id: m.id, titulo: m.titulo }))
-          });
+        const metaId = alvo.meta.id;
+        // Mesmo movimento duas vezes na mesma mensagem = repetição do modelo, não do cliente.
+        const feitos: Set<string> = ((ctx as any)._movimentosMeta ||= new Set<string>());
+        const chaveMov = `${op}:${metaId}:${valor}`;
+        if (feitos.has(chaveMov)) {
+          return JSON.stringify({ error: "Esse movimento já foi feito nesta mensagem. Não repita.", ja_feito: true });
         }
+        feitos.add(chaveMov);
+        let meta: any;
+        if (op === "deposito") meta = await depositarMeta(metaId, valor);
+        else if (op === "ajuste") meta = await ajustarSaldoMeta(metaId, valor);
+        else {
+          const r: any = await sacarMeta(metaId, valor);
+          if (r?.insuficiente) {
+            return JSON.stringify({
+              error: `Saldo insuficiente: a meta ${alvo.meta.titulo} tem ${moedaBR(r.saldo)} e o saque pedido é de ${moedaBR(valor)}. Nada foi tirado. Pergunte se quer tirar o saldo disponível.`,
+              saldo_insuficiente: true,
+              saldo: r.saldo,
+            });
+          }
+          meta = r;
+        }
+        if (!meta) return JSON.stringify({ error: "Não consegui atualizar a meta (não encontrada ou arquivada). Nada foi alterado." });
 
-        const meta = await ajustarSaldoMeta(targetId, args.valor);
-        if (!meta) return JSON.stringify({ error: "Erro ao ajustar saldo: Meta não encontrada no banco de dados." });
-
-        const alvo = parseFloat(meta.valor_alvo as string) || 0;
+        const valorAlvo = parseFloat(meta.valor_alvo as string) || 0;
         const atual = parseFloat(meta.valor_atual as string) || 0;
-        const pct = alvo > 0 ? Math.round((atual / alvo) * 100) : 0;
-
         return JSON.stringify({
           success: true,
           id: meta.id,
           titulo: meta.titulo,
-          valor_ajustado: args.valor,
+          operacao: op,
+          valor,
           valor_atual: atual,
-          valor_alvo: alvo,
-          progresso_pct: pct,
-          msg: `Saldo da meta ${meta.titulo} ajustado para R$ ${args.valor}.`
+          valor_alvo: valorAlvo,
+          progresso_pct: valorAlvo > 0 ? Math.round((atual / valorAlvo) * 100) : 0,
+          msg: reciboMeta(op, { titulo: meta.titulo, valor_atual: atual, valor_alvo: valorAlvo }, valor),
         });
       }
 
       case "deletar_meta": {
-        let targetId = args.meta_id;
+        const { resolverMetaAlvo } = await import("./metas-alvo");
         const metas = await getMetasByUsuarioId(ctx.userId);
-        if (!targetId && args.titulo) {
-          const found = metas.find(m => m.titulo.toLowerCase().includes(args.titulo.toLowerCase()));
-          if (found) targetId = found.id;
-        }
-        // Isolamento: só exclui meta do próprio usuário (nunca id cru vindo do modelo).
-        if (targetId != null && !metas.some(m => m.id === Number(targetId))) targetId = undefined;
-        if (!targetId) {
-          return JSON.stringify({ error: "Meta não encontrada para exclusão." });
-        }
-        const ok = await deleteMeta(targetId);
-        return JSON.stringify({ success: ok, id: targetId });
+        // Exclusão aceita também limites de gasto, mas exige alvo inequívoco.
+        const comLimites = metas.map((m: any) => ({ ...m, tipo: m.tipo === "limite_categoria" ? "limite" : m.tipo }));
+        const alvo = resolverMetaAlvo(comLimites as any, { meta_id: args.meta_id ?? args.id, titulo: args.titulo }, ctx.userMessage || "");
+        if ("erro" in alvo) return JSON.stringify({ error: alvo.erro, precisa_escolher_meta: true, metas_disponiveis: alvo.opcoes });
+        const ok = await deleteMeta(alvo.meta.id);
+        return JSON.stringify({ success: ok, id: alvo.meta.id, titulo: alvo.meta.titulo, msg: ok ? `Meta *${alvo.meta.titulo}* excluída.` : undefined });
       }
 
       case "listar_metas": {
@@ -2085,7 +2061,8 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         };
 
         const result = await storage.createTransaction(txData as any);
-        return JSON.stringify({ success: true, id: result.id, ...txData, categoria: cat?.nome, msg: "Conta a pagar criada!" });
+        const vencBR = String(args.data_vencimento || "").split("-").reverse().join("/");
+        return JSON.stringify({ success: true, id: result.id, ...txData, categoria: cat?.nome, msg: `Conta a pagar *${args.descricao}* de R$ ${Number(args.valor || 0).toFixed(2).replace(".", ",")} criada, vence em ${vencBR}${args.recorrente ? " (todo mês)" : ""}.` });
       }
 
       case "criar_mensalidade": {
@@ -2168,7 +2145,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
       case "pagar_conta": {
         const result = await marcarComoPaga(args.id_transacao);
         if (!result) return JSON.stringify({ error: "Transação não encontrada" });
-        return JSON.stringify({ success: true, id: args.id_transacao, msg: "Conta marcada como paga! ✅" });
+        return JSON.stringify({ success: true, id: args.id_transacao, msg: "Conta marcada como paga." });
       }
 
       case "marcar_recorrente": {
@@ -2531,6 +2508,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
             return JSON.stringify({
               success: true, parcelas_afetadas: n, compra: compra.descricao_base,
               forma_pagamento: formaNome, categoria: catNome, nova_descricao: args.descricao,
+          msg: `Compra *${args.descricao || compra.descricao_base}* atualizada (${n} parcela(s))${formaNome ? ` · forma: ${formaNome}` : ""}${catNome ? ` · categoria: ${catNome}` : ""}.`,
               aviso: e?.message || "Forma alterada, mas fatura/caixa não foram recalculados.",
             });
           }
@@ -2539,6 +2517,7 @@ async function executeTool(name: string, args: any, ctx: ToolContext): Promise<s
         return JSON.stringify({
           success: true, parcelas_afetadas: n, compra: compra.descricao_base,
           forma_pagamento: formaNome, categoria: catNome, nova_descricao: args.descricao,
+          msg: `Compra *${args.descricao || compra.descricao_base}* atualizada (${n} parcela(s))${formaNome ? ` · forma: ${formaNome}` : ""}${catNome ? ` · categoria: ${catNome}` : ""}.`,
         });
       }
 
@@ -4043,7 +4022,7 @@ ${contextoDataParaPrompt()}
 
     // Executar cada tool call
     for (const toolCall of assistantMessage.tool_calls) {
-      const fnName = toolCall.function.name;
+      let fnName = toolCall.function.name;
       // JSON malformado do modelo não pode derrubar a rodada (escritas anteriores
       // já gravadas + "erro inesperado" → cliente reenvia → duplicata).
       let fnArgs: any;
@@ -4060,96 +4039,14 @@ ${contextoDataParaPrompt()}
       }
 
       console.log(`[AI Agent] Tool call: ${fnName}(${JSON.stringify(fnArgs)})`);
-      // Mapeamento de aliases para evitar erros de "function not defined"
+      // Nomes alternativos que alguns modelos usam → ferramenta oficial.
       const toolAliases: Record<string, string> = {
-        "deletar_meta": "deleteMeta",
-        "excluir_meta": "deleteMeta",
-        "atualizar_saldo_meta": "ajustarSaldoMeta",
-        "ajustar_saldo_meta": "ajustarSaldoMeta",
-        "depositar_valor_meta": "depositarMeta",
-        "depositar_meta": "depositarMeta"
+        excluir_meta: "deletar_meta",
+        atualizar_saldo_meta: "ajustar_saldo_meta",
+        depositar_valor_meta: "depositar_meta",
+        resgatar_meta: "sacar_meta",
       };
-
-      const finalFnName = toolAliases[fnName] || fnName;
-
-      if (finalFnName === "deleteMeta") {
-        const { id, titulo } = fnArgs;
-        const metas = await getMetasByUsuarioId(ctx.userId);
-        let metaId = id;
-        if (titulo && !metaId) {
-           const meta = metas.find(m => m.titulo.toLowerCase().includes(titulo.toLowerCase()));
-           if (meta) metaId = meta.id;
-        }
-        // Isolamento: só exclui meta do próprio usuário (nunca id cru vindo do modelo).
-        if (metaId != null && !metas.some(m => m.id === Number(metaId))) metaId = undefined;
-        if (!metaId) {
-          const resStr = JSON.stringify({ error: "Meta não encontrada para exclusão." });
-          ultimaToolExecutada = fnName;
-          ultimoResultadoTool = resStr;
-          messages.push({ role: "tool", tool_call_id: toolCall.id, content: resStr });
-          continue;
-        }
-        const ok = await deleteMeta(metaId);
-        const resStr = JSON.stringify({ success: ok, id: metaId });
-        ultimaToolExecutada = fnName;
-        ultimoResultadoTool = resStr;
-        registrarEscrita(fnName, resStr);
-        messages.push({ role: "tool", tool_call_id: toolCall.id, content: resStr });
-        continue;
-      }
-      if (finalFnName === "ajustarSaldoMeta") {
-        const { titulo, valor, meta_id } = fnArgs;
-        let targetId = meta_id;
-        const metas = await getMetasByUsuarioId(ctx.userId);
-        if (titulo && !targetId) {
-          const meta = metas.find(m => m.titulo.toLowerCase().includes(titulo.toLowerCase()));
-          if (meta) targetId = meta.id;
-        }
-        if (!targetId && metas.length === 1) targetId = metas[0].id;
-        // Isolamento: só ajusta meta do próprio usuário (nunca id cru vindo do modelo).
-        if (targetId != null && !metas.some(m => m.id === Number(targetId))) targetId = undefined;
-        if (!targetId) {
-          const resStr = JSON.stringify({ error: `Meta '${titulo}' não encontrada.` });
-          ultimaToolExecutada = fnName;
-          ultimoResultadoTool = resStr;
-          messages.push({ role: "tool", tool_call_id: toolCall.id, content: resStr });
-          continue;
-        }
-        const updated = await ajustarSaldoMeta(targetId, valor);
-        const resStr = JSON.stringify({ success: true, meta: updated });
-        ultimaToolExecutada = fnName;
-        ultimoResultadoTool = resStr;
-        registrarEscrita(fnName, resStr);
-        messages.push({ role: "tool", tool_call_id: toolCall.id, content: resStr });
-        continue;
-      }
-      if (finalFnName === "depositarMeta") {
-        const { titulo, valor, meta_id } = fnArgs;
-        let targetId = meta_id;
-        const metas = await getMetasByUsuarioId(ctx.userId);
-        if (titulo && !targetId) {
-          const meta = metas.find(m => m.titulo.toLowerCase().includes(titulo.toLowerCase()));
-          if (meta) targetId = meta.id;
-        }
-        if (!targetId && metas.length === 1) targetId = metas[0].id;
-        // Isolamento: só deposita em meta do próprio usuário (nunca id cru vindo do modelo).
-        if (targetId != null && !metas.some(m => m.id === Number(targetId))) targetId = undefined;
-        if (!targetId) {
-          const resStr = JSON.stringify({ error: `Meta '${titulo}' não encontrada.` });
-          ultimaToolExecutada = fnName;
-          ultimoResultadoTool = resStr;
-          messages.push({ role: "tool", tool_call_id: toolCall.id, content: resStr });
-          continue;
-        }
-        const updated = await depositarMeta(targetId, valor);
-        const resStr = JSON.stringify({ success: true, meta: updated });
-        ultimaToolExecutada = fnName;
-        ultimoResultadoTool = resStr;
-        registrarEscrita(fnName, resStr);
-        messages.push({ role: "tool", tool_call_id: toolCall.id, content: resStr });
-        continue;
-      }
-
+      if (toolAliases[fnName]) fnName = toolAliases[fnName];
 
       const result = await executeTool(fnName, fnArgs, ctx);
       ultimaToolExecutada = fnName;

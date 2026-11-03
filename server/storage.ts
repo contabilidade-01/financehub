@@ -2346,32 +2346,46 @@ export async function getMetaById(id: number): Promise<MetaFinanceira | undefine
 }
 
 export async function depositarMeta(id: number, valor: number): Promise<MetaFinanceira | undefined> {
-  const meta = await getMetaById(id);
-  if (!meta) return undefined;
-  const novoValor = (parseFloat(meta.valor_atual as string) || 0) + valor;
+  // Atômico: soma no banco (sem ler-e-gravar), valor sempre positivo e finito.
+  const v = Number(valor);
+  if (!Number.isFinite(v) || v <= 0) return undefined;
   const result = await db.update(metasFinanceiras)
-    .set({ valor_atual: novoValor.toString() } as any)
-    .where(eq(metasFinanceiras.id, id))
+    .set({ valor_atual: sql`COALESCE(${metasFinanceiras.valor_atual}, 0) + ${v.toFixed(2)}::numeric` } as any)
+    .where(and(eq(metasFinanceiras.id, id), eq(metasFinanceiras.ativo, true)))
     .returning();
   return result[0];
 }
 
-export async function sacarMeta(id: number, valor: number): Promise<MetaFinanceira | undefined> {
-  const meta = await getMetaById(id);
-  if (!meta) return undefined;
-  const atual = parseFloat(meta.valor_atual as string) || 0;
-  const novoValor = Math.max(0, atual - valor);
+/**
+ * Saque atômico. Nunca tira mais do que o saldo: se faltar saldo, não grava e
+ * devolve { insuficiente, saldo } para a IA perguntar ao cliente.
+ */
+export async function sacarMeta(
+  id: number,
+  valor: number,
+): Promise<(MetaFinanceira & { insuficiente?: false }) | { insuficiente: true; saldo: number } | undefined> {
+  const v = Number(valor);
+  if (!Number.isFinite(v) || v <= 0) return undefined;
   const result = await db.update(metasFinanceiras)
-    .set({ valor_atual: novoValor.toString() } as any)
-    .where(eq(metasFinanceiras.id, id))
+    .set({ valor_atual: sql`COALESCE(${metasFinanceiras.valor_atual}, 0) - ${v.toFixed(2)}::numeric` } as any)
+    .where(and(
+      eq(metasFinanceiras.id, id),
+      eq(metasFinanceiras.ativo, true),
+      sql`COALESCE(${metasFinanceiras.valor_atual}, 0) >= ${v.toFixed(2)}::numeric`,
+    ))
     .returning();
-  return result[0];
+  if (result[0]) return result[0] as any;
+  const meta = await getMetaById(id);
+  if (!meta || !meta.ativo) return undefined;
+  return { insuficiente: true, saldo: parseFloat(meta.valor_atual as string) || 0 };
 }
 
 export async function ajustarSaldoMeta(id: number, novoSaldo: number): Promise<MetaFinanceira | undefined> {
+  const v = Number(novoSaldo);
+  if (!Number.isFinite(v) || v < 0) return undefined;
   const result = await db.update(metasFinanceiras)
-    .set({ valor_atual: novoSaldo.toString() } as any)
-    .where(eq(metasFinanceiras.id, id))
+    .set({ valor_atual: v.toFixed(2) } as any)
+    .where(and(eq(metasFinanceiras.id, id), eq(metasFinanceiras.ativo, true)))
     .returning();
   return result[0];
 }
@@ -2394,48 +2408,80 @@ export async function deleteMeta(id: number): Promise<boolean> {
 }
 
 // Verifica orçamento: compara gastos do mês atual por categoria vs metas tipo 'limite_categoria'
-export async function verificarOrcamentos(userId: number, walletId: number): Promise<{ categoria: string; limite: number; gasto: number; percentual: number; status: string }[]> {
-  // Buscar metas tipo limite_categoria ativas
+// ============================================
+// LIMITES DE GASTO (orçamento) — cálculo único para recibo, consulta e alerta
+// ============================================
+
+/** Mês corrente no horário de São Paulo: de = dia 1, ate = hoje (YYYY-MM-DD). */
+export function mesAtualSP(agora: Date = new Date()): { de: string; ate: string } {
+  const hoje = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(agora);
+  return { de: `${hoje.slice(0, 7)}-01`, ate: hoje };
+}
+
+/**
+ * Gasto PF que conta para o limite: despesas de TODAS as carteiras do usuário,
+ * no período, sem reembolsáveis (gasto de terceiro). Compras no cartão entram.
+ * categoriaId null = limite geral (todas as categorias).
+ */
+export async function gastoLimitePF(usuarioId: number, categoriaId: number | null, de: string, ate: string): Promise<number> {
+  const rows = await db.execute(sql`
+    SELECT COALESCE(SUM(t.valor::numeric), 0) AS total
+    FROM transacoes t JOIN carteiras c ON c.id = t.carteira_id
+    WHERE c.usuario_id = ${usuarioId}
+      AND t.tipo = 'Despesa'
+      AND COALESCE(t.reembolsavel, false) = false
+      AND (${categoriaId}::int IS NULL OR t.categoria_id = ${categoriaId})
+      AND t.data_transacao >= ${de} AND t.data_transacao <= ${ate}
+  `);
+  return parseFloat((rows as any[])[0]?.total) || 0;
+}
+
+/**
+ * Gasto PJ que conta para o limite: despesas efetivadas ou no cartão (ficam
+ * pendentes até a fatura), sem reembolso pessoal. contaId null = total da empresa.
+ */
+export async function gastoLimitePJ(empresaId: number, contaId: number | null, de: string, ate: string): Promise<number> {
+  const rows = await db.execute(sql`
+    SELECT COALESCE(SUM(valor::numeric), 0) AS total FROM empresas_transacoes
+    WHERE empresa_id = ${empresaId} AND tipo = 'Despesa'
+      AND (status = 'Efetivada' OR cartao_id IS NOT NULL)
+      AND COALESCE(reembolso_pessoal, false) = false
+      AND (${contaId}::int IS NULL OR categoria_id = ${contaId})
+      AND data_transacao >= ${de} AND data_transacao <= ${ate}
+  `);
+  return parseFloat((rows as any[])[0]?.total) || 0;
+}
+
+export function statusLimite(pct: number): "ok" | "atencao" | "estourado" {
+  if (pct >= 100) return "estourado";
+  if (pct >= 80) return "atencao";
+  return "ok";
+}
+
+export async function verificarOrcamentos(userId: number, _walletId: number): Promise<{ categoria: string; limite: number; gasto: number; percentual: number; status: string }[]> {
+  // Limites PF ativos (empresa_id NULL); categoria NULL = limite geral do mês.
   const limites = await db.select()
     .from(metasFinanceiras)
     .where(and(
       eq(metasFinanceiras.usuario_id, userId),
       eq(metasFinanceiras.tipo, 'limite_categoria'),
-      eq(metasFinanceiras.ativo, true)
+      eq(metasFinanceiras.ativo, true),
+      isNull(metasFinanceiras.empresa_id),
     ));
 
   if (limites.length === 0) return [];
-
-  // Período: mês atual
-  const now = new Date();
-  const de = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-  const ate = now.toISOString().slice(0, 10);
-
+  const { de, ate } = mesAtualSP();
   const results: { categoria: string; limite: number; gasto: number; percentual: number; status: string }[] = [];
 
   for (const limite of limites) {
-    if (!limite.categoria_id) continue;
-
-    // Buscar gasto na categoria no mês
-    const rows = await db.execute(sql`
-      SELECT COALESCE(SUM(valor::numeric), 0) AS total
-      FROM transacoes
-      WHERE carteira_id = ${walletId}
-        AND categoria_id = ${limite.categoria_id}
-        AND tipo = 'Despesa'
-        AND COALESCE(reembolsavel, false) = false
-        AND data_transacao >= ${de}
-        AND data_transacao <= ${ate}
-    `);
-
-    const gasto = parseFloat((rows as any[])[0]?.total) || 0;
+    const gasto = await gastoLimitePF(userId, limite.categoria_id ?? null, de, ate);
     const limiteVal = parseFloat(limite.valor_alvo as string) || 0;
     const pct = limiteVal > 0 ? (gasto / limiteVal) * 100 : 0;
-
-    // Buscar nome da categoria
-    const cat = await db.select().from(categories).where(eq(categories.id, limite.categoria_id)).limit(1);
-    const catNome = cat[0]?.nome || 'Desconhecida';
-
+    let catNome = 'Despesas do mês (todas as categorias)';
+    if (limite.categoria_id) {
+      const cat = await db.select().from(categories).where(eq(categories.id, limite.categoria_id)).limit(1);
+      catNome = cat[0]?.nome || 'Desconhecida';
+    }
     let status = '✅ OK';
     if (pct >= 100) status = '🚨 ESTOURADO';
     else if (pct >= 80) status = '⚠️ ATENÇÃO';
@@ -3655,13 +3701,16 @@ export async function editarTransacoesPorIds(
 // Usado para avisar o percentual logo após um gasto. null = sem limite definido.
 export async function getStatusOrcamentoCategoria(
   userId: number,
-  walletId: number,
+  _walletId: number,
   categoriaId: number,
 ): Promise<{ categoria: string; limite: number; gasto: number; percentual: number; status: string } | null> {
   try {
+    // Limite da categoria; se não houver, o limite geral do mês (categoria NULL).
     const metaRows = await db.execute(sql`
-      SELECT valor_alvo FROM metas_financeiras
-      WHERE usuario_id = ${userId} AND tipo = 'limite_categoria' AND ativo = true AND categoria_id = ${categoriaId}
+      SELECT valor_alvo, categoria_id FROM metas_financeiras
+      WHERE usuario_id = ${userId} AND tipo = 'limite_categoria' AND ativo = true AND empresa_id IS NULL
+        AND (categoria_id = ${categoriaId} OR categoria_id IS NULL)
+      ORDER BY categoria_id NULLS LAST
       LIMIT 1
     `);
     const meta = (metaRows as any[])[0];
@@ -3669,34 +3718,28 @@ export async function getStatusOrcamentoCategoria(
     const limite = parseFloat(meta.valor_alvo) || 0;
     if (limite <= 0) return null;
 
-    const now = new Date();
-    const de = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-    const ate = now.toISOString().slice(0, 10);
-    const gRows = await db.execute(sql`
-      SELECT COALESCE(SUM(valor::numeric), 0) AS total FROM transacoes
-      WHERE carteira_id = ${walletId} AND categoria_id = ${categoriaId} AND tipo = 'Despesa'
-        AND COALESCE(reembolsavel, false) = false
-        AND data_transacao >= ${de} AND data_transacao <= ${ate}
-    `);
-    const gasto = parseFloat((gRows as any[])[0]?.total) || 0;
+    const { de, ate } = mesAtualSP();
+    const metaCat = (meta.categoria_id as number | null) ?? null;
+    const gasto = await gastoLimitePF(userId, metaCat, de, ate);
     const pct = (gasto / limite) * 100;
-    const catRows = await db.execute(sql`SELECT nome FROM categorias WHERE id = ${categoriaId} LIMIT 1`);
-    const catNome = (catRows as any[])[0]?.nome || "";
-    let status = "ok";
-    if (pct >= 100) status = "estourado";
-    else if (pct >= 80) status = "atencao";
+    let catNome = "Despesas do mês";
+    if (metaCat) {
+      const catRows = await db.execute(sql`SELECT nome FROM categorias WHERE id = ${metaCat} LIMIT 1`);
+      catNome = (catRows as any[])[0]?.nome || "";
+    }
     return {
       categoria: catNome,
       limite: Math.round(limite * 100) / 100,
       gasto: Math.round(gasto * 100) / 100,
       percentual: Math.round(pct * 10) / 10,
-      status,
+      status: statusLimite(pct),
     };
   } catch (err: any) {
     console.error("[Orçamento] falha ao calcular status:", err?.message);
     return null;
   }
 }
+
 
 // Versão PJ do aviso de orçamento na hora: dado um lançamento de despesa numa
 // conta do plano de contas da empresa, verifica se existe meta 'limite_categoria'
@@ -3719,18 +3762,10 @@ export async function getStatusOrcamentoContaPJ(
     const limite = parseFloat(meta.valor_alvo) || 0;
     if (limite <= 0) return null;
 
-    const now = new Date();
-    const de = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-    const ate = now.toISOString().slice(0, 10);
+    const { de, ate } = mesAtualSP();
     // Se a meta é de uma conta específica, soma só ela; se é geral, soma tudo.
-    const metaContaId = meta.conta_id as number | null;
-    const gRows = await db.execute(sql`
-      SELECT COALESCE(SUM(valor::numeric), 0) AS total FROM empresas_transacoes
-      WHERE empresa_id = ${empresaId} AND tipo = 'Despesa' AND status = 'Efetivada'
-        AND (${metaContaId}::int IS NULL OR categoria_id = ${metaContaId})
-        AND data_transacao >= ${de} AND data_transacao <= ${ate}
-    `);
-    const gasto = parseFloat((gRows as any[])[0]?.total) || 0;
+    const metaContaId = (meta.conta_id as number | null) ?? null;
+    const gasto = await gastoLimitePJ(empresaId, metaContaId, de, ate);
     const pct = (gasto / limite) * 100;
     const cRows = await db.execute(sql`SELECT nome FROM empresas_contas WHERE id = ${contaId} LIMIT 1`);
     const contaNome = metaContaId ? ((cRows as any[])[0]?.nome || "") : "Despesas da empresa";
