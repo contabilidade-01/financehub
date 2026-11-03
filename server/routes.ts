@@ -5,7 +5,7 @@ import { storage, listIngestionEvents, jaConsentiuLgpd, registrarConsentimentoLg
 import { auth } from "./middleware/auth.middleware";
 import { apiKeyAuth } from "./middleware/apiKey.middleware";
 import { combinedAuth } from "./middleware/combinedAuth.middleware";
-import { authLimiter, forgotPasswordLimiter, resetPasswordLimiter, sensitiveLimiter, webhookLimiter } from "./middleware/security.middleware";
+import { authLimiter, forgotPasswordLimiter, resetPasswordLimiter, sensitiveLimiter, webhookLimiter, leituraContaLimiter } from "./middleware/security.middleware";
 import * as passwordResetController from "./controllers/password-reset.controller";
 import {
   checkImpersonation,
@@ -144,7 +144,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Verificação em duas etapas (2FA)
   const doisFatoresCtrl = await import("./controllers/dois-fatores.controller");
   app.post("/api/auth/2fa/verificar", authLimiter, doisFatoresCtrl.verificarLogin);
-  app.get("/api/auth/2fa", combinedAuth, checkImpersonation, doisFatoresCtrl.status);
+  app.get("/api/auth/2fa", leituraContaLimiter, combinedAuth, checkImpersonation, doisFatoresCtrl.status);
   app.post("/api/auth/2fa/configurar", sensitiveLimiter, combinedAuth, checkImpersonation, doisFatoresCtrl.configurar);
   app.post("/api/auth/2fa/ativar", sensitiveLimiter, combinedAuth, checkImpersonation, doisFatoresCtrl.ativar);
   app.post("/api/auth/2fa/desativar", sensitiveLimiter, combinedAuth, checkImpersonation, doisFatoresCtrl.desativar);

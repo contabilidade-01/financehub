@@ -123,7 +123,7 @@ export function gerarCodigosRecuperacao(qtd = QTD_CODIGOS_RECUPERACAO): string[]
   for (let i = 0; i < qtd; i++) {
     const bytes = randomBytes(8);
     let c = "";
-    for (const b of bytes) c += ALFABETO_REC[b % ALFABETO_REC.length];
+    for (const b of bytes) c += ALFABETO_REC[b & 31]; // 32 símbolos: 5 bits exatos, sem viés
     out.push(`${c.slice(0, 4)}-${c.slice(4)}`);
   }
   return out;
