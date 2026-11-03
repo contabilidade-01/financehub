@@ -37,10 +37,69 @@ export interface LinhaImportPj {
   tipo: "Despesa" | "Receita";
   reembolsoPessoal: boolean;
   itensAgrupados: number | null;
+  /** Cliente (a receber) ou fornecedor (a pagar), quando a planilha traz. */
+  contato: string;
 }
 
 export interface ErroLinha { linha: number; motivo: string; conteudo: string; }
-export interface ParseResultPj { linhas: LinhaImportPj[]; erros: ErroLinha[]; }
+/** Campos que a pessoa pode ligar a uma coluna da planilha. */
+export const CAMPOS_IMPORT_PJ = ["data", "valor", "entrada", "saida", "descricao", "contato", "categoria", "forma"] as const;
+export type CampoImportPj = (typeof CAMPOS_IMPORT_PJ)[number];
+/** Índice da coluna de cada campo (-1 = não usar). */
+export type MapaColunasPj = Record<CampoImportPj, number>;
+/** auto: pelo sinal do valor (ou colunas Entrada/Saída). Despesa/Receita: tudo de um tipo. */
+export type TipoImportPj = "auto" | "Despesa" | "Receita";
+export interface OpcoesImportPj { mapa?: Partial<MapaColunasPj> | null; tipo?: TipoImportPj | null; }
+
+export interface ParseResultPj {
+  linhas: LinhaImportPj[];
+  erros: ErroLinha[];
+  /** Nomes das colunas (linha de cabeçalho) e algumas linhas cruas, para a tela de mapeamento. */
+  colunas: string[];
+  amostraBruta: string[][];
+  mapa: MapaColunasPj;
+  tipo: TipoImportPj;
+}
+
+const ALIASES_PJ: Record<CampoImportPj, string[]> = {
+  data: ["vencimento", "data de vencimento", "data de recebimento", "data de pagamento", "data prevista", "previsao", "data"],
+  valor: ["valor", "valor total", "valor (r$)", "montante", "quantia", "total"],
+  entrada: ["entrada", "entradas", "credito", "receita", "recebimento", "a receber"],
+  saida: ["saida", "saidas", "debito", "despesa", "pagamento", "a pagar"],
+  descricao: ["descricao", "historico", "detalhe", "observacao", "referente", "lancamento", "item"],
+  contato: ["cliente", "fornecedor", "favorecido", "sacado", "pagador", "beneficiario", "contato", "nome", "razao social"],
+  categoria: ["categoria", "conta", "plano de contas", "classificacao", "natureza"],
+  forma: ["forma_pagamento", "forma de pagamento", "forma", "meio", "meio de pagamento"],
+};
+
+/** Adivinha a coluna de cada campo pelo cabeçalho (nome exato primeiro, depois "contém"). */
+export function detectarMapaPj(cabecalho: string[]): MapaColunasPj {
+  const h = cabecalho.map((c) => norm(String(c ?? "")).replace(/\s+/g, " "));
+  const usados = new Set<number>();
+  const mapa = {} as MapaColunasPj;
+  // Ordem importa: "data de recebimento" é data, não entrada; "valor" antes de entrada/saída.
+  const ordem: CampoImportPj[] = ["data", "valor", "descricao", "contato", "categoria", "forma", "entrada", "saida"];
+  for (const campo of ordem) {
+    const al = ALIASES_PJ[campo];
+    let i = h.findIndex((x, k) => !usados.has(k) && al.includes(x));
+    if (i < 0) i = h.findIndex((x, k) => !usados.has(k) && x !== "" && al.some((a) => a.length >= 4 && x.includes(a)));
+    mapa[campo] = i;
+    if (i >= 0) usados.add(i);
+  }
+  // Com coluna de valor única, entrada/saída sobram (evita pegar "Receita" como categoria, por ex.).
+  if (mapa.valor >= 0) { mapa.entrada = -1; mapa.saida = -1; }
+  return mapa;
+}
+
+/** Linha do cabeçalho: a primeira (até a 15ª) com 2+ células e algum nome conhecido. */
+function acharCabecalho(rows: any[][]): number {
+  const todos = Object.values(ALIASES_PJ).flat();
+  for (let i = 0; i < Math.min(rows.length, 15); i++) {
+    const cel = (rows[i] || []).map((c) => norm(String(c ?? ""))).filter(Boolean);
+    if (cel.length >= 2 && cel.some((c) => todos.some((a) => c === a || (a.length >= 4 && c.includes(a))))) return i;
+  }
+  return 0;
+}
 
 function parseDataBR(v: any): string | null {
   if (v == null || v === "") return null;
@@ -151,42 +210,63 @@ function readRows(buffer: Buffer): any[][] {
   return parseDelimited(text);
 }
 
-export function parseLancamentosPj(buffer: Buffer): ParseResultPj {
+export function parseLancamentosPj(buffer: Buffer, opcoes: OpcoesImportPj = {}): ParseResultPj {
   const rows = readRows(buffer);
   const linhas: LinhaImportPj[] = [];
   const erros: ErroLinha[] = [];
-  if (rows.length === 0) return { linhas, erros };
+  const tipoFixo: TipoImportPj = opcoes.tipo === "Despesa" || opcoes.tipo === "Receita" ? opcoes.tipo : "auto";
+  const vazio = { colunas: [], amostraBruta: [], mapa: detectarMapaPj([]), tipo: tipoFixo };
+  if (rows.length === 0) return { linhas, erros, ...vazio };
 
-  const header = rows[0].map((c) => norm(String(c)));
-  const col = (aliases: string[]) => header.findIndex((h) => aliases.some((a) => h === a || h.includes(a)));
-  const idx = {
-    data: col(["vencimento", "data"]),
-    descricao: col(["descricao", "descrição"]),
-    categoria: col(["categoria"]),
-    forma: col(["forma_pagamento", "forma"]),
-    valor: col(["valor"]),
-  };
-  const hasHeader = idx.data >= 0 && idx.valor >= 0;
-  const start = hasHeader ? 1 : 0;
-  const c = hasHeader ? idx : { data: 0, descricao: 1, categoria: 2, forma: 3, valor: 4 };
+  const ini = acharCabecalho(rows);
+  const cabecalho = (rows[ini] || []).map((c) => String(c ?? "").trim());
+  const detectado = detectarMapaPj(cabecalho);
+  const hasHeader = detectado.data >= 0 && (detectado.valor >= 0 || detectado.entrada >= 0 || detectado.saida >= 0);
+  const largura = Math.max(0, ...rows.slice(ini, ini + 50).map((r) => (r || []).length));
+  // Mapa escolhido pela pessoa vence; sem ele, o detectado (ou a ordem do modelo antigo).
+  let c: MapaColunasPj;
+  if (opcoes.mapa) {
+    c = { ...detectado };
+    for (const k of CAMPOS_IMPORT_PJ) {
+      const v = opcoes.mapa[k];
+      if (v !== undefined) c[k] = Number.isInteger(v) && v >= 0 && v < Math.max(largura, 1) ? v : -1;
+    }
+  } else c = hasHeader ? detectado : { data: 0, descricao: 1, categoria: 2, forma: 3, valor: 4, entrada: -1, saida: -1, contato: -1 };
+  const start = opcoes.mapa || hasHeader ? ini + 1 : 0;
+  const colunas = hasHeader || opcoes.mapa
+    ? Array.from({ length: largura }, (_, i) => cabecalho[i] || `Coluna ${i + 1}`)
+    : Array.from({ length: largura }, (_, i) => `Coluna ${i + 1}`);
+  const cel = (r: any[], i: number) => (i >= 0 ? r[i] : "");
+  const amostraBruta = rows.slice(start, start + 5).map((r) => Array.from({ length: largura }, (_, i) => String(r?.[i] ?? "")));
 
   for (let i = start; i < rows.length; i++) {
     const r = rows[i];
     if (!r || r.every((x) => x === "" || x == null)) continue;
     const linhaNum = i + 1;
-    const descRaw = String(r[c.descricao] ?? "");
+    const descRaw = String(cel(r, c.descricao) ?? "");
     if (/^detalhar$/i.test(descRaw.trim()) || /^reservar$/i.test(descRaw.trim())) continue;
-    if (/^status$/i.test(String(r[c.data] ?? "").trim())) continue;
+    if (/^status$/i.test(String(cel(r, c.data) ?? "").trim())) continue;
+    // Linha de total no rodapé de planilhas exportadas.
+    if (/^(sub)?total\b/i.test(String(cel(r, c.data) ?? "").trim()) || /^(sub)?total\b/i.test(descRaw.trim())) continue;
 
-    const venc = parseDataBR(r[c.data]) || parseMesExtenso(r[c.data]);
-    const val = parseValorBR(r[c.valor]);
-    const descricao = parseDescricao(r[c.descricao]);
-    if (!venc) { erros.push({ linha: linhaNum, motivo: "data inválida", conteudo: String(r[c.data] ?? "") }); continue; }
-    if (!val) { erros.push({ linha: linhaNum, motivo: "valor ilegível", conteudo: String(r[c.valor] ?? "") }); continue; }
+    const venc = parseDataBR(cel(r, c.data)) || parseMesExtenso(cel(r, c.data));
+    // Valor: coluna única (sinal decide) ou colunas Entrada/Saída separadas.
+    let val = c.valor >= 0 ? parseValorBR(cel(r, c.valor)) : null;
+    if (!val || val.valor === 0) {
+      const ent = c.entrada >= 0 ? parseValorBR(cel(r, c.entrada)) : null;
+      const sai = c.saida >= 0 ? parseValorBR(cel(r, c.saida)) : null;
+      if (ent && ent.valor > 0) val = { valor: ent.valor, negativo: false };
+      else if (sai && sai.valor > 0) val = { valor: sai.valor, negativo: true };
+    }
+    const contato = String(cel(r, c.contato) ?? "").trim().slice(0, 200);
+    const descricao = parseDescricao(cel(r, c.descricao)) || contato;
+    if (!venc) { erros.push({ linha: linhaNum, motivo: "data inválida", conteudo: String(cel(r, c.data) ?? "") }); continue; }
+    if (!val || !(val.valor > 0)) { erros.push({ linha: linhaNum, motivo: "valor ilegível", conteudo: String(cel(r, c.valor >= 0 ? c.valor : c.entrada >= 0 ? c.entrada : c.saida) ?? "") }); continue; }
     if (!descricao) { erros.push({ linha: linhaNum, motivo: "descrição vazia", conteudo: "" }); continue; }
 
-    const forma = parseFormaPj(r[c.forma]);
-    const cat = String(r[c.categoria] ?? "").trim();
+    const forma = parseFormaPj(cel(r, c.forma));
+    const cat = String(cel(r, c.categoria) ?? "").trim();
+    const tipo = tipoFixo !== "auto" ? tipoFixo : val.negativo ? "Despesa" : "Receita";
     linhas.push({
       linha: linhaNum,
       vencimento: venc,
@@ -196,24 +276,43 @@ export function parseLancamentosPj(buffer: Buffer): ParseResultPj {
       formaEhCartao: forma.cartao,
       formaDiaVencimento: forma.dia,
       valor: val.valor,
-      tipo: val.negativo ? "Despesa" : "Receita",
-      reembolsoPessoal: ehGrupoReembolso(descricao),
+      tipo,
+      reembolsoPessoal: tipoFixo !== "Receita" && ehGrupoReembolso(descricao),
       itensAgrupados: contarItens(descRaw),
+      contato: contato === "—" ? "" : contato,
     });
   }
-  return { linhas, erros };
+  return { linhas, erros, colunas, amostraBruta, mapa: c, tipo: tipoFixo };
 }
 
 export interface PreviewPj {
   total: number;
   contasAPagar: number;
+  contasAReceber: number;
+  totalAPagar: number;
+  totalAReceber: number;
+  contatosNovos: string[];
+  colunas: string[];
+  amostraBruta: string[][];
+  mapa: MapaColunasPj;
+  tipo: TipoImportPj;
   reembolsosPessoais: number;
   totalReembolsos: number;
   duplicadas: number;
   categoriasNovas: string[];
   formasNovas: { nome: string; cartao: boolean; diaVencimento: number | null }[];
   erros: ErroLinha[];
-  amostra: { vencimento: string; descricao: string; categoria: string; forma: string; valor: number; reembolsoPessoal: boolean }[];
+  amostra: { vencimento: string; descricao: string; categoria: string; forma: string; valor: number; reembolsoPessoal: boolean; tipo: "Despesa" | "Receita"; contato: string }[];
+}
+
+/** Clientes/fornecedores da empresa por nome normalizado. */
+async function contatosPorNome(empresaId: number): Promise<Map<string, { id: number; tipo: string }>> {
+  const rows = (await db.execute(sql`
+    SELECT id, nome, tipo FROM empresas_contatos WHERE empresa_id = ${empresaId} ORDER BY ativo DESC, id
+  `)) as any[];
+  const m = new Map<string, { id: number; tipo: string }>();
+  for (const r of rows) if (!m.has(norm(r.nome))) m.set(norm(r.nome), { id: Number(r.id), tipo: String(r.tipo) });
+  return m;
 }
 
 function chave(venc: string, desc: string, valor: number) {
@@ -239,6 +338,8 @@ function inferClassificacao(nome: string): "FIXA" | "VARIAVEL" | "OUTRA" {
 
 export async function montarPreviewPj(empresaId: number, parsed: ParseResultPj): Promise<PreviewPj> {
   const { linhas, erros } = parsed;
+  const contatos = await contatosPorNome(empresaId);
+  const contatosNovos = new Map<string, string>();
   const contas = await storage.getEmpresasContasByEmpresaId(empresaId);
   const catExist = new Set(contas.map((c) => norm(c.codigo) + "|" + norm(c.nome)));
   const categoriasNovas = new Set<string>();
@@ -247,7 +348,7 @@ export async function montarPreviewPj(empresaId: number, parsed: ParseResultPj):
   const cartaoNorm = new Set(cartoes.map((c) => norm(c.nome)));
 
   const existentes = await chavesExistentes(empresaId);
-  let duplicadas = 0, contasAPagar = 0, reembolsosPessoais = 0, totalReembolsos = 0;
+  let duplicadas = 0, contasAPagar = 0, contasAReceber = 0, reembolsosPessoais = 0, totalReembolsos = 0, totalAPagar = 0, totalAReceber = 0;
 
   for (const l of linhas) {
     const nomeCat = l.categoria || (l.reembolsoPessoal ? "Diversos" : "Outros");
@@ -261,14 +362,16 @@ export async function montarPreviewPj(empresaId: number, parsed: ParseResultPj):
       formasNovas.set(norm(l.forma), { nome: l.forma, cartao: true, diaVencimento: l.formaDiaVencimento });
     }
     // Forma não-cartão (PIX/boleto/nome de banco) NÃO vira cadastro — no commit vai para conta/Caixinha.
+    if (l.contato && !contatos.has(norm(l.contato))) contatosNovos.set(norm(l.contato), l.contato);
     if (existentes.has(chave(l.vencimento, l.descricao, l.valor))) duplicadas++;
     else if (l.reembolsoPessoal) { reembolsosPessoais++; totalReembolsos += l.valor; }
-    else contasAPagar++;
+    else if (l.tipo === "Receita") { contasAReceber++; totalAReceber += l.valor; }
+    else { contasAPagar++; totalAPagar += l.valor; }
   }
 
   const porForma = new Map<string, LinhaImportPj[]>();
   for (const l of linhas) {
-    const k = l.reembolsoPessoal ? "reemb" : (l.forma || "—");
+    const k = l.reembolsoPessoal ? "reemb" : `${l.tipo}|${l.forma || "—"}`;
     if (!porForma.has(k)) porForma.set(k, []);
     porForma.get(k)!.push(l);
   }
@@ -281,6 +384,14 @@ export async function montarPreviewPj(empresaId: number, parsed: ParseResultPj):
   return {
     total: linhas.length,
     contasAPagar,
+    contasAReceber,
+    totalAPagar: Math.round(totalAPagar * 100) / 100,
+    totalAReceber: Math.round(totalAReceber * 100) / 100,
+    contatosNovos: [...contatosNovos.values()],
+    colunas: parsed.colunas,
+    amostraBruta: parsed.amostraBruta,
+    mapa: parsed.mapa,
+    tipo: parsed.tipo,
     reembolsosPessoais,
     totalReembolsos: Math.round(totalReembolsos * 100) / 100,
     duplicadas,
@@ -289,7 +400,7 @@ export async function montarPreviewPj(empresaId: number, parsed: ParseResultPj):
     erros,
     amostra: amostra.map((l) => ({
       vencimento: l.vencimento, descricao: l.descricao, categoria: l.categoria || "Diversos",
-      forma: l.forma || "—", valor: l.valor, reembolsoPessoal: l.reembolsoPessoal,
+      forma: l.forma || "—", valor: l.valor, reembolsoPessoal: l.reembolsoPessoal, tipo: l.tipo, contato: l.contato,
     })),
   };
 }
@@ -332,6 +443,9 @@ async function resolveCartao(empresaId: number, nome: string, diaVenc: number | 
 
 export interface CommitPj {
   contasCriadas: number;
+  contasAPagarCriadas: number;
+  contasAReceberCriadas: number;
+  contatosCriados: number;
   reembolsosCriados: number;
   duplicadasPuladas: number;
   categoriasCriadas: number;
@@ -344,6 +458,23 @@ export async function commitImportPj(empresaId: number, parsed: ParseResultPj): 
   const existentes = await chavesExistentes(empresaId);
   const contaCache = new Map<string, number>();
   let categoriasCriadas = 0, cartoesCriados = 0, contasCriadas = 0, reembolsosCriados = 0, duplicadasPuladas = 0;
+  let contasAPagarCriadas = 0, contasAReceberCriadas = 0, contatosCriados = 0;
+  const contatos = await contatosPorNome(empresaId);
+  const contatoId = async (nome: string, tipo: "Despesa" | "Receita"): Promise<number | null> => {
+    if (!nome) return null;
+    const k = norm(nome);
+    const hit = contatos.get(k);
+    if (hit) return hit.id;
+    const r = (await db.execute(sql`
+      INSERT INTO empresas_contatos (empresa_id, tipo, nome)
+      VALUES (${empresaId}, ${tipo === "Receita" ? "cliente" : "fornecedor"}, ${nome.slice(0, 200)})
+      RETURNING id
+    `)) as any[];
+    const id = Number(r[0].id);
+    contatos.set(k, { id, tipo: tipo === "Receita" ? "cliente" : "fornecedor" });
+    contatosCriados++;
+    return id;
+  };
 
   const distintas = new Map<string, LinhaImportPj>();
   for (const l of linhas) if (l.forma && l.formaEhCartao && !distintas.has(norm(l.forma))) distintas.set(norm(l.forma), l);
@@ -427,11 +558,16 @@ export async function commitImportPj(empresaId: number, parsed: ParseResultPj): 
       reembolso_pessoal: l.reembolsoPessoal,
       itens_agrupados: l.itensAgrupados,
       ...meioPatch,
+      ...(l.contato ? { contato_id: await contatoId(l.contato, l.tipo) } : {}),
     } as any);
     existentes.add(k);
     if (l.reembolsoPessoal) reembolsosCriados++;
-    else contasCriadas++;
+    else {
+      contasCriadas++;
+      if (l.tipo === "Receita") contasAReceberCriadas++;
+      else contasAPagarCriadas++;
+    }
   }
 
-  return { contasCriadas, reembolsosCriados, duplicadasPuladas, categoriasCriadas, cartoesCriados, erros };
+  return { contasCriadas, contasAPagarCriadas, contasAReceberCriadas, contatosCriados, reembolsosCriados, duplicadasPuladas, categoriasCriadas, cartoesCriados, erros };
 }

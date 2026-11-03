@@ -71,6 +71,7 @@ jobs:
           npm run test:mensalidades-projecao
           npm run test:ia-fila
           npm run test:telefone-whatsapp
+          npm run test:import-planilha-pj
           npm run flags:auditar
 
       - name: Baterias com lógica pura / scripts

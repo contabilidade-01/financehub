@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronsUpDown, Loader2, Plus, RotateCcw, X } from "lucide-react";
+import { Check, ChevronsUpDown, Loader2, Plus, RotateCcw, Upload, X } from "lucide-react";
+import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -288,7 +289,14 @@ function Titulos({ empresaId, tipo }: { empresaId: number; tipo: TipoTitulo }) {
       <CabecalhoPagina
         titulo={tx.titulo}
         descricao={tx.descricao}
-        acoes={<Button onClick={abrirNovo}><Plus className="mr-2 h-4 w-4" />{tx.novo}</Button>}
+        acoes={
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" asChild>
+              <Link href={`/p/importar?tipo=${tipo}`}><Upload className="mr-2 h-4 w-4" />Importar planilha</Link>
+            </Button>
+            <Button onClick={abrirNovo}><Plus className="mr-2 h-4 w-4" />{tx.novo}</Button>
+          </div>
+        }
       />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
