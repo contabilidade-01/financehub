@@ -3,4 +3,4 @@ Allow: /
 Allow: /assinar/
 Disallow: /api/
 Disallow: /admin
-Sitemap: https://controledinheiro.com.br/sitemap.xml
+Sitemap: https://tudocontado.com.br/sitemap.xml

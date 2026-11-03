@@ -151,7 +151,7 @@ export async function register(req: Request, res: Response) {
           const webhookData = {
             evento: "usuario_registrado",
             timestamp: new Date().toISOString(),
-            dominio: process.env.BASE_URL || 'https://app.controledinheiro.com.br',
+            dominio: process.env.BASE_URL || 'https://app.tudocontado.com.br',
             id: newUser.id,
             nome: newUser.nome,
             email: newUser.email,

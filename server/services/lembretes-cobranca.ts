@@ -94,7 +94,7 @@ export function textoCobranca(
 
 /** Link para assinar / pagar (login com e-mail e senha e cai na página de assinatura). */
 export function linkAssinar(): string {
-  const base = String(process.env.PUBLIC_APP_URL || process.env.BASE_URL || "https://app.controledinheiro.com.br").replace(/\/+$/, "");
+  const base = String(process.env.PUBLIC_APP_URL || process.env.BASE_URL || "https://app.tudocontado.com.br").replace(/\/+$/, "");
   return `${base}/subscription/renew`;
 }
 

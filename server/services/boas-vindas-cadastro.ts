@@ -15,7 +15,7 @@ import { sql } from "drizzle-orm";
 import { uazapiService } from "./uazapi.service";
 import { getPublicAppUrl } from "./mailer";
 
-export function textoBoasVindasCadastro(nome: string, isPJ: boolean, appUrl = "https://app.controledinheiro.com.br"): string {
+export function textoBoasVindasCadastro(nome: string, isPJ: boolean, appUrl = "https://app.tudocontado.com.br"): string {
   const primeiroNome = (nome || "").trim().split(/\s+/)[0] || "";
   const exemplo = isPJ ? "paguei 180 de fornecedor no pix" : "gastei 50 no mercado";
   return (

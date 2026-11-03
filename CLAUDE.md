@@ -144,7 +144,7 @@ Arquivo `.env.example` na raiz. Variáveis críticas:
 ```env
 # Obrigatórias
 DATABASE_URL=postgresql://user:pass@host:5432/db
-BASE_URL=https://app.controledinheiro.com.br
+BASE_URL=https://app.tudocontado.com.br
 SESSION_SECRET=<chave_256_chars>
 
 # Asaas (pagamentos)

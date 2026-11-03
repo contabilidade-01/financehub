@@ -122,7 +122,7 @@ function extrairEmail(text: string): string | null {
 }
 
 const appUrl = () =>
-  getPublicAppUrl() || process.env.BASE_URL || "https://app.controledinheiro.com.br";
+  getPublicAppUrl() || process.env.BASE_URL || "https://app.tudocontado.com.br";
 
 const msgConviteCadastro = (nome?: string | null) =>
   `Olá ${primeiro(nome) || "tudo bem"}! 👋 Sou o assistente do *${SYSTEM_NAME}*.\n\nQuer se *cadastrar no sistema* para controlar suas finanças por aqui?\n\nResponda *SIM* para continuar.`;
