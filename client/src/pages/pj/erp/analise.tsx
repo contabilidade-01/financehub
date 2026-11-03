@@ -27,6 +27,8 @@ interface Painel {
   top_fornecedores: { id: number; nome: string; total: number }[];
   receber: { resumo: { total_aberto: number; vencido: number; vence_7_dias: number }; aging: Aging };
   pagar: { resumo: { total_aberto: number; vencido: number; vence_7_dias: number }; aging: Aging };
+  pagar_periodo?: { resumo: { total_aberto: number; vencido: number; qtd_aberto: number }; atrasado_antes: number };
+  mes_atual?: { de: string; ate: string; indicadores: Indicadores; anterior: { de: string; ate: string }; indicadores_anterior: Indicadores };
   proximos_7_dias: { id: number; descricao: string; valor: number; tipo: "Receita" | "Despesa"; vencimento: string; contato: string | null }[];
   projecao: { periodos: { inicio: string; rotulo: string; saldo_final: number }[]; primeiro_negativo: { data: string; saldo: number } | null; saldo_final: number; menor_saldo: { data: string; saldo: number } };
 }
@@ -51,6 +53,10 @@ function Analise({ empresaId }: { empresaId: number }) {
   const { data: centros = [] } = useQuery<CentroCusto[]>({ queryKey: [`/api/empresas/${empresaId}/erp/centros-custo`], queryFn: () => apiErp(`/api/empresas/${empresaId}/erp/centros-custo`) });
   const { data: bancos = [] } = useQuery<any[]>({ queryKey: [`/api/empresas/${empresaId}/contas-bancarias`], queryFn: () => apiErp(`/api/empresas/${empresaId}/contas-bancarias`) });
 
+  // Servidor antigo (sem mes_atual) cai no comportamento anterior.
+  const mesInd = data?.mes_atual ?? (data ? { de: data.periodo.de, ate: data.periodo.ate, indicadores: data.indicadores, anterior: data.anterior, indicadores_anterior: data.indicadores_anterior } : null)!;
+  const pagarPer = data?.pagar_periodo ?? (data ? { resumo: { ...data.pagar.resumo, qtd_aberto: 0 }, atrasado_antes: 0 } : null)!;
+  const periodoQs = new URLSearchParams(Object.entries({ periodo: f.periodo, de: f.de, ate: f.ate, centro_custo_id: f.centro_custo_id }).filter(([, v]) => v)).toString();
   const filtroRazao = `de=${f.de}&ate=${f.ate}&regime=${f.regime}${f.centro_custo_id ? `&centro_custo_id=${f.centro_custo_id}` : ""}`;
 
   return (
@@ -86,16 +92,26 @@ function Analise({ empresaId }: { empresaId: number }) {
         <p className="text-sm text-destructive">{(error as Error).message}</p>
       ) : data && (
         <>
-          <p className="-mt-3 text-xs text-muted-foreground">
-            {dataBr(data.periodo.de)} a {dataBr(data.periodo.ate)}, comparado com {dataBr(data.anterior.de)} a {dataBr(data.anterior.ate)}
-          </p>
-
-          <PainelIndicadores ind={data.indicadores} anterior={data.indicadores_anterior} />
+          <div className="-mt-3 space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Indicadores do mês atual ({rotuloMesAno(mesInd.de)}), comparado com {rotuloMesAno(mesInd.anterior.de)}. Os demais blocos seguem o período do filtro: {dataBr(data.periodo.de)} a {dataBr(data.periodo.ate)}.
+            </p>
+            <PainelIndicadores ind={mesInd.indicadores} anterior={mesInd.indicadores_anterior} />
+          </div>
 
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <Resumo titulo="Saldo em bancos" valor={data.saldo_bancos.total} sinal detalhe={`${data.saldo_bancos.bancos.length} conta(s)`} href="/p/contas-bancarias" />
-            <Resumo titulo="A receber em aberto" valor={data.receber.resumo.total_aberto} detalhe={data.receber.resumo.vencido ? `${brl(data.receber.resumo.vencido)} vencido` : "nada vencido"} alerta={data.receber.resumo.vencido > 0} href="/p/contas-receber" />
-            <Resumo titulo="A pagar em aberto" valor={data.pagar.resumo.total_aberto} detalhe={data.pagar.resumo.vencido ? `${brl(data.pagar.resumo.vencido)} vencido` : "nada vencido"} alerta={data.pagar.resumo.vencido > 0} href="/p/contas-pagar" />
+            <Resumo titulo="A receber em aberto" valor={data.receber.resumo.total_aberto} detalhe={data.receber.resumo.vencido ? `${brl(data.receber.resumo.vencido)} vencido` : "nada vencido"} alerta={data.receber.resumo.vencido > 0} href="/p/contas-receber?status=aberto" />
+            <Resumo
+              titulo="A pagar em aberto no período"
+              valor={pagarPer.resumo.total_aberto}
+              detalhe={[
+                pagarPer.resumo.vencido ? `${brl(pagarPer.resumo.vencido)} vencido` : "nada vencido",
+                pagarPer.atrasado_antes ? `+ ${brl(pagarPer.atrasado_antes)} atrasado de antes` : "",
+              ].filter(Boolean).join(" · ")}
+              alerta={pagarPer.resumo.vencido > 0 || pagarPer.atrasado_antes > 0}
+              href={`/p/contas-pagar?status=aberto${periodoQs ? `&${periodoQs}` : ""}`}
+            />
             <Resumo
               titulo="Saldo em 90 dias"
               valor={data.projecao.saldo_final}
@@ -126,7 +142,7 @@ function Analise({ empresaId }: { empresaId: number }) {
               </CardContent>
             </Card>
 
-            <PontoEquilibrio ind={data.indicadores} />
+            <PontoEquilibrio ind={mesInd.indicadores} />
           </div>
 
           <div className="grid gap-6 lg:grid-cols-3">
@@ -232,6 +248,9 @@ function Analise({ empresaId }: { empresaId: number }) {
   );
 }
 
+const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+const rotuloMesAno = (iso: string) => `${MESES[Number(iso.slice(5, 7)) - 1]} de ${iso.slice(0, 4)}`;
+
 function Resumo({ titulo, valor, detalhe, href, sinal, alerta }: { titulo: string; valor: number; detalhe: string; href: string; sinal?: boolean; alerta?: boolean }) {
   return (
     <Link href={href} className="block">
@@ -258,12 +277,12 @@ function PontoEquilibrio({ ind }: { ind: Indicadores }) {
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-base">Ponto de equilíbrio</CardTitle>
-        <CardDescription>Quanto é preciso vender para pagar as despesas fixas</CardDescription>
+        <CardDescription>Quanto é preciso vender no mês atual para pagar as despesas fixas</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {pe === null ? (
           <p className="text-sm text-muted-foreground">
-            {ind.receita_bruta ? "A margem de contribuição está negativa: cada venda aumenta o prejuízo. Revise preços e custos variáveis." : "Sem receita no período."}
+            {ind.receita_bruta ? "A margem de contribuição está negativa: cada venda aumenta o prejuízo. Revise preços e custos variáveis." : "Sem receita no mês."}
           </p>
         ) : (
           <>
