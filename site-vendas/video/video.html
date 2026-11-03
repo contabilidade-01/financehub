@@ -7,7 +7,17 @@
 <style>
   :root { --verde:#17463A; --verde2:#0f3329; --ouro:#E3A21A; --creme:#F6F4EE; --tinta:#13241f; --mudo:#55665f; --borda:#e3ddcf; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { width: 1080px; height: 1080px; overflow: hidden; }
+  html, body { width: 100vw; height: 100vh; overflow: hidden; }
+  /* Vertical 9:16 (status e stories): deixa livre o topo e o rodapé, onde ficam os botões do app */
+  html.vertical #legenda { top: 230px; height: 330px; }
+  html.vertical #titulo { font-size: 74px; }
+  html.vertical #sub { font-size: 38px; }
+  html.vertical #janela { top: 590px; bottom: 290px; }
+  html.vertical .msg { font-size: 37px; }
+  /* Retrato 4:5 (feed do Instagram e Facebook) */
+  html.retrato #legenda { top: 60px; }
+  html.retrato #janela { top: 360px; bottom: 60px; }
+  html.retrato .msg { font-size: 35px; }
   body { font-family: "Inter", system-ui, sans-serif; background: var(--creme); color: var(--tinta); position: relative; }
   .camada { position: absolute; inset: 0; }
 
@@ -120,7 +130,7 @@
   <div class="ref" id="ref2">Lucas 16:10</div>
   <div class="oferta">Teste <em>15 dias grátis</em></div>
   <div class="preco">Depois, R$ 29,90 por mês. Sem cartão para começar.</div>
-  <div class="botao">Crie sua conta pelo link desta página</div>
+  <div class="botao" id="botao">Crie sua conta pelo link desta página</div>
 </div>
 
 <script>
@@ -155,6 +165,10 @@ const MSGS = [
 const FIM0 = 58, TOTAL = 66;
 
 // Versão geral (sem linguagem cristã): video.html?v=geral
+const FORMATO = new URLSearchParams(location.search).get("f");
+if (FORMATO) document.documentElement.classList.add(FORMATO);
+// Nas redes sociais não há "esta página": mostra o endereço do site
+if (FORMATO === "vertical" || FORMATO === "retrato") document.getElementById("botao").textContent = "Acesse pf.gestaoempresa.com";
 const GERAL = new URLSearchParams(location.search).get("v") === "geral";
 if (GERAL) {
   MSGS[1].h = "Escola das crianças R$ 350 no Pix";
