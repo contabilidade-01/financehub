@@ -65,6 +65,7 @@ const BillingSettingsPage = lazy(() => import("@/pages/billing/settings"));
 const AdminBillingDashboard = lazy(() => import("@/pages/admin/billing-dashboard"));
 const AdminAssinaturas = lazy(() => import("@/pages/admin/assinaturas"));
 const FeatureFlagsPage = lazy(() => import("@/pages/admin/feature-flags"));
+const AvisosPage = lazy(() => import("@/pages/admin/avisos"));
 const SimularWhatsappPage = lazy(() => import("@/pages/admin/simular-whatsapp"));
 const IaAuditoriaPage = lazy(() => import("@/pages/admin/ia-auditoria"));
 const IaProvedoresPage = lazy(() => import("@/pages/admin/ia-provedores"));
@@ -331,6 +332,11 @@ function Router() {
             <Route path="/admin/payments">
               <MainLayout>
                 <AdminPaymentsPage />
+              </MainLayout>
+            </Route>
+            <Route path="/admin/avisos">
+              <MainLayout>
+                <AvisosPage />
               </MainLayout>
             </Route>
             <Route path="/admin/feature-flags">

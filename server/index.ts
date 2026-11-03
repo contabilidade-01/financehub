@@ -195,6 +195,10 @@ app.use((req, res, next) => {
       expurgarExclusoesVencidas().catch(() => {});
       setInterval(() => { expurgarExclusoesVencidas().catch(() => {}); }, 24 * 60 * 60 * 1000);
     });
+    // Avisos aos clientes: continua envios que ficaram no meio por reinício/deploy.
+    import('./services/avisos.service').then(({ retomarAvisosPendentes }) => {
+      retomarAvisosPendentes().catch((e) => console.error('[Avisos] retomar:', e?.message || e));
+    }).catch(() => {});
     // Reembolso vinculado entre usuários (só age com FLAG_REEMBOLSO_VINCULADO ligada).
     import('./services/reembolso-vinculado.service').then(({ iniciarSincronizacaoReembolsosVinculados }) => {
       iniciarSincronizacaoReembolsosVinculados();

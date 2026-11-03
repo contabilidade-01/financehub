@@ -1612,6 +1612,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ==========================================
   // Feature flags + simulador WhatsApp + health
   // ==========================================
+  const avisosCtrl = await import("./controllers/avisos.controller");
+  // Avisos aos clientes (admin): WhatsApp, e-mail e aviso no app.
+  app.get("/api/admin/avisos", combinedAuth, checkImpersonation, requireSuperAdmin, avisosCtrl.listar);
+  app.post("/api/admin/avisos/previa", combinedAuth, checkImpersonation, requireSuperAdmin, avisosCtrl.previa);
+  app.post("/api/admin/avisos/teste", combinedAuth, checkImpersonation, requireSuperAdmin, avisosCtrl.teste);
+  app.post("/api/admin/avisos", combinedAuth, checkImpersonation, requireSuperAdmin, avisosCtrl.enviar);
+  app.get("/api/admin/avisos/:id", combinedAuth, checkImpersonation, requireSuperAdmin, avisosCtrl.detalhe);
+  app.post("/api/admin/avisos/:id/reenviar-falhas", combinedAuth, checkImpersonation, requireSuperAdmin, avisosCtrl.reenviar);
+  // Lado do cliente: avisos "no app" ainda não lidos.
+  app.get("/api/avisos/meus", combinedAuth, checkImpersonation, avisosCtrl.meus);
+  app.post("/api/avisos/:id/lido", combinedAuth, checkImpersonation, avisosCtrl.lido);
+
   const featureFlagsCtrl = await import("./controllers/feature-flags.controller");
   app.get("/api/flags", combinedAuth, featureFlagsCtrl.minhasFlags);
   app.get("/api/admin/flags", combinedAuth, checkImpersonation, requireSuperAdmin, featureFlagsCtrl.listarFlags);

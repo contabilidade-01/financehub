@@ -44,6 +44,7 @@ import {
   Globe,
   Percent,
   UserCog,
+  Megaphone,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useTranslation } from "@/contexts/LocalizationContext";
@@ -209,6 +210,7 @@ export function useNavigation() {
       items: [
         { icon: Shield, text: t("navigation.admin_dashboard", "Dashboard Admin"), path: "/admin" },
         { icon: Users, text: t("navigation.users", "Usuários"), path: "/admin/users" },
+        { icon: Megaphone, text: "Avisos aos clientes", path: "/admin/avisos" },
         { icon: CalendarCheck, text: t("navigation.subscriptions", "Assinaturas"), path: "/admin/assinaturas" },
         { icon: Banknote, text: t("navigation.billing", "Pagamentos"), path: "/admin/billing" },
         { icon: Search, text: t("navigation.manage_payments", "Gerenciar Pagamentos"), path: "/admin/payments" },
@@ -238,6 +240,7 @@ export function useNavigation() {
       label: "CLIENTES",
       items: [
         { icon: Users, text: "Usuários", path: "/admin/users" },
+        { icon: Megaphone, text: "Avisos aos clientes", path: "/admin/avisos" },
         { icon: CalendarCheck, text: "Assinaturas e vencimentos", path: "/admin/assinaturas" },
         { icon: ShieldCheck, text: "Consentimentos LGPD", path: "/admin/lgpd" },
       ],
