@@ -391,7 +391,8 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
   const [fConta, setFConta] = useState("todas");
   const [fStatus, setFStatus] = useState("todos");
   const [fForma, setFForma] = useState("todas");
-  const [fPeriodo, setFPeriodo] = useState<Periodo>("todos");
+  // Abre no mês atual; "Todo o período" continua disponível no filtro.
+  const [fPeriodo, setFPeriodo] = useState<Periodo>("mes_atual");
   const [fDe, setFDe] = useState("");
   const [fAte, setFAte] = useState("");
 
@@ -653,7 +654,7 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
 
   const filtroAtivo =
     busca !== "" || fTipo !== "todos" || fConta !== "todas" || fStatus !== "todos"
-    || fForma !== "todas" || fPeriodo !== "todos";
+    || fForma !== "todas" || fPeriodo !== "mes_atual";
 
   const limparFiltros = () => {
     setBusca("");
@@ -661,7 +662,7 @@ export default function PjTransactions({ empresaId }: { empresaId: number }) {
     setFConta("todas");
     setFStatus("todos");
     setFForma("todas");
-    setFPeriodo("todos");
+    setFPeriodo("mes_atual");
     setFDe("");
     setFAte("");
   };
