@@ -18,6 +18,7 @@ import {
   FLAG_BOAS_VINDAS_CADASTRO_SITE,
   FLAG_REEMBOLSO_VINCULADO,
   FLAG_LEMBRETES_CONTAS_PAGAR,
+  FLAG_DOIS_FATORES,
   FLAGS_NO_CODIGO,
   DIAS_PARA_APOSENTAR,
   avaliarFlag,
@@ -36,6 +37,7 @@ export {
   FLAG_BOAS_VINDAS_CADASTRO_SITE,
   FLAG_REEMBOLSO_VINCULADO,
   FLAG_LEMBRETES_CONTAS_PAGAR,
+  FLAG_DOIS_FATORES,
   FLAGS_NO_CODIGO,
   DIAS_PARA_APOSENTAR,
   avaliarFlag,
@@ -157,6 +159,16 @@ async function garantirTabelas(): Promise<void> {
     VALUES (
       ${FLAG_LEMBRETES_CONTAS_PAGAR},
       ${"Lembrete no WhatsApp das contas a pagar (PF e PJ) que vencem hoje e amanhã, uma mensagem por dia na rodada das 9h. Fora: compras no cartão e reembolsáveis."},
+      false
+    )
+    ON CONFLICT (chave) DO NOTHING
+  `);
+  // 2FA: nasce off — super admin já vê; ligar para outros usuários no admin.
+  await db.execute(sql`
+    INSERT INTO feature_flags (chave, descricao, ativo_todos)
+    VALUES (
+      ${FLAG_DOIS_FATORES},
+      ${"Verificação em duas etapas por app autenticador (Google Authenticator etc.) em Configurações > Segurança, com 10 códigos de recuperação e opção de lembrar o navegador por 30 dias. Só para administradores: super admin sempre vê; ligar aqui libera para usuários admin. Clientes não veem. Desligar a flag não desliga o 2FA de quem já ativou."},
       false
     )
     ON CONFLICT (chave) DO NOTHING

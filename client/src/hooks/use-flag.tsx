@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 export const FLAG_IMPORTACAO_EXTRATO_V2 = "importacao_extrato_v2";
 export const FLAG_INTEGRACAO_CORA = "integracao_cora";
 export const FLAG_CORA_CARTEIRA_NESCON = "cora_carteira_nescon";
+export const FLAG_DOIS_FATORES = "dois_fatores";
 
 /** Flag ativa para o usuário logado. Super admin sempre vê (como no servidor). */
 export function useFlag(chave: string): { ativa: boolean; carregando: boolean } {

@@ -141,6 +141,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/register", authLimiter, userController.register);
   app.post("/api/auth/login", authLimiter, userController.login);
   app.post("/api/auth/logout", userController.logout);
+  // Verificação em duas etapas (2FA)
+  const doisFatoresCtrl = await import("./controllers/dois-fatores.controller");
+  app.post("/api/auth/2fa/verificar", authLimiter, doisFatoresCtrl.verificarLogin);
+  app.get("/api/auth/2fa", combinedAuth, checkImpersonation, doisFatoresCtrl.status);
+  app.post("/api/auth/2fa/configurar", sensitiveLimiter, combinedAuth, checkImpersonation, doisFatoresCtrl.configurar);
+  app.post("/api/auth/2fa/ativar", sensitiveLimiter, combinedAuth, checkImpersonation, doisFatoresCtrl.ativar);
+  app.post("/api/auth/2fa/desativar", sensitiveLimiter, combinedAuth, checkImpersonation, doisFatoresCtrl.desativar);
+  app.post("/api/auth/2fa/codigos", sensitiveLimiter, combinedAuth, checkImpersonation, doisFatoresCtrl.regerarCodigos);
   app.post("/api/auth/forgot-password", forgotPasswordLimiter, passwordResetController.forgotPassword);
   app.get("/api/auth/reset-token", resetPasswordLimiter, passwordResetController.checkResetToken);
   app.post("/api/auth/reset-password", resetPasswordLimiter, passwordResetController.resetPassword);

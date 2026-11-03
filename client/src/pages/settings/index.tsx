@@ -35,7 +35,8 @@ import { UnsavedChangesModal } from "@/components/ui/UnsavedChangesModal";
 import { useLocalization, useTranslation } from "@/contexts/LocalizationContext";
 import { MeusDados } from "@/components/settings/MeusDados";
 import { IntegracoesEmpresa } from "@/components/cora/IntegracoesEmpresa";
-import { useFlag, FLAG_INTEGRACAO_CORA } from "@/hooks/use-flag";
+import { useFlag, FLAG_INTEGRACAO_CORA, FLAG_DOIS_FATORES } from "@/hooks/use-flag";
+import { DoisFatores } from "@/components/settings/DoisFatores";
 import { temErpPj } from "@shared/modalidade";
 
 const createProfileSchema = (t: (key: string, fallback: string) => string) =>
@@ -224,6 +225,7 @@ export default function SettingsPage() {
     try { return new URLSearchParams(window.location.search).get("aba") || "perfil"; } catch { return "perfil"; }
   });
   const { ativa: coraLiberado } = useFlag(FLAG_INTEGRACAO_CORA);
+  const { ativa: doisFatoresLiberado } = useFlag(FLAG_DOIS_FATORES);
 
   // Formulário de perfil
   const profileForm = useForm<ProfileFormValues>({
@@ -555,6 +557,7 @@ export default function SettingsPage() {
               </Form>
             </CardContent>
           </Card>
+          {doisFatoresLiberado && ["super_admin", "admin"].includes((user as any)?.tipo_usuario) && <DoisFatores />}
         </TabsContent>
 
         <TabsContent value="api">
