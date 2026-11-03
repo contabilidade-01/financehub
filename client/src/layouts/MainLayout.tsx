@@ -7,6 +7,7 @@ import { User } from "@shared/schema";
 import AdminStickyHeader from "@/components/admin/AdminStickyHeader";
 import { GuidedTourModal } from "@/components/shared/GuidedTourModal";
 import { ExpiringSoonBanner } from "@/components/subscription/ExpiringSoonBanner";
+import { AvisosNoApp } from "@/components/shared/AvisosNoApp";
 import { cn } from "@/lib/utils";
 
 interface MainLayoutProps {
@@ -41,6 +42,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
       <main className="min-w-0 px-4 pt-4 pb-[calc(var(--mobile-nav-h)+env(safe-area-inset-bottom)+1rem)] sm:px-6 sm:pt-6 lg:ml-64 lg:px-8 lg:pb-8">
         <div className="mx-auto w-full max-w-7xl">
           <ExpiringSoonBanner />
+          <AvisosNoApp />
           {children}
         </div>
       </main>
