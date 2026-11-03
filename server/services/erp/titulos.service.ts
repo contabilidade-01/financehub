@@ -182,8 +182,14 @@ export async function criarTitulo(empresaId: number, tipo: TipoTitulo, b: any) {
   if (jaPago && !v.conta_bancaria_id) throw new ErroErp("Escolha a conta bancária por onde o dinheiro passou.");
   const dataPagamento = jaPago ? iso(b.data_pagamento) ?? venc : null;
 
-  // Parcelado: divide o total; recorrente: repete o valor todo mês.
-  const valores = modo === "recorrente" ? Array.from({ length: n }, () => valorInformado)
+  // Parcelado: divide o total; recorrente: repete o valor todo mês, ou usa o
+  // valor de cada mês quando é variável (b.valores, um por ocorrência).
+  const variaveis = modo === "recorrente" && Array.isArray(b.valores) ? b.valores.map((x: unknown) => dinheiro(x)) : null;
+  if (variaveis && (variaveis.length !== n || variaveis.some((x: number) => !(x > 0) || x > 99_999_999))) {
+    throw new ErroErp("Informe um valor válido para cada mês.");
+  }
+  const valores: number[] = variaveis ? variaveis
+    : modo === "recorrente" ? Array.from({ length: n }, () => valorInformado)
     : b.valor_modo === "parcela" ? Array.from({ length: n }, () => valorInformado) : dividirParcelas(valorInformado, n);
   const prefixo = tipo === "Receita" ? "rec" : "pag";
   const grupo = n > 1 ? `${prefixo}-${Date.now().toString(36)}` : null;

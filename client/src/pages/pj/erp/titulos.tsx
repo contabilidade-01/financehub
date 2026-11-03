@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronsUpDown, Loader2, Plus, RotateCcw, Upload, X } from "lucide-react";
 import { Link } from "wouter";
@@ -107,7 +107,9 @@ export function TitulosPage({ empresaId, tipo }: { empresaId: number; tipo: Tipo
 
 type Novo = {
   descricao: string; valor: string; data_vencimento: string; data_competencia: string;
-  modo: "unica" | "parcelas" | "recorrente"; n: string; valor_modo: "total" | "parcela";
+  modo: "unica" | "parcelas" | "recorrente" | "variavel"; n: string; valor_modo: "total" | "parcela";
+  /** Variável mensal: valor de cada mês, na ordem dos vencimentos. */
+  valores: string[];
   categoria_id: number | null; contato_id: number | null; centro_custo_id: string;
   ja_pago: boolean; conta_bancaria_id: string; data_pagamento: string;
 };
@@ -173,10 +175,38 @@ function Titulos({ empresaId, tipo }: { empresaId: number; tipo: TipoTitulo }) {
     qc.invalidateQueries({ predicate: (q) => String(q.queryKey[0]).includes(`/api/empresas/${empresaId}/`) });
   };
 
-  const abrirNovo = () => setNovo({
-    descricao: "", valor: "", data_vencimento: hoje, data_competencia: hoje, modo: "unica", n: "2", valor_modo: "total",
+  const abrirNovo = (preset: Partial<Novo> = {}) => setNovo({
+    descricao: "", valor: "", data_vencimento: hoje, data_competencia: hoje, modo: "unica", n: "2", valor_modo: "total", valores: [],
     categoria_id: null, contato_id: null, centro_custo_id: "", ja_pago: false, conta_bancaria_id: bancoPadrao, data_pagamento: hoje,
+    ...preset,
   });
+
+  // Vindo do cadastro de clientes/fornecedores (?novo=fixo|variavel&contato_id=X):
+  // abre o formulário já com a pessoa e a recorrência escolhidas.
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    const modoUrl = p.get("novo");
+    if (!modoUrl) return;
+    const contatoId = Number(p.get("contato_id")) || null;
+    abrirNovo({ contato_id: contatoId, modo: modoUrl === "variavel" ? "variavel" : "recorrente", n: "12" });
+    p.delete("novo");
+    const qs = p.toString();
+    window.history.replaceState(null, "", `${window.location.pathname}${qs ? `?${qs}` : ""}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Meses da recorrência variável (vencimento de cada um), para a lista de valores.
+  const mesesVariavel = useMemo(() => {
+    if (!novo || novo.modo !== "variavel" || !/^\d{4}-\d{2}-\d{2}$/.test(novo.data_vencimento)) return [];
+    const n = Math.min(60, Math.max(1, Number(novo.n) || 1));
+    const [a, m, d] = novo.data_vencimento.split("-").map(Number);
+    return Array.from({ length: n }, (_, i) => {
+      const dt = new Date(Date.UTC(a, m - 1 + i, 1));
+      const ultimo = new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth() + 1, 0)).getUTCDate();
+      dt.setUTCDate(Math.min(d, ultimo));
+      return dt.toISOString().slice(0, 10);
+    });
+  }, [novo]);
 
   const salvarNovo = async () => {
     if (!novo) return;
@@ -186,7 +216,8 @@ function Titulos({ empresaId, tipo }: { empresaId: number; tipo: TipoTitulo }) {
         method: "POST",
         body: {
           descricao: novo.descricao,
-          valor: novo.valor,
+          valor: novo.modo === "variavel" ? (novo.valores[0] || novo.valor) : novo.valor,
+          valores: novo.modo === "variavel" ? mesesVariavel.map((_, i) => novo.valores[i] || novo.valor) : undefined,
           data_vencimento: novo.data_vencimento,
           data_competencia: novo.data_competencia || undefined,
           categoria_id: novo.categoria_id,
@@ -194,8 +225,8 @@ function Titulos({ empresaId, tipo }: { empresaId: number; tipo: TipoTitulo }) {
           centro_custo_id: novo.centro_custo_id || null,
           parcelas: novo.modo === "parcelas" ? Number(novo.n) || 1 : 1,
           valor_modo: novo.valor_modo,
-          recorrencia: novo.modo === "recorrente" ? "mensal" : undefined,
-          meses: novo.modo === "recorrente" ? Number(novo.n) || 1 : undefined,
+          recorrencia: novo.modo === "recorrente" || novo.modo === "variavel" ? "mensal" : undefined,
+          meses: novo.modo === "recorrente" || novo.modo === "variavel" ? (novo.modo === "variavel" ? mesesVariavel.length : Number(novo.n) || 1) : undefined,
           ja_pago: novo.modo === "unica" && novo.ja_pago,
           conta_bancaria_id: novo.ja_pago || novo.conta_bancaria_id ? Number(novo.conta_bancaria_id) || null : null,
           data_pagamento: novo.ja_pago ? novo.data_pagamento : undefined,
@@ -294,7 +325,7 @@ function Titulos({ empresaId, tipo }: { empresaId: number; tipo: TipoTitulo }) {
             <Button variant="outline" asChild>
               <Link href={`/p/importar?tipo=${tipo}`}><Upload className="mr-2 h-4 w-4" />Importar planilha</Link>
             </Button>
-            <Button onClick={abrirNovo}><Plus className="mr-2 h-4 w-4" />{tx.novo}</Button>
+            <Button onClick={() => abrirNovo()}><Plus className="mr-2 h-4 w-4" />{tx.novo}</Button>
           </div>
         }
       />
@@ -485,13 +516,16 @@ function Titulos({ empresaId, tipo }: { empresaId: number; tipo: TipoTitulo }) {
                   <TabsList>
                     <TabsTrigger value="unica">Única</TabsTrigger>
                     <TabsTrigger value="parcelas">Parcelada</TabsTrigger>
-                    <TabsTrigger value="recorrente">Recorrente mensal</TabsTrigger>
+                    <TabsTrigger value="recorrente">Fixo mensal</TabsTrigger>
+                    <TabsTrigger value="variavel">Variável mensal</TabsTrigger>
                   </TabsList>
                 </Tabs>
+                {novo.modo === "recorrente" && <p className="text-xs text-muted-foreground">O mesmo valor todo mês.</p>}
+                {novo.modo === "variavel" && <p className="text-xs text-muted-foreground">Um valor diferente para cada mês. Preencha o valor de referência e ajuste os meses abaixo.</p>}
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="nt-valor">
-                  {novo.modo === "parcelas" ? (novo.valor_modo === "total" ? "Valor total (R$)" : "Valor da parcela (R$)") : novo.modo === "recorrente" ? "Valor mensal (R$)" : "Valor (R$)"}
+                  {novo.modo === "parcelas" ? (novo.valor_modo === "total" ? "Valor total (R$)" : "Valor da parcela (R$)") : novo.modo === "recorrente" ? "Valor mensal (R$)" : novo.modo === "variavel" ? "Valor de referência (R$)" : "Valor (R$)"}
                 </Label>
                 <Input id="nt-valor" inputMode="decimal" value={novo.valor} onChange={(e) => setNovo({ ...novo, valor: e.target.value })} placeholder="0,00" />
               </div>
@@ -499,6 +533,29 @@ function Titulos({ empresaId, tipo }: { empresaId: number; tipo: TipoTitulo }) {
                 <div className="space-y-1.5">
                   <Label htmlFor="nt-n">{novo.modo === "parcelas" ? "Parcelas" : "Quantos meses"}</Label>
                   <Input id="nt-n" inputMode="numeric" value={novo.n} onChange={(e) => setNovo({ ...novo, n: e.target.value.replace(/\D/g, "").slice(0, 2) })} />
+                </div>
+              )}
+              {novo.modo === "variavel" && mesesVariavel.length > 0 && (
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>Valor de cada mês</Label>
+                  <div className="grid max-h-56 grid-cols-2 gap-2 overflow-y-auto rounded-md border p-2 sm:grid-cols-3">
+                    {mesesVariavel.map((d, i) => (
+                      <label key={d} className="space-y-0.5 text-xs text-muted-foreground">
+                        <span>{d.split("-").reverse().join("/")}</span>
+                        <Input
+                          inputMode="decimal"
+                          value={novo.valores[i] ?? ""}
+                          placeholder={novo.valor || "0,00"}
+                          onChange={(e) => {
+                            const valores = [...novo.valores];
+                            valores[i] = e.target.value;
+                            setNovo({ ...novo, valores });
+                          }}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Mês em branco usa o valor de referência.</p>
                 </div>
               )}
               {novo.modo === "parcelas" && (
