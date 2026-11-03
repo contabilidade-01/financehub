@@ -546,6 +546,8 @@ async function processarMensagemUazapi(req: Request, tokenValidado: string): Pro
     // ============================================
     let resolvedText = "";
 
+    // Quem leu a imagem/documento (Claude, Gemini ou OpenAI), para a auditoria.
+    const visaoInfo: { provedor?: string } = {};
     switch (messageType) {
       case "Conversation":
       case "ExtendedTextMessage":
@@ -581,7 +583,7 @@ async function processarMensagemUazapi(req: Request, tokenValidado: string): Pro
         console.log(`[UazAPI Webhook] Analisando imagem...`);
         try {
           const imgData = await uazapiService.downloadMedia(BaseUrl, token, messageid);
-          const imgText = await analyzeWithGemini(imgData.base64Data, imgData.mimetype, "image");
+          const imgText = await analyzeWithGemini(imgData.base64Data, imgData.mimetype, "image", visaoInfo);
           resolvedText = text ? `${imgText}, ${text}` : imgText;
           console.log(`[UazAPI Webhook] Análise imagem: "${resolvedText.slice(0, 80)}..."`);
         } catch (imgErr: any) {
@@ -607,7 +609,7 @@ async function processarMensagemUazapi(req: Request, tokenValidado: string): Pro
         console.log(`[UazAPI Webhook] Analisando documento...`);
         try {
           const docData = await uazapiService.downloadMedia(BaseUrl, token, messageid);
-          resolvedText = await analyzeWithGemini(docData.base64Data, docData.mimetype, "document");
+          resolvedText = await analyzeWithGemini(docData.base64Data, docData.mimetype, "document", visaoInfo);
           console.log(`[UazAPI Webhook] Análise doc: "${resolvedText.slice(0, 80)}..."`);
         } catch (docErr: any) {
           const c = classifyAiError(docErr, "gemini");
@@ -648,7 +650,7 @@ async function processarMensagemUazapi(req: Request, tokenValidado: string): Pro
       console.log(`[UazAPI Webhook] Mídia ilegível: ${motivo}`);
       await createIngestionEvent({
         usuario_id: user.id, remote_jid: chatid, tipo_mensagem: messageType,
-        resultado: "ilegivel", etapa: "visao", detalhe: motivo || "ilegível", provider: "gemini",
+        resultado: "ilegivel", etapa: "visao", detalhe: motivo || "ilegível", provider: visaoInfo.provedor ?? null,
       });
       const dica = messageType === "ImageMessage"
         ? "📷 A foto ficou difícil de ler" + (motivo ? ` (${motivo})` : "") + ". Pode reenviar?\n\n_Dicas:_\n• Boa iluminação, sem sombra\n• Enquadre o cupom inteiro, de cima\n• Foco nos valores\n\nOu me diga os valores por texto/áudio."

@@ -9,6 +9,8 @@ import {
   montarReciboDeEscrita,
   mensagemTravaFalsoRecibo,
   extrairConsulta,
+  soConfirmacao,
+  foiRecibo,
 } from "../server/services/recibo-agente";
 import { resumoConferenciaFatura } from "../server/services/conferencia-fatura-texto";
 
@@ -170,6 +172,31 @@ else ok("pergunta não afirma escrita");
   const out3 = finalizarRespostaAgente({ content: "🔴 Despesa registrada! R$ 12,62", escritas: [], consultas: [c!] });
   if (/Despesa registrada/.test(out3)) fail("recibo falso após consulta passou", out3);
   else ok("recibo falso após consulta bloqueado");
+}
+
+// "Sim" logo depois de um recibo: não dizer "ainda não registrei nada".
+{
+  const recibo = "🔴 Compra parcelada registrada!\n*MercadoCar*\n💰 R$ 2.120,60\n🔍 Código: #708";
+  const r = finalizarRespostaAgente({ content: "Já está registrada! ✅", escritas: [], userMessage: "Sim", respostaAnterior: recibo });
+  if (/ainda nao registrei/i.test(r.normalize("NFD").replace(/[\u0300-\u036f]/g, ""))) fail("sim após recibo", r);
+  else if (!/ja ficou registrado/i.test(r.normalize("NFD").replace(/[\u0300-\u036f]/g, ""))) fail("sim após recibo: texto", r);
+  else ok("sim após recibo → já registrado");
+
+  const r2 = finalizarRespostaAgente({ content: "Despesa registrada!", escritas: [], userMessage: "Sim", respostaAnterior: "Confirma o lançamento de R$ 50?" });
+  if (!/ainda nao registrei/i.test(r2.normalize("NFD").replace(/[\u0300-\u036f]/g, ""))) fail("sim sem recibo antes continua travado", r2);
+  else ok("sim sem recibo antes → trava continua");
+
+  const r3 = finalizarRespostaAgente({ content: "Despesa registrada!", escritas: [], userMessage: "gastei 50 no mercado no pix", respostaAnterior: recibo });
+  if (!/ainda nao registrei/i.test(r3.normalize("NFD").replace(/[\u0300-\u036f]/g, ""))) fail("mensagem nova após recibo continua travada", r3);
+  else ok("mensagem nova após recibo → trava continua");
+
+  const conf = ["Sim", "sim!", "Ok", "isso", "Pode", "confirmo", "sim pode", "SS"].every(soConfirmacao);
+  const naoConf = ["sim, gastei 50 no mercado hoje", "não", "almoço 25", ""].some(soConfirmacao);
+  if (!conf || naoConf) fail("soConfirmacao", JSON.stringify({ conf, naoConf }));
+  else ok("soConfirmacao");
+
+  if (!foiRecibo(recibo) || foiRecibo("Confirma o lançamento?") || !foiRecibo("✅ Operação concluída.")) fail("foiRecibo");
+  else ok("foiRecibo");
 }
 
 if (falhas) {
