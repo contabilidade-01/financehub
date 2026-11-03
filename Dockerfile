@@ -1,6 +1,6 @@
 # Dockerfile para rodar a aplicação
 # Usando Debian (slim) ao invés de Alpine para melhor compatibilidade com canvas
-FROM node:22-slim
+FROM node:26-slim
 
 # Hash do commit (EasyPanel / CI: --build-arg GIT_COMMIT=$SOURCE_COMMIT)
 ARG GIT_COMMIT=unknown
