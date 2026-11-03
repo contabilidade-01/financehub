@@ -131,7 +131,12 @@ export async function transcribeAudio(base64Data: string, mimetype?: string): Pr
 /**
  * Analisa imagem/PDF: Claude (se configurado) → Gemini → OpenAI (só imagem).
  */
-export async function analyzeWithGemini(base64Data: string, mimetype: string, type: "image" | "document"): Promise<string> {
+export async function analyzeWithGemini(
+  base64Data: string,
+  mimetype: string,
+  type: "image" | "document",
+  info?: { provedor?: string },
+): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
   const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
   const openaiKey = String(process.env.OPENAI_API_KEY || "").trim();
@@ -188,13 +193,16 @@ Os números de valor devem usar notação decimal americana (ponto como separado
       ),
       { provider: "openai" }
     );
+    if (info) info.provedor = "openai";
     return resp.data?.choices?.[0]?.message?.content || "";
   };
 
   // 1º Claude (imagem ou PDF), se configurado e ligado; falhou → Gemini → OpenAI.
   if (usarClaude) {
     try {
-      return await lerMidiaComClaude(base64Data, mimetype, prompt);
+      const t = await lerMidiaComClaude(base64Data, mimetype, prompt);
+      if (info) info.provedor = "anthropic";
+      return t;
     } catch (claudeErr: any) {
       console.warn(`[Vision] Claude falhou (${claudeErr?.response?.status || ""} ${claudeErr?.message}), seguindo para Gemini/OpenAI...`);
       if (!apiKey && !podeOpenai) throw claudeErr;
@@ -221,6 +229,7 @@ Os números de valor devem usar notação decimal americana (ponto como separado
       ),
       { provider: "gemini" }
     );
+    if (info) info.provedor = "gemini";
     return response.data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
   } catch (geminiErr: any) {
     if (!podeOpenai) throw geminiErr;
@@ -4027,6 +4036,8 @@ ${contextoDataParaPrompt()}
         escritas: escritasNestaRodada,
         consultas: consultasNestaRodada,
         userMessage,
+        // Para não dizer "ainda não registrei" a um "sim" logo depois de um recibo.
+        respostaAnterior: [...(history || [])].reverse().find((m) => m.role === "assistant")?.content,
       });
     }
 

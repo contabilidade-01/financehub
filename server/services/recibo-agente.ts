@@ -217,6 +217,23 @@ export function montarReciboDeEscrita(e: EscritaRodada): string {
   return `✅ Operação concluída.`;
 }
 
+function semAcento(s: string): string {
+  return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+}
+
+/** Mensagem que é só uma confirmação curta ("sim", "ok", "isso", "pode", "confirmo"...). */
+export function soConfirmacao(userMessage?: string): boolean {
+  const t = semAcento(userMessage || "").replace(/[!.,?]+/g, " ").replace(/\s+/g, " ").trim();
+  if (!t || t.split(" ").length > 3) return false;
+  return /^(sim|s|ss|isso|ok|okay|pode|confirmo|confirma|confirmado|certo|beleza|blz|positivo|isso mesmo|pode sim|sim pode|ok obrigado|sim obrigado)$/.test(t);
+}
+
+/** A resposta anterior do app foi um recibo de gravação (sempre traz "registrad…!" ou "Código: #"). */
+export function foiRecibo(resposta?: string): boolean {
+  const t = semAcento(resposta || "");
+  return /registrad[oa]s?!|codigo: #\d|operacao concluida/.test(t);
+}
+
 /** Mensagem de bloqueio: pede só o que parece faltar na mensagem do usuário. */
 export function mensagemTravaFalsoRecibo(userMessage?: string): string {
   const n = String(userMessage || "")
@@ -261,6 +278,8 @@ export function finalizarRespostaAgente(opts: {
   escritas: EscritaRodada[];
   consultas?: EscritaRodada[];
   userMessage?: string;
+  /** Última resposta do app nesta conversa (para reconhecer um "sim" logo após um recibo). */
+  respostaAnterior?: string;
 }): string {
   const validas = opts.escritas.filter((e) => {
     const p = e.parsed;
@@ -294,6 +313,11 @@ export function finalizarRespostaAgente(opts: {
 
   const content = bruto || "Pronto!";
   if (afirmaEscrita(content)) {
+    // "Sim"/"ok" logo depois de um recibo: o lançamento já foi feito na mensagem
+    // anterior. Não dizer "ainda não registrei nada" (que é falso aqui).
+    if (soConfirmacao(opts.userMessage) && foiRecibo(opts.respostaAnterior)) {
+      return "✅ Isso já ficou registrado na mensagem anterior (veja o código lá). Quer lançar mais alguma coisa?";
+    }
     return mensagemTravaFalsoRecibo(opts.userMessage);
   }
   return content;
