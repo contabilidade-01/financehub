@@ -5,6 +5,8 @@ import json, os, subprocess
 
 aqui = os.path.dirname(os.path.abspath(__file__))
 ORIG = [0, 6, 11, 24, 32, 42, 50, 58, 66]  # início de cada cena em video.html + fim
+# Com voz gravada (fala mais rápida) a cena também pode encolher até esta fração do original
+ENCOLHE = {"geral-jeandson": 0.6}
 
 def dur(f):
     return float(subprocess.check_output(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", f]).strip())
@@ -17,7 +19,7 @@ for versao, trechos in json.load(open(os.path.join(aqui, "roteiro.json"), encodi
             break
         d = dur(f)
         t = novo[n] + 0.4
-        novo.append(round(novo[n] + max(ORIG[n + 1] - ORIG[n], d + 0.9), 2))
+        novo.append(round(novo[n] + max((ORIG[n + 1] - ORIG[n]) * ENCOLHE.get(versao, 1.0), d + 0.9), 2))
         ent += ["-i", f]
         filtros.append(f"[{n}:a]adelay={int(t*1000)}:all=1[a{n}]")
         print(versao, n, f"{d:.1f}s", f"cena {novo[n]:.1f}-{novo[n+1]:.1f}")

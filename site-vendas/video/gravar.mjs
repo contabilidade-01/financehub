@@ -14,7 +14,7 @@ const iPrev = args.indexOf("--previa");
 const previa = iPrev >= 0 ? args[iPrev + 1].split(",").map(Number) : null;
 const iVer = args.indexOf("--versao");
 const versao = iVer >= 0 ? args[iVer + 1] : "cristao";
-const nome = versao === "geral" ? "video-tudo-contado" : "video-financas-cristas";
+const nome = versao.startsWith("geral") ? "video-tudo-contado" + (versao === "geral-jeandson" ? "-voz-jeandson" : "") : "video-financas-cristas";
 const iFmt = args.indexOf("--formato");
 const formato = iFmt >= 0 ? args[iFmt + 1] : "quadrado";
 const TAM = { quadrado: [1080, 1080], vertical: [1080, 1920], retrato: [1080, 1350] }[formato];

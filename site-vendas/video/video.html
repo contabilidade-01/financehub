@@ -169,7 +169,7 @@ const FORMATO = new URLSearchParams(location.search).get("f");
 if (FORMATO) document.documentElement.classList.add(FORMATO);
 // Nas redes sociais não há "esta página": mostra o endereço do site
 if (FORMATO === "vertical" || FORMATO === "retrato") document.getElementById("botao").textContent = "Acesse pf.gestaoempresa.com";
-const GERAL = new URLSearchParams(location.search).get("v") === "geral";
+const GERAL = new URLSearchParams(location.search).get("v")?.startsWith("geral");
 if (GERAL) {
   MSGS[1].h = "Escola das crianças R$ 350 no Pix";
   MSGS[2].h = "✅ *Lançado!* R$ 350,00\n🎓 Educação · Pix";

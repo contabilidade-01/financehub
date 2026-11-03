@@ -1,22 +1,104 @@
 {
-  "cristao": [
-    [0.4,  "Finanças com propósito. Como ensina Lucas catorze: antes de construir, sente e faça as contas."],
-    [6.3,  "Passo um: crie sua conta grátis. São quinze dias para testar, sem cartão."],
-    [11.3, "Passo dois: mande seus lançamentos pelo WhatsApp, do jeito que você fala. Dízimo de trezentos e cinquenta no Pix. Mercado no débito. Ou grave um áudio. A inteligência artificial entende e lança na categoria certa."],
-    [24.3, "Passo três: prefere foto? Mande a foto do cupom, e pronto, está lançado."],
-    [32.3, "Passo quatro: peça seus resumos. Escreva resumo do mês e veja quanto entrou, quanto saiu e para onde foi o dinheiro."],
-    [42.3, "Passo cinco: planeje e guarde. Crie metas, caixinhas e a sua reserva de emergência."],
-    [50.3, "Passo seis: veja tudo no painel, no computador ou no celular."],
-    [58.4, "Quem é fiel no mínimo também é fiel no muito. Teste o Tudo Contado por quinze dias grátis."]
+ "cristao": [
+  [
+   0.4,
+   "Finanças com propósito. Como ensina Lucas catorze: antes de construir, sente e faça as contas."
   ],
-  "geral": [
-    [0.4,  "Tudo Contado: seu dinheiro organizado pelo WhatsApp, sem planilha e sem complicação."],
-    [6.3,  "Passo um: crie sua conta grátis. São quinze dias para testar, sem cartão."],
-    [11.3, "Passo dois: mande seus lançamentos pelo WhatsApp, do jeito que você fala. Escola das crianças no Pix. Mercado no débito. Ou grave um áudio. A inteligência artificial entende e lança na categoria certa."],
-    [24.3, "Passo três: prefere foto? Mande a foto do cupom, e pronto, está lançado."],
-    [32.3, "Passo quatro: peça seus resumos. Escreva resumo do mês e veja quanto entrou, quanto saiu e para onde foi o dinheiro."],
-    [42.3, "Passo cinco: planeje e guarde. Crie metas, caixinhas e a sua reserva de emergência."],
-    [50.3, "Passo seis: veja tudo no painel, no computador ou no celular."],
-    [58.4, "Comece hoje a cuidar melhor do seu dinheiro. Teste o Tudo Contado por quinze dias grátis."]
+  [
+   6.3,
+   "Passo um: crie sua conta grátis. São quinze dias para testar, sem cartão."
+  ],
+  [
+   11.3,
+   "Passo dois: mande seus lançamentos pelo WhatsApp, do jeito que você fala. Dízimo de trezentos e cinquenta no Pix. Mercado no débito. Ou grave um áudio. A inteligência artificial entende e lança na categoria certa."
+  ],
+  [
+   24.3,
+   "Passo três: prefere foto? Mande a foto do cupom, e pronto, está lançado."
+  ],
+  [
+   32.3,
+   "Passo quatro: peça seus resumos. Escreva resumo do mês e veja quanto entrou, quanto saiu e para onde foi o dinheiro."
+  ],
+  [
+   42.3,
+   "Passo cinco: planeje e guarde. Crie metas, caixinhas e a sua reserva de emergência."
+  ],
+  [
+   50.3,
+   "Passo seis: veja tudo no painel, no computador ou no celular."
+  ],
+  [
+   58.4,
+   "Quem é fiel no mínimo também é fiel no muito. Teste o Tudo Contado por quinze dias grátis."
   ]
+ ],
+ "geral": [
+  [
+   0.4,
+   "Tudo Contado: seu dinheiro organizado pelo WhatsApp, sem planilha e sem complicação."
+  ],
+  [
+   6.3,
+   "Passo um: crie sua conta grátis. São quinze dias para testar, sem cartão."
+  ],
+  [
+   11.3,
+   "Passo dois: mande seus lançamentos pelo WhatsApp, do jeito que você fala. Escola das crianças no Pix. Mercado no débito. Ou grave um áudio. A inteligência artificial entende e lança na categoria certa."
+  ],
+  [
+   24.3,
+   "Passo três: prefere foto? Mande a foto do cupom, e pronto, está lançado."
+  ],
+  [
+   32.3,
+   "Passo quatro: peça seus resumos. Escreva resumo do mês e veja quanto entrou, quanto saiu e para onde foi o dinheiro."
+  ],
+  [
+   42.3,
+   "Passo cinco: planeje e guarde. Crie metas, caixinhas e a sua reserva de emergência."
+  ],
+  [
+   50.3,
+   "Passo seis: veja tudo no painel, no computador ou no celular."
+  ],
+  [
+   58.4,
+   "Comece hoje a cuidar melhor do seu dinheiro. Teste o Tudo Contado por quinze dias grátis."
+  ]
+ ],
+ "geral-jeandson": [
+  [
+   0.4,
+   "Você sabe para onde foi o seu dinheiro este mês? Com o Tudo Contado, você descobre pelo WhatsApp."
+  ],
+  [
+   6.3,
+   "É simples: crie sua conta e teste grátis por quinze dias, sem cartão."
+  ],
+  [
+   11.3,
+   "Depois, é só mandar mensagem do jeito que você fala: escola das crianças, trezentos e cinquenta no Pix. Mercado no débito. Ou mande um áudio. A inteligência artificial entende e organiza tudo na categoria certa."
+  ],
+  [
+   24.3,
+   "Tem o cupom? Tire uma foto e mande. Pronto, está lançado."
+  ],
+  [
+   32.3,
+   "Quer saber como está o mês? Escreva: resumo do mês. Você vê o que entrou, o que saiu e quanto sobrou."
+  ],
+  [
+   42.3,
+   "Crie metas, caixinhas e comece a sua reserva de emergência."
+  ],
+  [
+   50.3,
+   "E acompanhe tudo no painel, pelo celular ou pelo computador."
+  ],
+  [
+   58.4,
+   "Tudo Contado: seu dinheiro organizado pelo WhatsApp. Teste grátis por quinze dias."
+  ]
+ ]
 }
