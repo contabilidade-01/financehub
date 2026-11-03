@@ -312,9 +312,9 @@ def cristao():
 <p class="nota" style="text-align:center;margin-top:20px">Citações bíblicas na versão Almeida Revista e Corrigida.</p>
 </div></section>
 <section class="alt" id="video"><div class="wrap">
-<div class="titulo"><h2>Veja em 1 minuto como funciona</h2><p>Do WhatsApp ao painel, passo a passo.</p></div>
+<div class="titulo"><h2>Veja em pouco mais de 1 minuto como funciona</h2><p>Do WhatsApp ao painel, passo a passo.</p></div>
 <div class="video-grade">
-<div class="video-caixa"><video src="/assets/video-financas-cristas.mp4" poster="/assets/video-financas-cristas-capa.jpg" controls muted playsinline preload="metadata" width="1080" height="1080"></video></div>
+<div class="video-caixa"><video src="/assets/video-financas-cristas.mp4" poster="/assets/video-financas-cristas-capa.jpg" controls playsinline preload="metadata" width="1080" height="1080"></video></div>
 <div class="cards passos-lista">{passos}</div>
 </div>
 </div></section>

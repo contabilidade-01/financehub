@@ -1,26 +1,30 @@
 """Junta narracao/<versao>-<n>.mp3 no tempo de roteiro.json e grava narracao-<versao>.mp3.
-Se um trecho passar do início do próximo, ele é acelerado (até 1,25x) para caber.
+Cada cena do vídeo é esticada para caber a fala (grava tempos-<versao>.json, que o gravar.mjs usa).
 Depois rode `node gravar.mjs [--versao geral]`: o MP4 sai com o áudio."""
 import json, os, subprocess
 
 aqui = os.path.dirname(os.path.abspath(__file__))
-TOTAL = 66.0
+ORIG = [0, 6, 11, 24, 32, 42, 50, 58, 66]  # início de cada cena em video.html + fim
 
 def dur(f):
     return float(subprocess.check_output(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", f]).strip())
 
 for versao, trechos in json.load(open(os.path.join(aqui, "roteiro.json"), encoding="utf-8")).items():
-    ent, filtros = [], []
-    for n, (t, _) in enumerate(trechos):
+    ent, filtros, novo = [], [], [0.0]
+    for n, _ in enumerate(trechos):
         f = os.path.join(aqui, "narracao", f"{versao}-{n}.mp3")
         if not os.path.exists(f):
             break
-        fim = trechos[n + 1][0] - 0.25 if n + 1 < len(trechos) else TOTAL - 0.3
-        vel = min(1.25, max(1.0, dur(f) / (fim - t)))
+        d = dur(f)
+        t = novo[n] + 0.4
+        novo.append(round(novo[n] + max(ORIG[n + 1] - ORIG[n], d + 0.9), 2))
         ent += ["-i", f]
-        filtros.append(f"[{n}:a]atempo={vel:.3f},adelay={int(t*1000)}:all=1[a{n}]")
-        print(versao, n, f"{dur(f):.1f}s", f"vel {vel:.2f}")
+        filtros.append(f"[{n}:a]adelay={int(t*1000)}:all=1[a{n}]")
+        print(versao, n, f"{d:.1f}s", f"cena {novo[n]:.1f}-{novo[n+1]:.1f}")
     else:
+        TOTAL = novo[-1]
+        json.dump({"orig": ORIG, "novo": novo, "capa": novo[4] + (novo[5] - novo[4]) * 0.6},
+                  open(os.path.join(aqui, f"tempos-{versao}.json"), "w"))
         mix = "".join(f"[a{i}]" for i in range(len(trechos)))
         filtros.append(f"{mix}amix=inputs={len(trechos)}:normalize=0,apad,atrim=0:{TOTAL}[s]")
         subprocess.check_call(["ffmpeg", "-y", "-loglevel", "error", *ent, "-filter_complex", ";".join(filtros),
