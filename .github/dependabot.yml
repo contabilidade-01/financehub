@@ -1,0 +1,30 @@
+# Dependabot: alertas e PRs de atualização de segurança.
+# Versões maiores chegam em PR separado e exigem teste antes do merge.
+# PRs vão contra a branch de integração (financehub) e passam pelo CI antes do merge.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    target-branch: financehub
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Sao_Paulo
+    open-pull-requests-limit: 5
+    groups:
+      # Atualizações menores/patch num PR só, para não lotar a fila.
+      menores:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    target-branch: financehub
+    schedule:
+      interval: monthly
+
+  - package-ecosystem: docker
+    directory: "/"
+    target-branch: financehub
+    schedule:
+      interval: monthly

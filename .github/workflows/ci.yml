@@ -22,14 +22,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Node 20
+      - name: Node 22
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
 
       - name: Instalar dependências
         run: npm ci
+
+      # Barra dependência de produção com falha CRÍTICA conhecida.
+      # (altas/moderadas aparecem no log e nos alertas do Dependabot.)
+      - name: Auditoria de dependências (npm audit)
+        run: |
+          npm audit --omit=dev || true
+          npm audit --omit=dev --audit-level=critical
 
       - name: Baseline TypeScript (não pode subir)
         run: npx tsx scripts/check-tsc-baseline.ts
