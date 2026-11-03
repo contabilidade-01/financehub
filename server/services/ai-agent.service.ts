@@ -129,13 +129,15 @@ export async function transcribeAudio(base64Data: string, mimetype?: string): Pr
 }
 
 /**
- * Analisa imagem/PDF usando Gemini Vision
+ * Analisa imagem/PDF: Claude (se configurado) → Gemini → OpenAI (só imagem).
  */
 export async function analyzeWithGemini(base64Data: string, mimetype: string, type: "image" | "document"): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
   const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
   const openaiKey = String(process.env.OPENAI_API_KEY || "").trim();
-  if (!apiKey && !openaiKey) throw new Error("GEMINI_API_KEY não configurada");
+  const { claudeVisaoDisponivel, lerMidiaComClaude } = await import("./ia-provedores");
+  const usarClaude = await claudeVisaoDisponivel(mimetype, base64Data.length);
+  if (!apiKey && !openaiKey && !usarClaude) throw new Error("GEMINI_API_KEY não configurada");
 
   const alvo = type === "image"
     ? "a imagem (cupom fiscal, nota fiscal, comprovante ou uma foto com anotações de produtos comprados)"
@@ -189,6 +191,16 @@ Os números de valor devem usar notação decimal americana (ponto como separado
     return resp.data?.choices?.[0]?.message?.content || "";
   };
 
+  // 1º Claude (imagem ou PDF), se configurado e ligado; falhou → Gemini → OpenAI.
+  if (usarClaude) {
+    try {
+      return await lerMidiaComClaude(base64Data, mimetype, prompt);
+    } catch (claudeErr: any) {
+      console.warn(`[Vision] Claude falhou (${claudeErr?.response?.status || ""} ${claudeErr?.message}), seguindo para Gemini/OpenAI...`);
+      if (!apiKey && !podeOpenai) throw claudeErr;
+    }
+  }
+
   if (!apiKey) return viaOpenai();
 
   try {
@@ -239,6 +251,8 @@ export interface ToolContext {
   toolTrace?: { name: string; args: Record<string, unknown>; resultPreview: string }[];
   /** Auditoria: ferramentas chamadas nesta mensagem, com args e resultado resumido. */
   decisoes?: { tool: string; args: Record<string, unknown>; ok: boolean; resumo: string }[];
+  /** Auditoria: provedor e modelo que de fato responderam (o último da mensagem). */
+  ia?: { provedor: string; modelo: string };
 }
 
 // Ferramentas que o login PJ (empresa ativa) enxerga. Tudo que ficou de fora
@@ -3637,7 +3651,7 @@ export async function runAgent(
   // Basta um provedor na fila (OpenAI, DeepSeek, Gemini ou Groq).
   const { algumProvedorConfigurado } = await import("./ia-provedores");
   if (!algumProvedorConfigurado()) {
-    throw new Error("Nenhum provedor de IA configurado (OPENAI_API_KEY, DEEPSEEK_API_KEY ou GEMINI_API_KEY)");
+    throw new Error("Nenhum provedor de IA configurado (OPENAI_API_KEY, DEEPSEEK_API_KEY, GEMINI_API_KEY ou ANTHROPIC_API_KEY)");
   }
 
   // Disponibiliza o texto atual para os handlers (ex.: casar meta pelo contexto).
@@ -3645,6 +3659,7 @@ export async function runAgent(
   ctx.mensagemAnteriorUsuario =
     [...(history || [])].reverse().find((m) => m.role === "user" && m.content)?.content || undefined;
   ctx.decisoes = [];
+  ctx.ia = undefined;
   // Pendências ("em qual meio?", "criar a conta X?") vêm do banco: sobrevivem a
   // restart e funcionam com mais de uma réplica.
   await hidratarPendencias(ctx.userId);
@@ -3975,6 +3990,9 @@ ${contextoDataParaPrompt()}
     let response;
     try {
       response = await callChatCompletion(messages, tools, { llm });
+      if (response?.data?._provedor) {
+        ctx.ia = { provedor: String(response.data._provedor), modelo: String(response.data.model || "") };
+      }
     } catch (chatErr: any) {
       console.error(`[AI Agent] Erro em callChatCompletion na iteração ${i}:`, chatErr?.message);
       if (ultimoResultadoTool) {

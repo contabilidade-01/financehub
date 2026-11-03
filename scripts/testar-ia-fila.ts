@@ -2,7 +2,7 @@
  * Fila de provedores de IA: ordem, castigo por tipo de falha, candidatos e
  * limpeza de mensagens para provedores compatíveis com OpenAI.
  */
-import { minutosFora, ordemEfetiva, candidatos, limparMensagens, ORDEM_PADRAO, montarCorpo, semCercaJson, configProvedor } from "../server/services/ia-provedores";
+import { minutosFora, ordemEfetiva, candidatos, limparMensagens, ORDEM_PADRAO, montarCorpo, semCercaJson, configProvedor, claudeAceitaMidia, blocoMidiaClaude } from "../server/services/ia-provedores";
 
 let falhas = 0;
 function igual(nome: string, obtido: unknown, esperado: unknown) {
@@ -67,6 +67,14 @@ igual("OpenAI segue igual (temperature e json_object)", [op.temperature, op.resp
 igual("padrão de temperature 0.1 nos outros", montarCorpo("deepseek", "deepseek-chat", { messages: msgs }).temperature, 0.1);
 igual("tira cerca ```json", semCercaJson('```json\n{"a":1}\n```'), '{"a":1}');
 igual("sem cerca fica igual", semCercaJson('{"a":1}'), '{"a":1}');
+
+console.log("Claude lendo imagem/PDF");
+igual("aceita jpeg, png, webp, gif e pdf", ["image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf"].map((m) => claudeAceitaMidia(m, 1000)), [true, true, true, true, true]);
+igual("mimetype com parâmetro", claudeAceitaMidia("image/jpeg; charset=binary", 1000), true);
+igual("recusa heic e áudio", [claudeAceitaMidia("image/heic", 1000), claudeAceitaMidia("audio/ogg", 1000)], [false, false]);
+igual("recusa acima de 10 MB e vazio", [claudeAceitaMidia("image/jpeg", 10 * 1024 * 1024 + 1), claudeAceitaMidia("image/jpeg", 0)], [false, false]);
+igual("bloco de imagem", blocoMidiaClaude("QUJD", "image/png"), { type: "image", source: { type: "base64", media_type: "image/png", data: "QUJD" } });
+igual("bloco de PDF", blocoMidiaClaude("QUJD", "application/pdf"), { type: "document", source: { type: "base64", media_type: "application/pdf", data: "QUJD" } });
 
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }
 console.log("\nOK");

@@ -480,3 +480,71 @@ export async function testarProvedor(p: ProvedorId): Promise<{ ok: boolean; ms: 
     return { ok: false, ms: Date.now() - t0, erro: `${k.kind}: ${k.detail.slice(0, 200)}` };
   }
 }
+
+// ---------------------------------------------------------------------------
+// Leitura de imagem/PDF com o Claude (API nativa /v1/messages)
+// ---------------------------------------------------------------------------
+
+const CLAUDE_IMAGENS = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+/** Limite da API por imagem (base64). Usado também para o PDF, para conter custo. */
+const CLAUDE_MAX_BASE64 = 10 * 1024 * 1024;
+
+/** O Claude lê este arquivo? (JPEG/PNG/GIF/WebP ou PDF, até 10 MB em base64) */
+export function claudeAceitaMidia(mimetype: string, base64Len: number): boolean {
+  const m = String(mimetype || "").split(";")[0].trim().toLowerCase();
+  if (!base64Len || base64Len > CLAUDE_MAX_BASE64) return false;
+  return CLAUDE_IMAGENS.includes(m) || m === "application/pdf";
+}
+
+/** Bloco de conteúdo da API nativa para a mídia (imagem ou PDF). */
+export function blocoMidiaClaude(base64: string, mimetype: string): any {
+  const m = String(mimetype || "").split(";")[0].trim().toLowerCase();
+  return m === "application/pdf"
+    ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } }
+    : { type: "image", source: { type: "base64", media_type: m, data: base64 } };
+}
+
+/** Claude configurado, ligado na fila do admin e fora de castigo, e o arquivo é aceito. */
+export async function claudeVisaoDisponivel(mimetype: string, base64Len: number): Promise<boolean> {
+  if (!configProvedor("anthropic").configurado || !claudeAceitaMidia(mimetype, base64Len)) return false;
+  const cfg = await lerConfig();
+  if (cfg.desligados.includes("anthropic")) return false;
+  return (estado.get("anthropic")?.foraAte || 0) <= Date.now();
+}
+
+/** Lê a imagem/PDF com o Claude e devolve o texto. Falha: registra e lança (quem chama segue para o próximo). */
+export async function lerMidiaComClaude(base64: string, mimetype: string, prompt: string): Promise<string> {
+  const c = configProvedor("anthropic");
+  const modelo = String(process.env.ANTHROPIC_VISION_MODEL || c.modelo).trim();
+  try {
+    const r = await axios.post(
+      "https://api.anthropic.com/v1/messages",
+      {
+        model: modelo,
+        max_tokens: 4096,
+        messages: [{ role: "user", content: [blocoMidiaClaude(base64, mimetype), { type: "text", text: prompt }] }],
+      },
+      {
+        headers: { "x-api-key": c.chave, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+        timeout: 90_000,
+      },
+    );
+    const texto = (r.data?.content || [])
+      .filter((b: any) => b?.type === "text")
+      .map((b: any) => String(b.text || ""))
+      .join("\n")
+      .trim();
+    if (!texto) throw new Error("Claude: resposta sem texto");
+    marcarOk("anthropic");
+    registrarUso("anthropic", "visao", true, {
+      prompt_tokens: r.data?.usage?.input_tokens,
+      completion_tokens: r.data?.usage?.output_tokens,
+    });
+    return texto;
+  } catch (err: any) {
+    const k = classifyAiError(err, "anthropic");
+    marcarFalha("anthropic", k.kind, k.detail);
+    registrarUso("anthropic", "visao", false);
+    throw err;
+  }
+}

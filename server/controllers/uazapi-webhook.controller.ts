@@ -787,7 +787,9 @@ async function processarMensagemUazapi(req: Request, tokenValidado: string): Pro
         usuario_id: user.id, remote_jid: chatid, tipo_mensagem: messageType,
         mensagem_raw: resolvedText, resultado: "sucesso", etapa: "envio",
         decisoes: agentContext.decisoes, message_id: messageid,
-        modelo: process.env.AI_MODEL || "gpt-4o-mini",
+        // Provedor/modelo que de fato responderam (a fila pode ter trocado de provedor).
+        provider: agentContext.ia?.provedor ?? null,
+        modelo: agentContext.ia?.modelo || null,
       });
     } catch (sendErr: any) {
       console.error(`[UazAPI Webhook] ❌ Erro ao enviar resposta:`, sendErr.message);
