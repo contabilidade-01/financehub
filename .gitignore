@@ -85,3 +85,4 @@ public/reports/
 docs/importacao/controle-bruto*.txt
 docs/importacao/lancamentos-pf-importacao.csv
 docs/importacao/lancamentos-pf-importacao.xlsx
+build-info.json

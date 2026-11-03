@@ -38,6 +38,10 @@ RUN npm install -g drizzle-kit
 # Copia todo o restante do código
 COPY . .
 
+# Grava build-info.json (hash do commit + data do build). Usa GIT_COMMIT se vier;
+# senão consulta a API pública do GitHub. Falha vira "unknown", sem quebrar o build.
+RUN GIT_COMMIT=$GIT_COMMIT node scripts/gravar-build-info.cjs
+
 # Copia o script de inicialização do banco
 COPY init.sql /docker-entrypoint-initdb.d/
 
