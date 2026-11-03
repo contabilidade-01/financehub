@@ -394,8 +394,26 @@ export async function painelAnalise(empresaId: number, f: FiltrosAnalise) {
   `)) as any[];
   const top = (tipo: string) => tops.filter((t) => t.tipo === tipo).slice(0, 5).map((t) => ({ id: Number(t.id), nome: t.nome, total: r2(Number(t.total)) }));
 
+  // Indicadores rápidos: sempre o mês corrente (contra o mês anterior), com
+  // regime, centro de custo e conta do filtro. O resto da tela segue o período.
+  const mesAtual = { de: `${hoje.slice(0, 7)}-01`, ate: fimDoMes(hoje.slice(0, 7)) };
+  const mesAnterior = periodoAnterior(mesAtual.de, mesAtual.ate);
+  const mesmoPeriodo = atual.base.de === mesAtual.de && atual.base.ate === mesAtual.ate;
+  const somasMes = mesmoPeriodo ? somas : somasDe((await somarPorConta(empresaId, { ...f, ...mesAtual })).linhas);
+  const somasMesAnterior = mesmoPeriodo ? somasDe(anterior.linhas) : somasDe((await somarPorConta(empresaId, { ...f, ...mesAnterior })).linhas);
+
+  // A receber: o mesmo total em aberto da tela Contas a receber (sem recorte).
   const receber = await listarTitulos(empresaId, "Receita", { status: "aberto" });
   const pagar = await listarTitulos(empresaId, "Despesa", { status: "aberto" });
+  // A pagar em aberto do card: só o que vence no período do filtro (padrão: mês
+  // atual), pelo mesmo cálculo da tela Contas a pagar com esse filtro.
+  const pagarPeriodo = await listarTitulos(empresaId, "Despesa", {
+    status: "aberto", de: atual.base.de, ate: atual.base.ate, centro_custo_id: atual.base.centro,
+  });
+  const atrasadoAntes = r2(pagar.linhas
+    .filter((l: any) => String(l.data_vencimento || l.data_transacao).slice(0, 10) < atual.base.de)
+    .filter((l: any) => !atual.base.centro || Number(l.centro_custo_id) === atual.base.centro)
+    .reduce((s: number, l: any) => s + Number(l.valor), 0));
   const em7 = (l: any) => {
     const v = String(l.data_vencimento || l.data_transacao).slice(0, 10);
     return v >= hoje && v <= somarDias(hoje, 7);
@@ -424,6 +442,8 @@ export async function painelAnalise(empresaId: number, f: FiltrosAnalise) {
     top_fornecedores: top("Despesa"),
     receber: { resumo: receber.resumo, aging: receber.aging },
     pagar: { resumo: pagar.resumo, aging: pagar.aging },
+    pagar_periodo: { resumo: pagarPeriodo.resumo, atrasado_antes: atrasadoAntes },
+    mes_atual: { ...mesAtual, indicadores: calcularIndicadores(somasMes), anterior: mesAnterior, indicadores_anterior: calcularIndicadores(somasMesAnterior) },
     proximos_7_dias: proximos,
     projecao: { periodos: projecao.periodos, primeiro_negativo: projecao.primeiro_negativo, saldo_final: projecao.saldo_final, menor_saldo: projecao.menor_saldo },
   };

@@ -53,6 +53,7 @@
     "test:importacao-parsers": "tsx scripts/testar-importacao-parsers.ts",
     "test:importacao-cartao": "tsx scripts/testar-importacao-cartao.ts",
     "test:erp": "tsx scripts/testar-erp.ts",
+    "test:import-planilha-pj": "tsx scripts/testar-import-planilha-pj.ts",
     "test:plano-contas": "tsx scripts/testar-plano-contas-pj.ts",
     "test:titulos": "tsx scripts/testar-titulos.ts",
     "test:indicadores": "tsx scripts/testar-indicadores.ts",

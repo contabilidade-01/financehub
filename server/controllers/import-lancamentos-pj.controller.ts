@@ -2,7 +2,21 @@ import { Request, Response } from "express";
 import { storage } from "../storage";
 import { db } from "../db";
 import { sql } from "drizzle-orm";
-import { parseLancamentosPj, montarPreviewPj, commitImportPj } from "../services/import-lancamentos-pj.service";
+import { parseLancamentosPj, montarPreviewPj, commitImportPj, type OpcoesImportPj } from "../services/import-lancamentos-pj.service";
+
+/** Mapeamento de colunas e tipo escolhidos na tela (campos do multipart). */
+function opcoesDoPedido(req: Request): OpcoesImportPj {
+  const b = (req.body || {}) as Record<string, unknown>;
+  let mapa: OpcoesImportPj["mapa"] = null;
+  if (typeof b.mapa === "string" && b.mapa.length < 2000) {
+    try {
+      const m = JSON.parse(b.mapa);
+      if (m && typeof m === "object" && !Array.isArray(m)) mapa = m;
+    } catch { /* ignora mapa inválido: usa o detectado */ }
+  }
+  const tipo = b.tipo === "Despesa" || b.tipo === "Receita" ? b.tipo : "auto";
+  return { mapa, tipo };
+}
 
 const resolveEmpresa = async (empresaId: number, userId: number, res: Response) => {
   const empresa = await storage.getEmpresaById(empresaId);
@@ -20,9 +34,9 @@ export const ImportLancamentosPjController = {
       if (!empresa) return;
       const file = (req as any).file;
       if (!file?.buffer) return res.status(400).json({ error: "Envie um arquivo (.xlsx ou .csv) no campo 'arquivo'." });
-      const parsed = parseLancamentosPj(file.buffer);
-      if (parsed.linhas.length === 0 && parsed.erros.length === 0) {
-        return res.status(400).json({ error: "Não encontrei lançamentos na planilha. Use Data, Descrição, Categoria, Forma, Valor." });
+      const parsed = parseLancamentosPj(file.buffer, opcoesDoPedido(req));
+      if (parsed.linhas.length === 0 && parsed.erros.length === 0 && parsed.colunas.length === 0) {
+        return res.status(400).json({ error: "Não encontrei lançamentos na planilha. Ela precisa ter ao menos uma coluna de data e uma de valor." });
       }
       return res.json(await montarPreviewPj(empresaId, parsed));
     } catch (err: any) {
@@ -39,7 +53,7 @@ export const ImportLancamentosPjController = {
       if (!empresa) return;
       const file = (req as any).file;
       if (!file?.buffer) return res.status(400).json({ error: "Envie um arquivo (.xlsx ou .csv) no campo 'arquivo'." });
-      const parsed = parseLancamentosPj(file.buffer);
+      const parsed = parseLancamentosPj(file.buffer, opcoesDoPedido(req));
       if (parsed.linhas.length === 0) {
         return res.status(400).json({ error: "Nenhum lançamento válido para importar.", erros: parsed.erros });
       }

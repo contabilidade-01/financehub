@@ -78,6 +78,48 @@ export default function MensalidadesPage({ empresaId }: { empresaId?: number }) 
   const mapCartao = useMemo(() => new Map(cartoes.map((c) => [c.id, c.nome])), [cartoes]);
   const mapConta = useMemo(() => new Map(contas.map((c) => [c.id, c.nome])), [contas]);
 
+  // Filtros da lista (só na tela; não mudam o que é gerado todo mês).
+  const [fBusca, setFBusca] = useState("");
+  const [fSituacao, setFSituacao] = useState<"todas" | "ativas" | "pausadas">("todas");
+  const [fMeio, setFMeio] = useState<"todos" | "boleto" | "cartao">("todos");
+  const [fCategoria, setFCategoria] = useState("todas");
+  const [fMeioId, setFMeioId] = useState("todos"); // cartão ou conta específica
+  const filtradas = useMemo(() => {
+    const termo = fBusca.trim().toLowerCase();
+    return mensalidades.filter((m) => {
+      if (termo && !m.descricao.toLowerCase().includes(termo)) return false;
+      if (fSituacao === "ativas" && !m.ativo) return false;
+      if (fSituacao === "pausadas" && m.ativo) return false;
+      if (fMeio !== "todos" && m.tipo_meio !== fMeio) return false;
+      if (fCategoria === "sem" && m.categoria_id != null) return false;
+      if (fCategoria !== "todas" && fCategoria !== "sem" && String(m.categoria_id) !== fCategoria) return false;
+      if (fMeioId !== "todos") {
+        const id = m.tipo_meio === "cartao" ? `cartao:${pj ? m.cartao_id : m.forma_pagamento_id}` : `conta:${m.conta_bancaria_id}`;
+        if (id !== fMeioId) return false;
+      }
+      return true;
+    });
+  }, [mensalidades, fBusca, fSituacao, fMeio, fCategoria, fMeioId, pj]);
+  const totalAtivasFiltradas = filtradas.filter((m) => m.ativo).reduce((s, m) => s + (Number(m.valor) || 0), 0);
+  const filtroAtivo = fBusca !== "" || fSituacao !== "todas" || fMeio !== "todos" || fCategoria !== "todas" || fMeioId !== "todos";
+  const limparFiltros = () => { setFBusca(""); setFSituacao("todas"); setFMeio("todos"); setFCategoria("todas"); setFMeioId("todos"); };
+  // Só oferece categorias e meios que aparecem nas mensalidades cadastradas.
+  const categoriasUsadas = useMemo(() => {
+    const ids = new Set(mensalidades.map((m) => m.categoria_id).filter((x): x is number => x != null));
+    return [...ids].map((id) => ({ id, nome: mapCat.get(id) || `Categoria ${id}` })).sort((x, y) => x.nome.localeCompare(y.nome, "pt-BR"));
+  }, [mensalidades, mapCat]);
+  const meiosUsados = useMemo(() => {
+    const out = new Map<string, string>();
+    for (const m of mensalidades) {
+      if (fMeio !== "todos" && m.tipo_meio !== fMeio) continue;
+      if (m.tipo_meio === "cartao") {
+        const id = pj ? m.cartao_id : m.forma_pagamento_id;
+        if (id != null) out.set(`cartao:${id}`, `Cartão · ${mapCartao.get(id) || id}`);
+      } else if (m.conta_bancaria_id != null) out.set(`conta:${m.conta_bancaria_id}`, `Boleto · ${mapConta.get(m.conta_bancaria_id) || m.conta_bancaria_id}`);
+    }
+    return [...out.entries()].sort((x, y) => x[1].localeCompare(y[1], "pt-BR"));
+  }, [mensalidades, fMeio, mapCartao, mapConta, pj]);
+
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(freshForm());
   const confirmar = useConfirm();
@@ -187,7 +229,58 @@ export default function MensalidadesPage({ empresaId }: { empresaId?: number }) 
         </Card>
       ) : (
         <div className="grid gap-3">
-          {mensalidades.map((m) => (
+          <Card>
+            <CardContent className="py-4 space-y-3">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
+                <Input value={fBusca} onChange={(e) => setFBusca(e.target.value)} placeholder="Buscar pela descrição" className="md:col-span-2" />
+                <Select value={fSituacao} onValueChange={(v) => setFSituacao(v as any)}>
+                  <SelectTrigger><SelectValue placeholder="Situação" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todas">Ativas e pausadas</SelectItem>
+                    <SelectItem value="ativas">Só ativas</SelectItem>
+                    <SelectItem value="pausadas">Só pausadas</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={fMeio} onValueChange={(v) => { setFMeio(v as any); setFMeioId("todos"); }}>
+                  <SelectTrigger><SelectValue placeholder="Meio" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Boleto e cartão</SelectItem>
+                    <SelectItem value="boleto">Só boleto</SelectItem>
+                    <SelectItem value="cartao">Só cartão</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={fMeioId} onValueChange={setFMeioId}>
+                  <SelectTrigger><SelectValue placeholder="Conta ou cartão" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todas as contas e cartões</SelectItem>
+                    {meiosUsados.map(([k, r]) => <SelectItem key={k} value={k}>{r}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="md:w-80">
+                  <Select value={fCategoria} onValueChange={setFCategoria}>
+                    <SelectTrigger><SelectValue placeholder="Categoria" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="todas">Todas as categorias</SelectItem>
+                      <SelectItem value="sem">Sem categoria</SelectItem>
+                      {categoriasUsadas.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.nome}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                  <span>
+                    {filtradas.length} de {mensalidades.length} · ativas somam <b className="text-foreground font-numeric">{money(totalAtivasFiltradas)}</b> por mês
+                  </span>
+                  {filtroAtivo && <Button variant="ghost" size="sm" onClick={limparFiltros}>Limpar filtros</Button>}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          {filtradas.length === 0 && (
+            <p className="py-6 text-center text-sm text-muted-foreground">Nenhuma mensalidade com esses filtros.</p>
+          )}
+          {filtradas.map((m) => (
             <Card key={m.id} className={m.ativo ? "" : "opacity-60"}>
               <CardContent className="py-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div className="flex items-start gap-3">

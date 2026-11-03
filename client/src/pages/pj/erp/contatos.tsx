@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { CalendarPlus, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -157,6 +158,9 @@ function Contatos({ empresaId }: { empresaId: number }) {
                       <td className="px-2 py-2 text-right tabular-nums">{Number(c.a_receber) ? brl(c.a_receber) : "—"}</td>
                       <td className="px-2 py-2 text-right tabular-nums">{Number(c.a_pagar) ? brl(c.a_pagar) : "—"}</td>
                       <td className="px-4 py-2 text-right">
+                        <Button variant="ghost" size="icon" asChild title={c.tipo === "fornecedor" ? "Lançar valores a pagar" : "Lançar valores a receber"}>
+                          <Link href={linkLancar(c.id, c.tipo === "fornecedor" ? "Despesa" : "Receita", "fixo")} aria-label="Lançar valores"><CalendarPlus className="h-4 w-4" /></Link>
+                        </Button>
                         <Button variant="ghost" size="icon" aria-label="Editar" onClick={() => setEditando(paraEdicao(c))}><Pencil className="h-4 w-4" /></Button>
                         <Button variant="ghost" size="icon" aria-label="Excluir" onClick={() => setRemovendo(c)}><Trash2 className="h-4 w-4" /></Button>
                       </td>
@@ -297,6 +301,10 @@ interface Ficha {
 
 const ROTULO_COBRANCA: Record<string, string> = { aberta: "Em aberto", processando: "Processando", paga: "Paga", vencida: "Vencida", cancelada: "Cancelada" };
 
+/** Contas a receber/pagar já filtradas pela pessoa e com o formulário de recorrência aberto. */
+const linkLancar = (contatoId: number, tipo: "Receita" | "Despesa", modo: "fixo" | "variavel") =>
+  `/p/${tipo === "Receita" ? "contas-receber" : "contas-pagar"}?contato_id=${contatoId}&novo=${modo}`;
+
 /** Ficha do cliente/fornecedor: quanto já pagou, quanto deve, atraso médio e histórico. */
 function FichaContato({ empresaId, id, onFechar, onEditar }: { empresaId: number; id: number | null; onFechar: () => void; onEditar: (c: Contato) => void }) {
   const url = `/api/empresas/${empresaId}/erp/contatos/${id}/ficha`;
@@ -316,6 +324,17 @@ function FichaContato({ empresaId, id, onFechar, onEditar }: { empresaId: number
           <div className="mt-4 space-y-5">
             <div className="text-sm text-muted-foreground">{endereco || "Sem endereço cadastrado."}</div>
             <Button variant="outline" size="sm" onClick={() => onEditar(data.contato)}><Pencil className="mr-2 h-4 w-4" />Editar cadastro</Button>
+            <div className="space-y-2 rounded-md border p-3">
+              <div className="text-sm font-medium">Lançar valores mensais</div>
+              <p className="text-xs text-muted-foreground">Abre o lançamento já com {c?.nome || "este cadastro"}: fixo repete o mesmo valor todo mês; variável deixa um valor para cada mês.</p>
+              {(["Receita", "Despesa"] as const).filter((t) => (t === "Receita" ? data.contato.tipo !== "fornecedor" : data.contato.tipo !== "cliente")).map((t) => (
+                <div key={t} className="flex flex-wrap items-center gap-2">
+                  <span className="w-20 text-xs text-muted-foreground">{t === "Receita" ? "A receber" : "A pagar"}</span>
+                  <Button variant="outline" size="sm" asChild><Link href={linkLancar(data.contato.id, t, "fixo")}>Valor fixo</Link></Button>
+                  <Button variant="outline" size="sm" asChild><Link href={linkLancar(data.contato.id, t, "variavel")}>Valor variável</Link></Button>
+                </div>
+              ))}
+            </div>
             <div className="grid grid-cols-2 gap-3">
               {[
                 { r: "Já recebido", v: brl(data.totais.recebido) },
