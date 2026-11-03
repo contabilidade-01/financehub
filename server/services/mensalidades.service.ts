@@ -136,6 +136,43 @@ export async function listarMensalidades(
   return rows as any[];
 }
 
+/**
+ * Isolamento: categoria, conta, forma de pagamento e cartão informados pelo
+ * cliente precisam ser do próprio usuário (PF) ou da empresa dele (PJ).
+ * Sem isso, daria para gravar a mensalidade apontando para a conta de outra pessoa.
+ * Retorna a mensagem de erro, ou null se tudo pertence ao escopo.
+ */
+export async function validarReferenciasMensalidade(
+  usuarioId: number,
+  empresaId: number | null,
+  refs: { categoria_id?: unknown; conta_bancaria_id?: unknown; forma_pagamento_id?: unknown; cartao_id?: unknown },
+): Promise<string | null> {
+  const idDe = (v: unknown): number | null | "invalido" => {
+    if (v === undefined || v === null || v === "") return null;
+    const n = Number(v);
+    return Number.isInteger(n) && n > 0 ? n : "invalido";
+  };
+  const existe = async (q: any) => ((await db.execute(q)) as any[]).length > 0;
+  const checks: Array<[unknown, string, (id: number) => any]> =
+    empresaId == null
+      ? [
+          [refs.categoria_id, "Categoria inválida.", (id) => sql`SELECT 1 FROM categorias WHERE id = ${id} AND (usuario_id = ${usuarioId} OR global = true) LIMIT 1`],
+          [refs.conta_bancaria_id, "Conta inválida.", (id) => sql`SELECT 1 FROM contas_bancarias WHERE id = ${id} AND usuario_id = ${usuarioId} AND empresa_id IS NULL LIMIT 1`],
+          [refs.forma_pagamento_id, "Cartão inválido.", (id) => sql`SELECT 1 FROM formas_pagamento WHERE id = ${id} AND (usuario_id = ${usuarioId} OR global = true) LIMIT 1`],
+        ]
+      : [
+          [refs.categoria_id, "Categoria inválida.", (id) => sql`SELECT 1 FROM empresas_contas WHERE id = ${id} AND empresa_id = ${empresaId} LIMIT 1`],
+          [refs.conta_bancaria_id, "Conta inválida.", (id) => sql`SELECT 1 FROM contas_bancarias WHERE id = ${id} AND empresa_id = ${empresaId} LIMIT 1`],
+          [refs.cartao_id, "Cartão inválido.", (id) => sql`SELECT 1 FROM empresas_cartoes WHERE id = ${id} AND empresa_id = ${empresaId} LIMIT 1`],
+        ];
+  for (const [valor, msg, consulta] of checks) {
+    const id = idDe(valor);
+    if (id === null) continue;
+    if (id === "invalido" || !(await existe(consulta(id)))) return msg;
+  }
+  return null;
+}
+
 export async function criarMensalidade(input: MensalidadeInput): Promise<any> {
   const r = await db.execute(sql`
     INSERT INTO mensalidades
