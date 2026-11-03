@@ -26,6 +26,7 @@ const ENV: Record<string, string> = {
   deepseek: "DEEPSEEK_API_KEY (ou AI_FALLBACK_API_KEY) · DEEPSEEK_MODEL",
   gemini: "GEMINI_API_KEY (modelo: GEMINI_CHAT_MODEL ou GEMINI_MODEL)",
   groq: "GROQ_API_KEY (modelo: GROQ_MODEL)",
+  anthropic: "ANTHROPIC_API_KEY (modelo: ANTHROPIC_MODEL, padrão claude-haiku-5-5)",
 };
 const MOTIVO: Record<string, string> = {
   sem_credito: "sem crédito", auth: "chave inválida", rate_limit: "limite de chamadas", transitorio: "instável", timeout: "sem resposta",

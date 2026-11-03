@@ -1,7 +1,7 @@
 /**
  * Fila de provedores de IA (chat completions no formato OpenAI, com tools).
  *
- * Ordem padrão: OpenAI → DeepSeek → Gemini → Groq (se houver chave). A ordem e
+ * Ordem padrão: OpenAI → DeepSeek → Gemini → Groq → Claude (se houver chave). A ordem e
  * quem participa são editáveis em Admin > Provedores de IA.
  *
  * Troca fluida: cada chamada tenta o 1º da fila que estiver saudável. Se ele
@@ -19,8 +19,9 @@ import { db } from "../db";
 import { sql } from "drizzle-orm";
 import { classifyAiError, withRetry, type AiErrorKind } from "../utils/ai-errors";
 
-export type ProvedorId = "openai" | "deepseek" | "gemini" | "groq";
-export const ORDEM_PADRAO: ProvedorId[] = ["openai", "deepseek", "gemini", "groq"];
+export type ProvedorId = "openai" | "deepseek" | "gemini" | "groq" | "anthropic";
+// Claude entra por último: quem já tem ordem salva não muda nada até o admin reordenar.
+export const ORDEM_PADRAO: ProvedorId[] = ["openai", "deepseek", "gemini", "groq", "anthropic"];
 
 type Config = { id: ProvedorId; nome: string; configurado: boolean; modelo: string; baseUrl: string; chave: string; painel: string };
 
@@ -30,6 +31,7 @@ export const PRECO_REFERENCIA: Record<ProvedorId, { entrada: number; saida: numb
   deepseek: { entrada: 0.28, saida: 0.42, fonte: "deepseek-chat" },
   gemini: { entrada: 0.3, saida: 2.5, fonte: "gemini-2.5-flash" },
   groq: { entrada: 0.59, saida: 0.79, fonte: "llama-3.3-70b" },
+  anthropic: { entrada: 0.1, saida: 0.5, fonte: "claude-haiku-5-5 (prompts até 100 mil tokens)" },
 };
 
 export function configProvedor(id: ProvedorId): Config {
@@ -56,6 +58,13 @@ export function configProvedor(id: ProvedorId): Config {
     case "groq": {
       const chave = String(env.GROQ_API_KEY || "").trim();
       return { id, nome: "Groq", configurado: !!chave, modelo: env.GROQ_MODEL || "llama-3.3-70b-versatile", baseUrl: "https://api.groq.com/openai/v1", chave, painel: "https://console.groq.com/settings/usage" };
+    }
+    case "anthropic": {
+      // API do Claude pelo endpoint compatível com OpenAI (chat/completions + tools).
+      const chave = String(env.ANTHROPIC_API_KEY || "").trim();
+      const modelo = String(env.ANTHROPIC_MODEL || "claude-haiku-5-5").trim();
+      const baseUrl = String(env.ANTHROPIC_OPENAI_BASE_URL || "https://api.anthropic.com/v1").trim().replace(/\/$/, "");
+      return { id, nome: "Claude", configurado: !!chave, modelo, baseUrl, chave, painel: "https://platform.claude.com/settings/billing" };
     }
   }
 }
@@ -90,6 +99,42 @@ export function candidatos(
   const ativos = ordem.filter((p) => st.configurado(p) && !st.desligado(p));
   const saudaveis = ativos.filter((p) => st.foraAte(p) <= agora);
   return saudaveis.length ? saudaveis : ativos;
+}
+
+/** Modelos do Claude que recusam tool_choice forçado ("required"/função nomeada) com 400. */
+export function claudeSemToolChoiceForcado(modelo: string): boolean {
+  return /(opus-5-5|sonnet-5-5|fable-5-1|mythos-5-1)/i.test(modelo);
+}
+
+/**
+ * Corpo do chat/completions para cada provedor. Diferenças do Claude (endpoint
+ * compatível com OpenAI): temperature < 1 dá 400 nos modelos novos (não envia);
+ * response_format json_object dá 400 (não envia; o prompt já pede JSON);
+ * max_tokens explícito para limitar o custo.
+ */
+export function montarCorpo(p: ProvedorId, modelo: string, payload: PayloadChat): any {
+  const body: any = {
+    model: modelo,
+    messages: p === "openai" ? payload.messages : limparMensagens(payload.messages),
+  };
+  if (p !== "anthropic") body.temperature = payload.temperature ?? 0.1;
+  else body.max_tokens = 4096;
+  if (payload.tools?.length) {
+    body.tools = payload.tools;
+    let tc = payload.tool_choice ?? "auto";
+    if (p === "anthropic" && tc !== "auto" && tc !== "none" && claudeSemToolChoiceForcado(modelo)) tc = "auto";
+    body.tool_choice = tc;
+  }
+  if (payload.response_format && !(p === "anthropic" && payload.response_format?.type !== "json_schema")) {
+    body.response_format = payload.response_format;
+  }
+  return body;
+}
+
+/** Tira cercas ```json ... ``` que o modelo às vezes coloca em volta do JSON. */
+export function semCercaJson(texto: string): string {
+  const m = String(texto || "").trim().match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  return m ? m[1] : String(texto || "");
 }
 
 /** Mensagens no formato aceito por DeepSeek/Gemini/Groq (sem campos extras da OpenAI). */
@@ -280,22 +325,13 @@ export async function chatComFila(
     desligado: (p) => cfg.desligados.includes(p) && p !== opts.preferir,
     foraAte: (p) => estado.get(p)?.foraAte || 0,
   });
-  if (!fila.length) throw new Error("Nenhum provedor de IA configurado (OPENAI_API_KEY, DEEPSEEK_API_KEY ou GEMINI_API_KEY).");
+  if (!fila.length) throw new Error("Nenhum provedor de IA configurado (OPENAI_API_KEY, DEEPSEEK_API_KEY, GEMINI_API_KEY ou ANTHROPIC_API_KEY).");
 
   const origem = opts.origem || "agente";
   let ultimoErro: any;
   for (const p of fila) {
     const c = configProvedor(p);
-    const body: any = {
-      model: c.modelo,
-      messages: p === "openai" ? payload.messages : limparMensagens(payload.messages),
-      temperature: payload.temperature ?? 0.1,
-    };
-    if (payload.tools?.length) {
-      body.tools = payload.tools;
-      body.tool_choice = payload.tool_choice ?? "auto";
-    }
-    if (payload.response_format) body.response_format = payload.response_format;
+    const body = montarCorpo(p, c.modelo, payload);
     try {
       const resp = await withRetry(
         () => axios.post(`${c.baseUrl}/chat/completions`, body, {
@@ -305,6 +341,10 @@ export async function chatComFila(
         { provider: p, retries: 1 },
       );
       if (!resp?.data?.choices?.length) throw new Error(`${c.nome}: resposta sem choices`);
+      if (p === "anthropic" && payload.response_format) {
+        const msg = resp.data.choices[0]?.message;
+        if (msg && typeof msg.content === "string") msg.content = semCercaJson(msg.content);
+      }
       marcarOk(p);
       registrarUso(p, origem, true, resp.data?.usage);
       if (p !== fila[0]) console.warn(`[IA fila] ${origem}: atendido por ${c.nome} (${c.modelo}) após falha de ${fila.slice(0, fila.indexOf(p)).join(", ")}`);
@@ -425,7 +465,10 @@ export async function testarProvedor(p: ProvedorId): Promise<{ ok: boolean; ms: 
   try {
     const r = await axios.post(
       `${c.baseUrl}/chat/completions`,
-      { model: c.modelo, messages: [{ role: "user", content: "Responda só: OK" }], temperature: 0, max_tokens: 5 },
+      // Claude: sem temperature (400 nos modelos novos) e com folga de tokens (o pensamento já vem ligado).
+      p === "anthropic"
+        ? { model: c.modelo, messages: [{ role: "user", content: "Responda só: OK" }], max_tokens: 1024 }
+        : { model: c.modelo, messages: [{ role: "user", content: "Responda só: OK" }], temperature: 0, max_tokens: 5 },
       { headers: { Authorization: `Bearer ${c.chave}`, "Content-Type": "application/json" }, timeout: 20_000 },
     );
     marcarOk(p);
