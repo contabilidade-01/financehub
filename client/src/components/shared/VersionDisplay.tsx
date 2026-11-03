@@ -70,6 +70,32 @@ export function VersionDisplay() {
 
   const currentVersion = changelog?.currentVersion || "0.0.0";
 
+  // Versão real no ar (hash do commit + data do build), gravada no docker build.
+  const { data: health } = useQuery<{ commit_short?: string; built_at?: string | null }>({
+    queryKey: ["health"],
+    queryFn: async () => {
+      const r = await fetch("/api/health");
+      if (!r.ok) throw new Error("health");
+      return r.json();
+    },
+    staleTime: 1000 * 60 * 30,
+  });
+
+  const buildLabel = (() => {
+    const commit = health?.commit_short;
+    if (!commit || commit === "unknown") return `v.${currentVersion}`;
+    if (!health?.built_at) return commit;
+    const quando = new Date(health.built_at).toLocaleString("pt-BR", {
+      timeZone: "America/Sao_Paulo",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    return `${commit} · ${quando}`;
+  })();
+
   return (
     <>
       <Button
@@ -78,7 +104,7 @@ export function VersionDisplay() {
         className="text-xs text-muted-foreground hover:text-foreground px-2 py-1 h-auto"
         onClick={() => setIsModalOpen(true)}
       >
-        Build: v.{currentVersion}
+        Build: {buildLabel}
       </Button>
 
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>

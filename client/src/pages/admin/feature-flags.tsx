@@ -158,7 +158,11 @@ export default function FeatureFlagsPage() {
         </p>
         {health?.commit_short && (
           <p className="text-xs text-muted-foreground mt-2">
-            Versão no ar: <code>{health.commit_short}</code> · env={health.env}
+            Versão no ar: <code>{health.commit_short}</code>
+            {health.built_at && (
+              <> · build {new Date(health.built_at).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</>
+            )}{" "}
+            · env={health.env}
           </p>
         )}
       </div>
