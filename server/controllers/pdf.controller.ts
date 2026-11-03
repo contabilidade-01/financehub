@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { resolverArquivoSeguro } from "../utils/safe-path";
+import { resolverArquivoSeguro, tokenArquivo, nomeComToken } from "../utils/safe-path";
 import { storage } from '../storage';
 import fs from 'fs';
 import path from 'path';
@@ -382,7 +382,7 @@ export async function generateReportPDF(req: Request, res: Response) {
     const dateStr = now.toISOString().split('T')[0];
     const timeStr = now.getTime().toString();
     const hash = Buffer.from(`${req.user.id}-${timeStr}`).toString('base64').substring(0, 8);
-    const filename = `relatorio-financeiro-${dateStr}-${hash}.pdf`;
+    const filename = `relatorio-financeiro-${dateStr}-${tokenArquivo()}.pdf`;
     const filepath = path.join(process.cwd(), 'public', 'reports', filename);
     
     // Ensure reports directory exists
@@ -442,6 +442,9 @@ export async function generateReportPDF(req: Request, res: Response) {
 export async function downloadReportPDF(req: Request, res: Response) {
   try {
     const { filename } = req.params;
+    if (!nomeComToken(filename)) {
+      return res.status(404).json({ message: "Arquivo não encontrado" });
+    }
     const filepath = resolverArquivoSeguro(path.join(process.cwd(), 'public', 'reports'), filename);
     if (!filepath) {
       return res.status(400).json({ message: "Nome de arquivo inválido" });

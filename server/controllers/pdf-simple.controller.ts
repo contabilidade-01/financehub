@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { tokenArquivo } from "../utils/safe-path";
 import { storage } from "../storage";
 import fs from "fs";
 import path from "path";
@@ -481,7 +482,7 @@ export async function generateSimpleReportPDF(req: Request, res: Response) {
     const hash = Buffer.from(`${req.user!.id}-${timeStr}`)
       .toString("base64")
       .substring(0, 8);
-    const filename = `relatorio-${dateStr}-${hash}.pdf`;
+    const filename = `relatorio-${dateStr}-${tokenArquivo()}.pdf`;
     const filepath = path.join(process.cwd(), "public", "reports", filename);
 
     // Ensure reports directory exists

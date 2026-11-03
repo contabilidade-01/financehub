@@ -418,6 +418,15 @@ export async function resetPassword(req: Request, res: Response) {
         )
       );
 
+    // Conta com 2FA: trocar a senha pelo e-mail não pode pular o segundo fator.
+    const { doisFatoresAtivo } = await import("../services/dois-fatores.service");
+    if (await doisFatoresAtivo(Number(row.usuario_id)).catch(() => true)) {
+      return res.status(200).json({
+        message: "Senha redefinida com sucesso. Entre com a nova senha e o código do autenticador.",
+        requires2fa: true,
+      });
+    }
+
     try {
       (req.session as any).userId = row.usuario_id;
     } catch (e) {

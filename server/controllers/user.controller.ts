@@ -252,6 +252,19 @@ export async function login(req: Request, res: Response) {
       return res.status(401).json({ message: "Usuário ou senha incorretos ou inexistentes!" });
     }
     
+    // Conta com verificação em duas etapas: senha certa ainda não abre a sessão.
+    const { doisFatoresAtivo } = await import("../services/dois-fatores.service");
+    const { navegadorLembrado } = await import("./dois-fatores.controller");
+    if ((await doisFatoresAtivo(user.id)) && !(await navegadorLembrado(req, user.id))) {
+      await new Promise<void>((resolve, reject) =>
+        req.session.regenerate((err) => (err ? reject(err) : resolve())),
+      );
+      const { marcarSegundoFatorPendente } = await import("./dois-fatores.controller");
+      marcarSegundoFatorPendente(req, user.id, loginData.email);
+      console.log("LOGIN: senha ok, aguardando código de 2FA");
+      return res.status(200).json({ requires2fa: true });
+    }
+
     console.log("LOGIN SUCCESS: User authenticated successfully");
     
     // Update last access

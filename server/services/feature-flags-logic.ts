@@ -20,6 +20,8 @@ export const FLAG_BOAS_VINDAS_CADASTRO_SITE = "boas_vindas_cadastro_site";
 export const FLAG_REEMBOLSO_VINCULADO = "reembolso_vinculado";
 /** Aviso no WhatsApp das contas a pagar que vencem hoje e amanhã (PF e PJ), 1x por dia. */
 export const FLAG_LEMBRETES_CONTAS_PAGAR = "lembretes_contas_pagar";
+/** 2FA (app autenticador) para administradores em Configurações > Segurança. Super admin sempre; admin com a flag; clientes nunca. */
+export const FLAG_DOIS_FATORES = "dois_fatores";
 export const FLAGS_NO_CODIGO: readonly string[] = [
   FLAG_AGENTE_MEIO_PAGAMENTO,
   FLAG_ORQUESTRADOR_DEEPSEEK,
@@ -30,6 +32,7 @@ export const FLAGS_NO_CODIGO: readonly string[] = [
   FLAG_BOAS_VINDAS_CADASTRO_SITE,
   FLAG_REEMBOLSO_VINCULADO,
   FLAG_LEMBRETES_CONTAS_PAGAR,
+  FLAG_DOIS_FATORES,
 ];
 
 export const DIAS_PARA_APOSENTAR = 30;

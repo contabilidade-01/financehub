@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { LineChart } from "lucide-react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -81,28 +81,36 @@ export default function Login() {
     },
   });
 
+  // Segunda etapa (contas com verificação em duas etapas)
+  const [etapa2fa, setEtapa2fa] = useState(false);
+  const [codigo2fa, setCodigo2fa] = useState("");
+  const [lembrar2fa, setLembrar2fa] = useState(true);
+
+  const entrar = () => {
+    toast({
+      title: "Login realizado com sucesso",
+      description: `Bem-vindo ao ${systemConfig.system_name}!`,
+    });
+    // Redireciona e força recarregamento da página para atualizar o estado de autenticação
+    // Veio do link "assine por aqui" (WhatsApp): volta direto para a assinatura.
+    window.location.href = window.location.pathname.startsWith("/subscription/renew") ? "/subscription/renew" : "/";
+  };
+
   const onSubmit = async (data: LoginUser) => {
     try {
       setIsLoading(true);
-      console.log("API Request: POST /api/auth/login", data);
-      
-      const response = await apiRequest("/api/auth/login", {
+      const response = await apiRequest<{ requires2fa?: boolean }>("/api/auth/login", {
         method: "POST",
         data: data
       });
-      
-      console.log("API Response:", response);
-      
-      toast({
-        title: "Login realizado com sucesso",
-        description: `Bem-vindo ao ${systemConfig.system_name}!`,
-      });
-      
-      // Redireciona e força recarregamento da página para atualizar o estado de autenticação
-      // Veio do link "assine por aqui" (WhatsApp): volta direto para a assinatura.
-      window.location.href = window.location.pathname.startsWith("/subscription/renew") ? "/subscription/renew" : "/";
+      if (response?.requires2fa) {
+        setCodigo2fa("");
+        setEtapa2fa(true);
+        return;
+      }
+      entrar();
     } catch (error: any) {
-      console.error("Login error:", error);
+      console.error("Login error:", error?.message);
       
       let errorMessage = "Email ou senha incorretos.";
       let errorTitle = "Erro no login";
@@ -121,6 +129,30 @@ export default function Login() {
         description: errorMessage,
         variant: "destructive",
       });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const onSubmit2fa = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setIsLoading(true);
+      const r = await apiRequest<{ via?: string; codigos_restantes?: number }>("/api/auth/2fa/verificar", {
+        method: "POST",
+        data: { codigo: codigo2fa, lembrar: lembrar2fa },
+      });
+      if (r?.via === "recuperacao") {
+        toast({
+          title: "Código de recuperação usado",
+          description: `Restam ${r.codigos_restantes ?? 0}. Gere novos em Configurações > Segurança.`,
+        });
+      }
+      entrar();
+    } catch (error: any) {
+      const msg = error?.message || "Código inválido.";
+      toast({ title: "Não foi possível entrar", description: msg, variant: "destructive" });
+      if (/de novo/.test(msg)) setEtapa2fa(false);
     } finally {
       setIsLoading(false);
     }
@@ -153,6 +185,32 @@ export default function Login() {
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {etapa2fa ? (
+              <form onSubmit={onSubmit2fa} className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Digite o código de 6 dígitos do seu aplicativo autenticador. Sem o celular, use um dos códigos de recuperação.
+                </p>
+                <Input
+                  autoFocus
+                  inputMode="text"
+                  autoComplete="one-time-code"
+                  placeholder="123456"
+                  value={codigo2fa}
+                  onChange={(e) => setCodigo2fa(e.target.value)}
+                  maxLength={12}
+                />
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={lembrar2fa} onChange={(e) => setLembrar2fa(e.target.checked)} />
+                  Lembrar este navegador por 30 dias
+                </label>
+                <Button type="submit" className="w-full" disabled={isLoading || codigo2fa.trim().length < 6}>
+                  {isLoading ? t('login.logging_in', 'Entrando...') : "Confirmar"}
+                </Button>
+                <Button type="button" variant="link" className="w-full" onClick={() => setEtapa2fa(false)}>
+                  Voltar
+                </Button>
+              </form>
+            ) : (
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                 <FormField
@@ -196,6 +254,7 @@ export default function Login() {
                 </Button>
               </form>
             </Form>
+            )}
           </CardContent>
           <CardFooter className="flex justify-center">
             <p className="text-sm text-muted-foreground">

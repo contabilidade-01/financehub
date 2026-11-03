@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { tokenArquivo } from "../utils/safe-path";
 import { storage } from '../storage';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -135,7 +136,7 @@ export async function generateWeeklyReportImage(req: Request, res: Response) {
     const dateStr = now.toISOString().split('T')[0];
     const timeStr = now.getTime().toString();
     const hash = Buffer.from(`${req.user?.id}-${timeStr}`).toString('base64').substring(0, 8);
-    const filename = `relatorio-semanal-${dateStr}-${hash}.png`;
+    const filename = `relatorio-semanal-${dateStr}-${tokenArquivo()}.png`;
     const filepath = path.join(process.cwd(), 'public', 'charts', filename);
     
     // Ensure charts directory exists

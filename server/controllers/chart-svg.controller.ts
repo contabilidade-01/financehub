@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { resolverArquivoSeguro } from "../utils/safe-path";
+import { resolverArquivoSeguro, tokenArquivo, nomeComToken } from "../utils/safe-path";
 import { storage } from "../storage";
 import fs from "fs";
 import path from "path";
@@ -309,7 +309,7 @@ export async function generateBarChartSVG(req: Request, res: Response) {
     const userHash = Buffer.from(`${req.user?.id}-${timeStr}-${randomId}`)
       .toString("base64")
       .substring(0, 8);
-    const filename = `chart-receitas-despesas-svg-${periodStartStr}-${periodEndStr}-${timeStr.slice(-6)}-${userHash}.png`;
+    const filename = `chart-receitas-despesas-svg-${periodStartStr}-${periodEndStr}-${timeStr.slice(-6)}-${tokenArquivo()}.png`;
     const filepath = path.join(process.cwd(), "public", "charts", filename);
 
     // Ensure charts directory exists
@@ -664,7 +664,7 @@ export async function generatePieChartSVG(req: Request, res: Response) {
     const userHash = Buffer.from(`${req.user?.id}-${timeStr}-${randomId}`)
       .toString("base64")
       .substring(0, 8);
-    const filename = `chart-despesas-categoria-svg-${periodStartStr}-${periodEndStr}-${timeStr.slice(-6)}-${userHash}.png`;
+    const filename = `chart-despesas-categoria-svg-${periodStartStr}-${periodEndStr}-${timeStr.slice(-6)}-${tokenArquivo()}.png`;
     const filepath = path.join(process.cwd(), "public", "charts", filename);
 
     // Ensure charts directory exists
@@ -703,6 +703,9 @@ export async function generatePieChartSVG(req: Request, res: Response) {
 export async function downloadChartFile(req: Request, res: Response) {
   try {
     const { filename } = req.params;
+    if (!nomeComToken(filename)) {
+      return res.status(404).json({ message: "Arquivo não encontrado" });
+    }
     const filepath = resolverArquivoSeguro(path.join(process.cwd(), "public", "charts"), filename);
     if (!filepath) {
       return res.status(400).json({ message: "Nome de arquivo inválido" });

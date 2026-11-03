@@ -9,6 +9,7 @@ import {
   gerarMensalidadeSeDevido,
   obterMensalidade,
   removerProjecaoFutura,
+  validarReferenciasMensalidade,
   type MensalidadeInput,
   type TipoMeioMensalidade,
 } from "../services/mensalidades.service";
@@ -92,6 +93,9 @@ export async function criar(req: Request, res: Response) {
       origem: "app",
     };
 
+    const erroRef = await validarReferenciasMensalidade(req.user!.id, esc.empresaId, input);
+    if (erroRef) return res.status(400).json({ error: erroRef });
+
     const criada = await criarMensalidade(input);
     // Gera já o mês atual e os próximos (projeção), para aparecer de imediato.
     let transacaoId: number | null = null;
@@ -125,6 +129,12 @@ export async function atualizar(req: Request, res: Response) {
     }
     const antes = await obterMensalidade(id, req.user!.id);
     if (!antes) return res.status(404).json({ error: "Mensalidade não encontrada." });
+    const erroRef = await validarReferenciasMensalidade(
+      req.user!.id,
+      antes.empresa_id != null ? Number(antes.empresa_id) : null,
+      patch,
+    );
+    if (erroRef) return res.status(400).json({ error: erroRef });
     // Pausou ou mudou algo que entra no lançamento: tira os meses futuros em
     // aberto (com os dados antigos) e gera a projeção de novo, se ativa.
     const mudouLancamento = Object.keys(patch).some((k) => k !== "ativo");

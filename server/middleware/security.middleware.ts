@@ -85,3 +85,12 @@ export const webhookLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Muitas requisições." },
 });
+
+/** Leituras de dados de segurança da conta (ex.: status do 2FA): teto folgado. */
+export const leituraContaLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 120,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { error: "Muitas requisições. Aguarde alguns minutos." },
+});

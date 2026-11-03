@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { tokenArquivo } from "../utils/safe-path";
 import { storage } from "../storage";
 import fs from "fs";
 import path from "path";
@@ -198,7 +199,7 @@ export async function generateBarChartImage(req: Request, res: Response) {
     const hash = Buffer.from(`${req.user?.id}-${timeStr}-${randomId}`)
       .toString("base64")
       .substring(0, 12);
-    const filename = `chart-receitas-despesas-${dateStr}-${timeStr.slice(-6)}-${hash}-novo.png`;
+    const filename = `chart-receitas-despesas-${dateStr}-${timeStr.slice(-6)}-${tokenArquivo()}-novo.png`;
     const filepath = path.join(process.cwd(), "public", "charts", filename);
 
     // Ensure charts directory exists
