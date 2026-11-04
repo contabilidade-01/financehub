@@ -40,7 +40,7 @@ def head(titulo, desc, url, tema=""):
 """
 
 def topo(ativa):
-    abas = [(URL["pf"], "Pessoa Física", "pf"), (URL["mei"], "PJ MEI", "mei"), (URL["pj"], "PJ Empresa", "pj"), (URL["mordomia"], "Mordomia", "mordomia")]
+    abas = [(URL["pf"], "Pessoa Física", "pf"), (URL["mei"], "PJ MEI", "mei"), (URL["pj"], "PJ Empresa", "pj"), (URL["mordomia"], "Fé e finanças", "mordomia")]
     links = "".join(f'<a class="aba{" ativa" if k == ativa else ""}" href="{h}">{t}</a>' for h, t, k in abas)
     return f"""<header class="topo"><div class="wrap">
 <a class="marca" href="/" aria-label="Tudo Contado"><img src="/assets/logo-tudo-contado.png?v=2" alt="Tudo Contado" width="194" height="36"></a>
@@ -60,7 +60,7 @@ RODAPE = f"""<section id="contato" class="contato"><div class="wrap"><div class=
 <a class="zap-flutuante" href="{ZAP}" target="_blank" rel="noopener" aria-label="Falar com a equipe no WhatsApp" title="Falar com a equipe no WhatsApp">{ICONE_ZAP}</a>
 <footer><div class="wrap">
 <span>© 2026 Tudo Contado. Todos os direitos reservados.</span>
-<span><a href="{URL['pf']}">Pessoa Física</a> · <a href="{URL['mei']}">PJ MEI</a> · <a href="{URL['pj']}">PJ Empresa</a> · <a href="{URL['mordomia']}">Mordomia</a> · <a href="#contato">Fale com a equipe</a> · <a href="{APP}/">Entrar</a></span>
+<span><a href="{URL['pf']}">Pessoa Física</a> · <a href="{URL['mei']}">PJ MEI</a> · <a href="{URL['pj']}">PJ Empresa</a> · <a href="{URL['mordomia']}">Fé e finanças</a> · <a href="#contato">Fale com a equipe</a> · <a href="{APP}/">Entrar</a></span>
 </div></footer>
 </body>
 </html>
@@ -191,30 +191,30 @@ PAGINAS = {
     "mordomia": dict(
         mod="pf",
         tema="tema-mordomia",
-        titulo="Tudo Contado Mordomia: finanças com propósito",
-        desc="Organize suas finanças pessoais pelo WhatsApp, com dízimo, ofertas e generosidade no seu orçamento. 15 dias grátis.",
-        selo="Mordomia · finanças com propósito",
-        h1="Cuide bem do que passa pelas suas mãos",
-        sub="Dízimo, ofertas e generosidade no orçamento, junto com as contas do dia a dia. Mande pelo WhatsApp e a IA organiza tudo, para você administrar com clareza e propósito.",
-        av="TC", conversa="Mordomia",
-        msgs=[("eu", "Dízimo R$ 350 no Pix"), ("bot", "Lançado ✅ Dízimos e Ofertas · Pix"), ("eu", "Oferta missionária R$ 50"), ("bot", "Lançado ✅ Dízimos e Ofertas. No mês: R$ 400 entregues.")],
-        passos=[("💬", "Mande no WhatsApp", "Dízimo, oferta, mercado ou conta de luz: texto, áudio, foto ou PDF."),
-                ("✨", "A IA organiza", "Dízimos e ofertas vão para a categoria própria, sem você precisar escolher."),
-                ("📊", "Veja para onde vai", "Quanto entrou, quanto foi entregue e quanto foi gasto em cada área."),
-                ("🎯", "Planeje com propósito", "Metas para reserva, sonhos e generosidade, com lembretes das contas.")],
-        recursos_titulo="Recursos para uma boa mordomia",
-        recursos=[("🤲", "Dízimos e Ofertas", "Categoria própria, reconhecida automaticamente nas suas mensagens."),
-                  ("👛", "Receitas e despesas", "Tudo o que entra e sai da casa, em um só lugar."),
+        titulo="Tudo Contado: cuidando dos recursos que o Eterno te dá",
+        desc="Organize as finanças da sua casa pelo WhatsApp e cuide com sabedoria dos recursos que o Eterno te dá. 15 dias grátis.",
+        selo="Fé e finanças",
+        h1="Cuidando dos recursos que o Eterno te dá",
+        sub="Tudo o que você tem passa pelas suas mãos por um tempo. Mande seus gastos e entradas pelo WhatsApp, a IA organiza, e você enxerga com clareza para onde vai cada real da sua casa.",
+        av="TC", conversa="Tudo Contado",
+        msgs=[("eu", "Mercado R$ 230 no débito"), ("bot", "Lançado ✅ Alimentação · Débito"), ("eu", "Quanto gastei este mês?"), ("bot", "Até agora: R$ 2.140 de R$ 3.000 do seu orçamento.")],
+        passos=[("💬", "Mande no WhatsApp", "Mercado, conta de luz ou salário: texto, áudio, foto ou PDF."),
+                ("✨", "A IA organiza", "Valor, data e categoria identificados sozinhos."),
+                ("📊", "Veja para onde vai", "Quanto entrou, quanto saiu e quanto sobrou em cada área."),
+                ("🎯", "Planeje com sabedoria", "Metas para reserva e sonhos, com lembretes das contas.")],
+        recursos_titulo="Ferramentas para administrar bem",
+        recursos=[("👛", "Receitas e despesas", "Tudo o que entra e sai da casa, em um só lugar."),
+                  ("🏷️", "Categorias do seu jeito", "Crie as categorias que fazem sentido para a sua família."),
                   ("💳", "Cartões e faturas", "Parcelas e fatura do mês sob controle, sem surpresas."),
-                  ("🎯", "Metas financeiras", "Reserva de emergência, sonhos e projetos de generosidade."),
+                  ("🎯", "Metas financeiras", "Reserva de emergência, sonhos e projetos da família."),
                   ("🔔", "Lembretes", "Aviso das contas antes do vencimento."),
-                  ("📈", "Relatórios e gráficos", "Veja mês a mês quanto foi entregue e quanto foi gasto.")],
-        plano=("Plano Pessoa Física", "Mordomia", "As suas finanças pessoais e da família, com dízimo e ofertas organizados.", "29,90",
-               ["Lançamentos por WhatsApp (texto, áudio, foto e PDF)", "Categoria Dízimos e Ofertas automática", "Carteiras, cartões e categorias ilimitados", "Metas e lembretes de contas", "Relatórios e gráficos", "15 dias de degustação grátis"]),
-        faq_extra=[("É um plano diferente do Pessoa Física?", "Não. É o mesmo plano Pessoa Física, com o mesmo preço. A página Mordomia mostra como usar o Tudo Contado para cuidar das finanças com propósito."),
-                   ("O app faz o pagamento do dízimo ou da oferta?", "Não. O Tudo Contado só registra e organiza o que você informa. O pagamento continua sendo feito por você, como sempre."),
-                   ("Preciso ser de alguma igreja para usar?", "Não. O app é para qualquer pessoa. A categoria Dízimos e Ofertas é só mais uma forma de organizar o seu dinheiro.")],
-        cta="Comece a cuidar das suas finanças com propósito",
+                  ("📈", "Relatórios e gráficos", "Veja mês a mês como está a saúde financeira da casa.")],
+        plano=("Plano Pessoa Física", "Pessoa Física", "As finanças pessoais e da família organizadas pelo WhatsApp.", "29,90",
+               ["Lançamentos por WhatsApp (texto, áudio, foto e PDF)", "Carteiras, cartões e categorias ilimitados", "Metas e lembretes de contas", "Relatórios e gráficos", "15 dias de degustação grátis"]),
+        faq_extra=[("É um plano diferente do Pessoa Física?", "Não. É o mesmo plano Pessoa Física, com o mesmo preço. Esta página mostra como o Tudo Contado ajuda você a cuidar bem dos recursos que recebe."),
+                   ("O que é mordomia cristã?", "É a ideia de que tudo o que temos foi confiado a nós pelo Eterno, e que somos chamados a administrar isso com fidelidade e sabedoria. Organizar as finanças da casa é uma forma prática de viver isso."),
+                   ("Preciso ser de alguma igreja para usar?", "Não. O Tudo Contado é para qualquer pessoa que queira organizar o seu dinheiro.")],
+        cta="Comece hoje a cuidar bem dos seus recursos",
     ),
 }
 
@@ -245,7 +245,7 @@ def pagina(chave, p):
 <section id="planos"><div class="wrap">
 <div class="titulo"><h2>Plano e preço</h2><p>15 dias grátis para testar, sem compromisso.</p></div>
 <div class="planos" style="max-width:440px;margin:0 auto">{plano_card(tag, nome, para, preco, itens, p['mod'])}</div>
-<p class="nota" style="text-align:center;margin-top:20px">Não é o seu caso? Veja também <a href="{URL['pf']}">Pessoa Física</a>, <a href="{URL['mei']}">PJ MEI</a>, <a href="{URL['pj']}">PJ Empresa</a> ou <a href="{URL['mordomia']}">Mordomia</a>.</p>
+<p class="nota" style="text-align:center;margin-top:20px">Não é o seu caso? Veja também <a href="{URL['pf']}">Pessoa Física</a>, <a href="{URL['mei']}">PJ MEI</a>, <a href="{URL['pj']}">PJ Empresa</a> ou <a href="{URL['mordomia']}">Fé e finanças</a>.</p>
 </div></section>
 <div class="alt">{faq(FAQ_COMUM + p['faq_extra'])}</div>
 <section class="cta"><div class="wrap"><div class="caixa">
@@ -263,7 +263,7 @@ def inicio():
     ops = [(URL["pf"], "👤", "Pessoa Física", "Minhas finanças pessoais e da família.", "R$ 29,90/mês"),
            (URL["mei"], "🧑‍💼", "PJ MEI", "Caixa do meu MEI separado das contas pessoais.", "R$ 79,90/mês"),
            (URL["pj"], "🏢", "PJ Empresa", "Gestão financeira completa da microempresa.", "R$ 79,90/mês"),
-           (URL["mordomia"], "🤲", "Mordomia", "Finanças pessoais com dízimo e ofertas organizados.", "R$ 29,90/mês")]
+           (URL["mordomia"], "🤲", "Fé e finanças", "Cuidando dos recursos que o Eterno te dá.", "R$ 29,90/mês")]
     cards_ = "".join(f'<a class="opcao" href="{h}"><div class="ic">{ic}</div><h3>{t}</h3><p>{d}</p><span class="de">{pr} · Ver plano →</span></a>' for h, ic, t, d, pr in ops)
     s += f"""<main>
 <section class="hero"><div class="wrap grade">

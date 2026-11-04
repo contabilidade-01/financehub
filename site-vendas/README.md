@@ -5,7 +5,7 @@ Site estático, separado do app. Cada página tem o seu subdomínio (veja `nginx
 - https://pf.tudocontado.com.br: Pessoa Física (`/pf/`)
 - https://mei.tudocontado.com.br: PJ MEI (`/mei/`)
 - https://pj.tudocontado.com.br: PJ Empresa/ME (`/pj/`)
-- https://mordomo.tudocontado.com.br: Mordomia, plano PF com dízimo e ofertas (`/mordomia/`, tema creme/dourado)
+- https://mordomo.tudocontado.com.br: "Cuidando dos recursos que o Eterno te dá", plano PF (`/mordomia/`, tema creme/dourado)
 - https://mei.tudocontado.com.br/planos/: escolha do plano
 
 Os domínios antigos (pf/controle/pj.gestaoempresa.com) continuam servindo as mesmas páginas.
