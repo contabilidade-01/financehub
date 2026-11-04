@@ -8,9 +8,12 @@ interface HeroProps {
   onAssinar: () => void;
   onLogin: () => void;
   ctaLabel: string;
+  /** Página inicial com todos os planos: título e texto gerais (PF e empresa). */
+  titulo?: string;
+  subtitulo?: string;
 }
 
-export default function Hero({ tipo, nomeSistema, onAssinar, onLogin, ctaLabel }: HeroProps) {
+export default function Hero({ tipo, nomeSistema, onAssinar, onLogin, ctaLabel, titulo, subtitulo }: HeroProps) {
   const isPJ = tipo === "juridica";
 
   return (
@@ -26,14 +29,16 @@ export default function Hero({ tipo, nomeSistema, onAssinar, onLogin, ctaLabel }
         <div className="grid gap-10 lg:grid-cols-2 lg:items-center">
           <div className="text-center lg:text-left">
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-foreground">
-              {isPJ
-                ? "A gestão financeira da sua empresa, direto no WhatsApp"
-                : "Sua vida financeira organizada direto pelo WhatsApp"}
+              {titulo ??
+                (isPJ
+                  ? "A gestão financeira da sua empresa, direto no WhatsApp"
+                  : "Sua vida financeira organizada direto pelo WhatsApp")}
             </h1>
             <p className="mt-4 text-lg text-muted-foreground max-w-xl mx-auto lg:mx-0">
-              {isPJ
-                ? "Mande o comprovante, o áudio ou a nota por WhatsApp. A IA classifica, você acompanha contas a pagar, conciliação bancária e DRE no painel."
-                : "Mande uma mensagem, um áudio ou a foto do cupom pelo WhatsApp. A IA organiza tudo e você acompanha receitas, despesas e metas no painel."}
+              {subtitulo ??
+                (isPJ
+                  ? "Mande o comprovante, o áudio ou a nota por WhatsApp. A IA classifica, você acompanha contas a pagar, conciliação bancária e DRE no painel."
+                  : "Mande uma mensagem, um áudio ou a foto do cupom pelo WhatsApp. A IA organiza tudo e você acompanha receitas, despesas e metas no painel.")}
             </p>
 
             <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center lg:justify-start">

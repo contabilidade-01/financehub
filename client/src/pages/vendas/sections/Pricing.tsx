@@ -20,7 +20,7 @@ interface PricingProps {
 
 // Preço de entrada quando o plano ainda não carregou da API — deve
 // acompanhar o valor real cadastrado em Admin > Planos de Assinatura.
-const PRECO_PADRAO_PF = 39.9;
+const PRECO_PADRAO_PF = 29.9;
 const PRECO_PADRAO_PJ_MEI = 79.9;
 
 export default function Pricing({
