@@ -163,3 +163,13 @@ footer a:hover { color: var(--primary); }
 }
 .tema-mordomia .topo { background: hsl(38 52% 91% / 0.92); }
 .tema-mordomia h1, .tema-mordomia h2, .tema-mordomia .plano h3 { font-family: "Fraunces", Georgia, serif; letter-spacing: -0.01em; }
+
+/* Fale com a equipe (WhatsApp) */
+.contato { padding-top: 0; }
+.contato .caixa { text-align: center; }
+.btn-zap { background: #25D366; color: #fff; gap: 8px; }
+.btn-zap:hover { background: #1ebe5b; }
+.btn-zap svg { width: 22px; height: 22px; }
+.zap-flutuante { position: fixed; right: 18px; bottom: 18px; z-index: 50; width: 56px; height: 56px; border-radius: 50%; background: #25D366; color: #fff; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 24px -6px hsl(0 0% 0% / .35); transition: transform .15s; }
+.zap-flutuante:hover { transform: scale(1.07); }
+@media print { .zap-flutuante { display: none; } }
