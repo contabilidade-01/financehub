@@ -85,6 +85,7 @@ const FluxoProjetadoPF = lazy(() => import("@/pages/fluxo-projetado"));
 const ReembolsosPage = lazy(() => import("@/pages/reembolsos"));
 const VendasPF = lazy(() => import("@/pages/vendas/pf"));
 const VendasPJ = lazy(() => import("@/pages/vendas/pj"));
+const VendasTodos = lazy(() => import("@/pages/vendas/todos"));
 
 function Router() {
   const [location] = useLocation();
@@ -159,7 +160,7 @@ function Router() {
         <Route path="/assinar/pj" component={VendasPJ} />
         {!isAuthenticated ? (
           <>
-            <Route path="/" component={isMarketingHost() ? VendasPF : Login} />
+            <Route path="/" component={isMarketingHost() ? VendasTodos : Login} />
             {/* Link do WhatsApp "assine por aqui": pede login e volta para a assinatura */}
             <Route path="/subscription/renew" component={Login} />
             <Route path="/register" component={Register} />

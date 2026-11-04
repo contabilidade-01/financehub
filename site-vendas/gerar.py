@@ -34,7 +34,7 @@ def head(titulo, desc, url, tema=""):
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Fraunces:wght@600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/assets/style.css?v=4">
+<link rel="stylesheet" href="/assets/style.css?v=5">
 </head>
 <body{f' class="{tema}"' if tema else ""}>
 """
@@ -51,6 +51,16 @@ def topo(ativa):
 # WhatsApp da equipe (+55 11 93903-3814): seção "Fale com a equipe" e botão flutuante em todas as páginas.
 ZAP = "https://wa.me/5511939033814?text=" + "Ol%C3%A1!%20Vim%20pelo%20site%20e%20quero%20saber%20mais%20sobre%20o%20Tudo%20Contado."
 ICONE_ZAP = '<svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><path fill="currentColor" d="M16 3C8.8 3 3 8.7 3 15.8c0 2.5.7 4.9 2 7L3 29l6.4-2c2 1.1 4.3 1.7 6.6 1.7 7.2 0 13-5.7 13-12.8S23.2 3 16 3zm0 23.4c-2.1 0-4.1-.6-5.9-1.7l-.4-.3-3.8 1.2 1.2-3.7-.3-.4c-1.2-1.8-1.8-3.8-1.8-5.9C5 9.9 9.9 5.2 16 5.2s11 4.7 11 10.6-4.9 10.6-11 10.6zm6-7.9c-.3-.2-2-1-2.3-1.1-.3-.1-.5-.2-.8.2-.2.3-.9 1.1-1.1 1.3-.2.2-.4.3-.7.1-.3-.2-1.4-.5-2.7-1.6-1-.9-1.7-2-1.9-2.3-.2-.3 0-.5.1-.7l.5-.6c.2-.2.2-.4.3-.6.1-.2 0-.4 0-.6l-1-2.5c-.3-.7-.6-.6-.8-.6h-.7c-.2 0-.6.1-.9.4-.3.3-1.2 1.1-1.2 2.8s1.2 3.2 1.4 3.4c.2.2 2.4 3.6 5.8 5 .8.4 1.4.6 1.9.7.8.3 1.5.2 2.1.1.6-.1 2-.8 2.2-1.6.3-.8.3-1.4.2-1.6-.1-.1-.3-.2-.6-.4z"/></svg>'
+
+# PJ Empresa (ME) é venda assistida: preço sob consulta, botões levam ao WhatsApp da equipe.
+ZAP_PJ = "https://wa.me/5511939033814?text=" + "Ol%C3%A1!%20Vim%20pelo%20site%20e%20quero%20saber%20o%20valor%20do%20plano%20PJ%20Empresa%20(ME)%20do%20Tudo%20Contado."
+
+def destino(mod):
+    """Cadastro direto ou, no PJ Empresa (sob consulta), conversa com a equipe."""
+    return ZAP_PJ if mod == "pj_me" else cad(mod)
+
+def alvo(mod):
+    return ' target="_blank" rel="noopener"' if mod == "pj_me" else ""
 
 RODAPE = f"""<section id="contato" class="contato"><div class="wrap"><div class="caixa">
 <h2>Fale com a equipe</h2>
@@ -97,8 +107,18 @@ def cards(itens, classe):
     return f'<div class="cards {classe}">' + "".join(out) + "</div>"
 
 def plano_card(tag, nome, para, preco, itens, mod, destaque=True):
-    inteiro, cent = preco.split(",")
     lis = "".join(f"<li>{html.escape(x)}</li>" for x in itens)
+    if preco is None:  # sob consulta
+        return f"""<div class="plano{' destaque' if destaque else ''}">
+<span class="tag">{tag}</span>
+<h3>{nome}</h3>
+<p class="para">{para}</p>
+<div class="preco"><span class="valor consulta">Sob consulta</span></div>
+<ul class="lista">{lis}</ul>
+<a class="btn btn-primario btn-bloco" href="{ZAP_PJ}" target="_blank" rel="noopener">Consultar valor no WhatsApp</a>
+<p class="rodape">Fale com a equipe e receba uma proposta para a sua empresa.</p>
+</div>"""
+    inteiro, cent = preco.split(",")
     return f"""<div class="plano{' destaque' if destaque else ''}">
 <span class="tag">{tag}</span>
 <h3>{nome}</h3>
@@ -181,8 +201,8 @@ PAGINAS = {
                   ("📈", "DRE completo", "Demonstrativo de resultado pronto, mês a mês."),
                   ("🔮", "Fluxo de caixa projetado", "Saiba hoje como o caixa estará nas próximas semanas."),
                   ("🧾", "Plano de contas gerencial", "Estrutura pensada para gestão, pronta para usar.")],
-        plano=("Plano PJ Empresa", "PJ Empresa (ME)", "Para microempresas que querem a gestão financeira completa.", "79,90",
-               ["Contas a pagar e a receber", "Conciliação bancária por extrato", "Centros de custo", "DRE completo e fluxo de caixa projetado", "Lançamentos pelo WhatsApp para a equipe", "15 dias de degustação grátis"]),
+        plano=("Plano PJ Empresa", "PJ Empresa (ME)", "Para microempresas que querem a gestão financeira completa.", None,
+               ["Contas a pagar e a receber", "Conciliação bancária por extrato", "Centros de custo", "DRE completo e fluxo de caixa projetado", "Lançamentos pelo WhatsApp para a equipe"]),
         faq_extra=[("O plano substitui o meu contador?", "Não. Ele organiza a gestão financeira da empresa, mas não substitui a contabilidade formal."),
                    ("Sou MEI. Este é o plano certo?", "Para MEI, o plano PJ MEI costuma bastar. O PJ Empresa é para quem precisa de contas a receber, centros de custo e DRE completo.")],
         cta="Organize o financeiro da sua empresa hoje",
@@ -228,8 +248,8 @@ def pagina(chave, p):
 <span class="selo">{p['selo']}</span>
 <h1>{p['h1']}</h1>
 <p class="sub">{p['sub']}</p>
-<div class="acoes"><a class="btn btn-primario" href="{cad(p['mod'])}">Começar com 15 dias grátis</a><a class="btn btn-contorno" href="#planos">Ver preço</a></div>
-<p class="nota">Sem cartão de crédito para começar. Cancele quando quiser.</p>
+<div class="acoes"><a class="btn btn-primario" href="{destino(p['mod'])}"{alvo(p['mod'])}>{'Consultar valor' if p['mod'] == 'pj_me' else 'Começar com 15 dias grátis'}</a><a class="btn btn-contorno" href="#planos">{'Ver plano' if p['mod'] == 'pj_me' else 'Ver preço'}</a></div>
+<p class="nota">{'Plano sob consulta: fale com a equipe pelo WhatsApp.' if p['mod'] == 'pj_me' else 'Sem cartão de crédito para começar. Cancele quando quiser.'}</p>
 </div>
 <div class="zap" aria-hidden="true"><div class="zap-topo"><div class="av">{p['av']}</div><div><b>{p['conversa']}</b><small>online</small></div></div><div class="zap-corpo">{msgs}</div></div>
 </div></section>
@@ -250,8 +270,8 @@ def pagina(chave, p):
 <div class="alt">{faq(FAQ_COMUM + p['faq_extra'])}</div>
 <section class="cta"><div class="wrap"><div class="caixa">
 <h2>{p['cta']}</h2>
-<p>15 dias grátis. Sem cartão de crédito para começar.</p>
-<div class="acoes"><a class="btn btn-primario" href="{cad(p['mod'])}">Começar agora</a><a class="btn btn-contorno" href="{APP}/">Já tenho conta</a></div>
+<p>{'Fale com a equipe e receba uma proposta para a sua empresa.' if p['mod'] == 'pj_me' else '15 dias grátis. Sem cartão de crédito para começar.'}</p>
+<div class="acoes"><a class="btn btn-primario" href="{destino(p['mod'])}"{alvo(p['mod'])}>{'Consultar valor' if p['mod'] == 'pj_me' else 'Começar agora'}</a><a class="btn btn-contorno" href="{APP}/">Já tenho conta</a></div>
 </div></div></section>
 </main>
 """
@@ -262,8 +282,7 @@ def inicio():
              "Controle financeiro pelo WhatsApp com IA para pessoa física, MEI e microempresa. 15 dias grátis.", URL["planos"]) + topo("")
     ops = [(URL["pf"], "👤", "Pessoa Física", "Minhas finanças pessoais e da família.", "R$ 29,90/mês"),
            (URL["mei"], "🧑‍💼", "PJ MEI", "Caixa do meu MEI separado das contas pessoais.", "R$ 79,90/mês"),
-           (URL["pj"], "🏢", "PJ Empresa", "Gestão financeira completa da microempresa.", "R$ 79,90/mês"),
-           (URL["mordomia"], "🤲", "Fé e finanças", "Cuidando dos recursos que o Eterno te dá.", "R$ 29,90/mês")]
+           (URL["pj"], "🏢", "PJ Empresa", "Gestão financeira completa da microempresa.", "Sob consulta")]
     cards_ = "".join(f'<a class="opcao" href="{h}"><div class="ic">{ic}</div><h3>{t}</h3><p>{d}</p><span class="de">{pr} · Ver plano →</span></a>' for h, ic, t, d, pr in ops)
     s += f"""<main>
 <section class="hero"><div class="wrap grade">
@@ -272,7 +291,7 @@ def inicio():
 <h1>Seu financeiro organizado direto pelo WhatsApp</h1>
 <p class="sub">Mande uma mensagem, um áudio ou a foto do comprovante. A IA lança e categoriza, e você acompanha tudo no painel, seja da sua vida pessoal ou da sua empresa.</p>
 <div class="acoes"><a class="btn btn-primario" href="#planos">Escolher meu plano</a><a class="btn btn-contorno" href="{APP}/">Já tenho conta</a></div>
-<p class="nota">15 dias grátis em todos os planos. Sem cartão de crédito para começar.</p>
+<p class="nota">15 dias grátis nos planos Pessoa Física e PJ MEI. Sem cartão de crédito para começar.</p>
 </div>
 <div class="zap" aria-hidden="true"><div class="zap-topo"><div class="av">TC</div><div><b>Tudo Contado</b><small>online</small></div></div><div class="zap-corpo">
 <div class="msg eu">Almoço R$ 42 no débito</div><div class="msg bot">Lançado ✅ Alimentação · Débito</div>
