@@ -1,6 +1,7 @@
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import type { RequestHandler } from "express";
+import { motivoCsrf } from "../utils/csrf-origem";
 
 /**
  * Cabeçalhos de segurança HTTP (helmet).
@@ -36,6 +37,23 @@ export const securityHeaders: RequestHandler = helmet({
   crossOriginEmbedderPolicy: false,
   crossOriginResourcePolicy: { policy: "cross-origin" },
 });
+
+/**
+ * CSRF: requisições que alteram dados na API precisam vir do próprio app
+ * (ver server/utils/csrf-origem.ts). CSRF_MODO=report só registra no log;
+ * CSRF_MODO=off desliga.
+ */
+const csrfModo = (process.env.CSRF_MODO || "enforce").toLowerCase();
+export const protecaoCsrf: RequestHandler = (req, res, next) => {
+  if (csrfModo === "off") return next();
+  const motivo = motivoCsrf(req);
+  if (!motivo) return next();
+  // Só caracteres de rota no log (evita injeção de linhas vindas da URL).
+  const rota = req.path.replace(/[^\w/.-]/g, "");
+  console.warn(`[CSRF] ${csrfModo === "report" ? "(report) " : ""}${req.method} ${rota} recusado: ${motivo}`);
+  if (csrfModo === "report") return next();
+  res.status(403).json({ message: "Requisição de origem não permitida." });
+};
 
 /**
  * Limitador para endpoints de autenticação (login/registro), contra força bruta.

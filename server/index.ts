@@ -32,7 +32,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { validateAndInitializeDatabase, waitForDatabase } from "./startup";
 import { setupRedirect } from "./middleware/setup.middleware";
-import { securityHeaders } from "./middleware/security.middleware";
+import { securityHeaders, protecaoCsrf } from "./middleware/security.middleware";
 import { dominioCanonico } from "./middleware/dominio-canonico.middleware";
 import { runAutoMigrations } from "./migrations/auto-migrate";
 import { randomBytes } from "crypto";
@@ -92,6 +92,8 @@ if (isProduction) {
 
 // Cabeçalhos de segurança (helmet)
 app.use(securityHeaders);
+// CSRF: POST/PUT/PATCH/DELETE da API só a partir do próprio app.
+app.use('/api', protecaoCsrf);
 
 // Páginas abertas pelo domínio antigo vão (301) para o domínio de BASE_URL; /api e /ws não.
 app.use(dominioCanonico);

@@ -100,6 +100,25 @@ check(!nomeComToken(123 as any), "recusa não-string");
   registrarFalhaLogin("z@y.com", t0); registrarSucessoLogin("z@y.com");
   check(loginBloqueado("z@y.com", t0) === 0, "sucesso zera contagem");
 
+  // ---- CSRF pela origem ----
+  const { motivoCsrf } = await import("../server/utils/csrf-origem");
+  process.env.BASE_URL = "https://app.tudocontado.com.br";
+  process.env.CSRF_ORIGENS_PERMITIDAS = "https://app.controledinheiro.com.br";
+  const rq = (method: string, headers: Record<string, string> = {}) =>
+    ({ method, header: (n: string) => ({ host: "app.tudocontado.com.br", ...headers })[n.toLowerCase()] }) as any;
+  check(motivoCsrf(rq("GET", { origin: "https://mal.com" })) === null, "GET não é bloqueado");
+  check(motivoCsrf(rq("POST")) === null, "POST sem Origin/Referer (webhook) passa");
+  check(motivoCsrf(rq("POST", { origin: "https://app.tudocontado.com.br", "sec-fetch-site": "same-origin" })) === null, "POST do próprio app passa");
+  check(motivoCsrf(rq("POST", { origin: "https://app.controledinheiro.com.br" })) === null, "origem extra permitida passa");
+  check(motivoCsrf(rq("POST", { origin: "https://mal.com" })) !== null, "POST de outro site é bloqueado");
+  check(motivoCsrf(rq("DELETE", { origin: "https://x.tudocontado.com.br" })) !== null, "subdomínio não listado é bloqueado");
+  check(motivoCsrf(rq("POST", { origin: "null" })) !== null, "Origin null é bloqueado");
+  check(motivoCsrf(rq("PUT", { "sec-fetch-site": "cross-site" })) !== null, "Sec-Fetch-Site cross-site é bloqueado");
+  check(motivoCsrf(rq("POST", { referer: "https://mal.com/pagina" })) !== null, "Referer de outro site é bloqueado");
+  check(motivoCsrf(rq("POST", { origin: "https://mal.com", authorization: "Bearer fin_x" })) === null, "token de API (Bearer) passa");
+  check(motivoCsrf(rq("POST", { host: "interno:5000", "x-forwarded-host": "app.tudocontado.com.br", origin: "https://app.tudocontado.com.br" })) === null, "atrás do proxy usa x-forwarded-host");
+  delete process.env.CSRF_ORIGENS_PERMITIDAS;
+
   if (falhas) {
     console.error(`\n${falhas} falha(s)`);
     process.exit(1);
