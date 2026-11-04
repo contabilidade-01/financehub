@@ -32,6 +32,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { validateAndInitializeDatabase, waitForDatabase } from "./startup";
 import { setupRedirect } from "./middleware/setup.middleware";
+import { csrfOrigem } from './middleware/csrf-origem.middleware';
 import { securityHeaders } from "./middleware/security.middleware";
 import { dominioCanonico } from "./middleware/dominio-canonico.middleware";
 import { runAutoMigrations } from "./migrations/auto-migrate";
@@ -145,6 +146,8 @@ const sessionMiddleware = session({
     sameSite: 'lax',
   }
 });
+// CSRF: requisições que alteram dados com cookie de sessão precisam vir do próprio app.
+app.use(csrfOrigem);
 app.use(sessionMiddleware);
 // O WebSocket autentica pelo mesmo cookie de sessão (nunca por id na URL).
 setWebSocketSessionParser(sessionMiddleware);

@@ -1,4 +1,5 @@
 import { WebSocket, WebSocketServer } from 'ws'
+import { origemWebSocketPermitida } from './middleware/csrf-origem.middleware'
 import { IncomingMessage } from 'http'
 import { storage } from './storage.js'
 
@@ -88,6 +89,13 @@ export const initializeWebSocketServer = (server: any) => {
 
   wss.on('connection', async (ws: WebSocket, req: IncomingMessage) => {
     console.log('[WebSocket] Nova conexão recebida')
+
+    // Conexão aberta por página de outro site (Cross-Site WebSocket Hijacking): recusa.
+    if (!origemWebSocketPermitida(req.headers.origin, req.headers.host)) {
+      console.log('[WebSocket] ❌ Conexão rejeitada - origem não permitida')
+      ws.close(1008, 'Origem não permitida')
+      return
+    }
 
     // Validar sessão do usuário
     const { user, isValid, error } = await validateUserSession(req)

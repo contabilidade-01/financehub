@@ -61,6 +61,7 @@ jobs:
           npm run test:resumo-semanal
           npm run test:seguranca
           npm run test:dois-fatores
+          npm run test:csrf
           npm run test:modalidade
           npm run test:nlp-br
           npm run test:classificacao-pf
