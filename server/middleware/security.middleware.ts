@@ -44,7 +44,7 @@ export const securityHeaders: RequestHandler = helmet({
  * CSRF_MODO=off desliga.
  */
 const csrfModo = (process.env.CSRF_MODO || "enforce").toLowerCase();
-export const protecaoCsrf: RequestHandler = (req, res, next) => {
+export const protecaoCsrf: RequestHandler = function protecaoCsrf(req, res, next) {
   if (csrfModo === "off") return next();
   const motivo = motivoCsrf(req);
   if (!motivo) return next();
