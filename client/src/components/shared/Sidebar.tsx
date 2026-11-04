@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
-import { HelpCircle, LayoutDashboard, LogOut, Menu } from "lucide-react";
+import { HelpCircle, LayoutDashboard, LifeBuoy, LogOut, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import {
@@ -126,6 +126,16 @@ function NavList({
   );
 }
 
+/** WhatsApp do suporte (+55 11 93903-3814). */
+const SUPORTE_WHATSAPP = "5511939033814";
+
+function linkSuporteWhatsApp(nome?: string | null, email?: string | null): string {
+  const partes = ["Olá! Preciso de suporte no Tudo Contado."];
+  if (nome) partes.push(`Nome: ${nome}`);
+  if (email) partes.push(`E-mail: ${email}`);
+  return `https://wa.me/${SUPORTE_WHATSAPP}?text=${encodeURIComponent(partes.join("\n"))}`;
+}
+
 function UserBlock({ onLogoutClick }: { onLogoutClick: () => void }) {
   const { user } = useNavigation();
   const { t } = useTranslation();
@@ -152,7 +162,13 @@ function UserBlock({ onLogoutClick }: { onLogoutClick: () => void }) {
         </Button>
         <ThemeToggleSimple />
       </div>
-      <Button variant="ghost" size="sm" className="mt-1 w-full justify-start text-muted-foreground" onClick={onLogoutClick}>
+      <Button asChild variant="ghost" size="sm" className="mt-1 w-full justify-start text-muted-foreground">
+        <a href={linkSuporteWhatsApp(user?.nome, user?.email)} target="_blank" rel="noopener noreferrer">
+          <LifeBuoy className="h-4 w-4" />
+          Solicitar suporte
+        </a>
+      </Button>
+      <Button variant="ghost" size="sm" className="w-full justify-start text-muted-foreground" onClick={onLogoutClick}>
         <LogOut className="h-4 w-4" />
         {t("navigation.logout", "Sair")}
       </Button>
