@@ -55,11 +55,10 @@ RODAPE = f"""<section id="contato" class="contato"><div class="wrap"><div class=
 <h2>Fale com a equipe</h2>
 <p>Ficou com alguma dúvida sobre os planos ou como funciona? Chame a gente no WhatsApp.</p>
 <div class="acoes"><a class="btn btn-zap" href="{ZAP}" target="_blank" rel="noopener">{ICONE_ZAP}Falar no WhatsApp</a></div>
-<p class="nota">+55 11 93903-3814</p>
 </div></div></section>
 <a class="zap-flutuante" href="{ZAP}" target="_blank" rel="noopener" aria-label="Falar com a equipe no WhatsApp" title="Falar com a equipe no WhatsApp">{ICONE_ZAP}</a>
 <footer><div class="wrap">
-<span>© 2026 Tudo Contado by XPIRIA. Todos os direitos reservados.</span>
+<span>© 2026 Tudo Contado. Todos os direitos reservados.</span>
 <span><a href="{URL['pf']}">Pessoa Física</a> · <a href="{URL['mei']}">PJ MEI</a> · <a href="{URL['pj']}">PJ Empresa</a> · <a href="#contato">Fale com a equipe</a> · <a href="{APP}/">Entrar</a></span>
 </div></footer>
 </body>
