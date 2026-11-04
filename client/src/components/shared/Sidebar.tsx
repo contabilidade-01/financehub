@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
-import { HelpCircle, LayoutDashboard, LogOut, Menu } from "lucide-react";
+import { HelpCircle, LayoutDashboard, LifeBuoy, LogOut, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import {
@@ -21,6 +21,7 @@ import { useSystemConfig } from "@/contexts/SystemConfigContext";
 import { cn, getInitials } from "@/lib/utils";
 import { isPathActive, useNavigation, type NavGroup } from "@/components/shared/navigation";
 import { openGuidedTour } from "@/lib/guided-tour-bus";
+import { linkSuporteWhatsApp } from "@/lib/suporte";
 
 /** Logo do sistema (upload do admin em /api/logo) com ícone de reserva. */
 function BrandLogo({ size = "md" }: { size?: "sm" | "md" }) {
@@ -152,7 +153,13 @@ function UserBlock({ onLogoutClick }: { onLogoutClick: () => void }) {
         </Button>
         <ThemeToggleSimple />
       </div>
-      <Button variant="ghost" size="sm" className="mt-1 w-full justify-start text-muted-foreground" onClick={onLogoutClick}>
+      <Button asChild variant="ghost" size="sm" className="mt-1 w-full justify-start text-muted-foreground">
+        <a href={linkSuporteWhatsApp(user?.nome, user?.email)} target="_blank" rel="noopener noreferrer">
+          <LifeBuoy className="h-4 w-4" />
+          Solicitar suporte
+        </a>
+      </Button>
+      <Button variant="ghost" size="sm" className="w-full justify-start text-muted-foreground" onClick={onLogoutClick}>
         <LogOut className="h-4 w-4" />
         {t("navigation.logout", "Sair")}
       </Button>

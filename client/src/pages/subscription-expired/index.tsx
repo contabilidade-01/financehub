@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertTriangle, CreditCard, ArrowLeft } from "lucide-react";
+import { AlertTriangle, CreditCard, ArrowLeft, LifeBuoy } from "lucide-react";
+import { linkSuporteWhatsApp } from "@/lib/suporte";
 import { useLocation } from "wouter";
 import { useTranslation } from "@/contexts/LocalizationContext";
 import { useSystemConfig } from "@/contexts/SystemConfigContext";
@@ -10,7 +11,7 @@ export default function SubscriptionExpired() {
   const [, navigate] = useLocation();
   const { t } = useTranslation();
   const { config: systemConfig } = useSystemConfig();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
 
   const irPagar = () => {
     if (isAuthenticated) {
@@ -59,6 +60,13 @@ export default function SubscriptionExpired() {
               >
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 {t('subscription.expired.back_to_login', 'Voltar ao Login')}
+              </Button>
+
+              <Button asChild className="w-full" variant="ghost">
+                <a href={linkSuporteWhatsApp(user?.nome, user?.email)} target="_blank" rel="noopener noreferrer">
+                  <LifeBuoy className="h-4 w-4 mr-2" />
+                  Solicitar suporte
+                </a>
               </Button>
             </div>
           </CardContent>
