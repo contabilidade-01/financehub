@@ -21,6 +21,7 @@ import { useSystemConfig } from "@/contexts/SystemConfigContext";
 import { cn, getInitials } from "@/lib/utils";
 import { isPathActive, useNavigation, type NavGroup } from "@/components/shared/navigation";
 import { openGuidedTour } from "@/lib/guided-tour-bus";
+import { linkSuporteWhatsApp } from "@/lib/suporte";
 
 /** Logo do sistema (upload do admin em /api/logo) com ícone de reserva. */
 function BrandLogo({ size = "md" }: { size?: "sm" | "md" }) {
@@ -124,16 +125,6 @@ function NavList({
       ))}
     </nav>
   );
-}
-
-/** WhatsApp do suporte (+55 11 93903-3814). */
-const SUPORTE_WHATSAPP = "5511939033814";
-
-function linkSuporteWhatsApp(nome?: string | null, email?: string | null): string {
-  const partes = ["Olá! Preciso de suporte no Tudo Contado."];
-  if (nome) partes.push(`Nome: ${nome}`);
-  if (email) partes.push(`E-mail: ${email}`);
-  return `https://wa.me/${SUPORTE_WHATSAPP}?text=${encodeURIComponent(partes.join("\n"))}`;
 }
 
 function UserBlock({ onLogoutClick }: { onLogoutClick: () => void }) {
