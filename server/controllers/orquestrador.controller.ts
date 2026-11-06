@@ -3,6 +3,7 @@ import { storage } from "../storage";
 import { getConversaRecente, appendConversa } from "../storage";
 import { runAgent } from "../services/ai-agent.service";
 import { deepseekStatusPublico } from "../services/deepseek.service";
+import { statusOrquestradorIa } from "../services/ia-provedores";
 import {
   flagAtiva,
   FLAG_ORQUESTRADOR_DEEPSEEK,
@@ -13,7 +14,7 @@ import {
 } from "../services/feature-flags.service";
 
 /**
- * Orquestrador DeepSeek.
+ * Orquestrador (provedor escolhido pelo admin em Provedores de IA; padrão DeepSeek).
  * - super_admin: escolhe qualquer usuário alvo + libera acesso a outros
  * - usuário com flag orquestrador_deepseek: conversa só na própria carteira
  */
@@ -42,9 +43,14 @@ export async function statusOrquestrador(req: Request, res: Response) {
 
   const u = req.originalUser || req.user!;
   const isSuper = u.tipo_usuario === "super_admin";
+  const ia = await statusOrquestradorIa();
   return res.json({
-    provider: "deepseek",
-    ...deepseekStatusPublico(),
+    provider: ia.provedor,
+    provider_nome: ia.nome,
+    configured: ia.configured,
+    model: ia.model,
+    // Prefixo da chave só faz sentido para o DeepSeek (tela antiga).
+    key_prefix: ia.provedor === "deepseek" ? deepseekStatusPublico().key_prefix : null,
     canal: "orquestrador",
     is_super_admin: isSuper,
     pode_escolher_alvo: isSuper,
@@ -105,13 +111,14 @@ export async function chatOrquestrador(req: Request, res: Response) {
   const pode = await usuarioPodeOrquestrador(req);
   if (!pode) return res.status(403).json({ error: "Acesso negado ao orquestrador" });
 
-  const status = deepseekStatusPublico();
-  if (!status.configured) {
+  const ia = await statusOrquestradorIa();
+  if (!ia.configured) {
     return res.status(503).json({
-      error: "DeepSeek não configurada",
-      detalhe: "Defina DEEPSEEK_API_KEY no ambiente (só o orquestrador usa essa key).",
+      error: `${ia.nome} não configurado`,
+      detalhe: "Defina a chave do provedor no ambiente ou escolha outro em Admin > Provedores de IA.",
     });
   }
+  const status = { model: ia.model };
 
   const actor = req.originalUser || req.user!;
   const isSuper = actor.tipo_usuario === "super_admin";
@@ -171,7 +178,7 @@ export async function chatOrquestrador(req: Request, res: Response) {
   } catch (e: any) {
     return res.status(500).json({
       error: e?.message || "Erro no orquestrador",
-      provider: "deepseek",
+      provider: ia.provedor,
       model: status.model,
       usuario: { id: user.id, nome: user.nome, email: user.email },
       tools: toolTrace,
@@ -184,7 +191,7 @@ export async function chatOrquestrador(req: Request, res: Response) {
   return res.json({
     success: true,
     ms: Date.now() - t0,
-    provider: "deepseek",
+    provider: ia.provedor,
     model: status.model,
     usuario: { id: user.id, nome: user.nome, email: user.email },
     empresa: empresaAtiva,

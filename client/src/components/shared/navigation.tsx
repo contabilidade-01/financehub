@@ -202,7 +202,7 @@ export function useNavigation() {
     },
   ];
 
-  const orquestradorItem: NavItem = { icon: Bot, text: "Orquestrador (DeepSeek)", path: "/admin/orquestrador" };
+  const orquestradorItem: NavItem = { icon: Bot, text: "Orquestrador", path: "/admin/orquestrador" };
 
   const adminGroups: NavGroup[] = [
     {

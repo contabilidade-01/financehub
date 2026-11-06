@@ -2,7 +2,7 @@
  * Fila de provedores de IA: ordem, castigo por tipo de falha, candidatos e
  * limpeza de mensagens para provedores compatíveis com OpenAI.
  */
-import { minutosFora, ordemEfetiva, candidatos, limparMensagens, ORDEM_PADRAO, montarCorpo, semCercaJson, configProvedor, claudeAceitaMidia, blocoMidiaClaude } from "../server/services/ia-provedores";
+import { minutosFora, ordemEfetiva, candidatos, limparMensagens, ORDEM_PADRAO, montarCorpo, semCercaJson, configProvedor, claudeAceitaMidia, blocoMidiaClaude, provedorOrquestradorValido, ORQUESTRADOR_PADRAO } from "../server/services/ia-provedores";
 
 let falhas = 0;
 function igual(nome: string, obtido: unknown, esperado: unknown) {
@@ -75,6 +75,12 @@ igual("recusa heic e áudio", [claudeAceitaMidia("image/heic", 1000), claudeAcei
 igual("recusa acima de 10 MB e vazio", [claudeAceitaMidia("image/jpeg", 10 * 1024 * 1024 + 1), claudeAceitaMidia("image/jpeg", 0)], [false, false]);
 igual("bloco de imagem", blocoMidiaClaude("QUJD", "image/png"), { type: "image", source: { type: "base64", media_type: "image/png", data: "QUJD" } });
 igual("bloco de PDF", blocoMidiaClaude("QUJD", "application/pdf"), { type: "document", source: { type: "base64", media_type: "application/pdf", data: "QUJD" } });
+
+console.log("Orquestrador escolhido no admin");
+igual("padrão continua DeepSeek", ORQUESTRADOR_PADRAO, "deepseek");
+igual("Claude salvo → Claude", provedorOrquestradorValido("anthropic"), "anthropic");
+igual("vazio/desconhecido → padrão", [provedorOrquestradorValido(""), provedorOrquestradorValido(null), provedorOrquestradorValido("x")], ["deepseek", "deepseek", "deepseek"]);
+igual("orquestrador Claude vai à frente da fila", ordemEfetiva([...ORDEM_PADRAO], "anthropic"), ["anthropic", "openai", "deepseek", "gemini", "groq"]);
 
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }
 console.log("\nOK");

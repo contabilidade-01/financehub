@@ -154,7 +154,9 @@ export function limparMensagens(messages: any[]): any[] {
 
 type Estado = { foraAte: number; motivo: string | null; ultimaFalha: string | null; ultimoOk: number | null };
 const estado = new Map<ProvedorId, Estado>();
-let cfgCache: { ordem: ProvedorId[]; desligados: ProvedorId[]; lidoEm: number } | null = null;
+/** Provedor que o orquestrador tenta primeiro, se o admin não escolher outro. */
+export const ORQUESTRADOR_PADRAO: ProvedorId = "deepseek";
+let cfgCache: { ordem: ProvedorId[]; desligados: ProvedorId[]; orquestrador: ProvedorId; lidoEm: number } | null = null;
 let tabelasProntas = false;
 
 async function garantirTabelas(): Promise<void> {
@@ -167,6 +169,8 @@ async function garantirTabelas(): Promise<void> {
       atualizado_em TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `);
+  // Coluna aditiva: provedor do orquestrador escolhido pelo admin (padrão DeepSeek, como antes).
+  await db.execute(sql`ALTER TABLE ia_config ADD COLUMN IF NOT EXISTS orquestrador VARCHAR(20) NOT NULL DEFAULT 'deepseek'`);
   await db.execute(sql`INSERT INTO ia_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING`);
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS ia_provedores_estado (
@@ -195,11 +199,17 @@ async function garantirTabelas(): Promise<void> {
 
 const lista = (s: string) => String(s || "").split(",").map((x) => x.trim()).filter(Boolean) as ProvedorId[];
 
-async function lerConfig(): Promise<{ ordem: ProvedorId[]; desligados: ProvedorId[] }> {
+/** Valor salvo → provedor válido (desconhecido ou vazio = padrão). */
+export function provedorOrquestradorValido(v: unknown): ProvedorId {
+  const p = String(v || "").trim() as ProvedorId;
+  return ORDEM_PADRAO.includes(p) ? p : ORQUESTRADOR_PADRAO;
+}
+
+async function lerConfig(): Promise<{ ordem: ProvedorId[]; desligados: ProvedorId[]; orquestrador: ProvedorId }> {
   if (cfgCache && Date.now() - cfgCache.lidoEm < 30_000) return cfgCache;
   try {
     await garantirTabelas();
-    const r: any = ((await db.execute(sql`SELECT ordem, desligados FROM ia_config WHERE id = 1`)) as any[])[0];
+    const r: any = ((await db.execute(sql`SELECT ordem, desligados, orquestrador FROM ia_config WHERE id = 1`)) as any[])[0];
     // Estado salvo por outra réplica (castigos) também entra aqui.
     const rows = (await db.execute(sql`SELECT provedor, fora_ate, motivo FROM ia_provedores_estado`)) as any[];
     for (const e of rows) {
@@ -208,9 +218,9 @@ async function lerConfig(): Promise<{ ordem: ProvedorId[]; desligados: ProvedorI
       const doBanco = e.fora_ate ? new Date(e.fora_ate).getTime() : 0;
       estado.set(p, { ...atual, foraAte: doBanco, motivo: doBanco > Date.now() ? e.motivo : atual.motivo });
     }
-    cfgCache = { ordem: ordemEfetiva(lista(r?.ordem || "")), desligados: lista(r?.desligados || ""), lidoEm: Date.now() };
+    cfgCache = { ordem: ordemEfetiva(lista(r?.ordem || "")), desligados: lista(r?.desligados || ""), orquestrador: provedorOrquestradorValido(r?.orquestrador), lidoEm: Date.now() };
   } catch {
-    cfgCache = { ordem: [...ORDEM_PADRAO], desligados: [], lidoEm: Date.now() };
+    cfgCache = { ordem: [...ORDEM_PADRAO], desligados: [], orquestrador: ORQUESTRADOR_PADRAO, lidoEm: Date.now() };
   }
   return cfgCache;
 }
@@ -221,6 +231,25 @@ export async function salvarConfig(ordem: string[], desligados: string[]): Promi
   const d = desligados.filter((p) => ORDEM_PADRAO.includes(p as ProvedorId));
   await db.execute(sql`UPDATE ia_config SET ordem = ${o.join(",")}, desligados = ${d.join(",")}, atualizado_em = now() WHERE id = 1`);
   cfgCache = null;
+}
+
+/** Provedor que o orquestrador usa primeiro (escolhido em Admin > Provedores de IA). */
+export async function provedorOrquestrador(): Promise<ProvedorId> {
+  return (await lerConfig()).orquestrador;
+}
+
+export async function salvarOrquestrador(p: string): Promise<void> {
+  if (!ORDEM_PADRAO.includes(p as ProvedorId)) throw new Error("Provedor desconhecido");
+  await garantirTabelas();
+  await db.execute(sql`UPDATE ia_config SET orquestrador = ${p}, atualizado_em = now() WHERE id = 1`);
+  cfgCache = null;
+}
+
+/** Status público do provedor do orquestrador (para a tela do chat). */
+export async function statusOrquestradorIa(): Promise<{ provedor: ProvedorId; nome: string; configured: boolean; model: string }> {
+  const p = await provedorOrquestrador();
+  const c = configProvedor(p);
+  return { provedor: p, nome: c.nome, configured: c.configurado, model: c.modelo };
 }
 
 /** Tira o castigo (ex.: depois de recarregar o crédito). */
@@ -454,7 +483,7 @@ export async function painelProvedores() {
       painel: c.painel,
     });
   }
-  return { provedores, por_origem: porOrigem.map((r) => ({ origem: r.origem, provedor: r.provedor, chamadas: Number(r.chamadas) })) };
+  return { provedores, orquestrador: cfg.orquestrador, por_origem: porOrigem.map((r) => ({ origem: r.origem, provedor: r.provedor, chamadas: Number(r.chamadas) })) };
 }
 
 /** "Testar agora": chamada mínima só naquele provedor (não mexe no castigo se falhar por bug). */
