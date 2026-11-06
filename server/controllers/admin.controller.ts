@@ -1690,6 +1690,11 @@ export async function salvarProvedoresIa(req: Request, res: Response) {
     const ordem = Array.isArray(req.body?.ordem) ? req.body.ordem.map(String) : [];
     const desligados = Array.isArray(req.body?.desligados) ? req.body.desligados.map(String) : [];
     await salvarConfig(ordem, desligados);
+    // Orquestrador: só muda se vier no corpo (telas antigas não mandam).
+    if (req.body?.orquestrador !== undefined) {
+      const { salvarOrquestrador } = await import("../services/ia-provedores");
+      await salvarOrquestrador(String(req.body.orquestrador));
+    }
     return res.json({ ok: true });
   } catch (err: any) {
     return res.status(400).json({ error: err?.message || "Configuração inválida" });

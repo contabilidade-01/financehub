@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -19,7 +20,7 @@ type Provedor = {
   saldo: { texto: string; valor?: number; moeda?: string } | null;
   painel: string;
 };
-type Painel = { provedores: Provedor[]; por_origem: { origem: string; provedor: string; chamadas: number }[] };
+type Painel = { provedores: Provedor[]; orquestrador: string; por_origem: { origem: string; provedor: string; chamadas: number }[] };
 
 const ENV: Record<string, string> = {
   openai: "OPENAI_API_KEY (modelo: AI_MODEL)",
@@ -54,18 +55,21 @@ export default function IaProvedoresPage() {
   });
   const [ordem, setOrdem] = useState<string[]>([]);
   const [desligados, setDesligados] = useState<string[]>([]);
+  const [orquestrador, setOrquestrador] = useState<string>("deepseek");
   useEffect(() => {
     if (data) {
+      setOrquestrador(data.orquestrador || "deepseek");
       setOrdem(data.provedores.map((p) => p.id));
       setDesligados(data.provedores.filter((p) => !p.ligado).map((p) => p.id));
     }
   }, [data]);
+  const mudouOrq = !!data && orquestrador !== (data.orquestrador || "deepseek");
   const mudou = !!data && (ordem.join() !== data.provedores.map((p) => p.id).join() || desligados.slice().sort().join() !== data.provedores.filter((p) => !p.ligado).map((p) => p.id).sort().join());
 
   const invalidar = () => qc.invalidateQueries({ queryKey: ["/api/admin/ia/provedores"] });
   const salvar = useMutation({
-    mutationFn: () => apiRequest("/api/admin/ia/provedores", { method: "PUT", data: { ordem, desligados } }),
-    onSuccess: () => { invalidar(); toast({ title: "Fila salva", description: "Vale a partir da próxima mensagem (até 30 s nas outras instâncias)." }); },
+    mutationFn: () => apiRequest("/api/admin/ia/provedores", { method: "PUT", data: { ordem, desligados, orquestrador } }),
+    onSuccess: () => { invalidar(); toast({ title: "Configuração salva", description: "Vale a partir da próxima mensagem (até 30 s nas outras instâncias)." }); },
     onError: (e: any) => toast({ title: "Erro", description: e?.error || e?.message, variant: "destructive" }),
   });
   const testar = useMutation({
@@ -124,6 +128,27 @@ export default function IaProvedoresPage() {
           <div className="text-xs text-muted-foreground">Pelos tokens usados × preço de referência</div>
         </CardContent></Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Orquestrador</CardTitle>
+          <CardDescription>Escolha a IA que o orquestrador usa para os usuários. Se ela falhar, a mensagem segue pela fila abaixo.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-center gap-3">
+          <Select value={orquestrador} onValueChange={setOrquestrador}>
+            <SelectTrigger className="w-[260px]" aria-label="IA do orquestrador"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {(data?.provedores || []).map((p) => (
+                <SelectItem key={p.id} value={p.id}>{p.nome} · {p.modelo}{p.configurado ? "" : " (sem chave)"}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {porId.get(orquestrador) && !porId.get(orquestrador)!.configurado && (
+            <span className="text-xs text-expense">Sem chave: defina <code>{ENV[orquestrador]}</code> no EasyPanel, senão a fila assume.</span>
+          )}
+          <Button onClick={() => salvar.mutate()} disabled={!mudouOrq || salvar.isPending}>{salvar.isPending ? "Salvando…" : "Salvar orquestrador"}</Button>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -208,7 +233,7 @@ export default function IaProvedoresPage() {
           <p><strong className="text-foreground">Sem crédito ou chave inválida:</strong> o provedor sai da fila por <strong>30 min</strong> (para não atrasar cada mensagem tentando de novo) e você recebe um aviso no WhatsApp do admin. Passado o prazo, ele é tentado de novo sozinho; ao responder, volta ao seu lugar e você é avisado. Recarregou o crédito? Clique em <em>Reativar</em>.</p>
           <p><strong className="text-foreground">Instabilidade</strong> (erro 5xx, limite de chamadas, demora): o provedor sai por <strong>2 min</strong>.</p>
           <p><strong className="text-foreground">Todos fora:</strong> a fila tenta mesmo assim, na ordem — o crédito pode ter sido recarregado.</p>
-          <p><strong className="text-foreground">Orquestrador:</strong> usa o DeepSeek primeiro e cai na fila se ele falhar.</p>
+          <p><strong className="text-foreground">Orquestrador:</strong> usa primeiro a IA escolhida acima ({porId.get(orquestrador)?.nome || orquestrador}) e cai na fila se ela falhar.</p>
           <p><strong className="text-foreground">Onde a fila vale:</strong> agente do WhatsApp, orquestrador, sugestão de categorias na importação de extrato e conciliação. Áudio (transcrição) e leitura de fotos/PDF seguem com seus provedores próprios.</p>
           <p><strong className="text-foreground">Saldo:</strong> o DeepSeek informa o saldo pela API. A OpenAI não informa saldo pela chave comum — com <code>OPENAI_ADMIN_KEY</code> mostramos o gasto do mês. O Gemini não tem API de saldo; use o link do painel. O custo estimado usa preços de referência e pode diferir da fatura.</p>
         </CardContent>

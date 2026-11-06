@@ -140,14 +140,15 @@ export default function OrquestradorPage() {
     );
   }
 
+  const nomeIa: string = status?.provider_nome || "DeepSeek";
   const podeEnviar = conversaLiberada && !!texto.trim() && !mutChat.isPending;
 
   const enviar = () => {
     if (!podeEnviar) return;
     if (!status?.configured) {
       toast({
-        title: "DeepSeek não configurada",
-        description: "Defina DEEPSEEK_API_KEY (ou AI_FALLBACK_*) no EasyPanel e reinicie.",
+        title: `${nomeIa} não configurado`,
+        description: "Defina a chave do provedor no EasyPanel ou escolha outro em Admin > Provedores de IA.",
         variant: "destructive",
       });
       return;
@@ -160,19 +161,19 @@ export default function OrquestradorPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
-            <Bot className="h-6 w-6" /> Orquestrador (DeepSeek)
+            <Bot className="h-6 w-6" /> Orquestrador ({nomeIa})
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             {isSuperAdmin
               ? "Marque usuários para liberar o chat. Escolha o alvo e converse — as tools agem na carteira dele."
-              : "Chat com DeepSeek na sua carteira. WhatsApp continua no OpenAI/Gemini."}
+              : `Chat com ${nomeIa} na sua carteira.`}
           </p>
         </div>
         <div className="text-right text-sm space-y-1">
           {status?.configured ? (
-            <Badge className="bg-emerald-500/15 text-income">DeepSeek ok · {status.model}</Badge>
+            <Badge className="bg-emerald-500/15 text-income">{nomeIa} ok · {status.model}</Badge>
           ) : (
-            <Badge variant="destructive">DeepSeek não configurada</Badge>
+            <Badge variant="destructive">{nomeIa} não configurado</Badge>
           )}
           {status?.key_prefix && (
             <p className="text-xs text-muted-foreground">{status.key_prefix}</p>

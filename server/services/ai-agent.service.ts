@@ -3470,18 +3470,20 @@ async function resolverEmpresa(
 
 // Chama o modelo de chat.
 // - llm "openai" (padrão WhatsApp): OpenAI + fallback AI_FALLBACK_* / Groq
-// - llm "deepseek": só DeepSeek (orquestrador admin) — não mistura com OpenAI
+// - llm "deepseek" (nome histórico = orquestrador): prefere o provedor escolhido
+//   pelo admin em Provedores de IA (padrão DeepSeek); se falhar, segue a fila.
 async function callChatCompletion(
   messages: any[],
   tools: any[],
   opts?: { llm?: "openai" | "deepseek" },
 ): Promise<any> {
   // Fila de provedores (OpenAI → DeepSeek → Gemini…, ver ia-provedores.ts).
-  // O orquestrador prefere o DeepSeek; se ele falhar, a fila segue normal.
-  const { chatComFila } = await import("./ia-provedores");
+  // O orquestrador prefere o provedor escolhido pelo admin; se ele falhar, a fila segue normal.
+  const { chatComFila, provedorOrquestrador } = await import("./ia-provedores");
+  const preferir = opts?.llm === "deepseek" ? await provedorOrquestrador() : null;
   return chatComFila(
     { messages, tools, tool_choice: "auto", temperature: 0.1 },
-    { preferir: opts?.llm === "deepseek" ? "deepseek" : null, origem: opts?.llm === "deepseek" ? "orquestrador" : "agente" },
+    { preferir, origem: opts?.llm === "deepseek" ? "orquestrador" : "agente" },
   );
 }
 
