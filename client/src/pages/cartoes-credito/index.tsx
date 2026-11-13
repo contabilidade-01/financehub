@@ -1,7 +1,7 @@
 import { CadastrosPendentesBanner } from "@/components/shared/CadastrosPendentesBanner";
 import { useEffect, useMemo, useState } from "react";
 import { useConfirm } from "@/components/shared/ConfirmDialog";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -137,6 +137,12 @@ export default function CartoesCreditoPage() {
   });
 
   const { data: contas = [] } = useQuery<Conta[]>({ queryKey: ["/api/contas"] });
+
+  // Fatura do mês vigente de cada cartão (mostrada no card da lista). Usa a mesma
+  // consulta da timeline de faturas, então o valor bate com o detalhe do cartão.
+  const faturasPorCartao = useQueries({
+    queries: cartoes.map((c) => ({ queryKey: [`/api/cartoes/${c.id}/faturas`] })),
+  }) as { data?: { cartao: Cartao; faturas: Fatura[] }; isLoading: boolean }[];
 
   const { data: faturasResp, isLoading: loadingFaturas } = useQuery<{ cartao: Cartao; faturas: Fatura[] }>({
     queryKey: [`/api/cartoes/${cardId}/faturas`],
@@ -502,7 +508,9 @@ export default function CartoesCreditoPage() {
         </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {cartoes.map((c) => {
+          {cartoes.map((c, idx) => {
+            const respFaturas = faturasPorCartao[idx];
+            const faturaMes = respFaturas?.data?.faturas?.find((f) => f.competencia === compAtual());
             const ativo = c.id === cardId;
             const cor = c.cor || "#6366F1";
             const semDias = c.dia_fechamento == null || c.dia_vencimento == null;
@@ -552,8 +560,13 @@ export default function CartoesCreditoPage() {
                     Defina fechamento/vencimento para as faturas saírem certas
                   </p>
                 )}
-                <p className="text-xs text-muted-foreground mt-3">Limite</p>
-                <p className="text-xl font-numeric font-semibold">{money(Number(c.limite) || 0)}</p>
+                <p className="text-xs text-muted-foreground mt-3">
+                  Fatura {compLabel(compAtual())}
+                  {faturaMes?.status === "paga" ? " · paga" : ""}
+                </p>
+                <p className="text-xl font-numeric font-semibold">
+                  {respFaturas?.isLoading ? "…" : money(Number(faturaMes?.total) || 0)}
+                </p>
               </div>
             );
           })}
