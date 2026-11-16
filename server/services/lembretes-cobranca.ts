@@ -194,6 +194,11 @@ async function flagLigada(usuarioId: number): Promise<boolean> {
   return flagAtiva(FLAG_LEMBRETES_COBRANCA, usuarioId);
 }
 
+/** Texto para log numa linha só, sem quebras (evita log injection). */
+function logSeguro(v: unknown): string {
+  return String(v ?? "").replace(/[\r\n]+/g, " ").slice(0, 200);
+}
+
 /**
  * Envia uma vez só por chave. Se o envio falhar, libera a chave para tentar de novo.
  * `extra` (ex.: Pix copia e cola) vai numa 2ª mensagem; se só ela falhar, o aviso
@@ -219,7 +224,7 @@ async function enviarUmaVez(
     try {
       await enviar(remotejid, extra);
     } catch (err: any) {
-      console.warn(`[Lembretes] Falha ao enviar o Pix de ${chave} (user ${usuarioId}):`, err?.message);
+      console.warn("[Lembretes] Falha ao enviar o Pix de %s (user %d): %s", logSeguro(chave), usuarioId, logSeguro(err?.message));
     }
   }
   return true;
@@ -260,7 +265,7 @@ async function pixNoAsaas(asaasPaymentId: string): Promise<string | null> {
     const qr = await asaas.getPaymentPixQrCode(asaasPaymentId);
     return qr?.payload || null;
   } catch (err: any) {
-    console.warn(`[Lembretes] Sem Pix copia e cola para ${asaasPaymentId}:`, err?.response?.status || err?.message);
+    console.warn("[Lembretes] Sem Pix copia e cola para %s: %s", logSeguro(asaasPaymentId), logSeguro(err?.response?.status || err?.message));
     return null;
   }
 }
