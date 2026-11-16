@@ -4,6 +4,8 @@
  *  - Degustação: 3 dias antes, 1 dia antes e no último dia, com o link de pagamento.
  *  - Mensalidade a vencer: 3 dias antes e no dia, com o link da fatura do Asaas.
  *  - Mensalidade vencida: 1 e 3 dias depois (o 3º é o último dia da tolerância).
+ *  - Nos avisos de mensalidade, quando a cobrança aceita Pix, vai em seguida uma
+ *    2ª mensagem só com o Pix copia e cola (fácil de copiar no WhatsApp).
  *  - Pagamento confirmado: na hora, "acesso até dd/mm/aaaa".
  *
  * Nunca cobra quem já pagou: antes de avisar uma cobrança, confere no Asaas; se
@@ -44,6 +46,17 @@ export function asaasEstaPago(status: string | null | undefined): boolean {
   return ["RECEIVED", "CONFIRMED", "RECEIVED_IN_CASH", "DUNNING_RECEIVED"].includes(String(status || "").toUpperCase());
 }
 
+/** Cobrança que pode ser paga por Pix (cartão é debitado sozinho, não tem QR). */
+export function aceitaPix(billingType: string | null | undefined): boolean {
+  return ["PIX", "BOLETO", "UNDEFINED"].includes(String(billingType || "").toUpperCase());
+}
+
+/** Payload Pix plausível (copia e cola EMV começa com "000201"). */
+export function pixValido(payload: string | null | undefined): payload is string {
+  const p = String(payload || "").trim();
+  return p.startsWith("000201") && p.length >= 50 && p.length <= 1000;
+}
+
 /** Status que tiram a cobrança do lembrete (paga, estornada, cancelada…). */
 export function asaasEncerrada(status: string | null | undefined): boolean {
   const s = String(status || "").toUpperCase();
@@ -75,11 +88,14 @@ export function textoCobranca(
   valor: number,
   vencimentoISO: string,
   link: string,
+  comPix = false,
 ): string {
   const oi = `Oi ${primeiroNome(nome)}!`.replace(" !", "!");
   const venc = dataBrSP(vencimentoISO);
   const limite = dataBrSP(somarDiasISO(vencimentoISO, TOLERANCIA_DIAS));
-  const fatura = `\n\nFatura (Pix, boleto ou cartão):\n${link}`;
+  const fatura =
+    `\n\nFatura (Pix, boleto ou cartão):\n${link}` +
+    (comPix ? `\n\nPrefere Pix? O código *copia e cola* vem na próxima mensagem. 👇` : "");
   switch (etapa) {
     case "D-3":
       return `${oi} Sua mensalidade de *R$ ${money(valor)}* vence em *${venc}*.${fatura}\n\nSe já pagou, pode ignorar esta mensagem.`;
@@ -178,17 +194,35 @@ async function flagLigada(usuarioId: number): Promise<boolean> {
   return flagAtiva(FLAG_LEMBRETES_COBRANCA, usuarioId);
 }
 
-/** Envia uma vez só por chave. Se o envio falhar, libera a chave para tentar de novo. */
-async function enviarUmaVez(usuarioId: number, remotejid: string, chave: string, texto: string, enviar: Envio): Promise<boolean> {
+/**
+ * Envia uma vez só por chave. Se o envio falhar, libera a chave para tentar de novo.
+ * `extra` (ex.: Pix copia e cola) vai numa 2ª mensagem; se só ela falhar, o aviso
+ * conta como enviado (melhor não repetir o texto principal).
+ */
+async function enviarUmaVez(
+  usuarioId: number,
+  remotejid: string,
+  chave: string,
+  texto: string,
+  enviar: Envio,
+  extra?: string,
+): Promise<boolean> {
   if (!(await reservarAviso(usuarioId, chave))) return false;
   try {
     await enviar(remotejid, texto);
-    return true;
   } catch (err: any) {
     await liberarAviso(usuarioId, chave).catch(() => {});
     console.warn(`[Lembretes] Falha ao enviar ${chave} (user ${usuarioId}):`, err?.message);
     return false;
   }
+  if (extra) {
+    try {
+      await enviar(remotejid, extra);
+    } catch (err: any) {
+      console.warn(`[Lembretes] Falha ao enviar o Pix de ${chave} (user ${usuarioId}):`, err?.message);
+    }
+  }
+  return true;
 }
 
 /** WhatsApp "recebemos seu pagamento" — uma vez por cobrança (CONFIRMED e RECEIVED chegam os dois). */
@@ -206,30 +240,46 @@ export async function avisarPagamentoConfirmado(
 }
 
 /** Confere no Asaas o status atual da cobrança (a fonte da verdade). */
-async function statusNoAsaas(asaasPaymentId: string): Promise<{ status: string; invoiceUrl?: string } | null> {
+async function statusNoAsaas(asaasPaymentId: string): Promise<CobrancaAsaas | null> {
   try {
     const { getAsaasService } = await import("./asaas.service");
     const asaas = await getAsaasService();
     const p = await asaas.getPayment(asaasPaymentId);
-    return { status: p.status, invoiceUrl: p.invoiceUrl };
+    return { status: p.status, invoiceUrl: p.invoiceUrl, billingType: p.billingType };
   } catch (err: any) {
     console.warn(`[Lembretes] Não consegui consultar ${asaasPaymentId} no Asaas:`, err?.message);
     return null;
   }
 }
 
-export type ResumoLembretes = { degustacao: number; cobrancas: number; pulados_pagos: number };
+/** Pix copia e cola da cobrança no Asaas; null se não houver (não impede o aviso). */
+async function pixNoAsaas(asaasPaymentId: string): Promise<string | null> {
+  try {
+    const { getAsaasService } = await import("./asaas.service");
+    const asaas = await getAsaasService();
+    const qr = await asaas.getPaymentPixQrCode(asaasPaymentId);
+    return qr?.payload || null;
+  } catch (err: any) {
+    console.warn(`[Lembretes] Sem Pix copia e cola para ${asaasPaymentId}:`, err?.response?.status || err?.message);
+    return null;
+  }
+}
 
-type Consulta = (asaasPaymentId: string) => Promise<{ status: string; invoiceUrl?: string } | null>;
+export type ResumoLembretes = { degustacao: number; cobrancas: number; pulados_pagos: number; com_pix: number };
+
+type CobrancaAsaas = { status: string; invoiceUrl?: string; billingType?: string };
+type Consulta = (asaasPaymentId: string) => Promise<CobrancaAsaas | null>;
+type ConsultaPix = (asaasPaymentId: string) => Promise<string | null>;
 
 export async function checkLembretesCobranca(
-  opts: { agora?: Date; enviar?: Envio; consultarAsaas?: Consulta } = {},
+  opts: { agora?: Date; enviar?: Envio; consultarAsaas?: Consulta; consultarPix?: ConsultaPix } = {},
 ): Promise<ResumoLembretes> {
   const agora = opts.agora ?? new Date();
   const enviar = opts.enviar ?? envioPadrao;
   const consultar = opts.consultarAsaas ?? statusNoAsaas;
+  const consultarPix = opts.consultarPix ?? pixNoAsaas;
   await garantirTabela();
-  const resumo: ResumoLembretes = { degustacao: 0, cobrancas: 0, pulados_pagos: 0 };
+  const resumo: ResumoLembretes = { degustacao: 0, cobrancas: 0, pulados_pagos: 0, com_pix: 0 };
 
   // 1) Degustação terminando. Quem já pagou (cobrança confirmada ou assinatura
   // ativa) não recebe — mesmo que o status ainda diga "degustacao".
@@ -292,10 +342,15 @@ export async function checkLembretesCobranca(
     }
     const link = asaas.invoiceUrl || c.asaas_invoice_url;
     if (!link) continue;
-    const texto = textoCobranca(etapa, c.nome, Number(c.amount), venc, link);
-    if (await enviarUmaVez(c.usuario_id, c.remotejid, chave, texto, enviar)) resumo.cobrancas++;
+    const pix = aceitaPix(asaas.billingType) ? await consultarPix(c.asaas_payment_id) : null;
+    const comPix = pixValido(pix);
+    const texto = textoCobranca(etapa, c.nome, Number(c.amount), venc, link, comPix);
+    if (await enviarUmaVez(c.usuario_id, c.remotejid, chave, texto, enviar, comPix ? pix!.trim() : undefined)) {
+      resumo.cobrancas++;
+      if (comPix) resumo.com_pix++;
+    }
   }
 
-  console.log(`[Lembretes] degustação=${resumo.degustacao} cobranças=${resumo.cobrancas} já pagas (puladas)=${resumo.pulados_pagos}`);
+  console.log(`[Lembretes] degustação=${resumo.degustacao} cobranças=${resumo.cobrancas} (com Pix=${resumo.com_pix}) já pagas (puladas)=${resumo.pulados_pagos}`);
   return resumo;
 }
