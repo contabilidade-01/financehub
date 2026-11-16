@@ -18,6 +18,8 @@ import {
   asaasEstaPago,
   asaasEncerrada,
   textoCobranca,
+  aceitaPix,
+  pixValido,
   textoDegustacao,
   textoPagamentoConfirmado,
 } from "../server/services/lembretes-cobranca";
@@ -115,6 +117,13 @@ console.log("Textos");
   igual("D+1 cita vencimento, limite e link", /25\/10\/2026/.test(t) && /28\/10\/2026/.test(t) && /https:\/\/asaas\/x/.test(t) && /Oi Rafael!/.test(t), true);
   const t3 = textoCobranca("D+3", "Rafael", 79.9, "2026-10-25", "https://asaas/x");
   igual("D+3 = último dia", /último dia/.test(t3) && /28\/10\/2026/.test(t3), true);
+  const semPix = textoCobranca("D-3", "Ana", 39.9, "2026-11-20", "https://asaas/x");
+  const comPix = textoCobranca("D-3", "Ana", 39.9, "2026-11-20", "https://asaas/x", true);
+  igual("sem Pix não promete o copia e cola", /copia e cola/.test(semPix), false);
+  igual("com Pix avisa a próxima mensagem", /copia e cola/.test(comPix) && /https:\/\/asaas\/x/.test(comPix), true);
+  igual("Pix só para Pix/boleto/indefinido", ["PIX", "BOLETO", "UNDEFINED", "CREDIT_CARD", undefined].map(aceitaPix), [true, true, true, false, false]);
+  igual("payload Pix válido", pixValido("00020101021226820014br.gov.bcb.pix2560qrpix.bradesco.com.br/qr/v2/abc5204000053039865802BR5905ASAAS6009SAO PAULO62070503***6304ABCD"), true);
+  igual("payload Pix inválido", [null, "", "abc", "<html>erro</html>"].map(pixValido), [false, false, false, false]);
   igual("degustação D0", /termina hoje/.test(textoDegustacao("D0", "Ana", "https://app/subscription/renew")), true);
   const ok = textoPagamentoConfirmado("Rafael", 79.9, fimDoPeriodoPago("2026-09-25", 1));
   igual("confirmação com acesso até 28/10", /R\$ 79,90/.test(ok) && ok.includes(dataBrSP("2026-10-28") as string), true);

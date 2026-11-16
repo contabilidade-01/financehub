@@ -384,6 +384,17 @@ export class AsaasService {
   }
 
   /**
+   * QR Code Pix da cobrança (payload = Pix copia e cola; encodedImage = PNG em base64).
+   * Só existe para cobranças Pix/boleto/"pergunte ao cliente" em aberto.
+   */
+  async getPaymentPixQrCode(paymentId: string): Promise<{ encodedImage: string; payload: string; expirationDate?: string }> {
+    const response = await this.client.get<{ encodedImage: string; payload: string; expirationDate?: string }>(
+      `/payments/${paymentId}/pixQrCode`
+    );
+    return response.data;
+  }
+
+  /**
    * Listar cobranças de uma assinatura
    */
   async getSubscriptionPayments(
