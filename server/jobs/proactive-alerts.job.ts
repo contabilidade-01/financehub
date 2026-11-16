@@ -8,6 +8,8 @@
  *    cada por limite e por mês (mesmo cálculo do recibo e da consulta).
  * 3. Contas a vencer (flag lembretes_contas_pagar): hoje e amanhã, 1x por dia.
  * 4. Resumo semanal: segunda-feira.
+ * 5. Inatividade (flag lembretes_inatividade): quem parou de anotar, a partir
+ *    das 12h30, depois da rodada diária (ver services/lembretes-inatividade.ts).
  *
  * Rodada diária: a 1ª checagem dentro de 9h–20h (SP) de cada dia, marcada no
  * banco (alertas_enviados) — reinício/deploy não repete nem pula o dia.
@@ -370,6 +372,10 @@ export function initializeAlerts(): void {
   alertInterval = setInterval(runAllChecks, CHECK_INTERVAL);
   lembretesInterval = setInterval(() => {
     checkLembretesNaHora().catch((e) => console.error("[Alerts] lembretes:", e?.message));
+    // Inatividade: roda 1x por dia, a partir das 12h30 (a própria função decide).
+    import("../services/lembretes-inatividade-envio")
+      .then(({ checkInatividade }) => checkInatividade())
+      .catch((e) => console.error("[Alerts] inatividade:", e?.message));
   }, LEMBRETES_INTERVAL);
 }
 
