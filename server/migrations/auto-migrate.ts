@@ -1063,6 +1063,13 @@ const STEPS: Step[] = [
     },
   },
   {
+    name: "primeiros passos fechado pelo usuário (usuarios.primeiros_passos_fechado_em)",
+    run: async () => {
+      // Aditivo: quando o usuário fecha o card "Primeiros passos", ele não volta mais.
+      await db.execute(sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS primeiros_passos_fechado_em TIMESTAMPTZ`);
+    },
+  },
+  {
     name: "plano PJ ME com preço próprio (subscription_plans.porte_pj)",
     run: async () => {
       await db.execute(sql`ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS porte_pj VARCHAR(10)`);

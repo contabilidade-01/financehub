@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, Circle, ChevronDown, ChevronUp, X } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 
 interface ChecklistItem {
@@ -21,20 +22,23 @@ interface ChecklistResponse {
   total: number;
   concluidos: number;
   completo: boolean;
+  fechado?: boolean;
 }
 
 export function PrimeirosPassosCard() {
   const { user } = useAuth();
   const collapsedKey = `financehub_checklist_collapsed_${(user as any)?.id ?? "anon"}`;
+  const dismissedKey = `financehub_checklist_fechado_${(user as any)?.id ?? "anon"}`;
   const [collapsed, setCollapsed] = useState(false);
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
     try {
       setCollapsed(localStorage.getItem(collapsedKey) === "true");
+      setDismissed(localStorage.getItem(dismissedKey) === "true");
     } catch { /* sem storage */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [collapsedKey]);
+  }, [collapsedKey, dismissedKey]);
 
   const { data, isLoading } = useQuery<ChecklistResponse>({
     queryKey: ["/api/onboarding/checklist"],
@@ -42,6 +46,17 @@ export function PrimeirosPassosCard() {
   });
 
   if (!user || dismissed || isLoading || !data || data.itens.length === 0) return null;
+
+  // Fechado pelo usuário: não volta mais (gravado no servidor, vale em qualquer aparelho).
+  if (data.fechado) return null;
+
+  const fechar = () => {
+    setDismissed(true);
+    try { localStorage.setItem(dismissedKey, "true"); } catch { /* sem storage */ }
+    apiRequest("/api/onboarding/checklist/fechar", { method: "POST" })
+      .then(() => queryClient.invalidateQueries({ queryKey: ["/api/onboarding/checklist"] }))
+      .catch(() => { /* fica fechado neste aparelho pelo localStorage */ });
+  };
 
   // Terminado 100%: some da tela — não precisa mais "segurar" o usuário.
   if (data.completo) return null;
@@ -65,7 +80,7 @@ export function PrimeirosPassosCard() {
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleCollapsed} title={collapsed ? "Expandir" : "Minimizar"}>
             {collapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
           </Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setDismissed(true)} title="Fechar por agora">
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={fechar} title="Fechar">
             <X className="h-4 w-4" />
           </Button>
         </div>
