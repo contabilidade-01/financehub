@@ -1473,6 +1473,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Onboarding — checklist "Primeiros passos" (estado real, derivado dos dados)
   const onboardingCtrl = await import("./controllers/onboarding.controller");
   app.get("/api/onboarding/checklist", combinedAuth, checkImpersonation, onboardingCtrl.getChecklist);
+  app.post("/api/onboarding/checklist/fechar", combinedAuth, checkImpersonation, onboardingCtrl.fecharChecklist);
 
   // Mensalidades (recorrências mensais) — PF e PJ (empresa_id na query/body)
   const mensalidadesCtrl = await import("./controllers/mensalidades.controller");

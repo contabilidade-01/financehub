@@ -40,10 +40,42 @@ export async function getChecklist(req: Request, res: Response) {
       total: itens.length,
       concluidos,
       completo: concluidos === itens.length,
+      fechado: await checklistFechado(userId),
     });
   } catch (e: any) {
     console.error("[Onboarding] Erro ao montar checklist:", e);
     return res.status(500).json({ error: e?.message || "Erro ao montar checklist" });
+  }
+}
+
+/**
+ * POST /api/onboarding/checklist/fechar — o usuário fechou o card
+ * "Primeiros passos": grava a data e o card não aparece mais (em nenhum
+ * aparelho, nem após novo login).
+ */
+export async function fecharChecklist(req: Request, res: Response) {
+  try {
+    const userId = req.user!.id;
+    await db.execute(sql`
+      UPDATE usuarios SET primeiros_passos_fechado_em = NOW()
+      WHERE id = ${userId} AND primeiros_passos_fechado_em IS NULL
+    `);
+    return res.json({ ok: true });
+  } catch (e: any) {
+    console.error("[Onboarding] Erro ao fechar checklist:", e);
+    return res.status(500).json({ error: e?.message || "Erro ao fechar checklist" });
+  }
+}
+
+async function checklistFechado(userId: number): Promise<boolean> {
+  try {
+    const rows = await db.execute(sql`
+      SELECT 1 FROM usuarios WHERE id = ${userId} AND primeiros_passos_fechado_em IS NOT NULL LIMIT 1
+    `);
+    return (rows as any[]).length > 0;
+  } catch {
+    // Coluna ainda não criada: segue mostrando o card como antes.
+    return false;
   }
 }
 
