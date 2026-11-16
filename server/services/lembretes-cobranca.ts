@@ -196,7 +196,7 @@ async function flagLigada(usuarioId: number): Promise<boolean> {
 
 /** Texto para log numa linha só, sem quebras (evita log injection). */
 function logSeguro(v: unknown): string {
-  return String(v ?? "").replace(/[\r\n]+/g, " ").slice(0, 200);
+  return String(v ?? "").slice(0, 200).replace(/\n|\r/g, " ");
 }
 
 /**
