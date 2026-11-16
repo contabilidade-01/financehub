@@ -70,6 +70,7 @@
     "test:ia-fila": "tsx scripts/testar-ia-fila.ts",
     "test:dominio-canonico": "tsx scripts/testar-dominio-canonico.ts",
     "test:avisos": "tsx scripts/testar-avisos.ts",
+    "test:lembretes-inatividade": "tsx scripts/testar-lembretes-inatividade.ts",
     "test:lembretes-metas": "tsx scripts/testar-lembretes-metas.ts"
   },
   "dependencies": {

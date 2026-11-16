@@ -22,6 +22,8 @@ export const FLAG_REEMBOLSO_VINCULADO = "reembolso_vinculado";
 export const FLAG_LEMBRETES_CONTAS_PAGAR = "lembretes_contas_pagar";
 /** 2FA (app autenticador) para administradores em Configurações > Segurança. Super admin sempre; admin com a flag; clientes nunca. */
 export const FLAG_DOIS_FATORES = "dois_fatores";
+/** Lembretes no WhatsApp para quem parou de anotar (D+2, D+4, segunda, D+14, dia 1; sábado antecipa). */
+export const FLAG_LEMBRETES_INATIVIDADE = "lembretes_inatividade";
 export const FLAGS_NO_CODIGO: readonly string[] = [
   FLAG_AGENTE_MEIO_PAGAMENTO,
   FLAG_ORQUESTRADOR_DEEPSEEK,
@@ -33,6 +35,7 @@ export const FLAGS_NO_CODIGO: readonly string[] = [
   FLAG_REEMBOLSO_VINCULADO,
   FLAG_LEMBRETES_CONTAS_PAGAR,
   FLAG_DOIS_FATORES,
+  FLAG_LEMBRETES_INATIVIDADE,
 ];
 
 export const DIAS_PARA_APOSENTAR = 30;

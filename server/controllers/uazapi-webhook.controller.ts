@@ -678,6 +678,19 @@ async function processarMensagemUazapi(req: Request, tokenValidado: string): Pro
       return;
     }
 
+    // Resposta aos lembretes de inatividade (PAUSAR / SIM / ATIVAR LEMBRETES):
+    // tratada aqui, sem IA. Só com a flag lembretes_inatividade ligada.
+    try {
+      const { tratarRespostaInatividade } = await import("../services/lembretes-inatividade-envio");
+      const respInatividade = await tratarRespostaInatividade(user.id, resolvedText);
+      if (respInatividade) {
+        await uazapiService.sendText(BaseUrl, token, chatid, respInatividade);
+        return;
+      }
+    } catch (err: any) {
+      console.error("[UazAPI Webhook] Erro ao tratar resposta de lembrete de inatividade:", err?.message);
+    }
+
     // ============================================
     // 3. PREPARAR CONTEXTO PARA O AGENTE
     // ============================================
