@@ -1623,7 +1623,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/empresas/:id/importacao/lancamentos", combinedAuth, uploadMemoria.single("arquivo"), ImportLancamentosPjController.importar);
   app.get("/api/empresas/:id/reembolsos-pessoais", combinedAuth, ReembolsosPjController.listar);
   // Reembolsos vinculados (devedor): total a pagar ao credor + conferência com o A Receber dele.
-  app.get("/api/empresas/:id/reembolsos-vinculados/resumo", combinedAuth, checkImpersonation, async (req: Request, res: Response) => {
+  app.get("/api/empresas/:id/reembolsos-vinculados/resumo", leituraContaLimiter, combinedAuth, checkImpersonation, async (req: Request, res: Response) => {
     try {
       const usuarioId = (req.user as any)?.id;
       const empresaId = Number(req.params.id);
