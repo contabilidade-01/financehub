@@ -174,7 +174,7 @@ export default function PjReembolsos({ empresaId }: { empresaId: number }) {
             <p className="text-sm text-muted-foreground">
               Este lançamento fica só nesta tela até você marcar como recebido.
             </p>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Input
                 placeholder="Descrição (ex.: Pedágio Anhanguera)"
                 value={form.descricao}
@@ -255,7 +255,7 @@ export default function PjReembolsos({ empresaId }: { empresaId: number }) {
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Card>
           <CardContent className="p-4 flex items-center justify-between">
             <div>

@@ -351,7 +351,7 @@ function Titulos({ empresaId, tipo }: { empresaId: number; tipo: TipoTitulo }) {
 
       {data && data.resumo.total_aberto > 0 && (
         <Card>
-          <CardContent className="grid grid-cols-5 gap-2 p-4">
+          <CardContent className="grid grid-cols-3 gap-2 gap-y-3 p-4 sm:grid-cols-5 sm:gap-y-2">
             {faixas.map((x) => (
               <div key={x.k} className="min-w-0">
                 <div className="flex h-12 flex-col justify-end overflow-hidden rounded-sm bg-muted">
@@ -378,7 +378,7 @@ function Titulos({ empresaId, tipo }: { empresaId: number; tipo: TipoTitulo }) {
         valor
         inicio={
           <Tabs value={["aberto", "vencido", "pago", "todos"].includes(f.status) ? f.status : "aberto"} onValueChange={(v) => definir({ status: v })}>
-            <TabsList>
+            <TabsList className="h-auto flex-wrap justify-start">
               <TabsTrigger value="aberto">Em aberto</TabsTrigger>
               <TabsTrigger value="vencido">Vencidos</TabsTrigger>
               <TabsTrigger value="pago">{tx.feitos}</TabsTrigger>
@@ -497,7 +497,7 @@ function Titulos({ empresaId, tipo }: { empresaId: number; tipo: TipoTitulo }) {
             <DialogDescription>Parcelado divide o valor; recorrente repete o mesmo valor todo mês. Marque "{tx.jaFeito}" para lançar o que já aconteceu.</DialogDescription>
           </DialogHeader>
           {novo && (
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5 sm:col-span-2">
                 <Label htmlFor="nt-desc">Descrição</Label>
                 <Input id="nt-desc" value={novo.descricao} onChange={(e) => setNovo({ ...novo, descricao: e.target.value })} placeholder={tx.exemplo} />
@@ -513,7 +513,7 @@ function Titulos({ empresaId, tipo }: { empresaId: number; tipo: TipoTitulo }) {
               <div className="space-y-1.5 sm:col-span-2">
                 <Label>Forma</Label>
                 <Tabs value={novo.modo} onValueChange={(v) => setNovo({ ...novo, modo: v as Novo["modo"], ja_pago: v === "unica" ? novo.ja_pago : false })}>
-                  <TabsList>
+                  <TabsList className="h-auto flex-wrap justify-start">
                     <TabsTrigger value="unica">Única</TabsTrigger>
                     <TabsTrigger value="parcelas">Parcelada</TabsTrigger>
                     <TabsTrigger value="recorrente">Fixo mensal</TabsTrigger>
@@ -561,7 +561,7 @@ function Titulos({ empresaId, tipo }: { empresaId: number; tipo: TipoTitulo }) {
               {novo.modo === "parcelas" && (
                 <div className="space-y-1.5 sm:col-span-2">
                   <Tabs value={novo.valor_modo} onValueChange={(v) => setNovo({ ...novo, valor_modo: v as any })}>
-                    <TabsList>
+                    <TabsList className="h-auto flex-wrap justify-start">
                       <TabsTrigger value="total">Informei o total</TabsTrigger>
                       <TabsTrigger value="parcela">Informei a parcela</TabsTrigger>
                     </TabsList>
@@ -632,7 +632,7 @@ function Titulos({ empresaId, tipo }: { empresaId: number; tipo: TipoTitulo }) {
             </DialogDescription>
           </DialogHeader>
           {baixa && (
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label>{tx.baixaBanco}</Label>
                 <Select value={baixa.conta_bancaria_id} onValueChange={(v) => setBaixa({ ...baixa, conta_bancaria_id: v })}>

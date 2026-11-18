@@ -76,7 +76,7 @@ function RecebimentosCora({ empresaId }: { empresaId: number }) {
         descricao="Emita boleto e Pix pela conta Cora da empresa. Quando o cliente paga, a conta a receber é baixada sozinha, na data e no valor pagos."
       />
       <Tabs value={aba} onValueChange={(v) => definir({ aba: v })}>
-        <TabsList>
+        <TabsList className="h-auto flex-wrap justify-start">
           <TabsTrigger value="cobrancas" disabled={!conexao.conectada}>Cobranças</TabsTrigger>
           <TabsTrigger value="conexao">Conexão</TabsTrigger>
         </TabsList>
@@ -181,7 +181,7 @@ function Cobrancas({ empresaId, f, definir, limpar, ativos }: { empresaId: numbe
         inicio={
           <div className="flex flex-wrap items-center gap-2">
             <Tabs value={f.status || "todas"} onValueChange={(v) => definir({ status: v === "todas" ? "" : v })}>
-              <TabsList>
+              <TabsList className="h-auto flex-wrap justify-start">
                 <TabsTrigger value="todas">Todas</TabsTrigger>
                 <TabsTrigger value="aberta">Em aberto</TabsTrigger>
                 <TabsTrigger value="vencida">Vencidas</TabsTrigger>
@@ -257,7 +257,7 @@ function Cobrancas({ empresaId, f, definir, limpar, ativos }: { empresaId: numbe
             <DialogDescription>Cria a conta a receber e emite boleto e Pix no Cora. O cliente precisa ter CPF/CNPJ e endereço completos.</DialogDescription>
           </DialogHeader>
           {nova && (
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5 sm:col-span-2">
                 <Label>Cliente</Label>
                 <ContatoCombobox empresaId={empresaId} tipo="cliente" contatos={clientes} valor={nova.contato_id} onChange={(id) => setNova({ ...nova, contato_id: id })} />

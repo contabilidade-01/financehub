@@ -116,7 +116,7 @@ function Contatos({ empresaId }: { empresaId: number }) {
       />
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <Tabs value={tipo || "todos"} onValueChange={(v) => setTipo(v === "todos" ? "" : (v as any))}>
-          <TabsList>
+          <TabsList className="h-auto flex-wrap justify-start">
             <TabsTrigger value="todos">Todos</TabsTrigger>
             <TabsTrigger value="cliente">Clientes</TabsTrigger>
             <TabsTrigger value="fornecedor">Fornecedores</TabsTrigger>
@@ -194,7 +194,7 @@ function Contatos({ empresaId }: { empresaId: number }) {
             <DialogDescription>Cliente, fornecedor ou os dois.</DialogDescription>
           </DialogHeader>
           {editando && (
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5 sm:col-span-2">
                 <Label htmlFor="ct-nome">Nome / razão social</Label>
                 <Input id="ct-nome" value={editando.nome} onChange={(e) => setEditando({ ...editando, nome: e.target.value })} />

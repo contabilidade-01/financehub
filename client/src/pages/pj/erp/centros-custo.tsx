@@ -93,7 +93,7 @@ function Centros({ empresaId }: { empresaId: number }) {
             <DialogDescription>O código é opcional e serve para ordenar.</DialogDescription>
           </DialogHeader>
           {editando && (
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="space-y-1.5">
                 <Label htmlFor="cc-cod">Código</Label>
                 <Input id="cc-cod" value={editando.codigo} onChange={(e) => setEditando({ ...editando, codigo: e.target.value })} />

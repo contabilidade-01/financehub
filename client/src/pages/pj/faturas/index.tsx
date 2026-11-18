@@ -255,7 +255,7 @@ export default function PjFaturas({ empresaId }: { empresaId: number }) {
           {loadingF ? <Skeleton className="h-40 w-full" /> : !faturasData || faturasData.faturas.length === 0 ? (
             <Card><CardContent className="py-10 text-center text-muted-foreground">Nenhuma fatura ainda. Registre compras neste cartão.</CardContent></Card>
           ) : (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {faturasData.faturas.map((f) => {
                 const sb = stBadge(f.status);
                 return (

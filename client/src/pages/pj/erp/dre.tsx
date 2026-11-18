@@ -102,7 +102,7 @@ function DreGerencial({ empresaId }: { empresaId: number }) {
           <div className="space-y-1">
             <Label className="text-xs">Regime</Label>
             <Tabs value={f.regime} onValueChange={(v) => definir({ regime: v })}>
-              <TabsList>
+              <TabsList className="h-auto flex-wrap justify-start">
                 <TabsTrigger value="caixa">Caixa</TabsTrigger>
                 <TabsTrigger value="competencia">Competência</TabsTrigger>
               </TabsList>

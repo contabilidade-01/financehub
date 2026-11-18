@@ -118,7 +118,7 @@ function Transferencias({ empresaId }: { empresaId: number }) {
             <DialogDescription>Entre contas da própria empresa.</DialogDescription>
           </DialogHeader>
           {nova && (
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label>De</Label>
                 <Select value={nova.conta_origem_id} onValueChange={(v) => setNova({ ...nova, conta_origem_id: v })}>

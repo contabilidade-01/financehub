@@ -18,7 +18,7 @@ export default function PjRelatorios({ empresaId }: { empresaId: number }) {
         <ChapterHelpButton chapter="relatorios" />
       </div>
       <Tabs defaultValue="dre">
-        <TabsList>
+        <TabsList className="h-auto flex-wrap justify-start">
           <TabsTrigger value="dre">DRE (resumo)</TabsTrigger>
           <TabsTrigger value="fluxo">Fluxo de Caixa</TabsTrigger>
           <TabsTrigger value="projetado">Fluxo Projetado</TabsTrigger>
