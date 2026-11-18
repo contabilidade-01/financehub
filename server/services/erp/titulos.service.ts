@@ -29,6 +29,8 @@ export interface FiltrosTitulos {
   q?: string;
   valor_min?: number | null;
   valor_max?: number | null;
+  /** Só os espelhos de reembolso vinculado (Contas a Pagar do devedor). */
+  reembolso_vinculado?: boolean;
 }
 
 const iso = (s?: string | null) => (s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null);
@@ -134,6 +136,8 @@ export async function listarTitulos(empresaId: number, tipo: TipoTitulo, f: Filt
       AND (${f.valor_min ?? null}::numeric IS NULL OR t.valor::numeric >= ${f.valor_min ?? null})
       AND (${f.valor_max ?? null}::numeric IS NULL OR t.valor::numeric <= ${f.valor_max ?? null})
       AND (${termo} = '' OR t.descricao ILIKE ${"%" + termo + "%"} OR c.nome ILIKE ${"%" + termo + "%"})
+      AND (${f.reembolso_vinculado ? 1 : 0}::int = 0 OR EXISTS (
+        SELECT 1 FROM reembolsos_espelhos re WHERE re.destino = 'pj' AND re.transacao_pagar_id = t.id))
     ORDER BY ${venc} ASC, t.id
     LIMIT 2000
   `)) as any[];

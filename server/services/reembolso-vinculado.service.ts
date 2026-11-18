@@ -199,6 +199,55 @@ async function sincronizarPar(credorEmail: string, devedorEmail: string): Promis
   }
 }
 
+/**
+ * Resumo para o devedor (card do painel e filtro de Contas a Pagar PJ): quanto falta pagar
+ * dos espelhos desta empresa e, para conferência, quanto o credor tem em aberto de
+ * reembolsos no A Receber. null quando o usuário não é devedor de nenhum vínculo ativo.
+ */
+export async function resumoParaDevedor(usuarioId: number, empresaId: number): Promise<null | {
+  credor_nome: string;
+  pagar: { qtd: number; total: number; vencido: number; qtd_vencido: number };
+  receber_credor: { qtd: number; total: number };
+  confere: boolean;
+}> {
+  const { flagAtiva, FLAG_REEMBOLSO_VINCULADO } = await import("./feature-flags.service");
+  const eu = ((await db.execute(sql`SELECT email FROM usuarios WHERE id = ${usuarioId}`)) as any[])[0];
+  if (!eu?.email) return null;
+  const vinculo = VINCULOS_REEMBOLSO.find((v) => v.devedor.toLowerCase() === String(eu.email).toLowerCase());
+  if (!vinculo) return null;
+  const credor = await usuarioPorEmail(vinculo.credor);
+  if (!credor || !(await flagAtiva(FLAG_REEMBOLSO_VINCULADO, credor.id))) return null;
+  const carteiraCredor = await carteiraDe(credor.id);
+
+  const hoje = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+  const p = ((await db.execute(sql`
+    SELECT COUNT(*)::int AS qtd, COALESCE(SUM(t.valor::numeric), 0)::text AS total,
+           COUNT(*) FILTER (WHERE COALESCE(t.data_vencimento, t.data_transacao) < ${hoje}::date)::int AS qtd_vencido,
+           COALESCE(SUM(t.valor::numeric) FILTER (WHERE COALESCE(t.data_vencimento, t.data_transacao) < ${hoje}::date), 0)::text AS vencido
+    FROM reembolsos_espelhos e
+    JOIN empresas_transacoes t ON t.id = e.transacao_pagar_id AND t.empresa_id = ${empresaId}
+    WHERE e.devedor_usuario_id = ${usuarioId} AND e.destino = 'pj' AND t.status = 'Pendente'
+  `)) as any[])[0];
+  const r = carteiraCredor
+    ? ((await db.execute(sql`
+        SELECT COUNT(*)::int AS qtd, COALESCE(SUM(valor::numeric), 0)::text AS total
+        FROM transacoes
+        WHERE carteira_id = ${carteiraCredor} AND COALESCE(reembolsavel, false) = true AND status = 'Pendente'
+      `)) as any[])[0]
+    : { qtd: 0, total: "0" };
+
+  // Soma em centavos (numeric → string) para a conferência ser exata.
+  const centavos = (v: unknown) => Math.round(Number(v) * 100);
+  const pagar = { qtd: Number(p.qtd), total: centavos(p.total) / 100, vencido: centavos(p.vencido) / 100, qtd_vencido: Number(p.qtd_vencido) };
+  const receber_credor = { qtd: Number(r.qtd), total: centavos(r.total) / 100 };
+  return {
+    credor_nome: String(credor.nome || credor.email).split(" ")[0],
+    pagar,
+    receber_credor,
+    confere: pagar.qtd === receber_credor.qtd && centavos(p.total) === centavos(r.total),
+  };
+}
+
 /** Idempotente. Erros só vão para o log — nunca afetam quem chamou. */
 export async function sincronizarReembolsosVinculados(): Promise<void> {
   if (rodando) return;

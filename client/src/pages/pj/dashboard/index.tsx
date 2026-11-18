@@ -8,6 +8,7 @@ import type { EmpresaResumo } from "@shared/schema";
 import PeriodoSelector from "@/components/shared/PeriodoSelector";
 import { Periodo, rangeDoPeriodo, rotuloPeriodo } from "@/lib/period";
 import { PrimeirosPassosCard } from "@/components/dashboard/PrimeirosPassosCard";
+import { CardReembolsosVinculados } from "@/components/reembolsos/ReembolsosVinculados";
 
 /**
  * PJ Dashboard — visão de gestão financeira (Yampa-like).
@@ -113,6 +114,8 @@ export default function PjDashboard({ empresaId }: { empresaId: number }) {
       </div>
 
       <PrimeirosPassosCard />
+
+      <CardReembolsosVinculados empresaId={empresaId} className="max-w-md" />
 
       {filtros}
 

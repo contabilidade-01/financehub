@@ -1622,6 +1622,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/empresas/:id/importacao/lancamentos/preview", combinedAuth, uploadMemoria.single("arquivo"), ImportLancamentosPjController.preview);
   app.post("/api/empresas/:id/importacao/lancamentos", combinedAuth, uploadMemoria.single("arquivo"), ImportLancamentosPjController.importar);
   app.get("/api/empresas/:id/reembolsos-pessoais", combinedAuth, ReembolsosPjController.listar);
+  // Reembolsos vinculados (devedor): total a pagar ao credor + conferência com o A Receber dele.
+  app.get("/api/empresas/:id/reembolsos-vinculados/resumo", combinedAuth, checkImpersonation, async (req: Request, res: Response) => {
+    try {
+      const usuarioId = (req.user as any)?.id;
+      const empresaId = Number(req.params.id);
+      const emp = Number.isInteger(empresaId) ? await storage.getEmpresaById(empresaId) : null;
+      if (!emp || emp.usuario_id !== usuarioId) return res.status(404).json({ error: "Empresa não encontrada" });
+      const { resumoParaDevedor } = await import("./services/reembolso-vinculado.service");
+      const resumo = await resumoParaDevedor(usuarioId, empresaId);
+      res.json(resumo ? { ativo: true, ...resumo } : { ativo: false });
+    } catch (err: any) {
+      console.error("[ReembolsoVinculado] resumo:", err?.message || err);
+      res.status(500).json({ error: "Erro ao calcular os reembolsos." });
+    }
+  });
   app.put("/api/empresas/:id/reembolsos-pessoais/:transacaoId/receber", combinedAuth, ReembolsosPjController.receber);
   app.put("/api/empresas/:id/reembolsos-pessoais/:transacaoId/pagar", combinedAuth, ReembolsosPjController.pagar);
 
