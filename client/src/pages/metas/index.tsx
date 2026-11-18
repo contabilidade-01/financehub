@@ -193,7 +193,7 @@ export default function MetasPage({ variant = "pf", empresaId }: { variant?: Var
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{copy.titulo}</h1>
           <p className="text-muted-foreground">{copy.subtitulo}</p>
@@ -259,7 +259,7 @@ export default function MetasPage({ variant = "pf", empresaId }: { variant?: Var
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {metas.map((meta) => {
             const Icon = tipoIcons[meta.tipo] || Target;
             return (

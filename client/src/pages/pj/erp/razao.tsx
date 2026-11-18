@@ -114,7 +114,7 @@ function RazaoGerencial({ empresaId }: { empresaId: number }) {
         periodo={{ rotulo: "Período" }}
         inicio={
           <Tabs value={f.regime} onValueChange={(v) => definir({ regime: v })}>
-            <TabsList>
+            <TabsList className="h-auto flex-wrap justify-start">
               <TabsTrigger value="caixa">Caixa</TabsTrigger>
               <TabsTrigger value="competencia">Competência</TabsTrigger>
             </TabsList>

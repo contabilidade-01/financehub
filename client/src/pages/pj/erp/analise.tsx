@@ -74,7 +74,7 @@ function Analise({ empresaId }: { empresaId: number }) {
         periodo={{ rotulo: "Período" }}
         inicio={
           <Tabs value={f.regime} onValueChange={(v) => definir({ regime: v })}>
-            <TabsList>
+            <TabsList className="h-auto flex-wrap justify-start">
               <TabsTrigger value="caixa">Caixa</TabsTrigger>
               <TabsTrigger value="competencia">Competência</TabsTrigger>
             </TabsList>
@@ -122,7 +122,7 @@ function Analise({ empresaId }: { empresaId: number }) {
             />
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <Card className="lg:col-span-2">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Receitas e despesas, 12 meses</CardTitle>
@@ -145,7 +145,7 @@ function Analise({ empresaId }: { empresaId: number }) {
             <PontoEquilibrio ind={mesInd.indicadores} />
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <Card className="lg:col-span-2">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Saldo em bancos no fim de cada mês</CardTitle>
@@ -178,7 +178,7 @@ function Analise({ empresaId }: { empresaId: number }) {
             </Card>
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <Card>
               <CardHeader className="pb-2"><CardTitle className="text-base">Atraso a receber e a pagar</CardTitle></CardHeader>
               <CardContent className="space-y-4">
@@ -190,7 +190,7 @@ function Analise({ empresaId }: { empresaId: number }) {
             <Ranking titulo="Maiores fornecedores" itens={data.top_fornecedores} vazio="Vincule fornecedores às despesas para ver o ranking." />
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <Card>
               <CardHeader className="pb-2"><CardTitle className="text-base">Próximos 7 dias</CardTitle></CardHeader>
               <CardContent className="p-0">
@@ -214,7 +214,7 @@ function Analise({ empresaId }: { empresaId: number }) {
 
             <Card className="lg:col-span-2">
               <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-base">
+                <CardTitle className="flex flex-wrap items-center gap-x-2 gap-y-1 text-base">
                   Projeção de caixa, 90 dias
                   {data.projecao.primeiro_negativo && (
                     <span className="inline-flex items-center gap-1 text-xs font-normal text-red-700 dark:text-red-400">

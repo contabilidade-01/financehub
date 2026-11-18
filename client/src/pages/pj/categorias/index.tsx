@@ -331,7 +331,7 @@ export default function PjCategorias({ empresaId }: { empresaId: number }) {
             </DialogDescription>
           </DialogHeader>
           {edicao && (
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="space-y-1.5 sm:col-span-2">
                 <Label htmlFor="pc-nome">Nome</Label>
                 <Input id="pc-nome" autoFocus value={edicao.nome} onChange={(e) => setEdicao({ ...edicao, nome: e.target.value })} />
@@ -401,7 +401,7 @@ export default function PjCategorias({ empresaId }: { empresaId: number }) {
               Adiciona as contas do modelo que ainda não existem no seu plano. Nenhuma conta atual é alterada ou renumerada.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {(Object.keys(ROTULO_MODELO_PLANO) as ModeloPlanoId[]).map((m) => (
               <button
                 key={m}

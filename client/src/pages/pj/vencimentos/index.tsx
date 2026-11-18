@@ -267,7 +267,7 @@ export default function PjVencimentos({ empresaId }: { empresaId: number }) {
       </div>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as "aberta" | "paga")}>
-        <TabsList>
+        <TabsList className="h-auto flex-wrap justify-start">
           <TabsTrigger value="aberta">Em aberto</TabsTrigger>
           <TabsTrigger value="paga">Pagos</TabsTrigger>
         </TabsList>

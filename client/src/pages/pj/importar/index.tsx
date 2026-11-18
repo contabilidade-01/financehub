@@ -122,7 +122,7 @@ export default function ImportarLancamentosPj({ empresaId }: { empresaId: number
   const escolherArquivo = (f: File | null) => { setFile(f); setPreview(null); setMapa(null); };
 
   return (
-    <div className="container mx-auto p-6 space-y-6 max-w-4xl">
+    <div className="container mx-auto space-y-6 max-w-4xl px-0 py-2 sm:p-6">
       <div>
         <h1 className="text-3xl font-bold">Importar contas a pagar e a receber</h1>
         <p className="text-muted-foreground">
@@ -221,7 +221,7 @@ export default function ImportarLancamentosPj({ empresaId }: { empresaId: number
             <CardDescription>Reconhecemos as colunas pelo nome. Confira e troque o que não estiver certo; a pré-visualização atualiza na hora.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               {CAMPOS.map((c) => {
                 const atual = (mapa ?? preview.mapa!)[c.k];
                 return (

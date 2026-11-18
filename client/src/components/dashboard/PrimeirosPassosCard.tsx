@@ -98,7 +98,7 @@ export function PrimeirosPassosCard() {
               <li
                 key={item.id}
                 className={cn(
-                  "flex items-start gap-3 rounded-md border px-3 py-2.5",
+                  "flex flex-wrap items-start gap-3 rounded-md border px-3 py-2.5 sm:flex-nowrap",
                   item.concluido ? "border-transparent bg-muted/40" : "border-border",
                 )}
               >
@@ -107,7 +107,7 @@ export function PrimeirosPassosCard() {
                 ) : (
                   <Circle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                 )}
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 basis-[calc(100%-1.75rem)] sm:basis-0">
                   <p className={cn("text-sm font-medium", item.concluido && "text-muted-foreground line-through")}>
                     {item.titulo}
                   </p>
@@ -115,7 +115,7 @@ export function PrimeirosPassosCard() {
                 </div>
                 {!item.concluido && (
                   <Link href={item.ctaHref}>
-                    <Button variant="outline" size="sm" className="shrink-0 whitespace-nowrap">
+                    <Button variant="outline" size="sm" className="ml-7 shrink-0 whitespace-nowrap sm:ml-0">
                       {item.ctaLabel}
                     </Button>
                   </Link>
