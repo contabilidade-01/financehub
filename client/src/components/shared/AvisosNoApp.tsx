@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Megaphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -23,10 +24,38 @@ function TextoComLinks({ texto }: { texto: string }) {
   );
 }
 
+/**
+ * Avisos já dispensados neste navegador (por usuário). O servidor é a fonte principal
+ * (marca lido_em), mas ele não marca nada durante a personificação do admin e a
+ * chamada pode falhar; sem isto o aviso voltava ao clicar em "Entendi".
+ */
+function chaveDispensados(usuarioId: unknown) {
+  return `avisos_dispensados:${usuarioId ?? "anon"}`;
+}
+function lerDispensados(usuarioId: unknown): number[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(chaveDispensados(usuarioId)) || "[]");
+    return Array.isArray(v) ? v.map(Number).filter(Number.isFinite) : [];
+  } catch {
+    return [];
+  }
+}
+function salvarDispensado(usuarioId: unknown, id: number): number[] {
+  const lista = Array.from(new Set([...lerDispensados(usuarioId), id])).slice(-50);
+  try {
+    localStorage.setItem(chaveDispensados(usuarioId), JSON.stringify(lista));
+  } catch {
+    /* navegador sem localStorage: vale só até recarregar a página */
+  }
+  return lista;
+}
+
 /** Avisos enviados pelo admin com o canal "no app": ficam no topo até o cliente clicar em Entendi. */
 export function AvisosNoApp() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
+  const usuarioId = (user as any)?.id;
   const qc = useQueryClient();
+  const [dispensados, setDispensados] = useState<number[]>(() => lerDispensados(usuarioId));
   const { data } = useQuery({
     queryKey: ["/api/avisos/meus"],
     enabled: isAuthenticated,
@@ -39,15 +68,22 @@ export function AvisosNoApp() {
   });
   const lido = useMutation({
     mutationFn: async (id: number) => {
-      await fetch(`/api/avisos/${id}/lido`, { method: "POST", credentials: "include" });
+      await fetch(`/api/avisos/${id}/lido`, { method: "POST", credentials: "include" }).catch(() => undefined);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/avisos/meus"] }),
   });
 
-  if (!data?.length) return null;
+  const dispensar = (id: number) => {
+    setDispensados(salvarDispensado(usuarioId, id));
+    lido.mutate(id);
+  };
+  const ocultos = new Set([...dispensados, ...lerDispensados(usuarioId)]);
+  const visiveis = (data || []).filter((a) => !ocultos.has(a.id));
+
+  if (!visiveis.length) return null;
   return (
     <div className="space-y-3 mb-4">
-      {data.map((a) => (
+      {visiveis.map((a) => (
         <div key={a.id} role="status" className="rounded-lg border border-primary/30 bg-primary/5 p-4">
           <div className="flex items-start gap-3">
             <Megaphone className="h-5 w-5 mt-0.5 text-primary shrink-0" />
@@ -56,7 +92,7 @@ export function AvisosNoApp() {
               <p className="mt-1 text-sm whitespace-pre-wrap break-words">
                 <TextoComLinks texto={a.texto} />
               </p>
-              <Button size="sm" className="mt-3" disabled={lido.isPending} onClick={() => lido.mutate(a.id)}>
+              <Button size="sm" className="mt-3" onClick={() => dispensar(a.id)}>
                 Entendi
               </Button>
             </div>
