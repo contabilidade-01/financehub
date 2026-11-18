@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { apiErp, brl, CabecalhoPagina, dataBr, SomenteErp } from "./comum";
 import type { Contato } from "./contatos";
 import type { CentroCusto } from "./centros-custo";
+import { useResumoReembolsosVinculados } from "@/components/reembolsos/ReembolsosVinculados";
 
 export type TipoTitulo = "Receita" | "Despesa";
 
@@ -94,7 +95,7 @@ const TX = {
 } as const;
 
 const FILTROS_PADRAO = {
-  status: "aberto", periodo: "", de: "", ate: "", q: "", contato_id: "", categoria_id: "", centro_custo_id: "", conta_bancaria_id: "", valor_min: "", valor_max: "",
+  status: "aberto", periodo: "", de: "", ate: "", q: "", contato_id: "", categoria_id: "", centro_custo_id: "", conta_bancaria_id: "", valor_min: "", valor_max: "", reembolso_vinculado: "",
 };
 
 export function TitulosPage({ empresaId, tipo }: { empresaId: number; tipo: TipoTitulo }) {
@@ -128,6 +129,10 @@ function Titulos({ empresaId, tipo }: { empresaId: number; tipo: TipoTitulo }) {
   const { data: bancos = [] } = useQuery<any[]>({ queryKey: [`/api/empresas/${empresaId}/contas-bancarias`], queryFn: () => apiErp(`/api/empresas/${empresaId}/contas-bancarias`) });
   const { data: centros = [] } = useQuery<CentroCusto[]>({ queryKey: [`/api/empresas/${empresaId}/erp/centros-custo`], queryFn: () => apiErp(`/api/empresas/${empresaId}/erp/centros-custo`) });
   const { data: contatos = [] } = useQuery<Contato[]>({ queryKey: [`/api/empresas/${empresaId}/erp/contatos`, tx.tipoContato], queryFn: () => apiErp(`/api/empresas/${empresaId}/erp/contatos?tipo=${tx.tipoContato}`) });
+
+  // Reembolsos vinculados: só aparece para quem deve reembolsos a outro usuário (Contas a pagar).
+  const reembolsos = useResumoReembolsosVinculados(tipo === "Despesa" ? empresaId : null);
+  const soReembolsos = f.reembolso_vinculado === "1";
 
   const hoje = data?.hoje || new Date().toISOString().slice(0, 10);
   const linhas = data?.linhas ?? [];
@@ -329,6 +334,29 @@ function Titulos({ empresaId, tipo }: { empresaId: number; tipo: TipoTitulo }) {
           </div>
         }
       />
+
+      {reembolsos?.pagar && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant={soReembolsos ? "default" : "outline"}
+            size="sm"
+            className="h-auto min-h-9 whitespace-normal py-1.5 text-left"
+            onClick={() => definir({ reembolso_vinculado: soReembolsos ? "" : "1" })}
+            aria-pressed={soReembolsos}
+          >
+            Reembolsos a {reembolsos.credor_nome}
+            <span className="ml-2 tabular-nums opacity-80">{brl(reembolsos.pagar.total)} · {reembolsos.pagar.qtd}</span>
+            {soReembolsos && <X className="ml-2 h-3.5 w-3.5" />}
+          </Button>
+          {soReembolsos && (
+            <span className={cn("text-xs", reembolsos.confere ? "text-emerald-700 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400")}>
+              {reembolsos.confere
+                ? `Em aberto confere com o A Receber de ${reembolsos.credor_nome}.`
+                : `A Receber de ${reembolsos.credor_nome}: ${brl(reembolsos.receber_credor?.total)} (${reembolsos.receber_credor?.qtd ?? 0}). Sincroniza a cada 2 min.`}
+            </span>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[

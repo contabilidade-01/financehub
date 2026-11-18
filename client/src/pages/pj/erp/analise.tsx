@@ -11,6 +11,7 @@ import { apiErp, brl, CabecalhoPagina, dataBr, SomenteErp } from "./comum";
 import { PainelIndicadores, pctBr } from "./indicadores-ui";
 import { COR, EIXO, Legenda, rotuloMes, TooltipPadrao, valorCurto } from "./graficos";
 import type { CentroCusto } from "./centros-custo";
+import { CardReembolsosVinculados } from "@/components/reembolsos/ReembolsosVinculados";
 
 type Aging = Record<"a_vencer" | "1_30" | "31_60" | "61_90" | "90_mais", number>;
 interface Painel {
@@ -65,6 +66,8 @@ function Analise({ empresaId }: { empresaId: number }) {
         titulo="Análise da empresa"
         descricao="Resultado, margens, ponto de equilíbrio e caixa num só lugar. Cada bloco leva ao detalhe."
       />
+
+      <CardReembolsosVinculados empresaId={empresaId} className="max-w-md" />
 
       <FiltroBar
         valores={f}

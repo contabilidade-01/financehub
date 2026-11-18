@@ -66,6 +66,7 @@ function filtrosTitulos(q: Request["query"]): titulos.FiltrosTitulos {
     q: q.q as string | undefined,
     valor_min: valor(q.valor_min),
     valor_max: valor(q.valor_max),
+    reembolso_vinculado: q.reembolso_vinculado === "1",
   };
 }
 
