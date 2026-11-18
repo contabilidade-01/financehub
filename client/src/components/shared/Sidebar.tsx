@@ -22,6 +22,7 @@ import { cn, getInitials } from "@/lib/utils";
 import { isPathActive, useNavigation, type NavGroup } from "@/components/shared/navigation";
 import { openGuidedTour } from "@/lib/guided-tour-bus";
 import { linkSuporteWhatsApp } from "@/lib/suporte";
+import { PrimeirosPassosMenuItem } from "@/components/dashboard/PrimeirosPassosCard";
 
 /** Logo do sistema (upload do admin em /api/logo) com ícone de reserva. */
 function BrandLogo({ size = "md" }: { size?: "sm" | "md" }) {
@@ -127,7 +128,7 @@ function NavList({
   );
 }
 
-function UserBlock({ onLogoutClick }: { onLogoutClick: () => void }) {
+function UserBlock({ onLogoutClick, onNavigate }: { onLogoutClick: () => void; onNavigate?: () => void }) {
   const { user } = useNavigation();
   const { t } = useTranslation();
   const nome = user?.nome || "Usuário";
@@ -159,6 +160,7 @@ function UserBlock({ onLogoutClick }: { onLogoutClick: () => void }) {
           Solicitar suporte
         </a>
       </Button>
+      <PrimeirosPassosMenuItem onDone={onNavigate} />
       <Button variant="ghost" size="sm" className="w-full justify-start text-muted-foreground" onClick={onLogoutClick}>
         <LogOut className="h-4 w-4" />
         {t("navigation.logout", "Sair")}
@@ -264,7 +266,7 @@ function Sidebar({ mobileOpen, onMobileOpenChange }: SidebarProps) {
             <NavList groups={groups} activePath={activePath} onNavigate={go} />
           </div>
           <div className="pb-safe">
-            <UserBlock onLogoutClick={askLogout} />
+            <UserBlock onLogoutClick={askLogout} onNavigate={() => setOpen(false)} />
           </div>
         </SheetContent>
       </Sheet>

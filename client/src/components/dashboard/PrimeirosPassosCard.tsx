@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Circle, ChevronDown, ChevronUp, X } from "lucide-react";
+import { CheckCircle2, Circle, ChevronDown, ChevronUp, ListChecks, X } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
@@ -25,10 +25,55 @@ interface ChecklistResponse {
   fechado?: boolean;
 }
 
+const EVENTO_REABRIR = "primeiros-passos:reabrir";
+const chaveFechado = (userId: unknown) => `financehub_checklist_fechado_${userId ?? "anon"}`;
+const chaveMinimizado = (userId: unknown) => `financehub_checklist_collapsed_${userId ?? "anon"}`;
+
+/**
+ * Item do menu lateral: depois de fechado, o card "Primeiros passos" some do
+ * painel, mas pode ser reaberto por aqui. Só aparece enquanto o card está
+ * fechado e ainda há passos pendentes.
+ */
+export function PrimeirosPassosMenuItem({ onDone }: { onDone?: () => void }) {
+  const { user } = useAuth();
+  const [, navigate] = useLocation();
+  const { data } = useQuery<ChecklistResponse>({
+    queryKey: ["/api/onboarding/checklist"],
+    enabled: !!user,
+  });
+  const userId = (user as any)?.id;
+  let fechadoLocal = false;
+  try { fechadoLocal = localStorage.getItem(chaveFechado(userId)) === "true"; } catch { /* sem storage */ }
+
+  if (!user || !data || data.itens.length === 0 || data.completo) return null;
+  if (!data.fechado && !fechadoLocal) return null;
+
+  const reabrir = () => {
+    try {
+      localStorage.removeItem(chaveFechado(userId));
+      localStorage.removeItem(chaveMinimizado(userId));
+    } catch { /* sem storage */ }
+    window.dispatchEvent(new Event(EVENTO_REABRIR));
+    queryClient.setQueryData<ChecklistResponse>(["/api/onboarding/checklist"], (d) => (d ? { ...d, fechado: false } : d));
+    apiRequest("/api/onboarding/checklist/reabrir", { method: "POST" })
+      .then(() => queryClient.invalidateQueries({ queryKey: ["/api/onboarding/checklist"] }))
+      .catch(() => { /* reaberto neste aparelho */ });
+    navigate((user as any)?.tipo_pessoa === "juridica" ? "/p/dashboard" : "/");
+    onDone?.();
+  };
+
+  return (
+    <Button variant="ghost" size="sm" className="w-full justify-start text-muted-foreground" onClick={reabrir}>
+      <ListChecks className="h-4 w-4" />
+      Primeiros passos
+    </Button>
+  );
+}
+
 export function PrimeirosPassosCard() {
   const { user } = useAuth();
-  const collapsedKey = `financehub_checklist_collapsed_${(user as any)?.id ?? "anon"}`;
-  const dismissedKey = `financehub_checklist_fechado_${(user as any)?.id ?? "anon"}`;
+  const collapsedKey = chaveMinimizado((user as any)?.id);
+  const dismissedKey = chaveFechado((user as any)?.id);
   const [collapsed, setCollapsed] = useState(false);
   const [dismissed, setDismissed] = useState(false);
 
@@ -39,6 +84,13 @@ export function PrimeirosPassosCard() {
     } catch { /* sem storage */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [collapsedKey, dismissedKey]);
+
+  // Reaberto pelo menu lateral (mesmo estando já no painel).
+  useEffect(() => {
+    const onReabrir = () => { setDismissed(false); setCollapsed(false); };
+    window.addEventListener(EVENTO_REABRIR, onReabrir);
+    return () => window.removeEventListener(EVENTO_REABRIR, onReabrir);
+  }, []);
 
   const { data, isLoading } = useQuery<ChecklistResponse>({
     queryKey: ["/api/onboarding/checklist"],
@@ -80,7 +132,7 @@ export function PrimeirosPassosCard() {
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleCollapsed} title={collapsed ? "Expandir" : "Minimizar"}>
             {collapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
           </Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={fechar} title="Fechar">
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={fechar} title="Fechar (dá para reabrir em Primeiros passos, no menu lateral)">
             <X className="h-4 w-4" />
           </Button>
         </div>

@@ -67,6 +67,21 @@ export async function fecharChecklist(req: Request, res: Response) {
   }
 }
 
+/**
+ * POST /api/onboarding/checklist/reabrir — o usuário pediu para ver de novo
+ * o card "Primeiros passos" (item no menu lateral).
+ */
+export async function reabrirChecklist(req: Request, res: Response) {
+  try {
+    const userId = req.user!.id;
+    await db.execute(sql`UPDATE usuarios SET primeiros_passos_fechado_em = NULL WHERE id = ${userId}`);
+    return res.json({ ok: true });
+  } catch (e: any) {
+    console.error("[Onboarding] Erro ao reabrir checklist:", e);
+    return res.status(500).json({ error: e?.message || "Erro ao reabrir checklist" });
+  }
+}
+
 async function checklistFechado(userId: number): Promise<boolean> {
   try {
     const rows = await db.execute(sql`
