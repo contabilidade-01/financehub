@@ -1474,6 +1474,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const onboardingCtrl = await import("./controllers/onboarding.controller");
   app.get("/api/onboarding/checklist", combinedAuth, checkImpersonation, onboardingCtrl.getChecklist);
   app.post("/api/onboarding/checklist/fechar", leituraContaLimiter, combinedAuth, checkImpersonation, onboardingCtrl.fecharChecklist);
+  app.post("/api/onboarding/checklist/reabrir", leituraContaLimiter, combinedAuth, checkImpersonation, onboardingCtrl.reabrirChecklist);
 
   // Mensalidades (recorrências mensais) — PF e PJ (empresa_id na query/body)
   const mensalidadesCtrl = await import("./controllers/mensalidades.controller");
