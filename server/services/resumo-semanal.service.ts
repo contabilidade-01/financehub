@@ -5,6 +5,7 @@
 import { db } from "../db";
 import { sql } from "drizzle-orm";
 import { storage } from "../storage";
+import { linkApp } from "./avisos.service";
 
 export type ResumoSemanalNums = {
   receita: number;
@@ -93,7 +94,7 @@ export async function calcularResumoSemanalPj(
   };
 }
 
-export function montarMensagemResumoSemanal(r: ResumoSemanalNums): string {
+export function montarMensagemResumoSemanal(r: ResumoSemanalNums, link = linkApp()): string {
   const emoji = r.saldo >= 0 ? "✅" : "🔴";
   const titulo =
     r.escopo === "pj"
@@ -105,6 +106,7 @@ export function montarMensagemResumoSemanal(r: ResumoSemanalNums): string {
     `💸 Despesas: R$ ${r.despesa.toFixed(2)}\n` +
     `${emoji} Saldo: R$ ${r.saldo.toFixed(2)}\n` +
     `📝 ${r.qtd} transações\n\n` +
+    `📲 Veja os detalhes no app: ${link}\n\n` +
     `Boa semana! 🚀`
   );
 }

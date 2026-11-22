@@ -65,6 +65,15 @@ const fail = (n: string, d: string) => {
   else ok("mensagem PF saldo negativo (bug antigo)");
 }
 
+{
+  const msg = montarMensagemResumoSemanal(
+    { receita: 10, despesa: 5, saldo: 5, qtd: 2, de: "2025-08-31", ate: "2025-09-06", escopo: "pf" },
+    "https://app.tudocontado.com.br",
+  );
+  if (!msg.includes("Veja os detalhes no app: https://app.tudocontado.com.br")) fail("link app", msg);
+  else ok("mensagem leva o link do app");
+}
+
 if (falhas) {
   console.error(`\n${falhas} falha(s)`);
   process.exit(1);
