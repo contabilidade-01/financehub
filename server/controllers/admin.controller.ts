@@ -1630,6 +1630,24 @@ export async function gerarLinkCobranca(req: Request, res: Response) {
   }
 }
 
+// POST /api/admin/assinaturas/:id/enviar-link — gera o link (Asaas) e manda no WhatsApp do cliente
+export async function enviarLinkCobrancaWhatsApp(req: Request, res: Response) {
+  try {
+    const userId = parseInt(req.params.id);
+    const { ciclo } = req.body || {};
+    if (!Number.isFinite(userId)) return res.status(400).json({ error: "id inválido" });
+    if (!MESES_CICLO[ciclo]) return res.status(400).json({ error: "ciclo inválido (mensal | trimestral | anual)" });
+    const { enviarLinkPagamentoAdmin } = await import("../services/link-pagamento-whatsapp");
+    const r = await enviarLinkPagamentoAdmin(userId, ciclo, (id, c) =>
+      getSubscriptionService(storage).createHostedCheckout(id, c as any),
+    );
+    return res.json(r);
+  } catch (err: any) {
+    console.error("enviarLinkCobrancaWhatsApp:", err);
+    return res.status(500).json({ error: err?.message || "Falha ao enviar o link no WhatsApp" });
+  }
+}
+
 // POST /api/admin/assinaturas/:id/sincronizar-asaas — confere no Asaas e libera quem pagou
 export async function sincronizarAssinaturaAsaas(req: Request, res: Response) {
   try {

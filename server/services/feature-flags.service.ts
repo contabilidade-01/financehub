@@ -20,6 +20,7 @@ import {
   FLAG_LEMBRETES_CONTAS_PAGAR,
   FLAG_DOIS_FATORES,
   FLAG_LEMBRETES_INATIVIDADE,
+  FLAG_LINK_PAGAMENTO_CADASTRO,
   FLAGS_NO_CODIGO,
   DIAS_PARA_APOSENTAR,
   avaliarFlag,
@@ -40,6 +41,7 @@ export {
   FLAG_LEMBRETES_CONTAS_PAGAR,
   FLAG_DOIS_FATORES,
   FLAG_LEMBRETES_INATIVIDADE,
+  FLAG_LINK_PAGAMENTO_CADASTRO,
   FLAGS_NO_CODIGO,
   DIAS_PARA_APOSENTAR,
   avaliarFlag,
@@ -181,6 +183,16 @@ async function garantirTabelas(): Promise<void> {
     VALUES (
       ${FLAG_LEMBRETES_INATIVIDADE},
       ${"Lembretes no WhatsApp para quem parou de anotar: 2 e 4 dias sem anotar, 1ª segunda a partir do 6º dia, 14 dias (pergunta SIM/PAUSAR) e dia 1 do mês a partir do 21º dia; depois para. Sai às 12h30, sábado antecipa para sexta, nunca no mesmo dia de outro aviso automático. Ao ligar, ninguém recebe lembretes atrasados."},
+      false
+    )
+    ON CONFLICT (chave) DO NOTHING
+  `);
+  // Link de pagamento no cadastro: nasce off — ligar no admin.
+  await db.execute(sql`
+    INSERT INTO feature_flags (chave, descricao, ativo_todos)
+    VALUES (
+      ${FLAG_LINK_PAGAMENTO_CADASTRO},
+      ${"Link de pagamento no WhatsApp logo após o cadastro: alguns segundos depois das boas-vindas, manda para o telefone do cadastro o link do checkout (escolhe o plano, informa CPF/CNPJ e paga no Asaas por Pix, boleto ou cartão). Não cria cobrança no Asaas no cadastro."},
       false
     )
     ON CONFLICT (chave) DO NOTHING

@@ -94,3 +94,4 @@ jobs:
           npm run test:isolamento-contas
           npm run test:backup
           npm run test:lembretes-metas
+          npm run test:link-pagamento

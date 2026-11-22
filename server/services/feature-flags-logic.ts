@@ -24,6 +24,8 @@ export const FLAG_LEMBRETES_CONTAS_PAGAR = "lembretes_contas_pagar";
 export const FLAG_DOIS_FATORES = "dois_fatores";
 /** Lembretes no WhatsApp para quem parou de anotar (D+2, D+4, segunda, D+14, dia 1; sábado antecipa). */
 export const FLAG_LEMBRETES_INATIVIDADE = "lembretes_inatividade";
+/** Link de pagamento (checkout Asaas) no WhatsApp logo após o cadastro. */
+export const FLAG_LINK_PAGAMENTO_CADASTRO = "link_pagamento_cadastro";
 export const FLAGS_NO_CODIGO: readonly string[] = [
   FLAG_AGENTE_MEIO_PAGAMENTO,
   FLAG_ORQUESTRADOR_DEEPSEEK,
@@ -36,6 +38,7 @@ export const FLAGS_NO_CODIGO: readonly string[] = [
   FLAG_LEMBRETES_CONTAS_PAGAR,
   FLAG_DOIS_FATORES,
   FLAG_LEMBRETES_INATIVIDADE,
+  FLAG_LINK_PAGAMENTO_CADASTRO,
 ];
 
 export const DIAS_PARA_APOSENTAR = 30;
