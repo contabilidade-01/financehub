@@ -690,7 +690,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/admin/assinaturas/:id/consultoria", combinedAuth, checkImpersonation, requireSuperAdmin, adminController.definirConsultoria);
   app.post("/api/admin/assinaturas/:id/renovar", combinedAuth, checkImpersonation, requireSuperAdmin, adminController.renovarAssinatura);
   app.post("/api/admin/assinaturas/:id/gerar-link", combinedAuth, checkImpersonation, requireSuperAdmin, adminController.gerarLinkCobranca);
-  app.post("/api/admin/assinaturas/:id/enviar-link", combinedAuth, checkImpersonation, requireSuperAdmin, adminController.enviarLinkCobrancaWhatsApp);
+  app.post("/api/admin/assinaturas/:id/enviar-link", sensitiveLimiter, combinedAuth, checkImpersonation, requireSuperAdmin, adminController.enviarLinkCobrancaWhatsApp);
   app.post("/api/admin/assinaturas/:id/sincronizar-asaas", combinedAuth, checkImpersonation, requireSuperAdmin, adminController.sincronizarAssinaturaAsaas);
   // Exportação CSV de relatórios administrativos
   app.get("/api/admin/export/users-csv", combinedAuth, checkImpersonation, requireSuperAdmin, adminController.exportUsersCsv);

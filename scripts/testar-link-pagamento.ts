@@ -24,7 +24,7 @@ ok("nada: sem destino", destinoWhatsApp({}) === null);
 
 const t = textoLinkPagamento("Rafael Souza", "https://asaas.com/i/abc", "2026-11-25");
 ok("texto: primeiro nome", t.startsWith("Oi Rafael!"));
-ok("texto: link", t.includes("https://asaas.com/i/abc"));
+ok("texto: link numa linha própria", t.split("\n").some((linha) => linha === "https://asaas.com/i/abc"));
 ok("texto: vencimento BR", t.includes("25/11/2026"));
 ok("texto sem nome", textoLinkPagamento("", "x").startsWith("Oi!"));
 ok("texto sem vencimento", !textoLinkPagamento("Ana", "x").includes("Vencimento"));
