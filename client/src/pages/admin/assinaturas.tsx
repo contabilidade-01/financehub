@@ -111,6 +111,18 @@ export default function AdminAssinaturas() {
     },
     onError: (err: any) => toast({ title: "Erro", description: err?.error || err?.message || "Falha ao gerar link", variant: "destructive" }),
   });
+  const enviarLinkMut = useMutation({
+    mutationFn: ({ id, ciclo }: { id: number; ciclo: string }) => apiRequest(`/api/admin/assinaturas/${id}/enviar-link`, { method: "POST", data: { ciclo } }),
+    onSuccess: (r: any) => {
+      setLinkCobranca(r?.url || "");
+      const venc = r?.vencimento ? String(r.vencimento).slice(0, 10).split("-").reverse().join("/") : null;
+      const tipo = r?.tipo === "checkout"
+        ? "Sem CPF/CNPJ no cadastro: foi o link do checkout (o cliente informa o documento e paga no Asaas)."
+        : `Fatura do Asaas${venc ? `, vence em ${venc}` : ""}.`;
+      toast({ title: "Link enviado no WhatsApp", description: `${tipo} Destino: ${r?.enviadoPara || "—"}.` });
+    },
+    onError: (err: any) => toast({ title: "Não enviou", description: err?.error || err?.message || "Falha ao enviar no WhatsApp", variant: "destructive" }),
+  });
   const sincronizarMut = useMutation({
     mutationFn: (id: number) => apiRequest(`/api/admin/assinaturas/${id}/sincronizar-asaas`, { method: "POST", data: {} }),
     onSuccess: (r: any) => {
@@ -302,6 +314,21 @@ export default function AdminAssinaturas() {
               })()}
               <Button size="sm" variant="secondary" className="w-full" onClick={() => definindo && linkMut.mutate({ id: definindo.id, ciclo: form.ciclo })} disabled={linkMut.isPending || consultoriaMut.isPending}>
                 {linkMut.isPending ? "Gerando…" : "Gerar link de cobrança"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  if (!definindo) return;
+                  const destino = definindo.telefone || "o WhatsApp vinculado";
+                  if (window.confirm(`Enviar o link de pagamento (${form.ciclo}) para ${definindo.nome} no WhatsApp (${destino})?`)) {
+                    enviarLinkMut.mutate({ id: definindo.id, ciclo: form.ciclo });
+                  }
+                }}
+                disabled={enviarLinkMut.isPending || linkMut.isPending || consultoriaMut.isPending}
+              >
+                {enviarLinkMut.isPending ? "Enviando…" : "Enviar link no WhatsApp"}
               </Button>
               {linkCobranca && (
                 <div className="flex items-center gap-2">
